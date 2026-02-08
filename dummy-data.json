@@ -1,0 +1,14 @@
+{
+    "rooms": [
+      { "number": "101", "type": "Double", "status": "CLEAN", "price": 300 },
+      { "number": "102", "type": "Twin", "status": "DIRTY", "price": 280 },
+      { "number": "201", "type": "Suite", "status": "OOO", "reason": "Broken AC", "price": 550 }
+    ],
+    "guests": [
+      { "name": "Jan Kowalski", "email": "jan@example.com", "phone": "+48123456789" },
+      { "name": "Anna Nowak", "email": "anna@example.com", "phone": "+48987654321" }
+    ],
+    "reservations": [
+      { "guestName": "Jan Kowalski", "room": "101", "checkIn": "2023-10-20", "checkOut": "2023-10-25", "status": "CONFIRMED" }
+    ]
+  }
