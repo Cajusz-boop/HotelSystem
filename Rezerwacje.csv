@@ -1,0 +1,10 @@
+ID,Pokoj,Data_Od,Data_Do,Klient,Status
+R001,101,2026-02-05,2026-02-09,Jan Kowalski,Zameldowany
+R002,102,2026-02-08,2026-02-12,Anna Nowak,Potwierdzona
+R003,103,2026-02-02,2026-02-06,Firma XYZ,Brudny
+R004,201,2026-02-07,2026-02-10,Thomas Smith,Zameldowany
+R005,202,2026-02-12,2026-02-17,Rodzina Adamsów,Potwierdzona
+R006,305,2026-02-07,2026-02-14,VIP Guest,Zameldowany
+R007,101,2026-02-10,2026-02-13,Piotr Zieliński,Potwierdzona
+R008,105,2026-02-09,2026-02-11,Marek Papszun,Anulowana
+R009,101,2026-02-03,2026-02-07,uuuu,Potwierdzona

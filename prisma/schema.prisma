@@ -1,0 +1,163 @@
+// Hotel PMS – minimalna schema pod Front Office i Finanse
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Enums ---
+enum RoomStatus {
+  CLEAN
+  DIRTY
+  OOO
+}
+
+enum ReservationStatus {
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+  NO_SHOW
+}
+
+enum AuditActionType {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+// --- Modele ---
+model RoomType {
+  id         String   @id @default(cuid())
+  name       String   @unique  // np. "Queen", "Twin", "Suite"
+  basePrice  Decimal? @db.Decimal(10, 2)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  ratePlans  RatePlan[]
+}
+
+model RatePlan {
+  id             String    @id @default(cuid())
+  roomTypeId     String
+  roomType       RoomType  @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  validFrom      DateTime  @db.Date
+  validTo        DateTime  @db.Date
+  price          Decimal   @db.Decimal(10, 2)
+  minStayNights  Int?      // min. długość pobytu (nocy)
+  maxStayNights  Int?      // max. długość pobytu (nocy)
+  isNonRefundable Boolean  @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  @@index([roomTypeId])
+  @@index([validFrom, validTo])
+}
+
+model Room {
+  id            String   @id @default(cuid())
+  number        String   @unique
+  type          String
+  status        RoomStatus
+  price         Decimal? @db.Decimal(10, 2)
+  reason        String?  // np. "Broken AC" dla OOO
+  activeForSale Boolean  @default(true) // false = wycofany ze sprzedaży (nie pokazywany na grafiku / w dostępności)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  reservations Reservation[]
+}
+
+model Guest {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  mrz       String?  // kod MRZ z dowodu (skaner 2D)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reservations Reservation[]
+}
+
+model RateCode {
+  id        String   @id @default(cuid())
+  code      String   @unique  // np. "BB", "RO", "NET"
+  name      String   // np. "Śniadanie", "Tylko nocleg"
+  price     Decimal? @db.Decimal(10, 2)  // cena za dobę przy tej stawce (opcjonalnie – może nadpisywać cenę pokoju)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  reservations Reservation[]
+}
+
+model Reservation {
+  id        String           @id @default(cuid())
+  guestId   String
+  guest     Guest            @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  roomId    String
+  room      Room             @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  rateCodeId String?
+  rateCode   RateCode?        @relation(fields: [rateCodeId], references: [id], onDelete: SetNull)
+  checkIn   DateTime         @db.Date
+  checkOut  DateTime         @db.Date
+  status    ReservationStatus
+  pax       Int?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  transactions Transaction[]
+
+  @@index([checkIn, checkOut])
+  @@index([roomId])
+  @@index([rateCodeId])
+}
+
+model AuditLog {
+  id         String         @id @default(cuid())
+  timestamp  DateTime       @default(now())
+  userId     String?
+  actionType AuditActionType
+  entityType String         // np. "Reservation", "Room"
+  entityId   String?
+  oldValue   Json?
+  newValue   Json?
+  ipAddress  String?
+
+  @@index([timestamp])
+  @@index([entityType, entityId])
+}
+
+model Transaction {
+  id             String   @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  amount         Decimal  @db.Decimal(12, 2)
+  type           String   // np. "ROOM", "DEPOSIT", "VOID"
+  isReadOnly     Boolean  @default(false) // po Night Audit
+  createdAt      DateTime @default(now())
+
+  @@index([reservationId])
+}
+
+model CennikConfig {
+  id             String   @id @default("default")
+  currency       String   @default("PLN")
+  vatPercent     Decimal  @db.Decimal(5, 2) @default(0)  // np. 8, 23
+  pricesAreNetto Boolean  @default(true)
+  updatedAt      DateTime @updatedAt
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("RECEPTION")  // RECEPTION | MANAGER | HOUSEKEEPING
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
