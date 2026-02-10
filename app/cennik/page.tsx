@@ -96,7 +96,7 @@ export default function CennikPage() {
           }, {})
         );
       } else {
-        setLoadError(roomsRes.success ? undefined : roomsRes.error ?? "Błąd ładowania pokoi");
+        setLoadError(roomsRes.success ? null : roomsRes.error ?? "Błąd ładowania pokoi");
         toast.error(roomsRes.success ? undefined : roomsRes.error);
       }
       if (typesRes.success && typesRes.data) {
@@ -161,7 +161,7 @@ export default function CennikPage() {
       setNewCodePrice("");
       toast.success("Kod stawki dodany.");
     } else {
-      toast.error(result.error);
+      toast.error("error" in result ? result.error : "Błąd dodawania kodu stawki");
     }
   };
 
@@ -179,7 +179,7 @@ export default function CennikPage() {
       toast.success(`Skopiowano ${result.data.copied} stawek sezonowych z ${from} na ${to}.`);
       load();
     } else {
-      toast.error(result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   };
 
@@ -188,7 +188,7 @@ export default function CennikPage() {
     if (result.success) {
       setRateCodes((prev) => prev.filter((c) => c.id !== id));
       toast.success("Kod stawki usunięty.");
-    } else toast.error(result.error);
+    } else toast.error("error" in result ? result.error : "Błąd");
   };
 
   useEffect(() => {
@@ -214,7 +214,7 @@ export default function CennikPage() {
         if (r.success && r.data) setPriceHistory(r.data);
       });
     } else {
-      toast.error(result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   };
 
@@ -235,7 +235,7 @@ export default function CennikPage() {
       );
       load();
     } else {
-      toast.error(result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   };
 
@@ -274,7 +274,7 @@ export default function CennikPage() {
       setNewPlanNonRefund(false);
       toast.success("Stawka sezonowa dodana.");
     } else {
-      toast.error(result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   };
 
@@ -295,7 +295,7 @@ export default function CennikPage() {
       setCennikConfig(result.data);
       toast.success("Ustawienia zapisane.");
     } else {
-      toast.error(result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   };
 
@@ -304,7 +304,7 @@ export default function CennikPage() {
     if (result.success) {
       setRatePlans((prev) => prev.filter((p) => p.id !== id));
       toast.success("Stawka usunięta.");
-    } else toast.error(result.error);
+    } else toast.error("error" in result ? result.error : "Błąd");
   };
 
   if (loading) {
@@ -438,7 +438,7 @@ export default function CennikPage() {
                         prev.map((x) => (x.id === t.id ? { ...x, name } : x))
                       );
                     } else {
-                      toast.error(result.error);
+                      toast.error("error" in result ? result.error : "Błąd");
                     }
                   }}
                 >

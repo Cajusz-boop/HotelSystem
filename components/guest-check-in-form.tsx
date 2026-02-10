@@ -128,7 +128,7 @@ export function GuestCheckInForm() {
       setCompanyData(result.data);
       toast.success("Dane firmy wczytane z wykazu VAT.");
     } else {
-      toast.error(result.success ? undefined : result.error);
+      toast.error("error" in result ? result.error : "Błąd");
       setCompanyData(null);
     }
   };
@@ -153,7 +153,7 @@ export function GuestCheckInForm() {
     if (result.success) {
       toast.success("Firma zapisana w bazie – przy kolejnym „Pobierz dane” dla tego NIP wczyta się pełna nazwa.");
     } else {
-      toast.error(result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   };
 
@@ -194,7 +194,7 @@ export function GuestCheckInForm() {
       setCheckInStr(toDateStr(new Date(Date.now() + 86400000)));
       setCheckOutStr(toDateStr(new Date(Date.now() + 2 * 86400000)));
     } else {
-      toast.error(result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   };
 
@@ -329,7 +329,10 @@ export function GuestCheckInForm() {
       </div>
 
       {/* Firma (do meldunku / faktury) – auto-uzupełnianie po NIP */}
-      <div className="space-y-3 rounded-lg border border-border/50 bg-muted/30 p-4">
+      <div
+        className="space-y-3 rounded-lg border border-border/50 bg-muted/30 p-4"
+        data-testid="check-in-company-section"
+      >
         <h3 className="flex items-center gap-2 text-sm font-semibold">
           <Building2 className="h-4 w-4" />
           Firma (do meldunku / faktury)

@@ -1,9 +1,14 @@
 # Wdrożenie na mydevil: build lokalnie + synchronizacja na serwer
 # Uruchom z katalogu projektu: .\scripts\deploy-to-mydevil.ps1
 # Przy scp zostaniesz poproszony o hasło SSH (jeśli nie masz klucza).
+#
+# Jeśli skrypt "nie startuje" (brak outputu), uruchom:
+#   powershell -ExecutionPolicy Bypass -File .\scripts\deploy-to-mydevil.ps1
+# albo raz na konto: Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 
 $ErrorActionPreference = "Stop"
-$ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+Write-Host "=== deploy-to-mydevil.ps1 start ===" -ForegroundColor Green
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
 $SSH_USER = "karczma-labedz"
@@ -25,6 +30,7 @@ Copy-Item -Path "node_modules\.prisma\*" -Destination ".next\standalone\node_mod
 Write-Host "`n=== 4/4 Wysyłanie na serwer (scp) ===" -ForegroundColor Cyan
 Write-Host "Cel: ${SSH_USER}@${SSH_HOST}:${REMOTE_PATH}" -ForegroundColor Yellow
 Write-Host "Wgraj: app.js, .next" -ForegroundColor Yellow
+# Uwaga: komunikaty „No such file or directory” dla export-marker.json / images-manifest.json można zignorować – aplikacja działa bez nich
 scp -r app.js .next "${SSH_USER}@${SSH_HOST}:${REMOTE_PATH}/"
 
 Write-Host "`n[OK] Wyslano. Na serwerze uruchom: devil www restart hotel.karczma-labedz.pl" -ForegroundColor Green

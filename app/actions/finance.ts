@@ -410,7 +410,7 @@ export async function printInvoiceForReservation(
 
     const result = await printFiscalInvoice(invoiceRequest);
     if (!result.success) {
-      return { success: false, error: result.error };
+      return { success: false, error: result.error ?? "Nieznany błąd druku" };
     }
     return { success: true, data: { invoiceNumber: result.invoiceNumber } };
   } catch (e) {

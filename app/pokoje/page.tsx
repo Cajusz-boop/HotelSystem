@@ -74,7 +74,7 @@ export default function PokojePage() {
       getRoomTypes().then((r) => r.success && r.data && setRoomTypes(r.data));
       toast.success(`Dodano pokój ${result.data.number}`);
     } else {
-      toast.error(result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   };
 
@@ -94,7 +94,7 @@ export default function PokojePage() {
           : "Pokój przywrócony do sprzedaży"
       );
     } else {
-      toast.error(result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   };
 
@@ -107,7 +107,7 @@ export default function PokojePage() {
       setRooms((prev) => prev.filter((r) => r.id !== room.id));
       toast.success(`Usunięto pokój ${room.number}`);
     } else {
-      toast.error(result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   };
 

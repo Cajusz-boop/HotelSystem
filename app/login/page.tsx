@@ -23,7 +23,7 @@ export default function LoginPage() {
       router.push("/");
       router.refresh();
     } else {
-      toast.error(result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   };
 

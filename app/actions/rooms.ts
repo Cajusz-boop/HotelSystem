@@ -69,7 +69,7 @@ export async function getEffectivePricesBatch(
     select: { number: true, type: true, price: true },
   });
   const roomByNumber = new Map(rooms.map((r) => [r.number, r]));
-  const typeNames = [...new Set(rooms.map((r) => r.type))];
+  const typeNames = Array.from(new Set(rooms.map((r) => r.type)));
   const roomTypes = await prisma.roomType.findMany({
     where: { name: { in: typeNames } },
     select: { id: true, name: true, basePrice: true },
@@ -760,7 +760,7 @@ export async function getPriceChangeHistory(
       const n = log.newValue as Record<string, unknown> | null;
       return (o && "price" in o) || (n && "price" in n);
     }).slice(0, limit);
-    const roomIds = [...new Set(withPrice.map((l) => l.entityId).filter(Boolean))] as string[];
+    const roomIds = Array.from(new Set(withPrice.map((l) => l.entityId).filter(Boolean))) as string[];
     const rooms = await prisma.room.findMany({
       where: { id: { in: roomIds } },
       select: { id: true, number: true },
