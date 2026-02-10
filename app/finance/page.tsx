@@ -81,7 +81,7 @@ export default function FinancePage() {
         `Zamknięto dobę. Transakcji: ${result.data.closedCount}. Suma: ${result.data.reportSummary.totalAmount} PLN.`
       );
     } else {
-      toast.error(result.success ? undefined : result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   };
 
@@ -103,7 +103,7 @@ export default function FinancePage() {
           : `Superata: ${result.data.difference.toFixed(2)} PLN`
       );
     } else {
-      toast.error(result.success ? undefined : result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   };
 
@@ -124,7 +124,7 @@ export default function FinancePage() {
         if (r.success && r.data) setTodayTransactions(r.data);
       });
     } else {
-      toast.error(result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   };
 

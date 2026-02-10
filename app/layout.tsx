@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import { AppSidebar } from "@/components/app-sidebar";
 import { CommandPalette } from "@/components/command-palette";
@@ -8,7 +7,8 @@ import { Providers } from "@/components/providers";
 import { getSession } from "@/lib/auth";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin", "latin-ext"] });
+// Czcionka systemowa zamiast next/font (Inter) – unikamy zawieszania przy starcie przy wolnym/braku sieci
+const fontClass = "font-sans";
 
 export const metadata: Metadata = {
   title: "Hotel PMS – System rezerwacji",
@@ -23,7 +23,7 @@ export default async function RootLayout({
   const session = await getSession();
   return (
     <html lang="pl">
-      <body className={`${inter.className} pms-allow-clicks`} suppressHydrationWarning>
+      <body className={`${fontClass} pms-allow-clicks`} suppressHydrationWarning>
         {/* Wymusza klikalność: Radix zostawia pointer-events:none na body – co 50ms dodajemy klasę gdy żaden overlay nie jest otwarty; CSS z !important nadpisuje inline. */}
         <script
           dangerouslySetInnerHTML={{

@@ -87,7 +87,7 @@ export function ReservationBarWithMenu({
     if (result.success && result.data) {
       toast.success("Meldunek zarejestrowany");
       onStatusChange?.(result.data as Reservation);
-    } else if (!result.success) toast.error(result.error);
+    } else if (!result.success) toast.error("error" in result ? result.error : "Błąd");
   }, [reservation.id, onStatusChange]);
 
   const handleCancel = useCallback(async () => {
@@ -95,7 +95,7 @@ export function ReservationBarWithMenu({
     if (result.success && result.data) {
       toast.success("Rezerwacja anulowana");
       onStatusChange?.(result.data as Reservation);
-    } else if (!result.success) toast.error(result.error);
+    } else if (!result.success) toast.error("error" in result ? result.error : "Błąd");
   }, [reservation.id, onStatusChange]);
 
   const handlePrintInvoice = useCallback(async () => {
@@ -107,7 +107,7 @@ export function ReservationBarWithMenu({
           : "Faktura wysłana do kasy (POSNET)"
       );
     } else {
-      toast.error(result.error);
+      toast.error("error" in result ? result.error : "Błąd");
     }
   }, [reservation.id]);
 
