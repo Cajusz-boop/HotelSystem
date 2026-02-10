@@ -6,9 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createReservation, findGuestByNameOrMrz } from "@/app/actions/reservations";
 import { getAvailableRoomsForDates } from "@/app/actions/rooms";
+import { lookupCompanyByNip, createOrUpdateCompany, type CompanyFromNip } from "@/app/actions/companies";
 import { parseMRZ } from "@/lib/mrz";
 import { toast } from "sonner";
-import { ScanLine, Upload, UserCheck } from "lucide-react";
+import { ScanLine, Upload, UserCheck, Building2, Search, Save } from "lucide-react";
 
 /** Symulacja OCR: z pliku nie odczytujemy prawdziwych danych – wypełniamy mock i natychmiast usuwamy plik */
 function simulateOcrFromFile(_file: File): Promise<{ name: string; mrz?: string }> {
@@ -48,6 +49,10 @@ export function GuestCheckInForm() {
   const [rooms, setRooms] = useState<Array<{ number: string; type: string; status: string }>>([]);
   const [uploadStatus, setUploadStatus] = useState<"idle" | "processing" | "done" | "error">("idle");
   const [existingGuestMatch, setExistingGuestMatch] = useState<{ name: string } | null>(null);
+  const [nipInput, setNipInput] = useState("");
+  const [companyData, setCompanyData] = useState<CompanyFromNip | null>(null);
+  const [nipLoading, setNipLoading] = useState(false);
+  const [companySaveLoading, setCompanySaveLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadAvailableRooms = useCallback(() => {
@@ -110,6 +115,48 @@ export function GuestCheckInForm() {
     }
   };
 
+  const handleFetchCompany = async () => {
+    const nip = nipInput.replace(/\D/g, "").trim();
+    if (nip.length !== 10) {
+      toast.error("Wprowadź prawidłowy NIP (10 cyfr).");
+      return;
+    }
+    setNipLoading(true);
+    const result = await lookupCompanyByNip(nip);
+    setNipLoading(false);
+    if (result.success && result.data) {
+      setCompanyData(result.data);
+      toast.success("Dane firmy wczytane z wykazu VAT.");
+    } else {
+      toast.error(result.success ? undefined : result.error);
+      setCompanyData(null);
+    }
+  };
+
+  const handleSaveCompany = async () => {
+    if (!companyData) return;
+    const nip = companyData.nip.replace(/\D/g, "").slice(0, 10);
+    if (nip.length !== 10) {
+      toast.error("NIP musi mieć 10 cyfr.");
+      return;
+    }
+    setCompanySaveLoading(true);
+    const result = await createOrUpdateCompany({
+      nip,
+      name: companyData.name.trim(),
+      address: companyData.address ?? undefined,
+      postalCode: companyData.postalCode ?? undefined,
+      city: companyData.city ?? undefined,
+      country: companyData.country,
+    });
+    setCompanySaveLoading(false);
+    if (result.success) {
+      toast.success("Firma zapisana w bazie – przy kolejnym „Pobierz dane” dla tego NIP wczyta się pełna nazwa.");
+    } else {
+      toast.error(result.error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (rooms.length === 0 || !room) {
@@ -123,6 +170,18 @@ export function GuestCheckInForm() {
       checkOut: checkOutStr,
       status: "CONFIRMED",
       mrz: mrz.trim() || undefined,
+      ...(companyData
+        ? {
+            companyData: {
+              nip: companyData.nip.replace(/\D/g, "").slice(0, 10),
+              name: companyData.name,
+              address: companyData.address ?? undefined,
+              postalCode: companyData.postalCode ?? undefined,
+              city: companyData.city ?? undefined,
+              country: companyData.country,
+            },
+          }
+        : {}),
     });
     if (result.success) {
       toast.success("Rezerwacja utworzona.");
@@ -130,6 +189,8 @@ export function GuestCheckInForm() {
       setEmail("");
       setPhone("");
       setMrz("");
+      setCompanyData(null);
+      setNipInput("");
       setCheckInStr(toDateStr(new Date(Date.now() + 86400000)));
       setCheckOutStr(toDateStr(new Date(Date.now() + 2 * 86400000)));
     } else {
@@ -265,6 +326,108 @@ export function GuestCheckInForm() {
           onChange={(e) => setPhone(e.target.value)}
           placeholder="opcjonalnie"
         />
+      </div>
+
+      {/* Firma (do meldunku / faktury) – auto-uzupełnianie po NIP */}
+      <div className="space-y-3 rounded-lg border border-border/50 bg-muted/30 p-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold">
+          <Building2 className="h-4 w-4" />
+          Firma (do meldunku / faktury)
+        </h3>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-[140px] flex-1 space-y-1">
+            <Label htmlFor="nip">NIP</Label>
+            <Input
+              id="nip"
+              value={nipInput}
+              onChange={(e) => setNipInput(e.target.value)}
+              placeholder="np. 5261040828"
+              maxLength={14}
+              aria-label="NIP firmy"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleFetchCompany}
+            disabled={nipLoading}
+          >
+            <Search className="mr-2 h-4 w-4" />
+            {nipLoading ? "Pobieranie…" : "Pobierz dane"}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Dane z Wykazu podatników VAT (Ministerstwo Finansów). Opcjonalnie – do faktury na POSNET.
+        </p>
+        {companyData && (
+          <div className="grid gap-2 border-t border-border/50 pt-3 sm:grid-cols-2">
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="companyName">Nazwa firmy</Label>
+              <Input
+                id="companyName"
+                value={companyData.name}
+                onChange={(e) =>
+                  setCompanyData((prev) => (prev ? { ...prev, name: e.target.value } : null))
+                }
+                placeholder="np. Karczma Łabędź Łukasz Wojenkowski"
+                aria-describedby="companyNameHint"
+              />
+              <p id="companyNameHint" className="text-xs text-muted-foreground">
+                Pole edytowalne – dopisz nazwę handlową (np. przed „PIOTR ZIELIŃSKI”). Zapisz firmę w bazie przyciskiem poniżej – przy kolejnym „Pobierz dane” dla tego NIP wczyta się pełna nazwa (działa tak samo jak dla Karczmy Łabędź).
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleSaveCompany}
+                disabled={companySaveLoading}
+                className="mt-2"
+              >
+                <Save className="mr-2 h-4 w-4" />
+                {companySaveLoading ? "Zapisywanie…" : "Zapisz firmę w bazie"}
+              </Button>
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="companyAddress">Adres</Label>
+              <Input
+                id="companyAddress"
+                value={companyData.address ?? ""}
+                onChange={(e) =>
+                  setCompanyData((prev) =>
+                    prev ? { ...prev, address: e.target.value || null } : null
+                  )
+                }
+                placeholder="ulica, nr"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="companyPostalCode">Kod pocztowy</Label>
+              <Input
+                id="companyPostalCode"
+                value={companyData.postalCode ?? ""}
+                onChange={(e) =>
+                  setCompanyData((prev) =>
+                    prev ? { ...prev, postalCode: e.target.value || null } : null
+                  )
+                }
+                placeholder="00-000"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="companyCity">Miasto</Label>
+              <Input
+                id="companyCity"
+                value={companyData.city ?? ""}
+                onChange={(e) =>
+                  setCompanyData((prev) =>
+                    prev ? { ...prev, city: e.target.value || null } : null
+                  )
+                }
+                placeholder="Warszawa"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Pole MRZ – pod skaner 2D */}

@@ -24,3 +24,6 @@ prisma/migrations/**/migration_lock.toml
 .DS_Store
 *.log
 npm-debug.log*
+
+# POSNET bridge spool
+posnet-bridge/spool

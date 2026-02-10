@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireExternalApiKey } from "@/lib/api-auth";
+import { isFiscalEnabled, printFiscalReceipt, buildReceiptRequest } from "@/lib/fiscal";
 
 interface PostingBody {
   reservationId?: string;
@@ -77,14 +78,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const txType = type.toUpperCase().slice(0, 20);
     const tx = await prisma.transaction.create({
       data: {
         reservationId: resId,
         amount,
-        type: type.toUpperCase().slice(0, 20),
+        type: txType,
         isReadOnly: false,
       },
     });
+
+    if (await isFiscalEnabled()) {
+      const receiptRequest = await buildReceiptRequest({
+        transactionId: tx.id,
+        reservationId: resId,
+        amount: Number(tx.amount),
+        type: txType,
+        description: description ?? undefined,
+      });
+      const fiscalResult = await printFiscalReceipt(receiptRequest);
+      if (!fiscalResult.success && fiscalResult.error) {
+        // Transakcja już zapisana – logujemy błąd kasy, nie przerywamy odpowiedzi
+        console.error("[FISCAL] Błąd druku paragonu:", fiscalResult.error);
+      }
+    }
 
     return NextResponse.json({
       success: true,

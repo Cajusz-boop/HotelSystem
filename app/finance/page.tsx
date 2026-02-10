@@ -14,7 +14,9 @@ import {
 } from "@/app/actions/finance";
 import type { TransactionForList } from "@/app/actions/finance";
 import { toast } from "sonner";
-import { Moon, Banknote, Shield, FileText } from "lucide-react";
+import { Moon, Banknote, Shield, FileText, Receipt } from "lucide-react";
+import { getFiscalConfig } from "@/lib/fiscal";
+import type { FiscalConfig } from "@/lib/fiscal/types";
 
 const FINANCE_LOAD_TIMEOUT_MS = 15_000;
 
@@ -35,6 +37,7 @@ export default function FinancePage() {
   const [voidPin, setVoidPin] = useState("");
   const [voidLoading, setVoidLoading] = useState(false);
   const [todayTransactions, setTodayTransactions] = useState<TransactionForList[]>([]);
+  const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -53,6 +56,7 @@ export default function FinancePage() {
         getTransactionsForToday().then((r) => {
           if (r.success && r.data) setTodayTransactions(r.data);
         }),
+        getFiscalConfig().then(setFiscalConfig),
       ]),
       timeoutPromise,
     ])
@@ -304,6 +308,33 @@ export default function FinancePage() {
             generuje fakturę zaliczkową (logika w Server Action przy tworzeniu
             transakcji typu DEPOSIT).
           </p>
+        </section>
+
+        {/* Kasa fiskalna */}
+        <section className="rounded-lg border bg-card p-6 shadow-sm">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
+            <Receipt className="h-5 w-5" />
+            Kasa fiskalna
+          </h2>
+          {fiscalConfig ? (
+            <>
+              <p className="mb-2 text-sm text-muted-foreground">
+                Status:{" "}
+                <span className={fiscalConfig.enabled ? "text-green-600 font-medium" : "text-muted-foreground"}>
+                  {fiscalConfig.enabled ? "Włączona" : "Wyłączona"}
+                </span>
+                {fiscalConfig.enabled && (
+                  <> · Sterownik: <span className="font-medium">{fiscalConfig.driver}</span></>
+                )}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Przy włączeniu (FISCAL_ENABLED=true) każda transakcja (posting, zaliczka) wysyła paragon do kasy.
+                Sterownik „mock” tylko loguje w konsoli. Zobacz docs/KASA-FISKALNA.md.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Ładowanie konfiguracji kasy…</p>
+          )}
         </section>
       </div>
     </div>
