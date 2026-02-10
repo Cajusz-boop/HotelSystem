@@ -11,6 +11,7 @@ import {
   type MoveReservationInput,
 } from "@/lib/validations/schemas";
 import type { ReservationStatus } from "@prisma/client";
+import { createOrUpdateCompany } from "@/app/actions/companies";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
@@ -145,17 +146,35 @@ export async function createReservation(
       }
     }
 
+    let companyId: string | null = data.companyId ?? null;
+    if (data.companyData) {
+      // Upsert Company (incl. user-edited full trading name) so next NIP lookup returns it from DB
+      const companyResult = await createOrUpdateCompany({
+        nip: data.companyData.nip,
+        name: data.companyData.name,
+        address: data.companyData.address,
+        postalCode: data.companyData.postalCode,
+        city: data.companyData.city,
+        country: data.companyData.country,
+      });
+      if (!companyResult.success) {
+        return { success: false, error: companyResult.error };
+      }
+      companyId = companyResult.data.companyId;
+    }
+
     const reservation = await prisma.reservation.create({
       data: {
         guestId: guest.id,
         roomId: room.id,
+        ...(companyId ? { companyId } : {}),
         ...(data.rateCodeId != null && data.rateCodeId !== "" ? { rateCodeId: data.rateCodeId } : {}),
         checkIn: new Date(data.checkIn),
         checkOut: new Date(data.checkOut),
         status: data.status,
         pax: data.pax ?? null,
       },
-      include: { guest: true, room: true, rateCode: true },
+      include: { guest: true, room: true, rateCode: true, company: true },
     });
 
     await createAuditLog({

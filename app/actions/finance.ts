@@ -5,6 +5,12 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { createAuditLog, getClientIp } from "@/lib/audit";
 import { blindDropSchema } from "@/lib/validations/schemas";
+import {
+  isFiscalEnabled,
+  printFiscalReceipt,
+  buildReceiptRequest,
+  printFiscalInvoice,
+} from "@/lib/fiscal";
 
 const MANAGER_PIN = process.env.MANAGER_PIN ?? "1234";
 
@@ -280,6 +286,21 @@ export async function createDepositPayment(
       },
     });
 
+    if (await isFiscalEnabled()) {
+      const receiptRequest = await buildReceiptRequest({
+        transactionId: tx.id,
+        reservationId,
+        amount: Number(tx.amount),
+        type: "DEPOSIT",
+        description: "Zaliczka",
+        itemName: "Zaliczka",
+      });
+      const fiscalResult = await printFiscalReceipt(receiptRequest);
+      if (!fiscalResult.success && fiscalResult.error) {
+        console.error("[FISCAL] Błąd druku paragonu zaliczki:", fiscalResult.error);
+      }
+    }
+
     await createAuditLog({
       actionType: "CREATE",
       entityType: "Transaction",
@@ -338,6 +359,64 @@ export async function voidTransaction(
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd void transakcji",
+    };
+  }
+}
+
+/** Druk faktury na POSNET dla rezerwacji (wymaga firmy przy meldunku) */
+export async function printInvoiceForReservation(
+  reservationId: string
+): Promise<ActionResult<{ invoiceNumber?: string }>> {
+  try {
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: { company: true, transactions: true },
+    });
+    if (!reservation) {
+      return { success: false, error: "Rezerwacja nie istnieje" };
+    }
+    if (!reservation.company) {
+      return {
+        success: false,
+        error: "Brak firmy przy rezerwacji – wpisz NIP przy meldunku i zapisz rezerwację z firmą.",
+      };
+    }
+
+    const totalAmount = reservation.transactions.reduce(
+      (sum, t) => sum + Number(t.amount),
+      0
+    );
+    const items = reservation.transactions.length
+      ? reservation.transactions.map((t) => ({
+          name: t.type === "ROOM" ? "Nocleg" : t.type === "DEPOSIT" ? "Zaliczka" : t.type,
+          quantity: 1,
+          unitPrice: Number(t.amount),
+        }))
+      : [{ name: "Usługa hotelowa", quantity: 1, unitPrice: totalAmount || 0 }];
+
+    const invoiceRequest = {
+      reservationId: reservation.id,
+      company: {
+        nip: reservation.company.nip,
+        name: reservation.company.name,
+        address: reservation.company.address,
+        postalCode: reservation.company.postalCode,
+        city: reservation.company.city,
+      },
+      items,
+      totalAmount: totalAmount || 0,
+      description: "Faktura za pobyt",
+    };
+
+    const result = await printFiscalInvoice(invoiceRequest);
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+    return { success: true, data: { invoiceNumber: result.invoiceNumber } };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd druku faktury",
     };
   }
 }

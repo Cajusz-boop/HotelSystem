@@ -10,8 +10,10 @@ import {
 } from "@/components/ui/context-menu";
 import { ReservationBar } from "./reservation-bar";
 import { updateReservationStatus } from "@/app/actions/reservations";
+import { printInvoiceForReservation } from "@/app/actions/finance";
 import { toast } from "sonner";
 import type { Reservation } from "@/lib/tape-chart-types";
+import { FileText } from "lucide-react";
 
 const LONG_PRESS_MS = 500;
 
@@ -96,6 +98,19 @@ export function ReservationBarWithMenu({
     } else if (!result.success) toast.error(result.error);
   }, [reservation.id, onStatusChange]);
 
+  const handlePrintInvoice = useCallback(async () => {
+    const result = await printInvoiceForReservation(reservation.id);
+    if (result.success) {
+      toast.success(
+        result.data?.invoiceNumber
+          ? `Faktura wydrukowana: ${result.data.invoiceNumber}`
+          : "Faktura wysłana do kasy (POSNET)"
+      );
+    } else {
+      toast.error(result.error);
+    }
+  }, [reservation.id]);
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -131,6 +146,10 @@ export function ReservationBarWithMenu({
           disabled={reservation.status !== "CONFIRMED" && reservation.status !== "CHECKED_IN"}
         >
           Meldunek
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={handlePrintInvoice}>
+          <FileText className="mr-2 h-4 w-4" />
+          Drukuj fakturę (POSNET)
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem

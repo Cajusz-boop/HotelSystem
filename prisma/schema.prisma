@@ -85,6 +85,20 @@ model Guest {
   reservations Reservation[]
 }
 
+model Company {
+  id          String   @id @default(cuid())
+  nip         String   @unique  // NIP (10 znaków)
+  name        String   // nazwa firmy
+  address     String?  // ulica, nr
+  postalCode  String?  // np. 00-925
+  city        String?  // np. WARSZAWA
+  country     String   @default("POL")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  reservations Reservation[]
+}
+
 model RateCode {
   id        String   @id @default(cuid())
   code      String   @unique  // np. "BB", "RO", "NET"
@@ -96,25 +110,28 @@ model RateCode {
 }
 
 model Reservation {
-  id        String           @id @default(cuid())
-  guestId   String
-  guest     Guest            @relation(fields: [guestId], references: [id], onDelete: Cascade)
-  roomId    String
-  room      Room             @relation(fields: [roomId], references: [id], onDelete: Restrict)
-  rateCodeId String?
-  rateCode   RateCode?        @relation(fields: [rateCodeId], references: [id], onDelete: SetNull)
-  checkIn   DateTime         @db.Date
-  checkOut  DateTime         @db.Date
-  status    ReservationStatus
-  pax       Int?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id          String           @id @default(cuid())
+  guestId     String
+  guest       Guest            @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  roomId      String
+  room        Room             @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  companyId   String?          // firma do meldunku / do faktury
+  company     Company?         @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  rateCodeId  String?
+  rateCode    RateCode?        @relation(fields: [rateCodeId], references: [id], onDelete: SetNull)
+  checkIn     DateTime         @db.Date
+  checkOut    DateTime         @db.Date
+  status      ReservationStatus
+  pax         Int?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
   transactions Transaction[]
 
   @@index([checkIn, checkOut])
   @@index([roomId])
   @@index([rateCodeId])
+  @@index([companyId])
 }
 
 model AuditLog {

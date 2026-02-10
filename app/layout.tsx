@@ -23,7 +23,7 @@ export default async function RootLayout({
   const session = await getSession();
   return (
     <html lang="pl">
-      <body className={inter.className}>
+      <body className={`${inter.className} pms-allow-clicks`} suppressHydrationWarning>
         {/* Wymusza klikalność: Radix zostawia pointer-events:none na body – co 50ms dodajemy klasę gdy żaden overlay nie jest otwarty; CSS z !important nadpisuje inline. */}
         <script
           dangerouslySetInnerHTML={{

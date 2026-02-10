@@ -22,11 +22,29 @@ export const guestSchema = z.object({
 
 export type GuestInput = z.infer<typeof guestSchema>;
 
+// --- Firma (NIP, nazwa, adres – do meldunku / faktury) ---
+export const companyDataSchema = z
+  .object({
+    nip: z.string().min(1, "NIP wymagany"),
+    name: z.string().min(1, "Nazwa firmy wymagana").max(200),
+    address: z.string().max(200).optional().nullable(),
+    postalCode: z.string().max(20).optional().nullable(),
+    city: z.string().max(100).optional().nullable(),
+    country: z.string().max(10).optional(),
+  })
+  .refine((d) => d.nip.replace(/\D/g, "").length === 10, {
+    message: "NIP musi mieć 10 cyfr",
+    path: ["nip"],
+  });
+export type CompanyDataInput = z.infer<typeof companyDataSchema>;
+
 // --- Rezerwacja (dla formularzy i Server Actions) ---
 export const reservationSchema = z
   .object({
     guestName: z.string().min(1, "Nazwa gościa wymagana").max(200),
     room: z.string().min(1, "Pokój wymagany").max(20),
+    companyId: z.string().optional().nullable(),
+    companyData: companyDataSchema.optional().nullable(), // firma do meldunku – przy tworzeniu rezerwacji zapisana do Company i powiązana
     rateCodeId: z.string().optional().nullable(),
     checkIn: dateString,
     checkOut: dateString,
