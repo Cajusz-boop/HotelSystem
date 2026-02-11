@@ -30,6 +30,7 @@ echo Na serwerze (SSH) wykonaj:
 echo   cd ~/domains/hotel.karczma-labedz.pl/public_nodejs
 echo   unzip -o deploy_mydevil.zip
 echo   mkdir -p .next
+echo   rm -rf .next/standalone .next/static
 echo   mv standalone .next/
 echo   mv static .next/
 echo   devil www restart hotel.karczma-labedz.pl
