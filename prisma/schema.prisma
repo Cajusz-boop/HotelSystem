@@ -2,8 +2,11 @@
 // https://pris.ly/d/prisma-schema
 
 generator client {
-  provider   = "prisma-client-js"
-  engineType = "client"
+  provider      = "prisma-client-js"
+  engineType    = "client"
+  binaryTargets = ["native", "freebsd14"]
+  // Przy engineType=client silnik to WASM/Node (bez binariów), ale binaryTargets trzymane zgodnie z zasadami projektu.
+  // FreeBSD: działanie zapewnia @prisma/adapter-mariadb (czysty Node.js).
 }
 
 datasource db {

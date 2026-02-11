@@ -1,0 +1,41 @@
+---
+description: Zasady projektu Next.js + Prisma + MyDevil (FreeBSD) – infrastruktura, baza danych, deploy
+alwaysApply: true
+---
+
+# Zasady projektu: Next.js + Prisma + MyDevil (FreeBSD)
+
+## 1. Kontekst infrastruktury
+
+- **Serwer:** MyDevil (FreeBSD 14).
+- **Node:** Hostowany przez Passenger.
+- **Baza danych:** MySQL (MariaDB).
+- **Deploy:** Aplikacja działa w trybie `standalone`.
+
+## 2. Zarządzanie bazą danych (krytyczne)
+
+Każda zmiana w pliku `prisma/schema.prisma` **musi** być odzwierciedlona w bazie danych. Nie zakładaj, że baza zaktualizuje się sama.
+
+### Workflow przy zmianie schematu
+
+**Lokalnie (Windows):**
+
+1. Po edycji `schema.prisma` uruchom: `npx prisma db push` (historia migracji jest niespójna).
+2. Wygeneruj klienta: `npx prisma generate`.
+
+**Produkcja (MyDevil):**
+
+1. Po deployu plików aplikacji zaktualizuj strukturę bazy na serwerze.
+2. **Metoda zalecana (automatyczna):** Skrypt `deploy-to-mydevil.ps1` na końcu uruchamia przez SSH `npx prisma db push` na serwerze – baza aktualizuje się przy każdym deployu.
+3. **Metoda ręczna:** Jeśli deploy bez tego kroku – wejdź SSH i wpisz `npx prisma db push` w katalogu aplikacji (wymaga `DATABASE_URL` w `~/.bash_profile`).
+4. **Metoda awaryjna (SQL):** Gdy `db push` nie jest możliwe – przygotuj zapytania SQL (`ALTER TABLE`, `CREATE TABLE`) do wykonania w PhpMyAdmin.
+
+## 3. Unikanie błędów runtime (Prisma)
+
+W pliku `prisma/schema.prisma` w sekcji `generator client` **zawsze** muszą być ustawione `binaryTargets` dla obu środowisk:
+
+```prisma
+binaryTargets = ["native", "freebsd14"]
+```
+
+(Nawet przy `engineType = "client"` trzymaj te wartości dla spójności i na wypadek zmiany silnika.)
