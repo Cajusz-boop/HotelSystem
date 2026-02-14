@@ -1,10 +1,10 @@
 "use client";
 
-import { Sparkles, AlertTriangle, Wrench } from "lucide-react";
+import { Sparkles, AlertTriangle, Wrench, ClipboardCheck } from "lucide-react";
 import type { RoomStatus } from "@/lib/tape-chart-types";
 import { cn } from "@/lib/utils";
 
-/** Badge + ikona – rozróżnialne bez czytania: CLEAN=zielony, DIRTY=żółty, OOO=czerwony (WCAG AA) */
+/** Badge + ikona – CLEAN=zielony, DIRTY=żółty, OOO=czerwony, INSPECTION=niebieski (WCAG AA) */
 const statusConfig: Record<
   RoomStatus,
   { icon: typeof Sparkles; label: string; badgeClass: string; iconClass: string }
@@ -25,6 +25,12 @@ const statusConfig: Record<
     icon: Wrench,
     label: "OOO",
     badgeClass: "bg-red-600 text-white",
+    iconClass: "text-white",
+  },
+  INSPECTION: {
+    icon: ClipboardCheck,
+    label: "Do sprawdzenia",
+    badgeClass: "bg-blue-600 text-white",
     iconClass: "text-white",
   },
 };

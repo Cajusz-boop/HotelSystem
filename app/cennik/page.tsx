@@ -12,6 +12,7 @@ import {
   ensureRoomTypes,
   updateRoomTypeBasePrice,
   updateRoomTypeName,
+  updateRoomTypeSortOrder,
   getRatePlans,
   createRatePlan,
   deleteRatePlan,
@@ -28,6 +29,7 @@ import {
   type RateCodeForUi,
 } from "@/app/actions/rate-codes";
 import { getCennikConfig, updateCennikConfig, type CennikConfigForUi } from "@/app/actions/cennik-config";
+import { getPackagesForCennik, type PackageForCennik } from "@/app/actions/packages";
 import { toast } from "sonner";
 import { Receipt, Printer, FileText, History, ChevronDown, ChevronUp, Download, Upload, Calendar, Trash2, Tag } from "lucide-react";
 import Link from "next/link";
@@ -36,6 +38,10 @@ const STATUS_LABELS: Record<string, string> = {
   CLEAN: "Czysty",
   DIRTY: "Do sprzątania",
   OOO: "OOO",
+  INSPECTION: "Do sprawdzenia",
+  INSPECTED: "Sprawdzony",
+  CHECKOUT_PENDING: "Oczekuje wymeldowania",
+  MAINTENANCE: "Do naprawy",
 };
 
 export default function CennikPage() {
@@ -48,8 +54,10 @@ export default function CennikPage() {
   const [roomTypes, setRoomTypes] = useState<RoomTypeForCennik[]>([]);
   const [editingTypePrice, setEditingTypePrice] = useState<Record<string, string>>({});
   const [editingTypeName, setEditingTypeName] = useState<Record<string, string>>({});
+  const [editingTypeSortOrder, setEditingTypeSortOrder] = useState<Record<string, string>>({});
   const [savingTypeId, setSavingTypeId] = useState<string | null>(null);
   const [savingTypeNameId, setSavingTypeNameId] = useState<string | null>(null);
+  const [savingTypeSortOrderId, setSavingTypeSortOrderId] = useState<string | null>(null);
   const [ratePlans, setRatePlans] = useState<RatePlanForCennik[]>([]);
   const [newPlanRoomTypeId, setNewPlanRoomTypeId] = useState("");
   const [newPlanFrom, setNewPlanFrom] = useState("");
@@ -69,10 +77,12 @@ export default function CennikPage() {
   const [newPlanMinStay, setNewPlanMinStay] = useState("");
   const [newPlanMaxStay, setNewPlanMaxStay] = useState("");
   const [newPlanNonRefund, setNewPlanNonRefund] = useState(false);
+  const [newPlanWeekendHoliday, setNewPlanWeekendHoliday] = useState(false);
   const [copyFromYear, setCopyFromYear] = useState(String(new Date().getFullYear()));
   const [copyToYear, setCopyToYear] = useState(String(new Date().getFullYear() + 1));
   const [copying, setCopying] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [packages, setPackages] = useState<PackageForCennik[]>([]);
 
   const LOAD_TIMEOUT_MS = 15_000;
 
@@ -113,6 +123,12 @@ export default function CennikPage() {
             return acc;
           }, {})
         );
+        setEditingTypeSortOrder(
+          typesRes.data.reduce<Record<string, string>>((acc, t) => {
+            acc[t.id] = String(t.sortOrder ?? 0);
+            return acc;
+          }, {})
+        );
       }
       if (plansRes.success && plansRes.data) setRatePlans(plansRes.data);
       if (codesRes.success && codesRes.data) setRateCodes(codesRes.data);
@@ -123,6 +139,8 @@ export default function CennikPage() {
         setConfigVat(String(configRes.data.vatPercent));
         setConfigNetto(configRes.data.pricesAreNetto);
       }
+      const packagesRes = await getPackagesForCennik();
+      if (packagesRes.success && packagesRes.data) setPackages(packagesRes.data);
     };
     try {
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -261,6 +279,7 @@ export default function CennikPage() {
       minStayNights: minStay ?? null,
       maxStayNights: maxStay ?? null,
       isNonRefundable: newPlanNonRefund,
+      isWeekendHoliday: newPlanWeekendHoliday,
     });
     setAddingPlan(false);
     if (result.success && result.data) {
@@ -272,6 +291,7 @@ export default function CennikPage() {
       setNewPlanMinStay("");
       setNewPlanMaxStay("");
       setNewPlanNonRefund(false);
+      setNewPlanWeekendHoliday(false);
       toast.success("Stawka sezonowa dodana.");
     } else {
       toast.error("error" in result ? result.error : "Błąd");
@@ -389,8 +409,46 @@ export default function CennikPage() {
         <div className="rounded-lg border bg-card p-4 print:hidden">
           <h2 className="mb-3 text-sm font-semibold">Ceny wg typu pokoju (bazowe)</h2>
           <div className="flex flex-wrap gap-4">
-            {roomTypes.map((t) => (
-              <div key={t.id} className="flex items-center gap-2">
+            {[...roomTypes]
+              .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+              .map((t) => (
+              <div key={t.id} className="flex flex-wrap items-center gap-2">
+                <Label className="w-8 text-muted-foreground">Kolejność</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={editingTypeSortOrder[t.id] ?? ""}
+                  onChange={(e) =>
+                    setEditingTypeSortOrder((prev) => ({ ...prev, [t.id]: e.target.value }))
+                  }
+                  className="w-16"
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={savingTypeSortOrderId === t.id}
+                  onClick={async () => {
+                    const raw = (editingTypeSortOrder[t.id] ?? "").trim();
+                    const value = raw === "" ? 0 : parseInt(raw, 10);
+                    if (Number.isNaN(value) || value < 0) {
+                      toast.error("Kolejność: liczba całkowita nieujemna.");
+                      return;
+                    }
+                    setSavingTypeSortOrderId(t.id);
+                    const result = await updateRoomTypeSortOrder(t.id, value);
+                    setSavingTypeSortOrderId(null);
+                    if (result.success) {
+                      toast.success("Kolejność zapisana.");
+                      setRoomTypes((prev) =>
+                        prev.map((x) => (x.id === t.id ? { ...x, sortOrder: value } : x))
+                      );
+                    } else {
+                      toast.error("error" in result ? result.error : "Błąd");
+                    }
+                  }}
+                >
+                  {savingTypeSortOrderId === t.id ? "…" : "Zapisz"}
+                </Button>
                 <span className="w-20 font-medium">{t.name}</span>
                 <Input
                   type="text"
@@ -409,7 +467,7 @@ export default function CennikPage() {
                   disabled={savingTypeId === t.id}
                   onClick={() => handleSaveTypePrice(t.id)}
                 >
-                  {savingTypeId === t.id ? "…" : "Zapisz"}
+                  {savingTypeId === t.id ? "…" : "Zapisz cenę"}
                 </Button>
                 <Input
                   value={editingTypeName[t.id] ?? ""}
@@ -417,7 +475,7 @@ export default function CennikPage() {
                     setEditingTypeName((prev) => ({ ...prev, [t.id]: e.target.value }))
                   }
                   placeholder="Nazwa typu"
-                  className="ml-2 w-32"
+                  className="w-32"
                 />
                 <Button
                   size="sm"
@@ -515,6 +573,42 @@ export default function CennikPage() {
             {addingCode ? "…" : "Dodaj"}
           </Button>
         </form>
+      </div>
+
+      <div className="rounded-lg border bg-card p-4 print:hidden">
+        <h2 className="mb-3 text-sm font-semibold">Cennik pakietów</h2>
+        {packages.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="py-1 font-medium">Kod</th>
+                  <th className="py-1 font-medium">Nazwa</th>
+                  <th className="py-1 font-medium">Cena (PLN)</th>
+                  <th className="py-1 font-medium">Składniki</th>
+                </tr>
+              </thead>
+              <tbody>
+                {packages.map((pkg) => (
+                  <tr key={pkg.id} className="border-b last:border-0">
+                    <td className="py-1 font-medium">{pkg.code}</td>
+                    <td className="py-1">{pkg.name}</td>
+                    <td className="py-1">
+                      {pkg.totalPrice != null ? pkg.totalPrice.toFixed(2) : pkg.components.length > 0
+                        ? pkg.components.reduce((s, c) => s + c.unitPrice * c.quantity, 0).toFixed(2)
+                        : "–"}
+                    </td>
+                    <td className="py-1 text-muted-foreground">
+                      {pkg.components.map((c) => `${c.label} × ${c.quantity}`).join(", ") || "–"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-sm">Brak zdefiniowanych pakietów. Dodaj pakiety (np. room + śniadanie) w bazie.</p>
+        )}
       </div>
 
       {roomTypes.length > 0 && (
@@ -618,6 +712,15 @@ export default function CennikPage() {
                 className="rounded"
               />
               Niezwrotna
+            </label>
+            <label className="flex items-center gap-1 text-sm whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={newPlanWeekendHoliday}
+                onChange={(e) => setNewPlanWeekendHoliday(e.target.checked)}
+                className="rounded"
+              />
+              Weekend/święto
             </label>
             <Button type="submit" size="sm" disabled={addingPlan}>
               {addingPlan ? "…" : "Dodaj"}

@@ -19,7 +19,7 @@ test.describe("Nawigacja – Sidebar", () => {
   test("klik Front Office prowadzi do /front-office", async ({ page }) => {
     await page.getByRole("link", { name: "Front Office" }).click();
     await expect(page).toHaveURL(/\/front-office/);
-    await expect(page.getByRole("heading", { name: /Tape Chart/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Grafik|Tape Chart/i })).toBeVisible();
   });
 
   test("klik Meldunek prowadzi do /check-in", async ({ page }) => {

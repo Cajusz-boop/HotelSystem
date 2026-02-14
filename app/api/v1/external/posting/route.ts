@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireExternalApiKey } from "@/lib/api-auth";
+import { checkApiRateLimit } from "@/lib/rate-limit";
 import { isFiscalEnabled, printFiscalReceipt, buildReceiptRequest } from "@/lib/fiscal";
 
 interface PostingBody {
@@ -16,8 +17,11 @@ interface PostingBody {
  * Dla systemów POS (restauracja) i zewnętrznych softów konferencyjnych:
  * obciążenie pokoju/rezerwacji kwotą.
  * Opcjonalna autoryzacja: jeśli ustawiono EXTERNAL_API_KEY w .env, wymagany nagłówek X-API-Key lub Authorization: Bearer <key>
+ * Rate limit: 100 req/min na klucz API lub IP.
  */
 export async function POST(request: NextRequest) {
+  const rateLimitRes = checkApiRateLimit(request);
+  if (rateLimitRes) return rateLimitRes;
   const authError = requireExternalApiKey(request);
   if (authError) return authError;
 
@@ -88,6 +92,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    let fiscalError: string | undefined;
     if (await isFiscalEnabled()) {
       const receiptRequest = await buildReceiptRequest({
         transactionId: tx.id,
@@ -98,7 +103,7 @@ export async function POST(request: NextRequest) {
       });
       const fiscalResult = await printFiscalReceipt(receiptRequest);
       if (!fiscalResult.success && fiscalResult.error) {
-        // Transakcja już zapisana – logujemy błąd kasy, nie przerywamy odpowiedzi
+        fiscalError = fiscalResult.error;
         console.error("[FISCAL] Błąd druku paragonu:", fiscalResult.error);
       }
     }
@@ -110,6 +115,7 @@ export async function POST(request: NextRequest) {
       amount: Number(tx.amount),
       type: tx.type,
       description: description ?? null,
+      fiscalError: fiscalError ?? undefined,
     });
   } catch (e) {
     return NextResponse.json(

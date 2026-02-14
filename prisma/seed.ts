@@ -18,6 +18,15 @@ async function main() {
     console.log("Utworzono użytkownika:", defaultEmail, "(hasło: admin123)");
   }
 
+  const defaultProperty = await prisma.property.upsert({
+    where: { code: "default" },
+    update: {},
+    create: {
+      name: "Obiekt główny",
+      code: "default",
+    },
+  });
+
   const roomData = [
     { number: "101", type: "Queen", status: "CLEAN" as const, price: 300 },
     { number: "102", type: "Twin", status: "DIRTY" as const, price: 280 },
@@ -32,8 +41,9 @@ async function main() {
   for (const r of roomData) {
     await prisma.room.upsert({
       where: { number: r.number },
-      update: {},
+      update: { propertyId: defaultProperty.id },
       create: {
+        propertyId: defaultProperty.id,
         number: r.number,
         type: r.type,
         status: r.status,
@@ -42,6 +52,20 @@ async function main() {
       },
     });
   }
+
+  // Firma testowa – dla auto-uzupełnienia NIP w formularzu meldunku
+  await prisma.company.upsert({
+    where: { nip: "5711640854" },
+    update: {},
+    create: {
+      nip: "5711640854",
+      name: "KARCZMA ŁABĘDŹ ŁUKASZ WOJENKOWSKI",
+      address: "ul. Przykładowa 1",
+      postalCode: "00-001",
+      city: "WARSZAWA",
+      country: "POL",
+    },
+  });
 
   const guestNames = ["Smith, J.", "Doe, A.", "Kowalski, P.", "Jan Kowalski", "Anna Nowak", "Thomas Smith"];
   const createdGuests = [];

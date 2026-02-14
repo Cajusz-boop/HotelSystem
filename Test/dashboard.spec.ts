@@ -11,7 +11,7 @@ test.describe("Dashboard", () => {
   test("DASH-01: nagłówek Dashboard i przycisk Otwórz Grafik widoczne", async ({ page }) => {
     await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
     await expect(
-      page.getByRole("link", { name: /Otwórz Grafik.*Tape Chart/i })
+      page.getByRole("link", { name: /Otwórz Grafik|Tape Chart/i })
     ).toBeVisible();
   });
 
@@ -39,7 +39,7 @@ test.describe("Dashboard", () => {
   test("DASH-06: klik Otwórz Grafik prowadzi do /front-office", async ({ page }) => {
     await page.getByRole("link", { name: /Otwórz Grafik/i }).click();
     await expect(page).toHaveURL(/\/front-office/);
-    await expect(page.getByRole("heading", { name: /Tape Chart/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("heading", { name: /Grafik|Tape Chart/i })).toBeVisible({ timeout: 5000 });
   });
 });
 

@@ -42,4 +42,17 @@ test.describe("Raporty", () => {
       page.getByRole("heading", { name: /Raport dobowy –/ })
     ).toBeVisible({ timeout: 8000 });
   });
+
+  test("SCENARIO: Automatyczna wysyłka raportu dobowego e-mailem – dodanie harmonogramu raportu dobowego", async ({
+    page,
+  }) => {
+    await expect(page.getByText(/Raporty|Management Report/i).first()).toBeVisible({ timeout: 5000 });
+    await page.getByRole("heading", { name: /Harmonogram raportów/i }).scrollIntoViewIfNeeded();
+    await expect(page.getByRole("heading", { name: /Harmonogram raportów/i })).toBeVisible({ timeout: 3000 });
+    await page.getByTestId("sched-report-type").selectOption("MANAGEMENT_DAILY");
+    await page.getByTestId("sched-emails").fill("test@example.com");
+    await page.getByTestId("sched-add-btn").click();
+    await expect(page.getByText("Raport dobowy").or(page.getByText("Codziennie")).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("test@example.com")).toBeVisible({ timeout: 3000 });
+  });
 });

@@ -7,20 +7,37 @@ import { Label } from "@/components/ui/label";
 import { createReservation, findGuestByNameOrMrz } from "@/app/actions/reservations";
 import { getAvailableRoomsForDates } from "@/app/actions/rooms";
 import { lookupCompanyByNip, createOrUpdateCompany, type CompanyFromNip } from "@/app/actions/companies";
+import { getFormFieldsForForm, type CustomFormField } from "@/app/actions/hotel-config";
 import { parseMRZ } from "@/lib/mrz";
+import { isValidNipChecksum } from "@/lib/nip-checksum";
 import { toast } from "sonner";
 import { ScanLine, Upload, UserCheck, Building2, Search, Save } from "lucide-react";
 
-/** Symulacja OCR: z pliku nie odczytujemy prawdziwych danych – wypełniamy mock i natychmiast usuwamy plik */
-function simulateOcrFromFile(_file: File): Promise<{ name: string; mrz?: string }> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        name: "Kowalski, Jan",
-        mrz: "IDPOLKOWALSKI<<JAN<<<<<<<<<<<<<<<<<<<<<<<",
-      });
-    }, 300);
+/**
+ * Odczyt MRZ/danych z pliku (zdjęcie dowodu/paszportu) przez Tesseract.js (OCR).
+ * Zwraca imię i nazwisko oraz surowy MRZ (jeśli znaleziono).
+ */
+async function ocrFromFile(file: File): Promise<{ name: string; mrz?: string }> {
+  const Tesseract = (await import("tesseract.js")).default;
+  const {
+    data: { text },
+  } = await Tesseract.recognize(file, "eng", {
+    logger: () => {},
   });
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const mrzLine =
+    lines.find((l) => l.length >= 30 && /[0-9<]/.test(l) && l.replace(/</g, "").length > 5) ??
+    lines.join("\n");
+  const parsed = parseMRZ(mrzLine);
+  if (parsed) {
+    const name = `${parsed.surname}, ${parsed.givenNames}`.trim();
+    return { name: name || "Nie odczytano nazwiska", mrz: mrzLine };
+  }
+  const firstLine = lines[0]?.slice(0, 80).trim();
+  return {
+    name: firstLine || "Nie odczytano tekstu",
+    mrz: mrzLine.length >= 30 ? mrzLine : undefined,
+  };
 }
 
 function toDateStr(d: Date): string {
@@ -34,6 +51,7 @@ export function GuestCheckInForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [mrz, setMrz] = useState("");
   const [checkInStr, setCheckInStr] = useState(() => {
     const d = new Date();
@@ -53,6 +71,8 @@ export function GuestCheckInForm() {
   const [companyData, setCompanyData] = useState<CompanyFromNip | null>(null);
   const [nipLoading, setNipLoading] = useState(false);
   const [companySaveLoading, setCompanySaveLoading] = useState(false);
+  const [customFormFields, setCustomFormFields] = useState<CustomFormField[]>([]);
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string | number | boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadAvailableRooms = useCallback(() => {
@@ -70,6 +90,21 @@ export function GuestCheckInForm() {
   useEffect(() => {
     loadAvailableRooms();
   }, [loadAvailableRooms]);
+
+  useEffect(() => {
+    getFormFieldsForForm("CHECK_IN").then((fields) => {
+      setCustomFormFields(fields);
+      setCustomFieldValues((prev) => {
+        const next = { ...prev };
+        fields.forEach((f) => {
+          if (next[f.key] === undefined) {
+            next[f.key] = f.type === "checkbox" ? false : "";
+          }
+        });
+        return next;
+      });
+    });
+  }, []);
 
   useEffect(() => {
     if (!name.trim() && !mrz.trim()) {
@@ -94,7 +129,7 @@ export function GuestCheckInForm() {
     setUploadStatus("processing");
 
     try {
-      const parsed = await simulateOcrFromFile(file);
+      const parsed = await ocrFromFile(file);
       setName(parsed.name);
       if (parsed.mrz) setMrz(parsed.mrz);
       setUploadStatus("done");
@@ -115,29 +150,54 @@ export function GuestCheckInForm() {
     }
   };
 
-  const handleFetchCompany = async () => {
+  const fetchCompanyByNip = useCallback(
+    async (nipRaw: string) => {
+      const nip = nipRaw.replace(/\D/g, "").trim();
+      if (nip.length !== 10) return;
+      setNipLoading(true);
+      const result = await lookupCompanyByNip(nip);
+      setNipLoading(false);
+      if (result.success && result.data) {
+        setCompanyData(result.data);
+        toast.success("Dane firmy wczytane (auto-uzupełnienie).");
+      } else {
+        setCompanyData(null);
+        if ("error" in result) toast.error(result.error);
+      }
+    },
+    []
+  );
+
+  /** Auto-uzupełnianie: gdy NIP ma 10 cyfr i poprawną sumę kontrolną – od razu pobierz dane firmy (debounce 500 ms) */
+  useEffect(() => {
+    const nip = nipInput.replace(/\D/g, "").trim();
+    if (nip.length !== 10 || !isValidNipChecksum(nip)) return;
+    const t = setTimeout(() => fetchCompanyByNip(nip), 500);
+    return () => clearTimeout(t);
+  }, [nipInput, fetchCompanyByNip]);
+
+  const handleFetchCompany = () => {
     const nip = nipInput.replace(/\D/g, "").trim();
     if (nip.length !== 10) {
       toast.error("Wprowadź prawidłowy NIP (10 cyfr).");
       return;
     }
-    setNipLoading(true);
-    const result = await lookupCompanyByNip(nip);
-    setNipLoading(false);
-    if (result.success && result.data) {
-      setCompanyData(result.data);
-      toast.success("Dane firmy wczytane z wykazu VAT.");
-    } else {
-      toast.error("error" in result ? result.error : "Błąd");
-      setCompanyData(null);
+    if (!isValidNipChecksum(nip)) {
+      toast.error("NIP ma błędną sumę kontrolną.");
+      return;
     }
+    fetchCompanyByNip(nip);
   };
 
   const handleSaveCompany = async () => {
     if (!companyData) return;
-    const nip = companyData.nip.replace(/\D/g, "").slice(0, 10);
+    const nip = companyData.nip.replace(/\D/g, "");
     if (nip.length !== 10) {
       toast.error("NIP musi mieć 10 cyfr.");
+      return;
+    }
+    if (!isValidNipChecksum(nip)) {
+      toast.error("NIP ma błędną sumę kontrolną.");
       return;
     }
     setCompanySaveLoading(true);
@@ -163,6 +223,20 @@ export function GuestCheckInForm() {
       toast.error("Wybierz daty, w których są wolne pokoje.");
       return;
     }
+    const customFormData: Record<string, string | number | boolean> = {};
+    customFormFields.forEach((f) => {
+      const v = customFieldValues[f.key];
+      if (v === undefined) return;
+      if (f.type === "checkbox") {
+        if (v) customFormData[f.key] = true;
+      } else if (f.type === "number") {
+        const n = typeof v === "number" ? v : Number(v);
+        if (!Number.isNaN(n)) customFormData[f.key] = n;
+      } else if (v !== "" && String(v).trim() !== "") {
+        customFormData[f.key] = String(v);
+      }
+    });
+
     const result = await createReservation({
       guestName: name.trim(),
       room,
@@ -170,10 +244,12 @@ export function GuestCheckInForm() {
       checkOut: checkOutStr,
       status: "CONFIRMED",
       mrz: mrz.trim() || undefined,
+      guestDateOfBirth: dateOfBirth.trim() || undefined,
+      ...(Object.keys(customFormData).length > 0 ? { customFormData } : {}),
       ...(companyData
         ? {
             companyData: {
-              nip: companyData.nip.replace(/\D/g, "").slice(0, 10),
+              nip: companyData.nip.replace(/\D/g, ""),
               name: companyData.name,
               address: companyData.address ?? undefined,
               postalCode: companyData.postalCode ?? undefined,
@@ -188,9 +264,17 @@ export function GuestCheckInForm() {
       setName("");
       setEmail("");
       setPhone("");
+      setDateOfBirth("");
       setMrz("");
       setCompanyData(null);
       setNipInput("");
+      setCustomFieldValues((prev) => {
+        const next = { ...prev };
+        customFormFields.forEach((f) => {
+          next[f.key] = f.type === "checkbox" ? false : "";
+        });
+        return next;
+      });
       setCheckInStr(toDateStr(new Date(Date.now() + 86400000)));
       setCheckOutStr(toDateStr(new Date(Date.now() + 2 * 86400000)));
     } else {
@@ -328,6 +412,17 @@ export function GuestCheckInForm() {
         />
       </div>
 
+      <div className="space-y-2">
+        <Label htmlFor="dateOfBirth">Data urodzenia</Label>
+        <Input
+          id="dateOfBirth"
+          type="date"
+          value={dateOfBirth}
+          onChange={(e) => setDateOfBirth(e.target.value)}
+          placeholder="opcjonalnie"
+        />
+      </div>
+
       {/* Firma (do meldunku / faktury) – auto-uzupełnianie po NIP */}
       <div
         className="space-y-3 rounded-lg border border-border/50 bg-muted/30 p-4"
@@ -455,6 +550,73 @@ export function GuestCheckInForm() {
           <span className="text-xs">Przygotowane pod skaner 2D</span>
         </div>
       </div>
+
+      {/* Dodatkowe pola z konfiguracji (Admin → Ustawienia → Dodatkowe pola formularzy) */}
+      {customFormFields.length > 0 && (
+        <div className="space-y-3 rounded-lg border border-border/50 bg-muted/30 p-4">
+          <h3 className="text-sm font-semibold">Dodatkowe pola</h3>
+          <div className="space-y-3">
+            {customFormFields.map((f) => (
+              <div key={f.id} className="space-y-1">
+                {f.type === "checkbox" ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={f.key}
+                      checked={Boolean(customFieldValues[f.key])}
+                      onChange={(e) =>
+                        setCustomFieldValues((prev) => ({ ...prev, [f.key]: e.target.checked }))
+                      }
+                      className="h-4 w-4 rounded border-input"
+                    />
+                    <Label htmlFor={f.key}>{f.label}</Label>
+                  </div>
+                ) : f.type === "select" && f.options?.length ? (
+                  <>
+                    <Label htmlFor={f.key}>{f.label}</Label>
+                    <select
+                      id={f.key}
+                      value={String(customFieldValues[f.key] ?? "")}
+                      onChange={(e) =>
+                        setCustomFieldValues((prev) => ({ ...prev, [f.key]: e.target.value }))
+                      }
+                      required={f.required}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">— wybierz —</option>
+                      {f.options.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    <Label htmlFor={f.key}>
+                      {f.label}
+                      {f.required && " *"}
+                    </Label>
+                    <Input
+                      id={f.key}
+                      type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"}
+                      value={String(customFieldValues[f.key] ?? "")}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setCustomFieldValues((prev) => ({
+                          ...prev,
+                          [f.key]: f.type === "number" ? (v === "" ? "" : Number(v)) : v,
+                        }));
+                      }}
+                      required={f.required}
+                    />
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Button type="submit" disabled={rooms.length === 0}>
         Zapisz gościa / Utwórz rezerwację

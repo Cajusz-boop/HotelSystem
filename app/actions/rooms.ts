@@ -1,14 +1,18 @@
 "use server";
 
 import { headers } from "next/headers";
+import { getEffectivePropertyId } from "@/app/actions/properties";
+import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { createAuditLog, getClientIp } from "@/lib/audit";
 import {
   roomStatusSchema,
   createRoomSchema,
+  roomBlockSchema,
   type RoomStatusInput,
   type CreateRoomInput,
+  type RoomBlockInput,
 } from "@/lib/validations/schemas";
 import type { RoomStatus } from "@prisma/client";
 
@@ -158,13 +162,36 @@ export async function getRooms(): Promise<
   }
 }
 
+export interface InventoryItem {
+  item: string;
+  count: number;
+}
+
 export interface RoomForManagement {
   id: string;
   number: string;
   type: string;
   status: string;
-  price?: number;
+  price: number | null;
   reason?: string;
+  beds: number;
+  bedTypes: string[];
+  photos: string[];
+  amenities: string[];
+  inventory: InventoryItem[];
+  connectedRooms: string[];
+  floor: string | null;
+  building: string | null;
+  view: string | null;
+  exposure: string | null;
+  maxOccupancy: number;
+  surfaceArea: number | null;
+  description: string | null;
+  technicalNotes: string | null;
+  nextServiceDate: string | null;
+  nextServiceNote: string | null;
+  roomFeatures: string[];
+  roomTypeId: string | null;
   activeForSale: boolean;
 }
 
@@ -173,25 +200,47 @@ export async function getRoomsForManagement(): Promise<
   ActionResult<RoomForManagement[]>
 > {
   try {
+    const propertyId = await getEffectivePropertyId();
     const [rooms, roomTypes] = await Promise.all([
-      prisma.room.findMany({ orderBy: { number: "asc" } }),
+      prisma.room.findMany({
+        where: propertyId ? { propertyId } : {},
+        orderBy: { number: "asc" },
+      }),
       prisma.roomType.findMany({ select: { name: true, basePrice: true } }).catch(() => []),
     ]);
-    const typePrice = new Map(
-      roomTypes.map((t) => [t.name, t.basePrice != null ? Number(t.basePrice) : undefined])
+    const typeData = new Map(
+      roomTypes.map((t) => [t.name, { basePrice: t.basePrice != null ? Number(t.basePrice) : null, id: t.id }])
     );
     return {
       success: true,
       data: rooms.map((r) => {
-        const effectivePrice =
-          r.price != null ? Number(r.price) : typePrice.get(r.type);
+        const rtData = typeData.get(r.type);
+        const effectivePrice = r.price != null ? Number(r.price) : rtData?.basePrice ?? null;
         return {
           id: r.id,
           number: r.number,
           type: r.type,
           status: r.status as string,
-          price: effectivePrice ?? (r.price != null ? Number(r.price) : undefined),
+          price: effectivePrice,
           reason: r.reason ?? undefined,
+          beds: r.beds,
+          bedTypes: (r.bedTypes as string[] | null) ?? [],
+          photos: (r.photos as string[] | null) ?? [],
+          amenities: (r.amenities as string[] | null) ?? [],
+          inventory: (r.inventory as InventoryItem[] | null) ?? [],
+          connectedRooms: (r.connectedRooms as string[] | null) ?? [],
+          floor: r.floor,
+          building: r.building,
+          view: r.view,
+          exposure: r.exposure,
+          maxOccupancy: r.maxOccupancy,
+          surfaceArea: r.surfaceArea != null ? Number(r.surfaceArea) : null,
+          description: r.description,
+          technicalNotes: r.technicalNotes,
+          nextServiceDate: r.nextServiceDate?.toISOString().slice(0, 10) ?? null,
+          nextServiceNote: r.nextServiceNote,
+          roomFeatures: (r.roomFeatures as string[] | null) ?? [],
+          roomTypeId: rtData?.id ?? null,
           activeForSale: r.activeForSale,
         };
       }),
@@ -212,7 +261,7 @@ export async function createRoom(data: CreateRoomInput): Promise<
   if (!parsed.success) {
     return { success: false, error: parsed.error.errors[0]?.message ?? "Błąd walidacji" };
   }
-  const { number, type, price } = parsed.data;
+  const { number, type, price, beds } = parsed.data;
   const headersList = await headers();
   const ip = getClientIp(headersList);
 
@@ -227,12 +276,15 @@ export async function createRoom(data: CreateRoomInput): Promise<
     if (existing) {
       return { success: false, error: `Pokój o numerze ${number} już istnieje.` };
     }
+    const propertyId = await getEffectivePropertyId();
     const created = await prisma.room.create({
       data: {
+        ...(propertyId ? { propertyId } : {}),
         number: number.trim(),
         type: type.trim(),
         status: "CLEAN",
         price: price != null ? price : null,
+        beds: beds ?? 1,
         activeForSale: true,
       },
     });
@@ -263,6 +315,7 @@ export async function createRoom(data: CreateRoomInput): Promise<
         status: created.status as string,
         price: created.price != null ? Number(created.price) : typePrice != null ? Number(typePrice) : undefined,
         reason: created.reason ?? undefined,
+        beds: created.beds ?? undefined,
         activeForSale: created.activeForSale,
       },
     };
@@ -347,6 +400,288 @@ export async function deleteRoom(roomId: string): Promise<ActionResult> {
   }
 }
 
+export type RoomBlockType = "RENOVATION" | "MAINTENANCE" | "VIP_HOLD" | "OVERBOOKING" | "OWNER_HOLD" | "OTHER";
+
+export interface RoomBlockItem {
+  id: string;
+  roomId: string;
+  roomNumber: string;
+  roomType: string;
+  startDate: string;
+  endDate: string;
+  reason: string | null;
+  blockType: RoomBlockType;
+  createdAt: string;
+}
+
+/** Tworzy blokadę pokoju (OOO) na podane daty. */
+export async function createRoomBlock(
+  input: RoomBlockInput & { blockType?: RoomBlockType }
+): Promise<
+  ActionResult<{ id: string; roomNumber: string; startDate: string; endDate: string; reason?: string; blockType: RoomBlockType }>
+> {
+  const parsed = roomBlockSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.errors[0]?.message ?? "Błąd walidacji" };
+  }
+  const { roomNumber, startDate, endDate, reason } = parsed.data;
+  const blockType = input.blockType ?? "OTHER";
+  try {
+    const room = await prisma.room.findUnique({ where: { number: roomNumber } });
+    if (!room) return { success: false, error: `Pokój ${roomNumber} nie istnieje` };
+    const block = await prisma.roomBlock.create({
+      data: {
+        roomId: room.id,
+        startDate: new Date(startDate + "T12:00:00Z"),
+        endDate: new Date(endDate + "T12:00:00Z"),
+        reason: reason?.trim() || null,
+        blockType,
+      },
+    });
+    revalidatePath("/front-office");
+    revalidatePath("/pokoje");
+    return {
+      success: true,
+      data: {
+        id: block.id,
+        roomNumber: room.number,
+        startDate,
+        endDate,
+        reason: block.reason ?? undefined,
+        blockType: block.blockType as RoomBlockType,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd tworzenia blokady",
+    };
+  }
+}
+
+/** Usuwa blokadę pokoju. */
+export async function deleteRoomBlock(blockId: string): Promise<ActionResult> {
+  try {
+    await prisma.roomBlock.delete({ where: { id: blockId } });
+    revalidatePath("/front-office");
+    revalidatePath("/pokoje");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd usuwania blokady",
+    };
+  }
+}
+
+/** Pobiera aktywne blokady pokoi (trwające lub nadchodzące). */
+export async function getActiveRoomBlocks(): Promise<ActionResult<RoomBlockItem[]>> {
+  try {
+    const propertyId = await getEffectivePropertyId();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const blocks = await prisma.roomBlock.findMany({
+      where: {
+        endDate: { gte: today },
+        room: propertyId ? { propertyId } : undefined,
+      },
+      include: {
+        room: { select: { number: true, type: true } },
+      },
+      orderBy: { startDate: "asc" },
+    });
+
+    return {
+      success: true,
+      data: blocks.map((b) => ({
+        id: b.id,
+        roomId: b.roomId,
+        roomNumber: b.room.number,
+        roomType: b.room.type,
+        startDate: b.startDate.toISOString().slice(0, 10),
+        endDate: b.endDate.toISOString().slice(0, 10),
+        reason: b.reason,
+        blockType: b.blockType as RoomBlockType,
+        createdAt: b.createdAt.toISOString(),
+      })),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd pobierania blokad",
+    };
+  }
+}
+
+/** Pobiera blokady pokoi kończące się w najbliższych dniach (powiadomienia o zakończeniu remontu). */
+export async function getRoomBlocksEndingSoon(
+  daysAhead: number = 3
+): Promise<ActionResult<RoomBlockItem[]>> {
+  try {
+    const propertyId = await getEffectivePropertyId();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endDate = new Date(today);
+    endDate.setDate(endDate.getDate() + daysAhead);
+
+    const blocks = await prisma.roomBlock.findMany({
+      where: {
+        endDate: { gte: today, lte: endDate },
+        room: propertyId ? { propertyId } : undefined,
+      },
+      include: {
+        room: { select: { number: true, type: true } },
+      },
+      orderBy: { endDate: "asc" },
+    });
+
+    return {
+      success: true,
+      data: blocks.map((b) => ({
+        id: b.id,
+        roomId: b.roomId,
+        roomNumber: b.room.number,
+        roomType: b.room.type,
+        startDate: b.startDate.toISOString().slice(0, 10),
+        endDate: b.endDate.toISOString().slice(0, 10),
+        reason: b.reason,
+        blockType: b.blockType as RoomBlockType,
+        createdAt: b.createdAt.toISOString(),
+      })),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd pobierania blokad kończących się wkrótce",
+    };
+  }
+}
+
+/** Pobiera blokady dla konkretnego pokoju. */
+export async function getRoomBlocksForRoom(roomId: string): Promise<ActionResult<RoomBlockItem[]>> {
+  try {
+    const room = await prisma.room.findUnique({
+      where: { id: roomId },
+      select: { number: true, type: true },
+    });
+    if (!room) {
+      return { success: false, error: "Pokój nie istnieje" };
+    }
+
+    const blocks = await prisma.roomBlock.findMany({
+      where: { roomId },
+      orderBy: { startDate: "desc" },
+    });
+
+    return {
+      success: true,
+      data: blocks.map((b) => ({
+        id: b.id,
+        roomId: b.roomId,
+        roomNumber: room.number,
+        roomType: room.type,
+        startDate: b.startDate.toISOString().slice(0, 10),
+        endDate: b.endDate.toISOString().slice(0, 10),
+        reason: b.reason,
+        blockType: b.blockType as RoomBlockType,
+        createdAt: b.createdAt.toISOString(),
+      })),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd pobierania blokad pokoju",
+    };
+  }
+}
+
+/** Grupy pokoi (wirtualne pokoje, np. Apartament Rodzinny = 101+102). */
+export async function getRoomGroups(): Promise<
+  ActionResult<Array<{ id: string; name: string; roomNumbers: string[] }>>
+> {
+  try {
+    const propertyId = await getEffectivePropertyId();
+    const groups = await prisma.roomGroup.findMany({
+      where: propertyId ? { propertyId } : {},
+      orderBy: { name: "asc" },
+      include: {
+        rooms: { include: { room: { select: { number: true } } } },
+      },
+    });
+    return {
+      success: true,
+      data: groups.map((g) => ({
+        id: g.id,
+        name: g.name,
+        roomNumbers: g.rooms.map((r) => r.room.number).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+      })),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd odczytu grup pokoi",
+    };
+  }
+}
+
+/** Tworzy grupę pokoi (wirtualny pokój). */
+export async function createRoomGroup(
+  name: string,
+  roomNumbers: string[]
+): Promise<ActionResult<{ id: string; name: string; roomNumbers: string[] }>> {
+  const trimmedName = name.trim();
+  if (!trimmedName) return { success: false, error: "Nazwa grupy wymagana" };
+  if (roomNumbers.length < 2) return { success: false, error: "Wybierz co najmniej 2 pokoje" };
+  try {
+    const propertyId = await getEffectivePropertyId();
+    const roomIds = await prisma.room.findMany({
+      where: { number: { in: roomNumbers } },
+      select: { id: true, number: true },
+    });
+    if (roomIds.length !== roomNumbers.length) {
+      const found = new Set(roomIds.map((r) => r.number));
+      const missing = roomNumbers.filter((n) => !found.has(n));
+      return { success: false, error: `Nie znaleziono pokoi: ${missing.join(", ")}` };
+    }
+    const existingInGroup = await prisma.roomGroupRoom.findMany({
+      where: { roomId: { in: roomIds.map((r) => r.id) } },
+      include: { room: { select: { number: true } }, roomGroup: { select: { name: true } } },
+    });
+    if (existingInGroup.length > 0) {
+      return {
+        success: false,
+        error: `Pokój ${existingInGroup[0].room.number} należy już do grupy "${existingInGroup[0].roomGroup.name}". Każdy pokój może być tylko w jednej grupie.`,
+      };
+    }
+    const group = await prisma.roomGroup.create({
+      data: {
+        name: trimmedName,
+        ...(propertyId ? { propertyId } : {}),
+        rooms: {
+          create: roomIds.map((r) => ({ roomId: r.id })),
+        },
+      },
+      include: { rooms: { include: { room: { select: { number: true } } } } },
+    });
+    revalidatePath("/front-office");
+    revalidatePath("/pokoje");
+    return {
+      success: true,
+      data: {
+        id: group.id,
+        name: group.name,
+        roomNumbers: group.rooms.map((r) => r.room.number).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd tworzenia grupy",
+    };
+  }
+}
+
 export interface CennikRoom {
   id: string;
   number: string;
@@ -357,6 +692,47 @@ export interface CennikRoom {
   typeBasePrice?: number | null;
 }
 
+/** Stawka sezonowa obowiązująca w danym dniu (do wydruku cennika) */
+export interface RatePlanOnDate {
+  id: string;
+  roomTypeName: string;
+  validFrom: string;
+  validTo: string;
+  price: number;
+  isNonRefundable: boolean;
+}
+
+/** Pobiera stawki sezonowe obowiązujące w podanym dniu */
+export async function getRatePlansForDate(dateStr: string): Promise<ActionResult<RatePlanOnDate[]>> {
+  try {
+    const date = new Date(dateStr + "T12:00:00Z");
+    if (Number.isNaN(date.getTime())) {
+      return { success: false, error: "Nieprawidłowa data." };
+    }
+    const plans = await prisma.ratePlan.findMany({
+      where: { validFrom: { lte: date }, validTo: { gte: date } },
+      orderBy: [{ roomType: { sortOrder: "asc" } }, { roomType: { name: "asc" } }],
+      include: { roomType: { select: { name: true } } },
+    });
+    return {
+      success: true,
+      data: plans.map((p) => ({
+        id: p.id,
+        roomTypeName: p.roomType.name,
+        validFrom: p.validFrom.toISOString().slice(0, 10),
+        validTo: p.validTo.toISOString().slice(0, 10),
+        price: Number(p.price),
+        isNonRefundable: p.isNonRefundable ?? false,
+      })),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd odczytu stawek na dzień",
+    };
+  }
+}
+
 /** Pobiera cennik na wybrany dzień (cena efektywna z RatePlan / Room / Type) */
 export async function getCennikForDate(dateStr: string): Promise<ActionResult<CennikRoom[]>> {
   try {
@@ -364,19 +740,33 @@ export async function getCennikForDate(dateStr: string): Promise<ActionResult<Ce
     if (Number.isNaN(date.getTime())) {
       return { success: false, error: "Nieprawidłowa data." };
     }
+    const propertyId = await getEffectivePropertyId();
     const [rooms, roomTypes, ratePlans] = await Promise.all([
       prisma.room.findMany({
+        where: propertyId ? { propertyId } : {},
         orderBy: { number: "asc" },
         select: { id: true, number: true, type: true, status: true, price: true },
       }),
       prisma.roomType.findMany({ select: { id: true, name: true, basePrice: true } }),
       prisma.ratePlan.findMany({
         where: { validFrom: { lte: date }, validTo: { gte: date } },
-        select: { roomTypeId: true, price: true },
+        select: { roomTypeId: true, price: true, isWeekendHoliday: true },
       }),
     ]);
     const typeByName = new Map(roomTypes.map((t) => [t.name, t]));
-    const planByTypeId = new Map(ratePlans.map((p) => [p.roomTypeId, Number(p.price)]));
+    const day = date.getUTCDay();
+    const isWeekend = day === 0 || day === 6;
+    const plansByTypeId = new Map<string, { price: number; isWeekendHoliday: boolean }[]>();
+    for (const p of ratePlans) {
+      const list = plansByTypeId.get(p.roomTypeId) ?? [];
+      list.push({ price: Number(p.price), isWeekendHoliday: p.isWeekendHoliday });
+      plansByTypeId.set(p.roomTypeId, list);
+    }
+    const planByTypeId = new Map<string, number>();
+    for (const [typeId, list] of plansByTypeId) {
+      const preferred = list.find((x) => x.isWeekendHoliday === isWeekend) ?? list[0];
+      if (preferred) planByTypeId.set(typeId, preferred.price);
+    }
     return {
       success: true,
       data: rooms.map((r) => {
@@ -405,8 +795,10 @@ export async function getCennikForDate(dateStr: string): Promise<ActionResult<Ce
 /** Pobiera pokoje z cenami dla modułu Cennik (z ceną bazową typu) */
 export async function getRoomsForCennik(): Promise<ActionResult<CennikRoom[]>> {
   try {
+    const propertyId = await getEffectivePropertyId();
     const [rooms, roomTypes] = await Promise.all([
       prisma.room.findMany({
+        where: propertyId ? { propertyId } : {},
         orderBy: { number: "asc" },
         select: { id: true, number: true, type: true, status: true, price: true },
       }),
@@ -547,6 +939,30 @@ export async function updateRoomTypeName(
   }
 }
 
+/** Aktualizuje kolejność wyświetlania typu pokoju */
+export async function updateRoomTypeSortOrder(
+  roomTypeId: string,
+  sortOrder: number
+): Promise<ActionResult> {
+  if (!Number.isInteger(sortOrder) || sortOrder < 0) {
+    return { success: false, error: "Kolejność musi być liczbą całkowitą nieujemną." };
+  }
+  try {
+    await prisma.roomType.update({
+      where: { id: roomTypeId },
+      data: { sortOrder },
+    });
+    revalidatePath("/cennik");
+    revalidatePath("/front-office");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd aktualizacji kolejności typu",
+    };
+  }
+}
+
 /** Kopiuje stawki sezonowe z roku na rok (przesunięcie dat) */
 export async function copyRatePlansFromYearToYear(
   fromYear: number,
@@ -600,6 +1016,7 @@ export interface RatePlanForCennik {
   minStayNights: number | null;
   maxStayNights: number | null;
   isNonRefundable: boolean;
+  isWeekendHoliday: boolean;
 }
 
 /** Lista stawek sezonowych */
@@ -621,6 +1038,7 @@ export async function getRatePlans(): Promise<ActionResult<RatePlanForCennik[]>>
         minStayNights: p.minStayNights,
         maxStayNights: p.maxStayNights,
         isNonRefundable: p.isNonRefundable ?? false,
+        isWeekendHoliday: p.isWeekendHoliday ?? false,
       })),
     };
   } catch (e) {
@@ -640,6 +1058,7 @@ export async function createRatePlan(data: {
   minStayNights?: number | null;
   maxStayNights?: number | null;
   isNonRefundable?: boolean;
+  isWeekendHoliday?: boolean;
 }): Promise<ActionResult<RatePlanForCennik>> {
   if (data.price < 0 || !Number.isFinite(data.price)) {
     return { success: false, error: "Cena musi być liczbą nieujemną." };
@@ -659,6 +1078,7 @@ export async function createRatePlan(data: {
         minStayNights: data.minStayNights ?? null,
         maxStayNights: data.maxStayNights ?? null,
         isNonRefundable: data.isNonRefundable ?? false,
+        isWeekendHoliday: data.isWeekendHoliday ?? false,
       },
       include: { roomType: { select: { name: true } } },
     });
@@ -675,6 +1095,7 @@ export async function createRatePlan(data: {
         minStayNights: created.minStayNights,
         maxStayNights: created.maxStayNights,
         isNonRefundable: created.isNonRefundable ?? false,
+        isWeekendHoliday: created.isWeekendHoliday ?? false,
       },
     };
   } catch (e) {
@@ -733,6 +1154,334 @@ export async function updateRoomPrice(roomId: string, price: number): Promise<Ac
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd aktualizacji ceny",
+    };
+  }
+}
+
+/** Aktualizacja cech pokoju (roomFeatures) */
+export async function updateRoomFeatures(
+  roomId: string,
+  features: string[]
+): Promise<ActionResult<{ features: string[] }>> {
+  const headersList = await headers();
+  const ip = getClientIp(headersList);
+
+  try {
+    const room = await prisma.room.findUnique({ where: { id: roomId } });
+    if (!room) {
+      return { success: false, error: "Pokój nie istnieje." };
+    }
+
+    const oldFeatures = (room.roomFeatures as string[] | null) ?? [];
+
+    await prisma.room.update({
+      where: { id: roomId },
+      data: { roomFeatures: features },
+    });
+
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "Room",
+      entityId: roomId,
+      oldValue: { roomFeatures: oldFeatures },
+      newValue: { roomFeatures: features },
+      ipAddress: ip,
+    });
+
+    revalidatePath("/pokoje");
+    revalidatePath("/front-office");
+    return { success: true, data: { features } };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd aktualizacji cech pokoju",
+    };
+  }
+}
+
+/** Ogólna aktualizacja pokoju (wiele pól naraz) */
+export async function updateRoom(
+  roomId: string,
+  data: {
+    number?: string;
+    type?: string;
+    price?: number | null;
+    beds?: number;
+    bedTypes?: string[];
+    photos?: string[];
+    amenities?: string[];
+    inventory?: InventoryItem[];
+    floor?: string | null;
+    building?: string | null;
+    view?: string | null;
+    exposure?: string | null;
+    maxOccupancy?: number;
+    surfaceArea?: number | null;
+    roomFeatures?: string[];
+    description?: string | null;
+    technicalNotes?: string | null;
+    nextServiceDate?: string | null;
+    nextServiceNote?: string | null;
+  }
+): Promise<ActionResult<RoomForManagement>> {
+  const headersList = await headers();
+  const ip = getClientIp(headersList);
+
+  try {
+    const room = await prisma.room.findUnique({ where: { id: roomId } });
+    if (!room) {
+      return { success: false, error: "Pokój nie istnieje." };
+    }
+
+    // Sprawdź unikalność numeru jeśli zmieniony
+    if (data.number && data.number !== room.number) {
+      const existing = await prisma.room.findUnique({ where: { number: data.number } });
+      if (existing) {
+        return { success: false, error: `Pokój o numerze ${data.number} już istnieje.` };
+      }
+    }
+
+    const updateData: {
+      number?: string;
+      type?: string;
+      price?: number | null;
+      beds?: number;
+      bedTypes?: string[];
+      photos?: string[];
+      amenities?: string[];
+      inventory?: InventoryItem[];
+      floor?: string | null;
+      building?: string | null;
+      view?: string | null;
+      exposure?: string | null;
+      maxOccupancy?: number;
+      surfaceArea?: number | null;
+      roomFeatures?: string[];
+      description?: string | null;
+      technicalNotes?: string | null;
+      nextServiceDate?: Date | null;
+      nextServiceNote?: string | null;
+    } = {};
+
+    if (data.number !== undefined) updateData.number = data.number;
+    if (data.type !== undefined) updateData.type = data.type;
+    if (data.price !== undefined) {
+      if (data.price != null && (data.price < 0 || !Number.isFinite(data.price))) {
+        return { success: false, error: "Cena pokoju nie może być ujemna" };
+      }
+      updateData.price = data.price;
+    }
+    if (data.beds !== undefined) updateData.beds = data.beds;
+    if (data.bedTypes !== undefined) updateData.bedTypes = data.bedTypes;
+    if (data.photos !== undefined) updateData.photos = data.photos;
+    if (data.amenities !== undefined) updateData.amenities = data.amenities;
+    if (data.inventory !== undefined) updateData.inventory = data.inventory;
+    if (data.floor !== undefined) updateData.floor = data.floor;
+    if (data.building !== undefined) updateData.building = data.building;
+    if (data.view !== undefined) updateData.view = data.view;
+    if (data.exposure !== undefined) updateData.exposure = data.exposure;
+    if (data.maxOccupancy !== undefined) updateData.maxOccupancy = data.maxOccupancy;
+    if (data.surfaceArea !== undefined) updateData.surfaceArea = data.surfaceArea;
+    if (data.roomFeatures !== undefined) updateData.roomFeatures = data.roomFeatures;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.technicalNotes !== undefined) updateData.technicalNotes = data.technicalNotes;
+    if (data.nextServiceDate !== undefined) {
+      updateData.nextServiceDate = data.nextServiceDate ? new Date(data.nextServiceDate + "T00:00:00Z") : null;
+    }
+    if (data.nextServiceNote !== undefined) updateData.nextServiceNote = data.nextServiceNote;
+
+    const updated = await prisma.room.update({
+      where: { id: roomId },
+      data: updateData,
+    });
+
+    // Pobierz RoomType ID na podstawie nazwy typu
+    const roomType = await prisma.roomType.findUnique({ where: { name: updated.type } });
+
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "Room",
+      entityId: roomId,
+      oldValue: {
+        number: room.number,
+        type: room.type,
+        price: room.price ? Number(room.price) : null,
+        beds: room.beds,
+        bedTypes: room.bedTypes,
+        photos: room.photos,
+        amenities: room.amenities,
+        inventory: room.inventory,
+        floor: room.floor,
+        building: room.building,
+        view: room.view,
+        exposure: room.exposure,
+        maxOccupancy: room.maxOccupancy,
+        surfaceArea: room.surfaceArea ? Number(room.surfaceArea) : null,
+        roomFeatures: room.roomFeatures,
+      },
+      newValue: updateData,
+      ipAddress: ip,
+    });
+
+    revalidatePath("/pokoje");
+    revalidatePath("/front-office");
+    revalidatePath("/cennik");
+
+    return {
+      success: true,
+      data: {
+        id: updated.id,
+        number: updated.number,
+        type: updated.type,
+        status: updated.status,
+        price: updated.price ? Number(updated.price) : null,
+        activeForSale: updated.activeForSale,
+        beds: updated.beds,
+        bedTypes: (updated.bedTypes as string[] | null) ?? [],
+        photos: (updated.photos as string[] | null) ?? [],
+        amenities: (updated.amenities as string[] | null) ?? [],
+        inventory: (updated.inventory as InventoryItem[] | null) ?? [],
+        connectedRooms: (updated.connectedRooms as string[] | null) ?? [],
+        floor: updated.floor,
+        building: updated.building,
+        view: updated.view,
+        exposure: updated.exposure,
+        maxOccupancy: updated.maxOccupancy,
+        surfaceArea: updated.surfaceArea ? Number(updated.surfaceArea) : null,
+        description: updated.description,
+        technicalNotes: updated.technicalNotes,
+        nextServiceDate: updated.nextServiceDate?.toISOString().slice(0, 10) ?? null,
+        nextServiceNote: updated.nextServiceNote,
+        roomFeatures: (updated.roomFeatures as string[] | null) ?? [],
+        roomTypeId: roomType?.id ?? null,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd aktualizacji pokoju",
+    };
+  }
+}
+
+/** Łączy dwa pokoje (symetrycznie – aktualizuje oba). Używane dla pokoi z drzwiami wewnętrznymi. */
+export async function connectRooms(
+  roomNumber1: string,
+  roomNumber2: string
+): Promise<ActionResult<{ room1: string; room2: string }>> {
+  const headersList = await headers();
+  const ip = getClientIp(headersList);
+
+  if (roomNumber1 === roomNumber2) {
+    return { success: false, error: "Nie można połączyć pokoju ze sobą." };
+  }
+
+  try {
+    const [room1, room2] = await Promise.all([
+      prisma.room.findUnique({ where: { number: roomNumber1 } }),
+      prisma.room.findUnique({ where: { number: roomNumber2 } }),
+    ]);
+
+    if (!room1) return { success: false, error: `Pokój ${roomNumber1} nie istnieje.` };
+    if (!room2) return { success: false, error: `Pokój ${roomNumber2} nie istnieje.` };
+
+    const connected1 = (room1.connectedRooms as string[] | null) ?? [];
+    const connected2 = (room2.connectedRooms as string[] | null) ?? [];
+
+    // Sprawdź czy już połączone
+    if (connected1.includes(roomNumber2)) {
+      return { success: false, error: `Pokoje ${roomNumber1} i ${roomNumber2} są już połączone.` };
+    }
+
+    // Dodaj symetryczną relację
+    const newConnected1 = [...connected1, roomNumber2];
+    const newConnected2 = [...connected2, roomNumber1];
+
+    await Promise.all([
+      prisma.room.update({
+        where: { id: room1.id },
+        data: { connectedRooms: newConnected1 },
+      }),
+      prisma.room.update({
+        where: { id: room2.id },
+        data: { connectedRooms: newConnected2 },
+      }),
+    ]);
+
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "Room",
+      entityId: room1.id,
+      oldValue: { connectedRooms: connected1 },
+      newValue: { connectedRooms: newConnected1, action: "connect", targetRoom: roomNumber2 },
+      ipAddress: ip,
+    });
+
+    revalidatePath("/pokoje");
+    return { success: true, data: { room1: roomNumber1, room2: roomNumber2 } };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd łączenia pokoi",
+    };
+  }
+}
+
+/** Rozłącza dwa pokoje (symetrycznie). */
+export async function disconnectRooms(
+  roomNumber1: string,
+  roomNumber2: string
+): Promise<ActionResult> {
+  const headersList = await headers();
+  const ip = getClientIp(headersList);
+
+  try {
+    const [room1, room2] = await Promise.all([
+      prisma.room.findUnique({ where: { number: roomNumber1 } }),
+      prisma.room.findUnique({ where: { number: roomNumber2 } }),
+    ]);
+
+    if (!room1) return { success: false, error: `Pokój ${roomNumber1} nie istnieje.` };
+    if (!room2) return { success: false, error: `Pokój ${roomNumber2} nie istnieje.` };
+
+    const connected1 = (room1.connectedRooms as string[] | null) ?? [];
+    const connected2 = (room2.connectedRooms as string[] | null) ?? [];
+
+    // Sprawdź czy w ogóle połączone
+    if (!connected1.includes(roomNumber2)) {
+      return { success: false, error: `Pokoje ${roomNumber1} i ${roomNumber2} nie są połączone.` };
+    }
+
+    // Usuń symetryczną relację
+    const newConnected1 = connected1.filter((n) => n !== roomNumber2);
+    const newConnected2 = connected2.filter((n) => n !== roomNumber1);
+
+    await Promise.all([
+      prisma.room.update({
+        where: { id: room1.id },
+        data: { connectedRooms: newConnected1 },
+      }),
+      prisma.room.update({
+        where: { id: room2.id },
+        data: { connectedRooms: newConnected2 },
+      }),
+    ]);
+
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "Room",
+      entityId: room1.id,
+      oldValue: { connectedRooms: connected1 },
+      newValue: { connectedRooms: newConnected1, action: "disconnect", targetRoom: roomNumber2 },
+      ipAddress: ip,
+    });
+
+    revalidatePath("/pokoje");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd rozłączania pokoi",
     };
   }
 }
@@ -799,9 +1548,13 @@ export async function getAvailableRoomsForDates(
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to <= from) {
       return { success: false, error: "Nieprawidłowy zakres dat" };
     }
-
+    const propertyId = await getEffectivePropertyId();
     const rooms = await prisma.room.findMany({
-      where: { status: "CLEAN", activeForSale: true },
+      where: {
+        status: "CLEAN",
+        activeForSale: true,
+        ...(propertyId ? { propertyId } : {}),
+      },
       orderBy: { number: "asc" },
     });
 
@@ -825,12 +1578,18 @@ export async function getAvailableRoomsForDates(
   }
 }
 
+export type CleaningPriority = "VIP_ARRIVAL" | "DEPARTURE" | "STAY_OVER" | "NORMAL";
+
 export interface HousekeepingRoom {
   id: string;
   number: string;
   type: string;
   status: string;
+  floor?: string;
+  assignedHousekeeper?: string;
+  estimatedCleaningMinutes?: number;
   reason?: string;
+  cleaningPriority?: CleaningPriority;
   updatedAt: string;
 }
 
@@ -839,9 +1598,11 @@ export async function getRoomsForHousekeeping(): Promise<
   ActionResult<HousekeepingRoom[]>
 > {
   try {
+    const propertyId = await getEffectivePropertyId();
     const rooms = await prisma.room.findMany({
+      where: propertyId ? { propertyId } : {},
       orderBy: { number: "asc" },
-      select: { id: true, number: true, type: true, status: true, reason: true, updatedAt: true },
+      select: { id: true, number: true, type: true, status: true, floor: true, assignedHousekeeper: true, estimatedCleaningMinutes: true, reason: true, cleaningPriority: true, updatedAt: true },
     });
     return {
       success: true,
@@ -850,7 +1611,11 @@ export async function getRoomsForHousekeeping(): Promise<
         number: r.number,
         type: r.type,
         status: r.status as string,
+        floor: r.floor ?? undefined,
+        assignedHousekeeper: r.assignedHousekeeper ?? undefined,
+        estimatedCleaningMinutes: r.estimatedCleaningMinutes ?? undefined,
         reason: r.reason ?? undefined,
+        cleaningPriority: (r.cleaningPriority as CleaningPriority) ?? undefined,
         updatedAt: r.updatedAt.toISOString(),
       })),
     };
@@ -877,9 +1642,12 @@ export async function updateRoomStatus(input: RoomStatusInput): Promise<ActionRe
     const prev = await prisma.room.findUnique({ where: { id: roomId } });
     if (!prev) return { success: false, error: "Pokój nie istnieje" };
 
+    // Po inspekcji (INSPECTED) automatycznie ustaw pokój na CLEAN – gotowy do zameldowania
+    const statusToSave = status === "INSPECTED" ? "CLEAN" : status;
+
     const updated = await prisma.room.update({
       where: { id: roomId },
-      data: { status, reason: reason ?? null },
+      data: { status: statusToSave, reason: reason ?? null },
     });
 
     await createAuditLog({
@@ -898,6 +1666,1123 @@ export async function updateRoomStatus(input: RoomStatusInput): Promise<ActionRe
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd aktualizacji statusu pokoju",
+    };
+  }
+}
+
+/** Przypisuje pokojową do pokoju */
+export async function updateRoomHousekeeper(
+  roomId: string,
+  assignedHousekeeper: string | null
+): Promise<ActionResult> {
+  try {
+    const room = await prisma.room.findUnique({ where: { id: roomId } });
+    if (!room) return { success: false, error: "Pokój nie istnieje" };
+    await prisma.room.update({
+      where: { id: roomId },
+      data: { assignedHousekeeper: assignedHousekeeper?.trim() || null },
+    });
+    revalidatePath("/housekeeping");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd przypisania" };
+  }
+}
+
+/** Aktualizuje szacowany czas sprzątania pokoju (minuty) */
+export async function updateRoomCleaningTime(
+  roomId: string,
+  estimatedCleaningMinutes: number | null
+): Promise<ActionResult> {
+  try {
+    const room = await prisma.room.findUnique({ where: { id: roomId } });
+    if (!room) return { success: false, error: "Pokój nie istnieje" };
+    const value = estimatedCleaningMinutes != null && estimatedCleaningMinutes >= 0 ? estimatedCleaningMinutes : null;
+    await prisma.room.update({
+      where: { id: roomId },
+      data: { estimatedCleaningMinutes: value },
+    });
+    revalidatePath("/housekeeping");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd aktualizacji czasu sprzątania" };
+  }
+}
+
+/** Przypisuje pokojową do wszystkich pokoi na piętrze */
+export async function assignHousekeeperToFloor(
+  propertyId: string,
+  floor: string,
+  housekeeperName: string
+): Promise<ActionResult<{ updated: number }>> {
+  try {
+    const result = await prisma.room.updateMany({
+      where: { propertyId, floor: floor || null },
+      data: { assignedHousekeeper: housekeeperName.trim() || null },
+    });
+    const property = await prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { housekeepingFloorAssignments: true },
+    });
+    const current = (property?.housekeepingFloorAssignments as Record<string, string>) ?? {};
+    const updated = { ...current, [floor]: housekeeperName.trim() || null };
+    await prisma.property.update({
+      where: { id: propertyId },
+      data: { housekeepingFloorAssignments: updated },
+    });
+    revalidatePath("/housekeeping");
+    return { success: true, data: { updated: result.count } };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd przypisania" };
+  }
+}
+
+/** Lista użytkowników z rolą HOUSEKEEPING (do dropdown) */
+export async function getHousekeepingStaff(): Promise<ActionResult<Array<{ id: string; name: string }>>> {
+  try {
+    const users = await prisma.user.findMany({
+      where: { role: "HOUSEKEEPING" },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    return { success: true, data: users };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd odczytu" };
+  }
+}
+
+// === Harmonogram sprzątania ===
+
+export type CleaningScheduleStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED";
+
+export interface CleaningScheduleItem {
+  id: string;
+  roomId: string;
+  roomNumber: string;
+  roomType: string;
+  assignedTo: string | null;
+  scheduledDate: string;
+  scheduledTime: string | null;
+  estimatedDuration: number | null;
+  status: CleaningScheduleStatus;
+  priority: CleaningPriority | null;
+  notes: string | null;
+  completedAt: string | null;
+  completedBy: string | null;
+}
+
+/** Pobiera harmonogram sprzątania na dany dzień */
+export async function getCleaningScheduleForDate(
+  dateStr: string
+): Promise<ActionResult<CleaningScheduleItem[]>> {
+  try {
+    const date = new Date(dateStr + "T00:00:00Z");
+    if (Number.isNaN(date.getTime())) {
+      return { success: false, error: "Nieprawidłowa data" };
+    }
+
+    const propertyId = await getEffectivePropertyId();
+    const schedules = await prisma.cleaningSchedule.findMany({
+      where: {
+        scheduledDate: date,
+        ...(propertyId ? { propertyId } : {}),
+      },
+      include: {
+        room: { select: { number: true, type: true } },
+      },
+      orderBy: [{ scheduledTime: "asc" }, { room: { number: "asc" } }],
+    });
+
+    return {
+      success: true,
+      data: schedules.map((s) => ({
+        id: s.id,
+        roomId: s.roomId,
+        roomNumber: s.room.number,
+        roomType: s.room.type,
+        assignedTo: s.assignedTo,
+        scheduledDate: s.scheduledDate.toISOString().slice(0, 10),
+        scheduledTime: s.scheduledTime,
+        estimatedDuration: s.estimatedDuration,
+        status: s.status as CleaningScheduleStatus,
+        priority: s.priority as CleaningPriority | null,
+        notes: s.notes,
+        completedAt: s.completedAt?.toISOString() ?? null,
+        completedBy: s.completedBy,
+      })),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd odczytu harmonogramu",
+    };
+  }
+}
+
+/** Dodaje wpis do harmonogramu sprzątania */
+export async function createCleaningScheduleEntry(data: {
+  roomId: string;
+  scheduledDate: string;
+  scheduledTime?: string;
+  assignedTo?: string;
+  estimatedDuration?: number;
+  priority?: CleaningPriority;
+  notes?: string;
+}): Promise<ActionResult<CleaningScheduleItem>> {
+  try {
+    const room = await prisma.room.findUnique({ where: { id: data.roomId } });
+    if (!room) {
+      return { success: false, error: "Pokój nie istnieje" };
+    }
+
+    const date = new Date(data.scheduledDate + "T00:00:00Z");
+    if (Number.isNaN(date.getTime())) {
+      return { success: false, error: "Nieprawidłowa data" };
+    }
+
+    const propertyId = await getEffectivePropertyId();
+    const created = await prisma.cleaningSchedule.create({
+      data: {
+        roomId: data.roomId,
+        scheduledDate: date,
+        scheduledTime: data.scheduledTime ?? null,
+        assignedTo: data.assignedTo ?? null,
+        estimatedDuration: data.estimatedDuration ?? null,
+        priority: data.priority ?? null,
+        notes: data.notes ?? null,
+        ...(propertyId ? { propertyId } : {}),
+      },
+      include: {
+        room: { select: { number: true, type: true } },
+      },
+    });
+
+    revalidatePath("/housekeeping");
+    return {
+      success: true,
+      data: {
+        id: created.id,
+        roomId: created.roomId,
+        roomNumber: created.room.number,
+        roomType: created.room.type,
+        assignedTo: created.assignedTo,
+        scheduledDate: created.scheduledDate.toISOString().slice(0, 10),
+        scheduledTime: created.scheduledTime,
+        estimatedDuration: created.estimatedDuration,
+        status: created.status as CleaningScheduleStatus,
+        priority: created.priority as CleaningPriority | null,
+        notes: created.notes,
+        completedAt: null,
+        completedBy: null,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd tworzenia wpisu harmonogramu",
+    };
+  }
+}
+
+/** Aktualizuje status wpisu harmonogramu */
+export async function updateCleaningScheduleStatus(
+  scheduleId: string,
+  status: CleaningScheduleStatus,
+  completedBy?: string
+): Promise<ActionResult> {
+  try {
+    const updateData: { status: string; completedAt?: Date; completedBy?: string | null } = { status };
+    if (status === "COMPLETED") {
+      updateData.completedAt = new Date();
+      const session = completedBy ? null : await getSession().catch(() => null);
+      updateData.completedBy = completedBy ?? session?.name ?? null;
+    } else {
+      updateData.completedAt = undefined;
+      updateData.completedBy = null;
+    }
+
+    await prisma.cleaningSchedule.update({
+      where: { id: scheduleId },
+      data: updateData,
+    });
+
+    revalidatePath("/housekeeping");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd aktualizacji harmonogramu",
+    };
+  }
+}
+
+/** Raport wydajności pokojowych – liczba posprzątanych pokoi w okresie */
+export interface HousekeeperPerformanceRow {
+  name: string;
+  roomsCompleted: number;
+  totalEstimatedMinutes: number;
+}
+
+export async function getHousekeeperPerformanceReport(
+  dateFrom: string,
+  dateTo: string
+): Promise<ActionResult<HousekeeperPerformanceRow[]>> {
+  try {
+    const from = new Date(dateFrom + "T00:00:00Z");
+    const to = new Date(dateTo + "T23:59:59.999Z");
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) {
+      return { success: false, error: "Nieprawidłowy zakres dat" };
+    }
+
+    const propertyId = await getEffectivePropertyId();
+    const schedules = await prisma.cleaningSchedule.findMany({
+      where: {
+        status: "COMPLETED",
+        completedAt: { gte: from, lte: to },
+        ...(propertyId ? { propertyId } : {}),
+      },
+      select: { completedBy: true, assignedTo: true, estimatedDuration: true },
+    });
+
+    const byName = new Map<string, { roomsCompleted: number; totalEstimatedMinutes: number }>();
+    for (const s of schedules) {
+      const name = (s.completedBy ?? s.assignedTo)?.trim() || "Nieprzypisano";
+      const row = byName.get(name) ?? { roomsCompleted: 0, totalEstimatedMinutes: 0 };
+      row.roomsCompleted += 1;
+      row.totalEstimatedMinutes += s.estimatedDuration ?? 0;
+      byName.set(name, row);
+    }
+
+    const data = Array.from(byName.entries())
+      .map(([name, row]) => ({ name, ...row }))
+      .sort((a, b) => b.roomsCompleted - a.roomsCompleted);
+
+    return { success: true, data };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd raportu wydajności",
+    };
+  }
+}
+
+/** Usuwa wpis harmonogramu */
+export async function deleteCleaningScheduleEntry(scheduleId: string): Promise<ActionResult> {
+  try {
+    await prisma.cleaningSchedule.delete({ where: { id: scheduleId } });
+    revalidatePath("/housekeeping");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd usuwania wpisu harmonogramu",
+    };
+  }
+}
+
+/** Generuje harmonogram sprzątania na podstawie dzisiejszych rezerwacji */
+export async function generateDailyCleaningSchedule(
+  dateStr: string
+): Promise<ActionResult<{ created: number }>> {
+  try {
+    const date = new Date(dateStr + "T00:00:00Z");
+    if (Number.isNaN(date.getTime())) {
+      return { success: false, error: "Nieprawidłowa data" };
+    }
+
+    const propertyId = await getEffectivePropertyId();
+    const nextDay = new Date(date);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    // Znajdź pokoje które wymagają sprzątania:
+    // 1. Wymeldowania dziś (checkout = date)
+    // 2. Pokoje ze statusem DIRTY lub CHECKOUT_PENDING
+    const [checkouts, dirtyRooms] = await Promise.all([
+      prisma.reservation.findMany({
+        where: {
+          checkOut: { gte: date, lt: nextDay },
+          status: { in: ["CONFIRMED", "CHECKED_IN"] },
+        },
+        select: { roomId: true },
+      }),
+      prisma.room.findMany({
+        where: {
+          status: { in: ["DIRTY", "CHECKOUT_PENDING"] },
+          ...(propertyId ? { propertyId } : {}),
+        },
+        select: { id: true },
+      }),
+    ]);
+
+    const roomIdsToClean = new Set([
+      ...checkouts.map((c) => c.roomId),
+      ...dirtyRooms.map((r) => r.id),
+    ]);
+
+    // Sprawdź które już mają wpisy na dziś
+    const existingSchedules = await prisma.cleaningSchedule.findMany({
+      where: {
+        scheduledDate: date,
+        roomId: { in: Array.from(roomIdsToClean) },
+      },
+      select: { roomId: true },
+    });
+
+    const alreadyScheduled = new Set(existingSchedules.map((s) => s.roomId));
+    const toCreate = Array.from(roomIdsToClean).filter((id) => !alreadyScheduled.has(id));
+
+    // Stwórz wpisy dla brakujących (z estimatedDuration z pokoju)
+    if (toCreate.length > 0) {
+      const roomsWithTime = await prisma.room.findMany({
+        where: { id: { in: toCreate } },
+        select: { id: true, estimatedCleaningMinutes: true },
+      });
+      const timeByRoom = new Map(roomsWithTime.map((r) => [r.id, r.estimatedCleaningMinutes]));
+      await prisma.cleaningSchedule.createMany({
+        data: toCreate.map((roomId) => ({
+          roomId,
+          scheduledDate: date,
+          status: "PENDING",
+          priority: checkouts.some((c) => c.roomId === roomId) ? "DEPARTURE" : "NORMAL",
+          estimatedDuration: timeByRoom.get(roomId) ?? null,
+          ...(propertyId ? { propertyId } : {}),
+        })),
+      });
+    }
+
+    revalidatePath("/housekeeping");
+    return { success: true, data: { created: toCreate.length } };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd generowania harmonogramu",
+    };
+  }
+}
+
+/** Aktualizuje priorytet sprzątania pokoju */
+export async function updateRoomCleaningPriority(
+  roomId: string,
+  priority: CleaningPriority | null
+): Promise<ActionResult> {
+  const headersList = await headers();
+  const ip = getClientIp(headersList);
+
+  try {
+    const prev = await prisma.room.findUnique({ where: { id: roomId } });
+    if (!prev) return { success: false, error: "Pokój nie istnieje" };
+
+    await prisma.room.update({
+      where: { id: roomId },
+      data: { cleaningPriority: priority },
+    });
+
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "Room",
+      entityId: roomId,
+      oldValue: { cleaningPriority: prev.cleaningPriority },
+      newValue: { cleaningPriority: priority },
+      ipAddress: ip,
+    });
+
+    revalidatePath("/housekeeping");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd aktualizacji priorytetu sprzątania",
+    };
+  }
+}
+
+// === Historia usterek/awarii pokoi ===
+
+export type MaintenanceCategory =
+  | "ELECTRICAL"
+  | "PLUMBING"
+  | "HVAC"
+  | "FURNITURE"
+  | "CLEANING"
+  | "APPLIANCE"
+  | "OTHER";
+
+export type MaintenancePriority = "URGENT" | "HIGH" | "MEDIUM" | "LOW";
+
+export type MaintenanceStatus =
+  | "REPORTED"
+  | "IN_PROGRESS"
+  | "ON_HOLD"
+  | "RESOLVED"
+  | "CANCELLED";
+
+export interface MaintenanceIssueItem {
+  id: string;
+  roomId: string;
+  roomNumber: string;
+  roomType: string;
+  title: string;
+  description: string | null;
+  category: MaintenanceCategory;
+  priority: MaintenancePriority;
+  status: MaintenanceStatus;
+  reportedBy: string | null;
+  reportedAt: string;
+  assignedTo: string | null;
+  assignedAt: string | null;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  resolutionNotes: string | null;
+  estimatedCost: number | null;
+  actualCost: number | null;
+  roomWasOOO: boolean;
+  isScheduled: boolean;
+  scheduledStartDate: string | null;
+  scheduledEndDate: string | null;
+}
+
+/** Pobiera historię usterek dla pokoju */
+export async function getMaintenanceIssuesForRoom(
+  roomId: string
+): Promise<ActionResult<MaintenanceIssueItem[]>> {
+  try {
+    const room = await prisma.room.findUnique({
+      where: { id: roomId },
+      select: { number: true, type: true },
+    });
+    if (!room) {
+      return { success: false, error: "Pokój nie istnieje" };
+    }
+
+    const issues = await prisma.maintenanceIssue.findMany({
+      where: { roomId },
+      orderBy: { reportedAt: "desc" },
+    });
+
+    return {
+      success: true,
+      data: issues.map((i) => ({
+        id: i.id,
+        roomId: i.roomId,
+        roomNumber: room.number,
+        roomType: room.type,
+        title: i.title,
+        description: i.description,
+        category: i.category as MaintenanceCategory,
+        priority: i.priority as MaintenancePriority,
+        status: i.status as MaintenanceStatus,
+        reportedBy: i.reportedBy,
+        reportedAt: i.reportedAt.toISOString(),
+        assignedTo: i.assignedTo,
+        assignedAt: i.assignedAt?.toISOString() ?? null,
+        resolvedAt: i.resolvedAt?.toISOString() ?? null,
+        resolvedBy: i.resolvedBy,
+        resolutionNotes: i.resolutionNotes,
+        estimatedCost: i.estimatedCost ? Number(i.estimatedCost) : null,
+        actualCost: i.actualCost ? Number(i.actualCost) : null,
+        roomWasOOO: i.roomWasOOO,
+        isScheduled: i.isScheduled,
+        scheduledStartDate: i.scheduledStartDate?.toISOString().slice(0, 10) ?? null,
+        scheduledEndDate: i.scheduledEndDate?.toISOString().slice(0, 10) ?? null,
+      })),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd odczytu historii usterek",
+    };
+  }
+}
+
+/** Pobiera wszystkie aktywne usterki (niezamknięte) */
+export async function getActiveMaintenanceIssues(): Promise<
+  ActionResult<MaintenanceIssueItem[]>
+> {
+  try {
+    const propertyId = await getEffectivePropertyId();
+    const issues = await prisma.maintenanceIssue.findMany({
+      where: {
+        status: { in: ["REPORTED", "IN_PROGRESS", "ON_HOLD"] },
+        room: propertyId ? { propertyId } : undefined,
+      },
+      include: {
+        room: { select: { number: true, type: true } },
+      },
+      orderBy: [{ priority: "asc" }, { reportedAt: "desc" }],
+    });
+
+    return {
+      success: true,
+      data: issues.map((i) => ({
+        id: i.id,
+        roomId: i.roomId,
+        roomNumber: i.room.number,
+        roomType: i.room.type,
+        title: i.title,
+        description: i.description,
+        category: i.category as MaintenanceCategory,
+        priority: i.priority as MaintenancePriority,
+        status: i.status as MaintenanceStatus,
+        reportedBy: i.reportedBy,
+        reportedAt: i.reportedAt.toISOString(),
+        assignedTo: i.assignedTo,
+        assignedAt: i.assignedAt?.toISOString() ?? null,
+        resolvedAt: i.resolvedAt?.toISOString() ?? null,
+        resolvedBy: i.resolvedBy,
+        resolutionNotes: i.resolutionNotes,
+        estimatedCost: i.estimatedCost ? Number(i.estimatedCost) : null,
+        actualCost: i.actualCost ? Number(i.actualCost) : null,
+        roomWasOOO: i.roomWasOOO,
+        isScheduled: i.isScheduled,
+        scheduledStartDate: i.scheduledStartDate?.toISOString().slice(0, 10) ?? null,
+        scheduledEndDate: i.scheduledEndDate?.toISOString().slice(0, 10) ?? null,
+      })),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd odczytu aktywnych usterek",
+    };
+  }
+}
+
+/** Tworzy nowe zgłoszenie usterki */
+export async function createMaintenanceIssue(data: {
+  roomId: string;
+  title: string;
+  description?: string;
+  category: MaintenanceCategory;
+  priority?: MaintenancePriority;
+  reportedBy?: string;
+  assignedTo?: string;
+  estimatedCost?: number;
+  setRoomOOO?: boolean;
+  isScheduled?: boolean;
+  scheduledStartDate?: string;
+  scheduledEndDate?: string;
+}): Promise<ActionResult<MaintenanceIssueItem>> {
+  const headersList = await headers();
+  const ip = getClientIp(headersList);
+
+  try {
+    const room = await prisma.room.findUnique({
+      where: { id: data.roomId },
+      select: { id: true, number: true, type: true, status: true },
+    });
+    if (!room) {
+      return { success: false, error: "Pokój nie istnieje" };
+    }
+
+    if (!data.title.trim()) {
+      return { success: false, error: "Tytuł usterki jest wymagany" };
+    }
+
+    // Dla planowanych konserwacji, sprawdź czy podano daty
+    const isScheduled = data.isScheduled ?? false;
+    let scheduledStartDate: Date | null = null;
+    let scheduledEndDate: Date | null = null;
+    if (isScheduled) {
+      if (!data.scheduledStartDate || !data.scheduledEndDate) {
+        return { success: false, error: "Dla planowanej konserwacji wymagane są daty rozpoczęcia i zakończenia" };
+      }
+      scheduledStartDate = new Date(data.scheduledStartDate + "T00:00:00Z");
+      scheduledEndDate = new Date(data.scheduledEndDate + "T00:00:00Z");
+      if (scheduledEndDate < scheduledStartDate) {
+        return { success: false, error: "Data zakończenia nie może być wcześniejsza niż data rozpoczęcia" };
+      }
+    }
+
+    // Rozpocznij transakcję: stwórz usterkę i opcjonalnie ustaw pokój jako OOO
+    const [issue] = await prisma.$transaction(async (tx) => {
+      const created = await tx.maintenanceIssue.create({
+        data: {
+          roomId: data.roomId,
+          title: data.title.trim(),
+          description: data.description?.trim() || null,
+          category: data.category,
+          priority: data.priority ?? "MEDIUM",
+          status: "REPORTED",
+          reportedBy: data.reportedBy?.trim() || null,
+          assignedTo: data.assignedTo?.trim() || null,
+          assignedAt: data.assignedTo ? new Date() : null,
+          estimatedCost: data.estimatedCost ?? null,
+          roomWasOOO: data.setRoomOOO ?? false,
+          isScheduled,
+          scheduledStartDate,
+          scheduledEndDate,
+        },
+      });
+
+      // Opcjonalnie ustaw pokój jako OOO
+      if (data.setRoomOOO && room.status !== "OOO") {
+        await tx.room.update({
+          where: { id: data.roomId },
+          data: {
+            status: "OOO",
+            reason: data.title.trim(),
+          },
+        });
+      }
+
+      return [created];
+    });
+
+    await createAuditLog({
+      actionType: "CREATE",
+      entityType: "MaintenanceIssue",
+      entityId: issue.id,
+      newValue: {
+        roomId: data.roomId,
+        roomNumber: room.number,
+        title: data.title,
+        category: data.category,
+        priority: data.priority ?? "MEDIUM",
+        setRoomOOO: data.setRoomOOO,
+        isScheduled,
+        scheduledStartDate: data.scheduledStartDate,
+        scheduledEndDate: data.scheduledEndDate,
+      },
+      ipAddress: ip,
+    });
+
+    revalidatePath("/pokoje");
+    revalidatePath("/housekeeping");
+
+    return {
+      success: true,
+      data: {
+        id: issue.id,
+        roomId: issue.roomId,
+        roomNumber: room.number,
+        roomType: room.type,
+        title: issue.title,
+        description: issue.description,
+        category: issue.category as MaintenanceCategory,
+        priority: issue.priority as MaintenancePriority,
+        status: issue.status as MaintenanceStatus,
+        reportedBy: issue.reportedBy,
+        reportedAt: issue.reportedAt.toISOString(),
+        assignedTo: issue.assignedTo,
+        assignedAt: issue.assignedAt?.toISOString() ?? null,
+        resolvedAt: null,
+        resolvedBy: null,
+        resolutionNotes: null,
+        estimatedCost: issue.estimatedCost ? Number(issue.estimatedCost) : null,
+        actualCost: null,
+        roomWasOOO: issue.roomWasOOO,
+        isScheduled: issue.isScheduled,
+        scheduledStartDate: issue.scheduledStartDate?.toISOString().slice(0, 10) ?? null,
+        scheduledEndDate: issue.scheduledEndDate?.toISOString().slice(0, 10) ?? null,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd tworzenia zgłoszenia usterki",
+    };
+  }
+}
+
+/** Aktualizuje status usterki */
+export async function updateMaintenanceIssueStatus(
+  issueId: string,
+  status: MaintenanceStatus,
+  options?: {
+    resolvedBy?: string;
+    resolutionNotes?: string;
+    actualCost?: number;
+    restoreRoomStatus?: RoomStatus;
+  }
+): Promise<ActionResult> {
+  const headersList = await headers();
+  const ip = getClientIp(headersList);
+
+  try {
+    const issue = await prisma.maintenanceIssue.findUnique({
+      where: { id: issueId },
+      include: { room: { select: { id: true, status: true } } },
+    });
+    if (!issue) {
+      return { success: false, error: "Usterka nie istnieje" };
+    }
+
+    const updateData: {
+      status: string;
+      resolvedAt?: Date | null;
+      resolvedBy?: string | null;
+      resolutionNotes?: string | null;
+      actualCost?: number | null;
+      assignedAt?: Date;
+    } = { status };
+
+    if (status === "RESOLVED" || status === "CANCELLED") {
+      updateData.resolvedAt = new Date();
+      updateData.resolvedBy = options?.resolvedBy?.trim() || null;
+      updateData.resolutionNotes = options?.resolutionNotes?.trim() || null;
+      if (options?.actualCost !== undefined) {
+        updateData.actualCost = options.actualCost;
+      }
+    } else if (status === "IN_PROGRESS" && !issue.assignedAt) {
+      updateData.assignedAt = new Date();
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.maintenanceIssue.update({
+        where: { id: issueId },
+        data: updateData,
+      });
+
+      // Opcjonalnie przywróć status pokoju po zamknięciu usterki
+      if (
+        (status === "RESOLVED" || status === "CANCELLED") &&
+        issue.roomWasOOO &&
+        issue.room.status === "OOO" &&
+        options?.restoreRoomStatus
+      ) {
+        await tx.room.update({
+          where: { id: issue.roomId },
+          data: {
+            status: options.restoreRoomStatus,
+            reason: null,
+          },
+        });
+      }
+    });
+
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "MaintenanceIssue",
+      entityId: issueId,
+      oldValue: { status: issue.status },
+      newValue: {
+        status,
+        ...(options?.resolvedBy ? { resolvedBy: options.resolvedBy } : {}),
+        ...(options?.actualCost !== undefined ? { actualCost: options.actualCost } : {}),
+      },
+      ipAddress: ip,
+    });
+
+    revalidatePath("/pokoje");
+    revalidatePath("/housekeeping");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd aktualizacji statusu usterki",
+    };
+  }
+}
+
+/** Aktualizuje dane usterki */
+export async function updateMaintenanceIssue(
+  issueId: string,
+  data: {
+    title?: string;
+    description?: string;
+    category?: MaintenanceCategory;
+    priority?: MaintenancePriority;
+    assignedTo?: string;
+    estimatedCost?: number | null;
+  }
+): Promise<ActionResult> {
+  const headersList = await headers();
+  const ip = getClientIp(headersList);
+
+  try {
+    const issue = await prisma.maintenanceIssue.findUnique({
+      where: { id: issueId },
+    });
+    if (!issue) {
+      return { success: false, error: "Usterka nie istnieje" };
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (data.title !== undefined) {
+      if (!data.title.trim()) {
+        return { success: false, error: "Tytuł usterki jest wymagany" };
+      }
+      updateData.title = data.title.trim();
+    }
+    if (data.description !== undefined) {
+      updateData.description = data.description.trim() || null;
+    }
+    if (data.category !== undefined) {
+      updateData.category = data.category;
+    }
+    if (data.priority !== undefined) {
+      updateData.priority = data.priority;
+    }
+    if (data.assignedTo !== undefined) {
+      updateData.assignedTo = data.assignedTo.trim() || null;
+      if (data.assignedTo && !issue.assignedAt) {
+        updateData.assignedAt = new Date();
+      }
+    }
+    if (data.estimatedCost !== undefined) {
+      updateData.estimatedCost = data.estimatedCost;
+    }
+
+    await prisma.maintenanceIssue.update({
+      where: { id: issueId },
+      data: updateData,
+    });
+
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "MaintenanceIssue",
+      entityId: issueId,
+      oldValue: {
+        title: issue.title,
+        description: issue.description,
+        category: issue.category,
+        priority: issue.priority,
+        assignedTo: issue.assignedTo,
+        estimatedCost: issue.estimatedCost ? Number(issue.estimatedCost) : null,
+      },
+      newValue: data,
+      ipAddress: ip,
+    });
+
+    revalidatePath("/pokoje");
+    revalidatePath("/housekeeping");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd aktualizacji usterki",
+    };
+  }
+}
+
+/** Usuwa zgłoszenie usterki */
+export async function deleteMaintenanceIssue(issueId: string): Promise<ActionResult> {
+  const headersList = await headers();
+  const ip = getClientIp(headersList);
+
+  try {
+    const issue = await prisma.maintenanceIssue.findUnique({
+      where: { id: issueId },
+    });
+    if (!issue) {
+      return { success: false, error: "Usterka nie istnieje" };
+    }
+
+    await prisma.maintenanceIssue.delete({ where: { id: issueId } });
+
+    await createAuditLog({
+      actionType: "DELETE",
+      entityType: "MaintenanceIssue",
+      entityId: issueId,
+      oldValue: {
+        roomId: issue.roomId,
+        title: issue.title,
+        category: issue.category,
+        status: issue.status,
+      },
+      ipAddress: ip,
+    });
+
+    revalidatePath("/pokoje");
+    revalidatePath("/housekeeping");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd usuwania usterki",
+    };
+  }
+}
+
+/** Pobiera statystyki usterek dla pokoju */
+export async function getMaintenanceStatsForRoom(roomId: string): Promise<
+  ActionResult<{
+    total: number;
+    resolved: number;
+    active: number;
+    avgResolutionTimeHours: number | null;
+    totalCost: number;
+    byCategory: Record<MaintenanceCategory, number>;
+  }>
+> {
+  try {
+    const room = await prisma.room.findUnique({ where: { id: roomId } });
+    if (!room) {
+      return { success: false, error: "Pokój nie istnieje" };
+    }
+
+    const issues = await prisma.maintenanceIssue.findMany({
+      where: { roomId },
+      select: {
+        status: true,
+        category: true,
+        reportedAt: true,
+        resolvedAt: true,
+        actualCost: true,
+      },
+    });
+
+    const resolved = issues.filter((i) => i.status === "RESOLVED");
+    const active = issues.filter((i) =>
+      ["REPORTED", "IN_PROGRESS", "ON_HOLD"].includes(i.status)
+    );
+
+    // Średni czas rozwiązania (tylko dla zamkniętych z resolvedAt)
+    const resolutionTimes = resolved
+      .filter((i) => i.resolvedAt)
+      .map((i) => (i.resolvedAt!.getTime() - i.reportedAt.getTime()) / (1000 * 60 * 60));
+    const avgResolutionTimeHours =
+      resolutionTimes.length > 0
+        ? resolutionTimes.reduce((a, b) => a + b, 0) / resolutionTimes.length
+        : null;
+
+    // Suma kosztów
+    const totalCost = issues.reduce(
+      (sum, i) => sum + (i.actualCost ? Number(i.actualCost) : 0),
+      0
+    );
+
+    // Podział wg kategorii
+    const byCategory: Record<MaintenanceCategory, number> = {
+      ELECTRICAL: 0,
+      PLUMBING: 0,
+      HVAC: 0,
+      FURNITURE: 0,
+      CLEANING: 0,
+      APPLIANCE: 0,
+      OTHER: 0,
+    };
+    for (const i of issues) {
+      byCategory[i.category as MaintenanceCategory]++;
+    }
+
+    return {
+      success: true,
+      data: {
+        total: issues.length,
+        resolved: resolved.length,
+        active: active.length,
+        avgResolutionTimeHours,
+        totalCost,
+        byCategory,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd pobierania statystyk usterek",
+    };
+  }
+}
+
+/** Pobiera planowane konserwacje kończące się dzisiaj lub w najbliższych dniach */
+export async function getMaintenanceEndingSoon(
+  daysAhead: number = 1
+): Promise<ActionResult<MaintenanceIssueItem[]>> {
+  try {
+    const propertyId = await getEffectivePropertyId();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endDate = new Date(today);
+    endDate.setDate(endDate.getDate() + daysAhead);
+
+    const issues = await prisma.maintenanceIssue.findMany({
+      where: {
+        isScheduled: true,
+        scheduledEndDate: {
+          gte: today,
+          lte: endDate,
+        },
+        status: { in: ["REPORTED", "IN_PROGRESS"] },
+        room: propertyId ? { propertyId } : undefined,
+      },
+      include: {
+        room: { select: { number: true, type: true } },
+      },
+      orderBy: { scheduledEndDate: "asc" },
+    });
+
+    return {
+      success: true,
+      data: issues.map((i) => ({
+        id: i.id,
+        roomId: i.roomId,
+        roomNumber: i.room.number,
+        roomType: i.room.type,
+        title: i.title,
+        description: i.description,
+        category: i.category as MaintenanceCategory,
+        priority: i.priority as MaintenancePriority,
+        status: i.status as MaintenanceStatus,
+        reportedBy: i.reportedBy,
+        reportedAt: i.reportedAt.toISOString(),
+        assignedTo: i.assignedTo,
+        assignedAt: i.assignedAt?.toISOString() ?? null,
+        resolvedAt: i.resolvedAt?.toISOString() ?? null,
+        resolvedBy: i.resolvedBy,
+        resolutionNotes: i.resolutionNotes,
+        estimatedCost: i.estimatedCost ? Number(i.estimatedCost) : null,
+        actualCost: i.actualCost ? Number(i.actualCost) : null,
+        roomWasOOO: i.roomWasOOO,
+        isScheduled: i.isScheduled,
+        scheduledStartDate: i.scheduledStartDate?.toISOString().slice(0, 10) ?? null,
+        scheduledEndDate: i.scheduledEndDate?.toISOString().slice(0, 10) ?? null,
+      })),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd pobierania kończących się konserwacji",
+    };
+  }
+}
+
+/** Pobiera wszystkie planowane konserwacje (scheduled maintenance) */
+export async function getScheduledMaintenance(): Promise<ActionResult<MaintenanceIssueItem[]>> {
+  try {
+    const propertyId = await getEffectivePropertyId();
+    const issues = await prisma.maintenanceIssue.findMany({
+      where: {
+        isScheduled: true,
+        status: { in: ["REPORTED", "IN_PROGRESS", "ON_HOLD"] },
+        room: propertyId ? { propertyId } : undefined,
+      },
+      include: {
+        room: { select: { number: true, type: true } },
+      },
+      orderBy: { scheduledStartDate: "asc" },
+    });
+
+    return {
+      success: true,
+      data: issues.map((i) => ({
+        id: i.id,
+        roomId: i.roomId,
+        roomNumber: i.room.number,
+        roomType: i.room.type,
+        title: i.title,
+        description: i.description,
+        category: i.category as MaintenanceCategory,
+        priority: i.priority as MaintenancePriority,
+        status: i.status as MaintenanceStatus,
+        reportedBy: i.reportedBy,
+        reportedAt: i.reportedAt.toISOString(),
+        assignedTo: i.assignedTo,
+        assignedAt: i.assignedAt?.toISOString() ?? null,
+        resolvedAt: i.resolvedAt?.toISOString() ?? null,
+        resolvedBy: i.resolvedBy,
+        resolutionNotes: i.resolutionNotes,
+        estimatedCost: i.estimatedCost ? Number(i.estimatedCost) : null,
+        actualCost: i.actualCost ? Number(i.actualCost) : null,
+        roomWasOOO: i.roomWasOOO,
+        isScheduled: i.isScheduled,
+        scheduledStartDate: i.scheduledStartDate?.toISOString().slice(0, 10) ?? null,
+        scheduledEndDate: i.scheduledEndDate?.toISOString().slice(0, 10) ?? null,
+      })),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd pobierania planowanych konserwacji",
     };
   }
 }

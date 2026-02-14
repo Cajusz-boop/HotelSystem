@@ -19,6 +19,10 @@ enum RoomStatus {
   CLEAN
   DIRTY
   OOO
+  INSPECTION        // Do sprawdzenia – po sprzątaniu, przed oddaniem do dyspozycji
+  INSPECTED         // Sprawdzony – po inspekcji, gotowy do zameldowania
+  CHECKOUT_PENDING  // Oczekuje na wymeldowanie – gość się nie wymeldował, pokój zajęty
+  MAINTENANCE       // Do naprawy/konserwacji – wymaga interwencji technicznej
 }
 
 enum ReservationStatus {
@@ -35,7 +39,185 @@ enum AuditActionType {
   DELETE
 }
 
+enum KsefStatus {
+  DRAFT
+  PENDING
+  SENT
+  ACCEPTED
+  REJECTED
+  VERIFICATION
+}
+
 // --- Modele ---
+model Property {
+  id        String   @id @default(cuid())
+  name      String   // np. "Karczma Łabędź", "Hotel Central"
+  code      String   @unique  // np. "LABEDZ", "CENTRAL" – krótki identyfikator
+  reservationStatusColors Json?  // opcjonalna paleta kolorów tła pasków: { CONFIRMED: "#2563eb", ... }
+  overbookingLimitPercent Int    @default(0)  // 0 = wyłączony, np. 10 = dozwolone 10% ponad dostępność (ostrzeżenie)
+  localTaxPerPersonPerNight Decimal? @db.Decimal(10, 2)  // opłata miejscowa / klimatyczna PLN za osobę za noc; null/0 = wyłączone
+  mealPrices Json?  // ceny posiłków PLN: { breakfast: 50, lunch: 80, dinner: 80 } – do obciążania za posiłki
+  ownerId   String?  // User.id – właściciel (Portal Właściciela)
+  dunningConfig Json?  // przypomnienia o płatności: { enabled, paymentDueDaysAfterCheckout, level1Days, level2Days, level3Days, maxReminders, templateSubject1..3, templateBody1..3 }
+  housekeepingFloorAssignments Json?  // { "1": "Anna", "2": "Ewa" } – domyślna pokojowa na piętro
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rooms         Room[]
+  parkingSpots  ParkingSpot[]
+  roomGroups    RoomGroup[]
+  accountingExports AccountingExport[]
+  ksefSessions KsefSession[]
+  channelMappings ChannelMapping[]
+  channelPropertyConfigs ChannelPropertyConfig[]
+  ownerSettlements OwnerSettlement[]
+  surchargeTypes SurchargeType[]
+  packages Package[]
+  shopProducts ShopProduct[]
+}
+
+/** Rozliczenia z właścicielami – historia dokumentów rozliczenia. */
+model OwnerSettlement {
+  id               String    @id @default(cuid())
+  propertyId       String
+  property         Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  ownerId          String    // User.id – właściciel obiektu
+  periodFrom       DateTime  @db.Date
+  periodTo         DateTime  @db.Date
+  amount           Decimal   @db.Decimal(12, 2)
+  currency         String    @default("PLN")
+  status           String    @default("PENDING")  // PENDING, ZAPLACONE
+  documentGeneratedAt DateTime?  // kiedy wygenerowano dokument
+  paidAt           DateTime? @db.DateTime
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([propertyId, periodFrom])
+  @@index([ownerId])
+  @@index([status])
+}
+
+// Konfiguracja kanału na obiekt: externalPropertyId + mapowanie typów pokoi (JSON)
+model ChannelPropertyConfig {
+  id                  String   @id @default(cuid())
+  propertyId          String
+  property            Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  channel             String   // booking_com | airbnb | expedia
+  externalPropertyId  String   // zewnętrzne ID obiektu (np. Booking hotel id)
+  roomTypeMappings    Json?    // { "roomTypeId": "externalRoomId", ... } lub { "roomId": "externalRoomId", ... }
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([propertyId, channel])
+  @@index([propertyId])
+  @@index([channel])
+}
+
+// Mapowanie Room.id / RoomType.id na zewnętrzne ID kanałów (np. Booking room id)
+model ChannelMapping {
+  id           String   @id @default(cuid())
+  propertyId   String
+  property     Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  channel      String   // np. "booking_com", "airbnb", "expedia"
+  internalType String   // "room" = Room.id, "room_type" = RoomType.id
+  internalId   String   // Room.id lub RoomType.id
+  externalId   String   // zewnętrzne ID (np. Booking room id jako string)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([propertyId, channel, internalType, internalId])
+  @@index([propertyId])
+  @@index([propertyId, channel])
+}
+
+// Integracje księgowe – ostatni eksport do Optima, Subiekt, wFirma, Fakturownia
+model AccountingExport {
+  id            String   @id @default(cuid())
+  propertyId    String?
+  property      Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  system        String   // optima | subiekt | wfirma | fakturownia
+  lastExportAt  DateTime?
+  config        Json?    // np. { apiKey, lastSyncToken, mappingOptions }
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([propertyId, system])
+  @@index([propertyId])
+  @@index([system])
+}
+
+model KsefSession {
+  id                 String    @id @default(cuid())
+  propertyId         String?
+  property           Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  nip                String    // NIP podmiotu (sesja KSeF)
+  sessionToken      String    @db.Text  // token sesji KSeF
+  tokenExpiresAt    DateTime  // ważność tokenu
+  challenge         String?   @db.Text  // challenge z inicjacji sesji
+  contextIdentifier String?   @db.VarChar(500)  // identyfikator kontekstu KSeF
+  createdAt         DateTime  @default(now())
+  lastKeepAliveAt   DateTime? // ostatnie odświeżenie sesji (keep-alive)
+
+  @@index([propertyId])
+  @@index([nip])
+  sentBatches KsefSentBatch[]
+}
+
+model KsefSentBatch {
+  id                   String   @id @default(cuid())
+  sessionId            String
+  session              KsefSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  invoiceIds           Json     // ["invoiceId1", "invoiceId2", ...] – list of Invoice.id
+  batchReferenceNumber String?  // nr referencyjny partii w KSeF
+  sentAt               DateTime @default(now())
+  status               String   // np. PENDING, SENT, PARTIAL, FAILED
+
+  @@index([sessionId])
+}
+
+/** Kolejka faktur do wysyłki KSeF – gdy bramka MF zwraca 5xx. */
+model KsefPendingSend {
+  id             String   @id @default(cuid())
+  invoiceId      String   @unique  // jedna faktura = jeden wpis
+  queuedAt       DateTime @default(now())
+  lastAttemptAt  DateTime?
+  attemptCount   Int      @default(0)
+  lastError      String?  @db.Text
+  createdAt      DateTime @default(now())
+
+  @@index([invoiceId])
+  @@index([queuedAt])
+}
+
+model ParkingSpot {
+  id          String   @id @default(cuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  number      String   // np. "P-01", "G-12"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  bookings ParkingBooking[]
+
+  @@unique([propertyId, number])
+  @@index([propertyId])
+}
+
+model ParkingBooking {
+  id             String   @id @default(cuid())
+  parkingSpotId  String
+  parkingSpot    ParkingSpot @relation(fields: [parkingSpotId], references: [id], onDelete: Cascade)
+  reservationId  String?
+  reservation    Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  startDate      DateTime @db.Date
+  endDate        DateTime @db.Date
+  createdAt      DateTime @default(now())
+
+  @@index([parkingSpotId])
+  @@index([reservationId])
+  @@index([startDate, endDate])
+}
+
 model RoomType {
   id         String   @id @default(cuid())
   name       String   @unique  // np. "Queen", "Twin", "Suite"
@@ -43,7 +225,9 @@ model RoomType {
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-  ratePlans  RatePlan[]
+  ratePlans       RatePlan[]
+  allotments      Allotment[]
+  waitlistEntries WaitlistEntry[]
 }
 
 model RatePlan {
@@ -56,50 +240,342 @@ model RatePlan {
   minStayNights  Int?      // min. długość pobytu (nocy)
   maxStayNights  Int?      // max. długość pobytu (nocy)
   isNonRefundable Boolean  @default(false)
+  isWeekendHoliday Boolean @default(false)  // stawka weekend/święto (osobna logika wyceny)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   @@index([roomTypeId])
   @@index([validFrom, validTo])
 }
 
+model DerivedRateRule {
+  id          String   @id @default(cuid())
+  name        String   // np. "Śniadanie +40 PLN", "Bezzwrotna +10%"
+  type        String   // PERCENT_ADD | FIXED_ADD
+  value       Decimal  @db.Decimal(10, 2)  // procent lub kwota
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model MinibarItem {
+  id          String   @id @default(cuid())
+  name        String   // np. "Cola 0.33", "Piwo"
+  price       Decimal  @db.Decimal(10, 2)
+  unit        String   @default("szt")  // szt, opak
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  consumptions MinibarConsumption[]
+}
+
+model MinibarConsumption {
+  id             String   @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  minibarItemId  String
+  minibarItem    MinibarItem @relation(fields: [minibarItemId], references: [id], onDelete: Restrict)
+  quantity       Int      // np. 2
+  amount         Decimal  @db.Decimal(12, 2)  // quantity * unitPrice
+  createdAt      DateTime @default(now())
+
+  @@index([reservationId])
+  @@index([minibarItemId])
+}
+
 model Room {
-  id            String   @id @default(cuid())
-  number        String   @unique
+  id            String     @id @default(cuid())
+  propertyId    String?
+  property      Property?  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  number        String
   type          String
   status        RoomStatus
-  price         Decimal? @db.Decimal(10, 2)
-  reason        String?  // np. "Broken AC" dla OOO
-  activeForSale Boolean  @default(true) // false = wycofany ze sprzedaży (nie pokazywany na grafiku / w dostępności)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  price         Decimal?   @db.Decimal(10, 2)
+  reason        String?    // np. "Broken AC" dla OOO
+  activeForSale Boolean    @default(true) // false = wycofany ze sprzedaży (nie pokazywany na grafiku / w dostępności)
+  roomFeatures  Json?      // np. ["balkon", "widok"] – cechy do filtrowania
+  beds          Int        @default(1)   // liczba łóżek (1 = cały pokój, >1 = sprzedaż po łóżku, np. dorm)
+  surfaceArea   Decimal?   @db.Decimal(6, 2)  // metraż pokoju w m²
+  floor         String?    // piętro (np. "1", "2", "Parter")
+  building      String?    // budynek/skrzydło (np. "A", "Główny", "Wschodni")
+  view          String?    // widok z pokoju (np. "morze", "góry", "miasto", "parking", "ogród")
+  exposure      String?    // ekspozycja okien (północ, południe, wschód, zachód)
+  bedTypes      Json?      // typy łóżek np. ["double", "single"] lub [{"type":"double","count":1},{"type":"single","count":2}]
+  photos        Json?      // adresy URL zdjęć pokoju np. ["/uploads/room-101-1.jpg", "https://cdn.hotel.pl/img/room1.jpg"]
+  amenities     Json?      // wyposażenie pokoju np. ["TV", "minibar", "klimatyzacja", "sejf", "WiFi", "balkon", "wanna"]
+  inventory     Json?      // inwentaryzacja fizycznych przedmiotów np. [{"item":"ręcznik duży","count":4},{"item":"poduszka","count":2}]
+  connectedRooms  Json?     // pokoje połączone (drzwi wewnętrzne) np. ["102","103"] – symetryczna relacja
+  cleaningPriority String?  // priorytet sprzątania: VIP_ARRIVAL, DEPARTURE, STAY_OVER, NORMAL
+  assignedHousekeeper String?  // przypisana pokojowa (imię lub ID)
+  estimatedCleaningMinutes Int?  // szacowany czas sprzątania w minutach (per pokój)
+  maxOccupancy  Int        @default(2)   // maksymalna liczba osób
+  description   String?    @db.Text      // opis marketingowy pokoju
+  technicalNotes String?   @db.Text      // notatki techniczne (widoczne tylko dla personelu)
+  nextServiceDate DateTime? @db.Date     // termin następnego przeglądu/serwisu
+  nextServiceNote String?               // notatka do planowanego przeglądu
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
-  reservations Reservation[]
+  reservations       Reservation[]
+  blocks             RoomBlock[]
+  roomGroupRooms     RoomGroupRoom[]
+  cleaningSchedules  CleaningSchedule[]
+  maintenanceIssues  MaintenanceIssue[]
+  gastronomyOrders   Order[]
+  phoneCallLogs      PhoneCallLog[]
+
+  @@unique([number])
+  @@index([propertyId])
+}
+
+model RoomGroup {
+  id         String   @id @default(cuid())
+  name       String   // np. "Apartament Rodzinny"
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  rooms RoomGroupRoom[]
+
+  @@index([propertyId])
+}
+
+model RoomGroupRoom {
+  id          String    @id @default(cuid())
+  roomGroupId String
+  roomGroup   RoomGroup @relation(fields: [roomGroupId], references: [id], onDelete: Cascade)
+  roomId      String    @unique  // pokój może być tylko w jednej grupie
+  room        Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomGroupId])
 }
 
 model Guest {
-  id        String   @id @default(cuid())
-  name      String
-  email     String?
-  phone     String?
-  mrz       String?  // kod MRZ z dowodu (skaner 2D)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  name          String
+  email         String?
+  phone         String?
+  photoUrl      String?  @db.VarChar(500)  // zdjęcie gościa (opcjonalne) - URL lub base64
+  // Kontakt awaryjny (emergency contact)
+  emergencyContactName    String?  // imię i nazwisko osoby do kontaktu w nagłych przypadkach
+  emergencyContactPhone   String?  // telefon do osoby kontaktowej
+  emergencyContactRelation String? // relacja: SPOUSE, PARENT, SIBLING, CHILD, FRIEND, OTHER
+  occupation    String?  // zawód gościa (np. lekarz, prawnik, inżynier)
+  guestType     String   @default("INDIVIDUAL")  // typ gościa: INDIVIDUAL, CORPORATE, GROUP, CREW
+  segment       String?  // segmentacja marketingowa: BUSINESS, LEISURE, MICE, VIP, LONGSTAY, CREW, OTHER
+  dateOfBirth   DateTime? @db.Date  // data urodzenia (np. 1985-05-15)
+  placeOfBirth  String?   // miejsce urodzenia (np. "Warszawa", "Kraków")
+  nationality   String?   // obywatelstwo/narodowość (kod ISO np. "PL", "DE", "GB")
+  gender        String?   // płeć: M (mężczyzna), F (kobieta) - do statystyk GUS
+  // Adres zamieszkania
+  street        String?   // ulica i numer (np. "ul. Kwiatowa 15/3")
+  city          String?   // miasto (np. "Warszawa")
+  postalCode    String?   // kod pocztowy (np. "00-001")
+  country       String?   // kraj (kod ISO np. "PL", "DE")
+  // Dokument tożsamości
+  documentType     String?    // typ dokumentu: ID_CARD, PASSPORT, DRIVING_LICENSE, OTHER
+  documentNumber   String?    // numer dokumentu (np. "ABC123456")
+  documentExpiry   DateTime?  @db.Date  // data ważności dokumentu
+  documentIssuedBy String?    // organ wydający dokument (np. "Prezydent m.st. Warszawy")
+  mrz              String?    // kod MRZ z dowodu (skaner 2D)
+  // VIP status
+  isVip         Boolean  @default(false)  // czy gość ma status VIP
+  vipLevel      String?                   // poziom VIP: BRONZE, SILVER, GOLD, PLATINUM
+  isBlacklisted Boolean  @default(false)  // czarna lista – ostrzeżenie przy rezerwacji
+  preferences   Json?    // np. { floor: "1", bedType: "double" } – preferencje gościa
+  // Statystyki pobytów
+  totalStays    Int      @default(0)      // łączna liczba pobytów (zakończonych check-out)
+  lastStayDate  DateTime? @db.Date        // data ostatniego pobytu (check-out)
+  // Preferencje dietetyczne
+  mealPreferences Json?   // preferencje posiłków: { vegetarian, vegan, glutenFree, lactoseFree, halal, kosher, allergies: string[], other: string }
+  // Alergie i uwagi zdrowotne
+  healthAllergies String?  @db.Text  // alergie (nie tylko pokarmowe): lateks, pyłki, leki, kurz, etc.
+  healthNotes     String?  @db.Text  // uwagi zdrowotne: schorzenia, potrzeby specjalne, leki, mobilność
+  // Ulubiony minibar (do przygotowania przed przyjazdem)
+  favoriteMinibarItems Json?  // lista ulubionych produktów: [{ itemId?, name, quantity }]
+  // Uwagi/ostrzeżenia dla personelu
+  staffNotes    String?  @db.Text  // uwagi wewnętrzne dla personelu: "zawsze prosi o późny checkout", "skarżył się na hałas"
+  // RODO – zgody na przetwarzanie danych
+  gdprDataProcessingConsent Boolean @default(false)  // zgoda na przetwarzanie danych osobowych (obowiązkowa dla meldunku)
+  gdprDataProcessingDate    DateTime?  // data udzielenia zgody na przetwarzanie
+  gdprConsentSignature      Json?     // podpis elektroniczny przy zgody RODO (data URL z canvas)
+  gdprMarketingConsent      Boolean @default(false)  // zgoda na marketing (newsletter, oferty)
+  gdprMarketingConsentDate  DateTime?  // data udzielenia zgody marketingowej
+  gdprThirdPartyConsent     Boolean @default(false)  // zgoda na przekazywanie danych partnerom
+  gdprThirdPartyConsentDate DateTime?  // data zgody na partnerów
+  gdprConsentWithdrawnAt    DateTime?  // data wycofania wszystkich zgód
+  gdprAnonymizedAt          DateTime?  // data anonimizacji danych (prawo do bycia zapomnianym)
+  gdprNotes                 String? @db.Text  // notatki RODO (np. "żądanie usunięcia z 15.01.2026")
+  // Program lojalnościowy
+  loyaltyCardNumber String?  @unique  // numer karty lojalnościowej (np. "LOY-000001")
+  loyaltyPoints     Int      @default(0)  // aktualna liczba punktów
+  loyaltyTierId     String?  // aktualny poziom w programie
+  loyaltyTier       LoyaltyTier? @relation(fields: [loyaltyTierId], references: [id], onDelete: SetNull)
+  loyaltyEnrolledAt DateTime?  // data zapisania do programu
+  loyaltyTotalPoints Int      @default(0)  // łączna liczba zdobytych punktów (do obliczania tier)
+  loyaltyTotalStays  Int      @default(0)  // łączna liczba pobytów (do obliczania tier)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  reservations Reservation[]
+  reservations    Reservation[]
+  reservationOccupancies ReservationOccupant[]  // rezerwacje, w których gość jest w pokoju (osobny rachunek)
+  reservationFolios ReservationFolio[]  // folia przypisane do tego gościa (separate checks)
+  waitlistEntries WaitlistEntry[]
+  loyaltyTransactions LoyaltyTransaction[]
+  guestAppTokens  GuestAppToken[]  // tokeny dostępu do aplikacji mobilnej
+  // Relacje z innymi gośćmi (rodzina/osoby towarzyszące)
+  relationsAsSource GuestRelation[] @relation("GuestRelationSource")
+  relationsAsTarget GuestRelation[] @relation("GuestRelationTarget")
+  campsiteBookings  CampsiteBooking[]
+  rentalBookings   RentalBooking[]
+  receptionSales   ReceptionSale[]
+
+  @@index([loyaltyTierId])
+}
+
+// Token dostępu do aplikacji mobilnej dla gościa
+model GuestAppToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  guestId   String
+  guest     Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  @@index([guestId])
+  @@index([token])
+}
+
+// Powiązania między gośćmi (rodzina, osoby towarzyszące)
+model GuestRelation {
+  id            String   @id @default(cuid())
+  sourceGuestId String   // gość źródłowy
+  sourceGuest   Guest    @relation("GuestRelationSource", fields: [sourceGuestId], references: [id], onDelete: Cascade)
+  targetGuestId String   // gość powiązany
+  targetGuest   Guest    @relation("GuestRelationTarget", fields: [targetGuestId], references: [id], onDelete: Cascade)
+  relationType  String   // typ relacji: SPOUSE, CHILD, PARENT, SIBLING, FRIEND, COLLEAGUE, ASSISTANT, OTHER
+  note          String?  // dodatkowa notatka
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([sourceGuestId, targetGuestId])  // jeden gość może mieć tylko jeden typ relacji z innym
+  @@index([sourceGuestId])
+  @@index([targetGuestId])
 }
 
 model Company {
-  id          String   @id @default(cuid())
-  nip         String   @unique  // NIP (10 znaków)
-  name        String   // nazwa firmy
-  address     String?  // ulica, nr
-  postalCode  String?  // np. 00-925
-  city        String?  // np. WARSZAWA
-  country     String   @default("POL")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  nip             String   @unique  // NIP (10 znaków)
+  name            String   // nazwa firmy
+  address         String?  // ulica, nr
+  postalCode      String?  // np. 00-925
+  city            String?  // np. WARSZAWA
+  country         String   @default("POL")
+  
+  // Osoba kontaktowa
+  contactPerson   String?  // imię i nazwisko osoby kontaktowej
+  contactEmail    String?  // e-mail kontaktowy
+  contactPhone    String?  // telefon kontaktowy
+  contactPosition String?  // stanowisko (np. "Kierownik Działu HR")
+  
+  // Warunki płatności
+  paymentTermDays Int      @default(14)  // domyślny termin płatności (14/30/60 dni)
+  creditLimit     Decimal? @db.Decimal(12, 2)  // limit kredytowy (opcjonalnie)
+  billingEmail    String?  // e-mail do faktur
+  billingNotes    String?  // uwagi do rozliczeń
+  
+  // Opiekun handlowy (pracownik hotelu przypisany do firmy)
+  accountManagerId String?
+  accountManager   User?    @relation("AccountManager", fields: [accountManagerId], references: [id], onDelete: SetNull)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   reservations Reservation[]
+  corporateContracts CorporateContract[]
+  consolidatedInvoices ConsolidatedInvoice[]
+  accountingNotes AccountingNote[]
+  reservationFolios ReservationFolio[]
+}
+
+// Goście w pokoju (poza głównym) – do osobnych rachunków (separate checks)
+model ReservationOccupant {
+  id             String   @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  guestId        String
+  guest          Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+
+  @@unique([reservationId, guestId])
+  @@index([reservationId])
+  @@index([guestId])
+}
+
+// Przypisanie płatnika do folio (split folio: np. folio 1 = gość, folio 2 = firma; separate checks = który gość)
+model ReservationFolio {
+  id             String   @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  folioNumber    Int       // 1, 2, 3... – numer folio w ramach rezerwacji
+  billTo         String   // GUEST | COMPANY – kto jest płatnikiem tego folio
+  guestId        String?   // gdy billTo = GUEST: który gość (null = główny gość rezerwacji); do osobnych rachunków
+  guest          Guest?   @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  companyId      String?   // wymagane gdy billTo = COMPANY
+  company        Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  label          String?   @db.VarChar(200) // opcjonalna etykieta np. "Firma - ABC Sp. z o.o.", "Gość prywatnie"
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([reservationId, folioNumber])
+  @@index([reservationId])
+  @@index([companyId])
+  @@index([guestId])
+}
+
+// Biuro podróży / Agent (Travel Agent)
+model TravelAgent {
+  id                String   @id @default(cuid())
+  code              String   @unique  // kod agenta (np. "BT001", "ITAKA", "TUI")
+  name              String   // nazwa biura
+  nip               String?  // NIP (opcjonalnie)
+  address           String?
+  postalCode        String?
+  city              String?
+  country           String   @default("POL")
+  
+  // Kontakt
+  contactPerson     String?  // osoba kontaktowa
+  contactEmail      String?
+  contactPhone      String?
+  website           String?  // strona www biura
+  
+  // Warunki finansowe
+  commissionPercent Decimal  @db.Decimal(5, 2) @default(10)  // % prowizji dla agenta
+  commissionType    String   @default("NET")  // NET = prowizja od ceny netto, GROSS = prowizja od brutto
+  paymentTermDays   Int      @default(14)  // termin płatności faktury
+  creditLimit       Decimal? @db.Decimal(12, 2)  // limit kredytowy
+  
+  // Agent Rates - stawki specjalne
+  rateCodeId        String?  // powiązany kod cenowy (opcjonalnie)
+  rateCode          RateCode? @relation(fields: [rateCodeId], references: [id], onDelete: SetNull)
+  useNetRates       Boolean  @default(true)  // czy pokazywać ceny netto (bez marży)
+  discountPercent   Decimal? @db.Decimal(5, 2)  // dodatkowy rabat od ceny (np. 5% za objętość)
+  
+  // IATA / identyfikatory branżowe
+  iataNumber        String?  // numer IATA (dla linii lotniczych)
+  licenseNumber     String?  // numer licencji/zezwolenia
+  
+  // Notatki
+  notes             String?  @db.Text
+  isActive          Boolean  @default(true)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  reservations      Reservation[]  // rezerwacje przez to biuro
+
+  @@index([code])
+  @@index([name])
 }
 
 model RateCode {
@@ -110,10 +586,47 @@ model RateCode {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   reservations Reservation[]
+  corporateContracts CorporateContract[]
+  travelAgents TravelAgent[]  // agenci korzystający z tego kodu
+}
+
+// Kontrakty korporacyjne – umowy z firmami na specjalne ceny
+model CorporateContract {
+  id              String    @id @default(cuid())
+  companyId       String
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rateCodeId      String?   // opcjonalnie powiązany kod cenowy (np. "CORP")
+  rateCode        RateCode? @relation(fields: [rateCodeId], references: [id], onDelete: SetNull)
+
+  name            String?   // nazwa umowy, np. "Kontrakt 2026"
+  discountPercent Decimal?  @db.Decimal(5, 2)  // rabat procentowy od cen standardowych (np. 15.00 = 15%)
+  fixedPricePerNight Decimal? @db.Decimal(10, 2)  // lub stała cena za noc (zamiast rabatu)
+  
+  validFrom       DateTime  // początek obowiązywania
+  validTo         DateTime  // koniec obowiązywania
+  minNightsPerYear Int?     // minimalna liczba noclegów rocznie (gwarancja)
+  minRevenuePerYear Decimal? @db.Decimal(12, 2) // minimalne przychody rocznie
+  
+  paymentTermDays Int       @default(14)  // termin płatności w dniach
+  commissionPercent Decimal? @db.Decimal(5, 2)  // prowizja dla pośrednika (jeśli jest)
+  
+  contactPerson   String?   // osoba kontaktowa
+  contactEmail    String?   // e-mail kontaktowy
+  contactPhone    String?   // telefon kontaktowy
+  
+  notes           String?   @db.Text  // notatki do umowy
+  isActive        Boolean   @default(true)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([companyId])
+  @@index([validFrom, validTo])
 }
 
 model Reservation {
-  id          String           @id @default(cuid())
+  id                  String           @id @default(cuid())
+  confirmationNumber  String?          @unique  // numer potwierdzenia (np. ABC123, generowany automatycznie)
   guestId     String
   guest       Guest            @relation(fields: [guestId], references: [id], onDelete: Cascade)
   roomId      String
@@ -122,19 +635,229 @@ model Reservation {
   company     Company?         @relation(fields: [companyId], references: [id], onDelete: SetNull)
   rateCodeId  String?
   rateCode    RateCode?        @relation(fields: [rateCodeId], references: [id], onDelete: SetNull)
+  groupId     String?
+  group       ReservationGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   checkIn     DateTime         @db.Date
   checkOut    DateTime         @db.Date
+  checkInTime String?          // HH:mm – rezerwacja godzinowa (np. hotel na godziny)
+  checkOutTime String?         // HH:mm
+  eta         String?          // HH:mm – szacowana godzina przyjazdu (Estimated Time of Arrival)
+  etd         String?          // HH:mm – szacowana godzina wyjazdu (Estimated Time of Departure)
   status      ReservationStatus
+  source      String?          // źródło rezerwacji: OTA, PHONE, EMAIL, WALK_IN, WEBSITE, BOOKING_ENGINE
+  channel     String?          // kanał sprzedaży: DIRECT, BOOKING_COM, EXPEDIA, AIRBNB, AGODA, TRIVAGO, HOTELSCOM, itp.
+  marketSegment String?        // segment rynkowy: BUSINESS, LEISURE, GROUP, CORPORATE, GOVERNMENT, CREW, WHOLESALE, PACKAGE
+  tripPurpose String?          // rodzaj pobytu: BUSINESS, LEISURE, CONFERENCE, TRANSIT, MEDICAL, RELOCATION, OTHER
+  mealPlan    String?          // wyżywienie: RO, BB, HB, FB, AI (Room Only, Bed&Breakfast, Half Board, Full Board, All Inclusive)
+  roomPreferences Json?        // preferencje pokoju: { view, floor, quiet, highFloor, nearElevator, accessible, bedType, smoking, etc. }
   pax         Int?
+  adults      Int?             // liczba dorosłych
+  children    Int?             // liczba dzieci
+  childrenAges Json?           // wiek dzieci: [3, 7, 12] – tablica liczb
+  petInfo     Json?            // informacje o zwierzętach: { hasPet, petType, petCount, petBreed, petWeight, petFee, notes }
+  paymentStatus String?        // status płatności: UNPAID, PARTIAL, PAID
+  securityDeposit Json?        // kaucja/depozyt: { amount, collected, returned, refundDate, deductions, notes }
+  cardGuarantee Json?          // karta gwarancyjna: { lastFourDigits, expiryMonth, expiryYear, cardType, cardholderName, status }
+  advancePayment Json?         // przedpłata: { required, amount, dueDate, paid, paidDate, paidAmount, method, notes }
+  cancellationReason String?   // powód anulacji rezerwacji
+  cancellationCode String?     // kod anulacji (GUEST_REQUEST, NO_SHOW, OVERBOOKING, itp.)
+  cancelledAt DateTime?        // data i godzina anulacji
+  cancelledBy String?          // kto anulował (ID użytkownika lub "GUEST", "SYSTEM")
+  alerts Json?                 // alerty/flagi: { vip, badPayer, specialRequest, noShowHistory, blacklisted, loyalty, notes }
+  travelAgentId String?        // biuro podróży/agent
+  travelAgent   TravelAgent?   @relation(fields: [travelAgentId], references: [id], onDelete: SetNull)
+  agentCommission Decimal?     @db.Decimal(5, 2)  // prowizja agenta dla tej rezerwacji (może nadpisać domyślną)
+  bedsBooked  Int?             // ile łóżek zarezerwowano (null = cały pokój; gdy room.beds > 1 – sprzedaż zasobowa)
+  notes       String?          // uwagi do rezerwacji (widoczne dla gościa – drukowane na potwierdzeniu)
+  internalNotes String?        @db.Text // uwagi wewnętrzne (widoczne tylko dla personelu)
+  specialRequests String?      @db.Text // specjalne życzenia (łóżeczko dziecięce, dieta, preferencje, itp.)
+  webCheckInSignedAt DateTime? // zdalne podpisanie karty meldunkowej (Web Check-in)
+  webCheckInSignature Json?   // podpis (np. data URL z canvas)
+  kioskCheckInAt DateTime?    // meldunek przez kiosk samoobsługowy
+  kioskSignature Json?        // podpis z kiosku (data URL z canvas)
+  digitalKeyCode Json?        // cyfrowy klucz do drzwi { code, validFrom, validTo, generatedAt }
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  transactions Transaction[]
+  transactions   Transaction[]
+  reservationOccupants ReservationOccupant[]
+  reservationFolios ReservationFolio[]
+  parkingBookings ParkingBooking[]
+  proformas       Proforma[]
+  invoices        Invoice[]
+  receipts        Receipt[]
+  accountingNotes AccountingNote[]
+  paymentLinks    PaymentLink[]
+  cardPreauths    CardPreauth[]
+  webCheckInTokens WebCheckInToken[]
+  minibarConsumptions MinibarConsumption[]
+  dunningLogs     DunningLog[]
+  collectionCase   CollectionCase?
+  spaBookings      SpaBooking[]
+  gastronomyOrders Order[]
+  mealConsumptions MealConsumption[]
+  laundryOrders    LaundryOrder[]
+  transferBookings TransferBooking[]
+  attractionBookings AttractionBooking[]
+  campsiteBookings   CampsiteBooking[]
+  rentalBookings     RentalBooking[]
+  reservationSurcharges ReservationSurcharge[]
+  packageId         String?
+  package           Package? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  receptionSales    ReceptionSale[]
+  phoneCallLogs     PhoneCallLog[]
 
   @@index([checkIn, checkOut])
   @@index([roomId])
   @@index([rateCodeId])
   @@index([companyId])
+  @@index([groupId])
+  @@index([travelAgentId])
+  @@index([source])
+  @@index([channel])
+  @@index([marketSegment])
+  @@index([packageId])
+}
+
+// Dopłaty / extras – katalog typów (łóżko dostawkowe, dziecko, zwierzę, parking itd.)
+model SurchargeType {
+  id          String   @id @default(cuid())
+  code        String   @unique  // np. EXTRA_BED, CHILD, PET, PARKING
+  name        String   // np. "Łóżko dostawkowe", "Dziecko", "Zwierzę", "Parking"
+  price       Decimal  @db.Decimal(10, 2)  // cena (za noc lub jednorazowo – zależy od chargeType)
+  chargeType  String   @default("PER_NIGHT")  // PER_NIGHT = za każdą noc, ONE_TIME = jednorazowa dopłata
+  propertyId  String?  // opcjonalnie: dopłata tylko dla danego obiektu (null = globalna)
+  property    Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  reservationSurcharges ReservationSurcharge[]
+
+  @@index([propertyId])
+  @@index([code])
+}
+
+// Przypisanie dopłaty do rezerwacji (np. 1× łóżko dostawkowe, 1× zwierzę)
+model ReservationSurcharge {
+  id              String   @id @default(cuid())
+  reservationId   String
+  reservation     Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  surchargeTypeId String
+  surchargeType   SurchargeType @relation(fields: [surchargeTypeId], references: [id], onDelete: Cascade)
+  quantity        Int      @default(1)
+  amountOverride  Decimal? @db.Decimal(10, 2)  // opcjonalna nadpisana kwota (np. indywidualna umowa)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([reservationId, surchargeTypeId])
+  @@index([reservationId])
+  @@index([surchargeTypeId])
+}
+
+// Pakiety (room + śniadanie, room + SPA itd.)
+model Package {
+  id          String   @id @default(cuid())
+  code        String   @unique  // np. "BB_PACK", "SPA_PACK"
+  name        String   // np. "Pokój + śniadanie", "Pokój + SPA"
+  description String?  @db.Text
+  totalPrice  Decimal? @db.Decimal(10, 2)  // opcjonalna cena pakietu (nadpisuje sumę komponentów)
+  propertyId  String?
+  property    Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  components  PackageComponent[]
+  reservations Reservation[]
+
+  @@index([propertyId])
+  @@index([code])
+}
+
+// Składnik pakietu (np. śniadanie = rateCode BB, SPA = zasób SPA)
+model PackageComponent {
+  id             String   @id @default(cuid())
+  packageId      String
+  package        Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  componentType  String   // MEAL_PLAN, SPA_INCLUSION, OTHER
+  refValue       String?  // np. "BB" dla meal plan, ID zasobu SPA dla SPA_INCLUSION
+  label          String   // np. "Śniadanie", "1× Masaż relaksacyjny"
+  quantity       Int      @default(1)
+  unitPrice     Decimal  @db.Decimal(10, 2)  // cena jednostkowa (wliczona w pakiet)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([packageId])
+}
+
+// Towary sprzedawane w recepcji (pamiątki, napoje)
+model ShopProduct {
+  id          String   @id @default(cuid())
+  name        String   // np. "Magnes", "Woda 0.5l"
+  sku         String?  @unique  // opcjonalny kod towaru
+  price       Decimal  @db.Decimal(10, 2)
+  category    String   @default("OTHER")  // SOUVENIR, DRINK, OTHER
+  propertyId  String?
+  property    Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  stockQty    Int?     // opcjonalna ilość na magazynie (null = nie śledzimy)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  saleItems   ReceptionSaleItem[]
+
+  @@index([propertyId])
+  @@index([category])
+}
+
+// Sprzedaż w recepcji (paragon / obciążenie pokoju)
+model ReceptionSale {
+  id             String   @id @default(cuid())
+  reservationId  String?
+  reservation    Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  guestId        String?
+  guest          Guest?   @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  totalAmount    Decimal  @db.Decimal(12, 2)
+  paymentMethod  String?  // CASH, CARD, ROOM_CHARGE, ...
+  transactionId  String?  // jeśli obciążono pokój – powiązana Transaction
+  createdAt      DateTime @default(now())
+  items          ReceptionSaleItem[]
+
+  @@index([reservationId])
+  @@index([guestId])
+  @@index([createdAt])
+}
+
+model ReceptionSaleItem {
+  id             String   @id @default(cuid())
+  receptionSaleId String
+  receptionSale   ReceptionSale @relation(fields: [receptionSaleId], references: [id], onDelete: Cascade)
+  shopProductId   String
+  shopProduct    ShopProduct @relation(fields: [shopProductId], references: [id], onDelete: Restrict)
+  quantity       Int      @default(1)
+  unitPrice      Decimal  @db.Decimal(10, 2)
+  amount         Decimal  @db.Decimal(12, 2)  // quantity * unitPrice
+
+  @@index([receptionSaleId])
+  @@index([shopProductId])
+}
+
+// Centrala – log rozmów telefonicznych (pokój / rezerwacja, integracja z centralą)
+model PhoneCallLog {
+  id             String    @id @default(cuid())
+  roomId         String?
+  room           Room?     @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  reservationId  String?
+  reservation    Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  externalId     String   // ID rozmowy w systemie centrali
+  startedAt      DateTime  // początek rozmowy
+  durationSec    Int       @default(0)  // czas trwania w sekundach
+  cost           Decimal?  @db.Decimal(10, 4)  // opcjonalny koszt rozmowy
+  createdAt      DateTime  @default(now())
+
+  @@index([roomId])
+  @@index([reservationId])
+  @@index([externalId])
+  @@index([startedAt])
 }
 
 model AuditLog {
@@ -152,16 +875,529 @@ model AuditLog {
   @@index([entityType, entityId])
 }
 
+/** Log logowań użytkowników – raport kto kiedy się logował */
+model LoginLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  email     String   @db.VarChar(254)  // email użyty przy logowaniu (dla sukcesu i błędu)
+  loggedAt  DateTime @default(now())
+  ipAddress String?  @db.VarChar(45)
+  success   Boolean  @default(true)
+
+  @@index([loggedAt])
+  @@index([userId])
+  @@index([email])
+}
+
+/** Log wysłanych przypomnień o płatności (dunning letters) – poziom, data, odbiorca, sukces/błąd */
+model DunningLog {
+  id             String   @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  level          Int      // 1 = pierwsze przypomnienie, 2 = drugie, 3 = trzecie / windykacja
+  channel        String   @default("EMAIL")  // EMAIL, SMS
+  recipientEmail String?  @db.VarChar(254)
+  recipientPhone String?  @db.VarChar(50)
+  success        Boolean  @default(true)
+  errorMessage   String?  @db.Text  // komunikat błędu przy nieudanym wysłaniu
+  sentAt         DateTime @default(now())
+  balanceAtSend  Decimal  @db.Decimal(12, 2)  // saldo w momencie wysłania (do audytu)
+  dueDate        DateTime @db.Date  // termin płatności (checkOut + N dni)
+
+  @@index([reservationId])
+  @@index([sentAt])
+  @@index([reservationId, level])
+}
+
+/** Sprawa windykacyjna – rezerwacja z zaległością przekazana do windykacji */
+model CollectionCase {
+  id             String   @id @default(cuid())
+  reservationId  String   @unique  // jedna rezerwacja = jedna sprawa
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  status         String   @default("IN_COLLECTION")  // IN_COLLECTION, HANDED_TO_AGENCY, PAID, WRITTEN_OFF
+  agencyName     String?  @db.VarChar(200)  // nazwa agencji windykacyjnej (gdy HANDED_TO_AGENCY)
+  handedOverAt   DateTime? @db.DateTime  // data przekazania do agencji
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
 model Transaction {
   id             String   @id @default(cuid())
   reservationId  String
   reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
   amount         Decimal  @db.Decimal(12, 2)
-  type           String   // np. "ROOM", "DEPOSIT", "VOID"
+  type           String   // np. "ROOM", "DEPOSIT", "VOID", "LOCAL_TAX", "MINIBAR", "GASTRONOMY", "SPA", "PARKING"
+  paymentMethod  String?  // metoda płatności: CASH, CARD, TRANSFER, VOUCHER, PREPAID, BLIK, SPLIT, OTHER
   isReadOnly     Boolean  @default(false) // po Night Audit
+  createdAt      DateTime @default(now())
+  
+  // Szczegóły płatności (dla split payment i raportów)
+  paymentDetails Json?    // {"methods": [{"type": "CASH", "amount": 100}, {"type": "CARD", "amount": 50}]}
+
+  // === ROZSZERZENIE DLA FOLIO ===
+  // Szczegóły pozycji
+  description    String?  @db.Text  // opis pozycji (np. "Nocleg 01-02.03.2025")
+  quantity       Decimal  @db.Decimal(10, 2) @default(1)  // ilość
+  unitPrice      Decimal? @db.Decimal(12, 2)  // cena jednostkowa
+  
+  // VAT
+  vatRate        Decimal  @db.Decimal(5, 2) @default(8)  // stawka VAT (%)
+  vatAmount      Decimal? @db.Decimal(12, 2)  // kwota VAT
+  netAmount      Decimal? @db.Decimal(12, 2)  // kwota netto
+  
+  // Kategoryzacja
+  category       String?  // kategoria: ACCOMMODATION, F_B, SPA, PARKING, PHONE, LAUNDRY, OTHER
+  subcategory    String?  // podkategoria (np. dla F&B: RESTAURANT, BAR, MINIBAR)
+  departmentCode String?  // kod działu/departamentu
+  
+  // Powiązania
+  invoiceId      String?  // powiązanie z fakturą (jeśli zafakturowane)
+  receiptId      String?  // powiązanie z paragonem
+  folioNumber    Int      @default(1)  // numer folio (dla split folio: 1, 2, 3...)
+  
+  // Transfer między folio
+  transferredFrom String?  // ID transakcji źródłowej (jeśli transfer)
+  transferredTo   String?  // ID transakcji docelowej (jeśli transfer)
+  
+  // Status i audyt
+  status         String   @default("ACTIVE")  // ACTIVE, VOIDED, TRANSFERRED
+  voidedAt       DateTime?
+  voidedBy       String?
+  voidReason     String?
+  postedBy       String?  // kto wprowadził
+  postedAt       DateTime @default(now())
+  
+  // Rabat na pozycję vs na rezerwację: dla type=DISCOUNT – jeśli ustawione, rabat dotyczy tej jednej pozycji
+  appliesToTransactionId String?
+  appliesToTransaction   Transaction?  @relation("LineItemDiscount", fields: [appliesToTransactionId], references: [id], onDelete: SetNull)
+  lineItemDiscounts      Transaction[] @relation("LineItemDiscount")
+  
+  // Refundacja: transakcja REFUND wskazuje na oryginalną płatność
+  refundedTransactionId String?
+  refundedTransaction   Transaction?  @relation("RefundTarget", fields: [refundedTransactionId], references: [id], onDelete: SetNull)
+  refundTransactions    Transaction[] @relation("RefundTarget")
+  
+  // Referencje zewnętrzne
+  externalRef    String?  // np. numer zamówienia z restauracji
+  notes          String?  @db.Text  // notatki wewnętrzne
+
+  @@index([reservationId])
+  @@index([appliesToTransactionId])
+  @@index([refundedTransactionId])
+  @@index([paymentMethod])
+  @@index([folioNumber])
+  @@index([category])
+  @@index([status])
+  @@index([postedAt])
+}
+
+model Proforma {
+  id             String   @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  number         String   // np. PRO/2025/001 – numer proformy
+  amount         Decimal  @db.Decimal(12, 2)
+  issuedAt       DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@unique([number])
+  @@index([reservationId])
+}
+
+model Invoice {
+  id             String   @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  number        String   // FV/YYYY/SEQ – numer faktury VAT
+  amountNet     Decimal  @db.Decimal(12, 2)
+  amountVat     Decimal  @db.Decimal(12, 2)
+  amountGross   Decimal  @db.Decimal(12, 2)
+  vatRate       Decimal  @db.Decimal(5, 2)  // np. 8, 23
+  marginMode    Boolean  @default(false)    // marża (np. tour operator) – opcjonalnie
+  buyerNip      String
+  buyerName     String
+  buyerAddress  String?
+  buyerPostalCode String?
+  buyerCity      String?
+  issuedAt      DateTime @default(now())
+  createdAt      DateTime @default(now())
+  ksefUuid      String?  // nadany numer UUID faktury w KSeF (Krajowy System e-Faktur)
+  ksefReferenceNumber String?  // nr referencyjny sesji/wysyłki KSeF
+  ksefStatus    KsefStatus?  // status faktury w KSeF: DRAFT, PENDING, SENT, ACCEPTED, REJECTED, VERIFICATION
+  ksefUpoUrl    String?  // link do pobrania UPO (Urzędowe Potwierdzenie Otrzymania)
+  ksefPublishedAt DateTime?  // data przyjęcia faktury przez MF (KSeF)
+  ksefErrorMessage String?  @db.Text  // komunikat błędu z bramki KSeF
+
+  corrections   InvoiceCorrection[]
+
+  @@unique([number])
+  @@index([reservationId])
+}
+
+// Faktura zbiorcza - dla wielu rezerwacji jednej firmy
+model ConsolidatedInvoice {
+  id             String   @id @default(cuid())
+  number         String   @unique  // FVZ/YYYY/SEQ – numer faktury zbiorczej
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  
+  // Kwoty
+  amountNet      Decimal  @db.Decimal(12, 2)
+  amountVat      Decimal  @db.Decimal(12, 2)
+  amountGross    Decimal  @db.Decimal(12, 2)
+  vatRate        Decimal  @db.Decimal(5, 2) @default(8)
+  
+  // Dane nabywcy (skopiowane z firmy w momencie wystawiania)
+  buyerNip       String
+  buyerName      String
+  buyerAddress   String?
+  buyerPostalCode String?
+  buyerCity      String?
+  
+  // Okres rozliczeniowy
+  periodFrom     DateTime @db.Date
+  periodTo       DateTime @db.Date
+  
+  // Termin płatności
+  dueDate        DateTime @db.Date
+  paymentTermDays Int     @default(14)
+  
+  // Status
+  status         String   @default("ISSUED")  // ISSUED, PAID, OVERDUE, CANCELLED
+  paidAt         DateTime?
+  
+  // Notatki
+  notes          String?  @db.Text
+  
+  issuedAt       DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  items          ConsolidatedInvoiceItem[]
+
+  @@index([companyId])
+  @@index([periodFrom, periodTo])
+  @@index([status])
+}
+
+// Pozycje faktury zbiorczej (pojedyncze rezerwacje)
+model ConsolidatedInvoiceItem {
+  id                    String   @id @default(cuid())
+  consolidatedInvoiceId String
+  consolidatedInvoice   ConsolidatedInvoice @relation(fields: [consolidatedInvoiceId], references: [id], onDelete: Cascade)
+  reservationId         String
+  
+  // Dane rezerwacji (skopiowane w momencie fakturowania)
+  guestName             String
+  roomNumber            String
+  checkIn               DateTime @db.Date
+  checkOut              DateTime @db.Date
+  nights                Int
+  
+  // Kwoty
+  amountNet             Decimal  @db.Decimal(12, 2)
+  amountVat             Decimal  @db.Decimal(12, 2)
+  amountGross           Decimal  @db.Decimal(12, 2)
+  
+  description           String?  // opis pozycji (np. "Nocleg 5 dób")
+  
+  createdAt             DateTime @default(now())
+
+  @@index([consolidatedInvoiceId])
+  @@index([reservationId])
+}
+
+model InvoiceCorrection {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  number      String   // KOR/YYYY/SEQ
+  amountGross Decimal  @db.Decimal(12, 2)  // kwota korekty (ujemna = zwrot)
+  reason      String?
+  issuedAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@unique([number])
+  @@index([invoiceId])
+}
+
+// Rachunek (nie-VAT) – dla podmiotów zwolnionych z VAT (art. 106b ust. 2 ustawy o VAT)
+model Receipt {
+  id             String   @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  number         String   @unique  // R/YYYY/SEQ – numer rachunku
+  amount         Decimal  @db.Decimal(12, 2)  // kwota brutto (równa netto, bo zwolnienie z VAT)
+  
+  // Pozycje rachunku (JSON array)
+  // [{ name: string, quantity: number, unitPrice: number, amount: number }]
+  items          Json?
+  
+  // Dane nabywcy (skopiowane w momencie wystawienia)
+  buyerName      String   // imię i nazwisko / nazwa firmy
+  buyerAddress   String?  // ulica i numer
+  buyerPostalCode String? // kod pocztowy
+  buyerCity      String?  // miasto
+  buyerNip       String?  // NIP (opcjonalny dla osób fizycznych)
+  
+  // Dane sprzedawcy (z Property lub stałe)
+  sellerName     String   // nazwa hotelu / sprzedawcy
+  sellerAddress  String?
+  sellerPostalCode String?
+  sellerCity     String?
+  sellerNip      String?  // NIP sprzedawcy (może być zwolniony podmiotowo)
+  
+  // Podstawa zwolnienia z VAT
+  vatExemptionBasis String?  // np. "art. 113 ust. 1 ustawy o VAT" (podmiotowe), "art. 43 ust. 1 pkt X" (przedmiotowe)
+  
+  // Metoda płatności i termin
+  paymentMethod  String?  // CASH, TRANSFER, CARD
+  paymentDueDate DateTime? @db.Date  // termin płatności (opcjonalny)
+  isPaid         Boolean  @default(false)
+  paidAt         DateTime?
+  
+  // Daty
+  serviceDate    DateTime? @db.Date  // data sprzedaży / wykonania usługi
+  issuedAt       DateTime @default(now())  // data wystawienia
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // Notatki
+  notes          String?  @db.Text  // uwagi do rachunku
+
+  @@index([reservationId])
+  @@index([issuedAt])
+  @@index([buyerName])
+}
+
+// Nota księgowa (debit/credit note) – do rozliczeń niegotówkowych (kary, odszkodowania, odsetki, rabaty)
+model AccountingNote {
+  id             String   @id @default(cuid())
+  reservationId  String?  // opcjonalne powiązanie z rezerwacją
+  reservation    Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  companyId      String?  // opcjonalne powiązanie z firmą
+  company        Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  
+  number         String   @unique  // NK/YYYY/SEQ – numer noty (NK = Nota Księgowa)
+  type           String   // DEBIT (obciążeniowa), CREDIT (uznaniowa)
+  amount         Decimal  @db.Decimal(12, 2)
+  
+  // Tytuł / powód noty
+  title          String   // np. "Obciążenie za zniszczenia w pokoju 101"
+  description    String?  @db.Text  // szczegółowy opis
+  category       String?  // kategoria: DAMAGES, PENALTY, INTEREST, DISCOUNT, COMPENSATION, OTHER
+  
+  // Dane wystawcy (hotel)
+  issuerName     String
+  issuerAddress  String?
+  issuerPostalCode String?
+  issuerCity     String?
+  issuerNip      String?
+  
+  // Dane odbiorcy (gość lub firma)
+  recipientName  String
+  recipientAddress String?
+  recipientPostalCode String?
+  recipientCity  String?
+  recipientNip   String?  // NIP (opcjonalny dla osób fizycznych)
+  
+  // Kwota i waluta
+  currency       String   @default("PLN")
+  
+  // Powiązanie z dokumentem źródłowym (opcjonalne)
+  referenceDocument String?  // np. "Faktura FV/2026/0001", "Rezerwacja ABC123"
+  referenceDate  DateTime? @db.Date  // data dokumentu źródłowego
+  
+  // Termin płatności / realizacji
+  dueDate        DateTime? @db.Date
+  
+  // Status
+  status         String   @default("ISSUED")  // ISSUED, PAID, CANCELLED, DISPUTED
+  paidAt         DateTime?
+  cancelledAt    DateTime?
+  cancelledReason String?
+  
+  // Daty
+  issuedAt       DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  // Notatki wewnętrzne
+  internalNotes  String?  @db.Text
+
+  @@index([reservationId])
+  @@index([companyId])
+  @@index([type])
+  @@index([status])
+  @@index([issuedAt])
+  @@index([recipientName])
+}
+
+model PaymentLink {
+  id             String   @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  token          String   @unique  // unikalny token w URL (np. /pay/TOKEN)
+  amount         Decimal  @db.Decimal(12, 2)
+  status         String   @default("PENDING")  // PENDING, PAID, EXPIRED, CANCELLED
+  expiresAt      DateTime?
   createdAt      DateTime @default(now())
 
   @@index([reservationId])
+  @@index([token])
+}
+
+model CardPreauth {
+  id             String   @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  amount         Decimal  @db.Decimal(12, 2)   // zablokowana kwota
+  externalId     String?  // id transakcji w bramce (PayU/Stripe)
+  status         String   @default("HOLD")   // HOLD, CAPTURED, RELEASED
+  expiresAt      DateTime?  // ważność blokady (np. 7 dni)
+  createdAt      DateTime @default(now())
+
+  @@index([reservationId])
+  @@index([status])
+}
+
+// Batch settlement dla kart kredytowych - grupowe rozliczenie z terminala/banku
+model CardSettlementBatch {
+  id                String   @id @default(cuid())
+  propertyId        String?  // opcjonalne powiązanie z obiektem
+  
+  // Okres rozliczenia
+  periodFrom        DateTime // początek okresu (np. 00:00 danego dnia)
+  periodTo          DateTime // koniec okresu (np. 23:59 danego dnia)
+  
+  // Podsumowanie
+  transactionCount  Int      // liczba transakcji w batch'u
+  totalAmount       Decimal  @db.Decimal(12, 2)   // suma transakcji
+  
+  // Status i dane rozliczenia
+  status            String   @default("PENDING") // PENDING, SUBMITTED, SETTLED, FAILED, RECONCILED
+  batchNumber       String?  // numer batch'a z terminala
+  terminalId        String?  // identyfikator terminala
+  
+  // Dane z terminala/banku
+  externalReference String?  // numer referencyjny z banku/acquirera
+  settlementDate    DateTime? // data faktycznego rozliczenia przez bank
+  settlementAmount  Decimal?  @db.Decimal(12, 2) // kwota faktycznie rozliczona (może różnić się od total)
+  
+  // Różnice i uwagi
+  discrepancyAmount Decimal?  @db.Decimal(12, 2) // różnica między oczekiwaną a faktyczną kwotą
+  discrepancyReason String?   // powód różnicy
+  notes             String?   @db.Text
+  
+  // Audyt
+  submittedBy       String?  // kto wysłał batch do rozliczenia
+  settledBy         String?  // kto oznaczył jako rozliczone
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Szczegółowe transakcje (JSON array z id transakcji i kwotami)
+  transactionDetails Json?
+  
+  @@index([status])
+  @@index([periodFrom, periodTo])
+  @@index([batchNumber])
+}
+
+model WebCheckInToken {
+  id             String   @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  token          String   @unique
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  @@index([reservationId])
+  @@index([token])
+}
+
+model ReservationGroup {
+  id          String        @id @default(cuid())
+  name        String?
+  note        String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  reservations Reservation[]
+}
+
+model RoomBlock {
+  id        String   @id @default(cuid())
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  reason    String?
+  blockType String   @default("OTHER")  // RENOVATION, MAINTENANCE, VIP_HOLD, OVERBOOKING, OTHER
+  createdAt DateTime @default(now())
+
+  @@index([roomId])
+  @@index([startDate, endDate])
+  @@index([blockType])
+}
+
+// Allotmenty – blokady pokoi dla firm/touroperatorów
+model Allotment {
+  id             String   @id @default(cuid())
+  companyName    String   // nazwa firmy/touroperatora
+  roomTypeId     String?  // opcjonalnie: typ pokoju (jeśli blokada na typ)
+  roomType       RoomType? @relation(fields: [roomTypeId], references: [id])
+  roomCount      Int      @default(1) // liczba pokoi w allotmencie
+  startDate      DateTime @db.Date
+  endDate        DateTime @db.Date
+  releaseDate    DateTime @db.Date // data, po której allotment jest automatycznie zwalniany
+  releaseDays    Int      @default(7) // ile dni przed przyjazdem auto-release
+  status         String   @default("ACTIVE") // ACTIVE, RELEASED, CONVERTED
+  usedCount      Int      @default(0) // ile pokoi wykorzystano
+  note           String?
+  contactEmail   String?
+  contactPhone   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([roomTypeId])
+  @@index([startDate, endDate])
+  @@index([releaseDate])
+  @@index([status])
+}
+
+// Wait-lista – goście oczekujący na wolny termin
+model WaitlistEntry {
+  id              String   @id @default(cuid())
+  guestName       String   // imię i nazwisko gościa
+  guestEmail      String?  // email do powiadomienia
+  guestPhone      String?  // telefon kontaktowy
+  guestId         String?  // powiązanie z istniejącym gościem (opcjonalne)
+  guest           Guest?   @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  roomTypeId      String?  // preferowany typ pokoju (opcjonalnie)
+  roomType        RoomType? @relation(fields: [roomTypeId], references: [id], onDelete: SetNull)
+  desiredCheckIn  DateTime @db.Date  // pożądana data przyjazdu
+  desiredCheckOut DateTime @db.Date  // pożądana data wyjazdu
+  pax             Int      @default(2)  // liczba osób
+  flexibleDates   Boolean  @default(false)  // elastyczne daty (+/- kilka dni)
+  flexibilityDays Int      @default(0)  // jeśli elastyczne – ile dni tolerancji
+  priority        Int      @default(0)  // priorytet (wyższy = ważniejszy)
+  status          String   @default("WAITING")  // WAITING, NOTIFIED, CONVERTED, EXPIRED, CANCELLED
+  notes           String?  // uwagi
+  notifiedAt      DateTime?  // kiedy wysłano powiadomienie o dostępności
+  convertedReservationId String?  // ID rezerwacji jeśli przekonwertowano
+  expiresAt       DateTime?  // automatyczne wygasanie wpisu
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([guestId])
+  @@index([roomTypeId])
+  @@index([desiredCheckIn, desiredCheckOut])
+  @@index([status])
+  @@index([priority])
 }
 
 model CennikConfig {
@@ -172,12 +1408,1036 @@ model CennikConfig {
   updatedAt      DateTime @updatedAt
 }
 
+/** Dane hotelu / organizacji (nazwa, adres, NIP, KRS, logo, kontakt) – do faktur i dokumentów */
+model HotelConfig {
+  id             String   @id @default("default")
+  name           String   @default("")   // nazwa hotelu
+  address        String?  @db.VarChar(500)  // ulica i numer
+  postalCode     String?  @db.VarChar(20)
+  city           String?  @db.VarChar(200)
+  nip            String?  @db.VarChar(20)
+  krs            String?  @db.VarChar(20)
+  logoUrl        String?  @db.VarChar(1000)  // URL do logo (np. /uploads/logo.png)
+  phone          String?  @db.VarChar(50)
+  email          String?  @db.VarChar(254)
+  website        String?  @db.VarChar(500)
+  defaultCheckInTime  String?  @db.VarChar(5)  // HH:mm, np. 14:00
+  defaultCheckOutTime String?  @db.VarChar(5)  // HH:mm, np. 11:00
+  floors              Json?   // lista pięter: ["Parter", "1", "2", "3"] – do wyboru przy pokojach
+  customFormFields    Json?   // konfiguracja dodatkowych pól: { CHECK_IN: [{ key, label, type, required, order, options? }], RESERVATION: [], GUEST: [] }
+  reservationDictionaries Json?   // słowniki: { sources: [{ code, label }], channels: [], segments: [], cancellationReasons: [] }
+  seasons                 Json?   // okresy sezonowe: [{ id, name, type: "PEAK"|"OFF_PEAK", dateFrom: "MM-DD", dateTo: "MM-DD" }]
+  cancellationPolicyTemplates Json?   // szablony polityki anulacji: [{ id, name, freeUntilDaysBefore, penaltyPercent, description? }]
+  updatedAt      DateTime @updatedAt
+}
+
+/** Harmonogram raportów – automatyczne generowanie i wysyłka raportów (cron). */
+model ScheduledReport {
+  id              String    @id @default(cuid())
+  reportType      String    // MANAGEMENT_DAILY, OCCUPANCY, REVENUE, COMMISSION_OTA, itd.
+  scheduleType    String    @default("DAILY")  // DAILY | WEEKLY
+  scheduleTime    String    @db.VarChar(5)     // HH:mm, np. 08:00
+  scheduleDayOfWeek Int?    // 0–6 dla WEEKLY (0 = niedziela)
+  recipientEmails String    @db.VarChar(1000)   // adresy po przecinku
+  enabled         Boolean   @default(true)
+  lastRunAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([enabled])
+  @@index([lastRunAt])
+}
+
+// MICE – oferty grupowe / kosztorysy
+model GroupQuote {
+  id          String    @id @default(cuid())
+  name        String    // np. "Konferencja Q1 2026"
+  validUntil  DateTime? @db.Date
+  totalAmount Decimal?  @db.Decimal(12, 2)
+  items       Json?     // pozycje kosztorysu: [{ name, quantity, unitPrice, amount }]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// MICE – zlecenia realizacji (konferencje, bankiety, wesela)
+model EventOrder {
+  id          String   @id @default(cuid())
+  name        String   // np. "Sala A – 15.03.2026"
+  eventType   String   @default("OTHER")  // WEDDING, CONFERENCE, BANQUET, OTHER
+  quoteId     String?  // powiązanie z GroupQuote
+  roomIds     Json?    // id sal/pokojow
+  dateFrom    DateTime @db.Date
+  dateTo      DateTime @db.Date
+  status      String   @default("DRAFT")  // DRAFT, CONFIRMED, DONE, CANCELLED
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Camping – miejsca (działki, przyczepy)
+model Campsite {
+  id         String   @id @default(cuid())
+  number     String   // np. "A-01", "P-12"
+  type       String   @default("działka")  // działka, przyczepa, namiot
+  pricePerDay Decimal @db.Decimal(10, 2)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  bookings   CampsiteBooking[]
+}
+
+// Camping – rezerwacja miejsca (działka, przyczepa, namiot)
+model CampsiteBooking {
+  id             String    @id @default(cuid())
+  campsiteId     String
+  campsite       Campsite   @relation(fields: [campsiteId], references: [id], onDelete: Cascade)
+  reservationId  String?
+  reservation    Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  guestId        String?
+  guest          Guest?     @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  startDate      DateTime   @db.Date
+  endDate        DateTime   @db.Date
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([campsiteId])
+  @@index([reservationId])
+  @@index([guestId])
+  @@index([startDate, endDate])
+}
+
+// Wypożyczalnia – sprzęt (rowery, narty itd.)
+model RentalItem {
+  id          String   @id @default(cuid())
+  name        String   // np. "Rower górski", "Kijki nordic walking"
+  pricePerDay Decimal  @db.Decimal(10, 2)
+  quantity    Int      @default(1)  // szt. w magazynie
+  unit        String   @default("szt")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  bookings    RentalBooking[]
+}
+
+// Wypożyczalnia – rezerwacja wypożyczenia (sprzęt, daty, gość/rezerwacja)
+model RentalBooking {
+  id             String    @id @default(cuid())
+  rentalItemId   String
+  rentalItem     RentalItem @relation(fields: [rentalItemId], references: [id], onDelete: Cascade)
+  reservationId  String?
+  reservation    Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  guestId        String?
+  guest          Guest?     @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  startDate      DateTime   @db.Date
+  endDate        DateTime   @db.Date
+  quantity       Int        @default(1)  // liczba sztuk
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@index([rentalItemId])
+  @@index([reservationId])
+  @@index([guestId])
+  @@index([startDate, endDate])
+}
+
+// SPA – zasób (masaż, sauna, zabieg)
+model SpaResource {
+  id        String   @id @default(cuid())
+  name      String   // np. "Masaż relaksacyjny", "Sauna fińska"
+  price     Decimal  @db.Decimal(10, 2)  // cena za wizytę/zasób
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookings SpaBooking[]
+}
+
+// SPA – rezerwacja zasobu
+model SpaBooking {
+  id             String    @id @default(cuid())
+  resourceId     String
+  resource       SpaResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  reservationId  String?   // opcjonalne powiązanie z rezerwacją pokoju
+  reservation    Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  start          DateTime  // początek rezerwacji
+  end            DateTime  // koniec rezerwacji
+  status         String    @default("BOOKED")  // BOOKED, CONFIRMED, COMPLETED, CANCELLED, NO_SHOW
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([resourceId])
+  @@index([reservationId])
+  @@index([start, end])
+}
+
+// Gastronomia – pozycja w karcie dań
+model MenuItem {
+  id       String   @id @default(cuid())
+  name     String   // np. "Zupa dnia", "Kawa"
+  price    Decimal  @db.Decimal(10, 2)
+  category String   // np. "Dania główne", "Napoje", "Desery"
+  // Diety specjalne i alergeny (Rozporządzenie UE 1169/2011 – informacja dla konsumenta)
+  dietTags   Json?   // tablica tagów diet: ["VEGETARIAN", "VEGAN", "GLUTEN_FREE", "LACTOSE_FREE", "HALAL", "KOSHER"]
+  allergens  Json?   // tablica alergenów: ["gluten", "skorupiaki", "jaja", "ryby", "orzechy", "soja", "mleko", "seler", "gorczyca", "sezam", "dwutlenek siarki", "łubin", "mięczaki"]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderItems OrderItem[]
+}
+
+// Gastronomia – zamówienie (room service, restauracja)
+model Order {
+  id             String    @id @default(cuid())
+  roomId         String?   // pokój (dla room service / walk-in bez rezerwacji)
+  room           Room?     @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  reservationId  String?   // rezerwacja (dla obciążenia rachunku pokoju)
+  reservation    Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  status         String    @default("PENDING")  // PENDING, CONFIRMED, IN_PROGRESS, DELIVERED, CANCELLED
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  orderItems OrderItem[]
+
+  @@index([roomId])
+  @@index([reservationId])
+  @@index([status])
+}
+
+// Gastronomia – pozycja zamówienia
+model OrderItem {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+  quantity   Int      @default(1)
+  unitPrice  Decimal? @db.Decimal(10, 2)  // cena w momencie zamówienia (snapshot)
+  createdAt  DateTime @default(now())
+
+  @@index([orderId])
+  @@index([menuItemId])
+}
+
+// Moduł posiłków – tracking wyżywienia (BB, HB, FB, AI)
+model MealConsumption {
+  id             String    @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  date           DateTime  @db.Date  // dzień posiłku
+  mealType       String    // BREAKFAST, LUNCH, DINNER
+  paxCount       Int       @default(1)  // liczba osób
+  createdAt      DateTime  @default(now())
+
+  @@unique([reservationId, date, mealType])  // jedna rezerwacja = jeden wpis per dzień per typ
+  @@index([date])
+  @@index([reservationId])
+}
+
+// Pralnia – usługa (cennik)
+model LaundryService {
+  id        String   @id @default(cuid())
+  name      String   // np. "Pranie koszuli", "Prasowanie spodni"
+  price     Decimal  @db.Decimal(10, 2)
+  unit      String   @default("szt")  // szt, kg
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orderItems LaundryOrderItem[]
+}
+
+// Pralnia – zlecenie (powiązane z rezerwacją)
+model LaundryOrder {
+  id             String    @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  status         String    @default("PENDING")  // PENDING, PICKED_UP, IN_PROGRESS, READY, DELIVERED, CANCELLED
+  requestedAt    DateTime  @default(now())
+  deliveredAt    DateTime?  // data oddania gościowi
+  notes          String?   @db.Text
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  orderItems     LaundryOrderItem[]
+
+  @@index([reservationId])
+  @@index([status])
+  @@index([requestedAt])
+}
+
+// Pralnia – pozycja zlecenia
+model LaundryOrderItem {
+  id               String   @id @default(cuid())
+  laundryOrderId   String
+  laundryOrder     LaundryOrder @relation(fields: [laundryOrderId], references: [id], onDelete: Cascade)
+  laundryServiceId String
+  laundryService   LaundryService @relation(fields: [laundryServiceId], references: [id], onDelete: Restrict)
+  quantity         Int      @default(1)
+  unitPrice        Decimal  @db.Decimal(10, 2)
+  amount           Decimal  @db.Decimal(12, 2)  // quantity * unitPrice
+  createdAt        DateTime @default(now())
+
+  @@index([laundryOrderId])
+  @@index([laundryServiceId])
+}
+
+// Transfery (lotnisko, dworzec) – rezerwacja transferu dla gościa
+model TransferBooking {
+  id             String    @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  type           String    // AIRPORT, STATION
+  direction      String    // ARRIVAL, DEPARTURE
+  scheduledAt    DateTime  // data i godzina odbioru/dostawy
+  place          String    // np. "Lotnisko Chopin Warszawa", "Dworzec Centralny Kraków"
+  price          Decimal   @db.Decimal(10, 2)
+  status         String    @default("BOOKED")  // BOOKED, CONFIRMED, DONE, CANCELLED
+  chargedAt      DateTime? // kiedy doliczono do rachunku
+  notes          String?   @db.Text
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([reservationId])
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+// Wycieczki i atrakcje – pozycja cennika
+model Attraction {
+  id          String   @id @default(cuid())
+  name        String   // np. "Zwiedzanie zamku", "Spływ kajakowy"
+  price       Decimal  @db.Decimal(10, 2)
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  bookings   AttractionBooking[]
+}
+
+// Wycieczki i atrakcje – rezerwacja (powiązana z rezerwacją pobytu)
+model AttractionBooking {
+  id             String    @id @default(cuid())
+  reservationId  String
+  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  attractionId   String
+  attraction     Attraction @relation(fields: [attractionId], references: [id], onDelete: Restrict)
+  scheduledAt    DateTime  // data/godzina wycieczki
+  quantity       Int       @default(1)  // liczba osób
+  unitPrice      Decimal   @db.Decimal(10, 2)
+  amount         Decimal   @db.Decimal(12, 2)  // quantity * unitPrice
+  status         String    @default("BOOKED")  // BOOKED, CONFIRMED, DONE, CANCELLED
+  chargedAt      DateTime?
+  notes          String?   @db.Text
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([reservationId])
+  @@index([attractionId])
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+// Szablony e-mail
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  type        String   @unique  // CONFIRMATION, REMINDER, THANK_YOU, INVOICE, CANCELLATION, WEB_CHECK_IN
+  name        String   // nazwa wyświetlana (np. "Potwierdzenie rezerwacji")
+  subject     String   // temat e-maila (może zawierać {{zmienne}})
+  bodyHtml    String   @db.Text  // treść HTML (może zawierać {{zmienne}})
+  bodyText    String?  @db.Text  // treść tekstowa (fallback)
+  isActive    Boolean  @default(true)  // czy szablon jest aktywny
+  
+  // Dostępne zmienne (dokumentacja dla administratora)
+  availableVariables String? @db.Text  // np. "{{guestName}}, {{roomNumber}}, {{checkIn}}, {{checkOut}}"
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Log wysłanych SMS dla audytu
+model SmsLog {
+  id            String   @id @default(cuid())
+  
+  // Typ wiadomości SMS
+  type          String   // DOOR_CODE, ROOM_READY, REMINDER, CONFIRMATION, CUSTOM
+  
+  // Odbiorca
+  recipientPhone String  // numer telefonu w formacie E.164 (np. +48123456789)
+  recipientName  String? // opcjonalna nazwa odbiorcy (np. imię gościa)
+  
+  // Treść
+  messageBody   String   @db.Text  // treść SMS
+  
+  // Status
+  status        String   @default("SENT")  // SENT, FAILED, PENDING
+  errorMessage  String?  // komunikat błędu (jeśli status = FAILED)
+  
+  // Powiązania (opcjonalne)
+  reservationId String?  // ID rezerwacji (jeśli dotyczy)
+  guestId       String?  // ID gościa (jeśli dotyczy)
+  
+  // Informacje o providerze
+  provider      String   @default("TWILIO")  // TWILIO, SMSAPI, MOCK
+  providerMsgId String?  // ID wiadomości z bramki SMS (np. Twilio SID)
+  
+  // Kto wysłał (opcjonalnie)
+  sentByUserId  String?  // ID użytkownika systemu który zainicjował wysyłkę
+  
+  // Metadane
+  metadata      String?  @db.Text  // JSON z dodatkowymi danymi (np. kod do drzwi)
+  
+  createdAt     DateTime @default(now())
+
+  @@index([type])
+  @@index([status])
+  @@index([reservationId])
+  @@index([guestId])
+  @@index([createdAt])
+}
+
+// Historia Blind Dropów (kto, kiedy, kwota, manko/superata)
+model BlindDropRecord {
+  id           String   @id @default(cuid())
+  performedAt DateTime @default(now())
+  countedCash Decimal  @db.Decimal(12, 2)
+  expectedCash Decimal @db.Decimal(12, 2)
+  difference   Decimal  @db.Decimal(12, 2)  // wartość bezwzględna
+  isShortage   Boolean  // true = manko, false = superata
+  performedByUserId String?
+  performedBy  User?   @relation("BlindDropPerformedBy", fields: [performedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([performedAt])
+}
+
+// Kasa zmianowa – otwarcie/zamknięcie zmiany (stan gotówki na początek i koniec)
+model CashShift {
+  id                  String    @id @default(cuid())
+  openedAt            DateTime  @default(now())
+  closedAt            DateTime?
+  openingBalance      Decimal   @db.Decimal(12, 2)  // stan gotówki na początek zmiany
+  closingBalance      Decimal?  @db.Decimal(12, 2)  // policzona gotówka przy zamknięciu
+  expectedCashAtClose Decimal?  @db.Decimal(12, 2)  // suma z systemu w momencie zamknięcia
+  difference          Decimal?  @db.Decimal(12, 2)  // closingBalance - expectedCashAtClose (manko/superata)
+  openedByUserId      String?
+  openedBy            User?     @relation("ShiftOpenedBy", fields: [openedByUserId], references: [id], onDelete: SetNull)
+  closedByUserId      String?
+  closedBy            User?     @relation("ShiftClosedBy", fields: [closedByUserId], references: [id], onDelete: SetNull)
+  notes               String?   @db.Text
+
+  @@index([openedAt])
+  @@index([closedAt])
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
   name         String
-  passwordHash String
-  role         String   @default("RECEPTION")  // RECEPTION | MANAGER | HOUSEKEEPING
+  passwordHash    String
+  passwordChangedAt DateTime?  // do polityki wygasania haseł
+  role         String   @default("RECEPTION")  // RECEPTION | MANAGER | HOUSEKEEPING | OWNER
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  // Limity rabatowe per użytkownik (null = użyj domyślnego z env)
+  maxDiscountPercent Decimal? @db.Decimal(5, 2)  // max % rabatu (np. 20 = 20%)
+  maxDiscountAmount  Decimal? @db.Decimal(12, 2) // max kwota rabatu w PLN (np. 500)
+  // Limit void: anulowanie transakcji o kwocie powyżej tej wartości wymaga PIN managera
+  maxVoidAmount      Decimal? @db.Decimal(12, 2) // max kwota jednej transakcji do void bez PIN (PLN)
+
+  // 2FA (TOTP)
+  totpSecret         String?  @db.VarChar(64)   // secret dla aplikacji authenticator
+  totpEnabled        Boolean  @default(false)
+
+  // Relacje
+  managedCompanies Company[] @relation("AccountManager")  // firmy, których jest opiekunem handlowym
+  cashShiftsOpened CashShift[] @relation("ShiftOpenedBy")
+  cashShiftsClosed CashShift[] @relation("ShiftClosedBy")
+  blindDropsPerformed BlindDropRecord[] @relation("BlindDropPerformedBy")
+  shiftHandovers ShiftHandover[] @relation("ShiftHandoverAuthor")
+  staffAnnouncements StaffAnnouncement[] @relation("StaffAnnouncementAuthor")
+}
+
+// Przekazanie zmiany (shift handover) – notatki pozostawiane przez jedną zmianę dla następnej
+model ShiftHandover {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  authorId   String?
+  author     User?    @relation("ShiftHandoverAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  content    String   @db.Text  // treść przekazania (arrivals, departures, uwagi, VIP, problemy)
+  shiftDate  DateTime? @db.Date  // opcjonalna data zmiany, do której odnosi się przekazanie
+  propertyId String?  // opcjonalnie: obiekt (multi-property)
+
+  @@index([createdAt])
+  @@index([shiftDate])
+}
+
+// Wydarzenia hotelowe (kalendarz) – konferencje, wesela, konserwacja, święta
+model HotelEvent {
+  id          String   @id @default(cuid())
+  title       String   @db.VarChar(300)
+  startDate   DateTime @db.Date
+  endDate     DateTime? @db.Date  // null = jednodniowe
+  eventType   String   @default("OTHER")  // CONFERENCE, WEDDING, MAINTENANCE, HOLIDAY, OTHER
+  description String?  @db.Text
+  propertyId  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([startDate])
+  @@index([propertyId])
+}
+
+// Ogłoszenia wewnętrzne dla pracowników
+model StaffAnnouncement {
+  id         String    @id @default(cuid())
+  title      String    @db.VarChar(500)
+  body       String    @db.Text
+  authorId   String?
+  author     User?     @relation("StaffAnnouncementAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
+  validUntil DateTime? @db.Date  // po tej dacie nie pokazywać (opcjonalnie)
+  isPinned   Boolean   @default(false)
+
+  @@index([createdAt])
+  @@index([validUntil])
+}
+
+// Matryca uprawnień – szczegółowe uprawnienia per akcja (nie tylko rola)
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique  // np. reservation.create, finance.void, rates.edit
+  name        String   // nazwa wyświetlana
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  rolePermissions RolePermission[]
+  roleGroupPermissions RoleGroupPermission[]
+
+  @@index([code])
+}
+
+model RolePermission {
+  id             String   @id @default(cuid())
+  role           String   // RECEPTION | MANAGER | HOUSEKEEPING | OWNER
+  permissionId   String
+  permission     Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+
+  @@unique([role, permissionId])
+  @@index([role])
+  @@index([permissionId])
+}
+
+// Grupy uprawnień – zestaw uprawnień przypisany do kodu roli (np. RECEPTION = grupa "Recepcja")
+model RoleGroup {
+  id          String   @id @default(cuid())
+  code        String   @unique  // np. RECEPTION, MANAGER – odpowiada User.role
+  name        String   // np. "Recepcja", "Kierownik"
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  permissions RoleGroupPermission[]
+
+  @@index([code])
+}
+
+model RoleGroupPermission {
+  id             String   @id @default(cuid())
+  roleGroupId    String
+  roleGroup      RoleGroup @relation(fields: [roleGroupId], references: [id], onDelete: Cascade)
+  permissionId   String
+  permission     Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+
+  @@unique([roleGroupId, permissionId])
+  @@index([roleGroupId])
+  @@index([permissionId])
+}
+
+// Program lojalnościowy – konfiguracja globalna
+model LoyaltyProgram {
+  id                    String   @id @default("default")
+  name                  String   @default("Program Lojalnościowy")  // nazwa programu
+  isActive              Boolean  @default(true)  // czy program jest aktywny
+  pointsPerPln          Decimal  @db.Decimal(10, 4) @default(1)  // ile punktów za 1 PLN wydane
+  pointsForCheckIn      Int      @default(0)  // bonus punktowy za każdy check-in
+  pointsForBirthday     Int      @default(0)  // bonus urodzinowy (raz w roku)
+  tierCalculationMode   String   @default("POINTS")  // POINTS | STAYS | COMBINED – jak liczyć tier
+  cardNumberPrefix      String   @default("LOY")  // prefix numeru karty
+  cardNumberNextSeq     Int      @default(1)  // następny numer sekwencyjny
+  termsUrl              String?  // URL regulaminu programu
+  welcomeMessage        String?  @db.Text  // wiadomość powitalna dla nowych członków
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+// Poziomy (tiery) programu lojalnościowego
+model LoyaltyTier {
+  id                  String   @id @default(cuid())
+  name                String   // np. "Bronze", "Silver", "Gold", "Platinum"
+  code                String   @unique  // np. "BRONZE", "SILVER", "GOLD", "PLATINUM"
+  sortOrder           Int      @default(0)  // kolejność wyświetlania (0 = najniższy)
+  minPoints           Int      @default(0)  // minimalna liczba punktów (łącznych) do osiągnięcia tier
+  minStays            Int      @default(0)  // minimalna liczba pobytów do osiągnięcia tier
+  color               String?  // kolor badge (np. "#CD7F32" dla Bronze)
+  icon                String?  // ikona (np. emoji lub nazwa ikony)
+  discountPercent     Decimal? @db.Decimal(5, 2)  // rabat procentowy na pobyt
+  bonusPointsPercent  Decimal? @db.Decimal(5, 2)  // bonus % do punktów (np. Gold +50%)
+  earlyCheckIn        Boolean  @default(false)  // bezpłatny wczesny check-in
+  lateCheckOut        Boolean  @default(false)  // bezpłatny późny check-out
+  roomUpgrade         Boolean  @default(false)  // upgrade pokoju (jeśli dostępny)
+  welcomeDrink        Boolean  @default(false)  // powitalny drink
+  freeBreakfast       Boolean  @default(false)  // bezpłatne śniadanie
+  prioritySupport     Boolean  @default(false)  // priorytetowa obsługa
+  loungeAccess        Boolean  @default(false)  // dostęp do lounge
+  freeParking         Boolean  @default(false)  // bezpłatny parking
+  customBenefits      Json?    // dodatkowe benefity: [{ name, description }]
+  isDefault           Boolean  @default(false)  // domyślny tier dla nowych członków
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  guests              Guest[]
+
+  @@index([sortOrder])
+  @@index([minPoints])
+}
+
+// Transakcje punktowe (historia zdobywania/wydawania punktów)
+model LoyaltyTransaction {
+  id              String   @id @default(cuid())
+  guestId         String
+  guest           Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  reservationId   String?  // powiązanie z rezerwacją (opcjonalne)
+  type            String   // EARN, REDEEM, BONUS, ADJUSTMENT, EXPIRE
+  points          Int      // liczba punktów (dodatnia = zdobycie, ujemna = wydanie)
+  balanceAfter    Int      // saldo po transakcji
+  reason          String?  // opis transakcji (np. "Pobyt 12-15.03.2026", "Urodziny")
+  referenceType   String?  // typ referencji: RESERVATION, BIRTHDAY, REFERRAL, MANUAL, PROMOTION
+  referenceId     String?  // ID referencji (np. reservationId, promotionId)
+  expiresAt       DateTime?  // data wygaśnięcia punktów (opcjonalne)
+  createdBy       String?  // kto dodał (userId lub "SYSTEM")
+  createdAt       DateTime @default(now())
+
+  @@index([guestId])
+  @@index([reservationId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// Harmonogram sprzątania
+model CleaningSchedule {
+  id             String   @id @default(cuid())
+  roomId         String   // powiązany pokój
+  assignedTo     String?  // imię osoby sprzątającej lub ID pracownika
+  scheduledDate  DateTime @db.Date  // data sprzątania
+  scheduledTime  String?  // godzina (np. "10:00", "14:30")
+  estimatedDuration Int?  // szacowany czas sprzątania w minutach
+  status         String   @default("PENDING")  // PENDING, IN_PROGRESS, COMPLETED, SKIPPED
+  priority       String?  // VIP_ARRIVAL, DEPARTURE, STAY_OVER, NORMAL
+  notes          String?  // uwagi do sprzątania
+  completedAt    DateTime?  // kiedy zakończono
+  completedBy    String?    // kto zakończył
+  propertyId     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  room           Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([scheduledDate])
+  @@index([assignedTo])
+  @@index([status])
+}
+
+model MaintenanceIssue {
+  id             String   @id @default(cuid())
+  roomId         String   // powiązany pokój
+  title          String   // krótki opis usterki (np. "Cieknący kran", "Klimatyzacja nie działa")
+  description    String?  @db.Text  // szczegółowy opis
+  category       String   // ELECTRICAL, PLUMBING, HVAC, FURNITURE, CLEANING, APPLIANCE, OTHER
+  priority       String   @default("MEDIUM")  // URGENT, HIGH, MEDIUM, LOW
+  status         String   @default("REPORTED")  // REPORTED, IN_PROGRESS, ON_HOLD, RESOLVED, CANCELLED
+  reportedBy     String?  // kto zgłosił usterkę (imię lub ID)
+  reportedAt     DateTime @default(now())  // kiedy zgłoszono
+  assignedTo     String?  // technik przypisany do naprawy
+  assignedAt     DateTime?  // kiedy przypisano
+  resolvedAt     DateTime?  // kiedy rozwiązano
+  resolvedBy     String?    // kto naprawił
+  resolutionNotes String? @db.Text  // opis rozwiązania problemu
+  estimatedCost  Decimal? @db.Decimal(10, 2)  // szacowany koszt naprawy
+  actualCost     Decimal? @db.Decimal(10, 2)  // rzeczywisty koszt naprawy
+  roomWasOOO     Boolean  @default(false)  // czy pokój był oznaczony jako OOO w wyniku usterki
+  isScheduled    Boolean  @default(false)  // czy to planowana konserwacja (nie zgłoszenie usterki)
+  scheduledStartDate DateTime? @db.Date  // planowany początek konserwacji (dla planowanych)
+  scheduledEndDate   DateTime? @db.Date  // planowany koniec konserwacji (dla planowanych)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  room           Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([status])
+  @@index([category])
+  @@index([priority])
+  @@index([reportedAt])
+  @@index([scheduledEndDate])
+}
+
+// Konfiguracja numeracji dokumentów finansowych (faktury, rachunki, noty)
+model DocumentNumberingConfig {
+  id             String   @id @default(cuid())
+  documentType   String   @unique  // INVOICE, CORRECTION, CONSOLIDATED_INVOICE, RECEIPT, ACCOUNTING_NOTE, PROFORMA
+  prefix         String   // np. "FV", "KOR", "FVZ", "R", "NK", "PRO"
+  separator      String   @default("/")  // separator między częściami numeru (domyślnie "/")
+  yearFormat     String   @default("YYYY")  // YYYY (np. 2026) lub YY (np. 26)
+  sequencePadding Int     @default(4)  // ilość zer na początku sekwencji (np. 4 = "0001")
+  resetYearly    Boolean  @default(true)  // czy resetować sekwencję na początku roku
+  description    String?  // opis konfiguracji (dla UI)
+  exampleNumber  String?  // przykładowy numer (generowany automatycznie przy zapisie)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// Licznik numeracji dokumentów (oddzielny dla każdego typu i roku)
+model DocumentNumberCounter {
+  id             String   @id @default(cuid())
+  documentType   String   // INVOICE, CORRECTION, CONSOLIDATED_INVOICE, RECEIPT, ACCOUNTING_NOTE, PROFORMA
+  year           Int      // rok dla którego jest licznik
+  lastSequence   Int      @default(0)  // ostatnia użyta sekwencja
+  updatedAt      DateTime @updatedAt
+
+  @@unique([documentType, year])
+  @@index([documentType])
+}
+
+// Szablon dokumentów finansowych (faktury, rachunki, noty)
+model InvoiceTemplate {
+  id               String   @id @default(cuid())
+  // Identyfikator szablonu (np. "DEFAULT", "INVOICE", "RECEIPT") – jeden szablon na typ
+  templateType     String   @unique @default("DEFAULT")
+  
+  // Logo – przechowywane jako Base64 lub URL
+  logoBase64       String?  @db.MediumText  // logo w Base64 (do 16MB)
+  logoUrl          String?  // alternatywnie: URL do logo
+  logoWidth        Int      @default(150)  // szerokość logo w px
+  logoPosition     String   @default("left")  // left, center, right
+  
+  // Dane sprzedawcy (nadpisują env HOTEL_NAME)
+  sellerName       String?  // nazwa firmy/hotelu
+  sellerAddress    String?  // ulica i numer
+  sellerPostalCode String?  // kod pocztowy
+  sellerCity       String?  // miasto
+  sellerNip        String?  // NIP sprzedawcy
+  sellerPhone      String?  // telefon
+  sellerEmail      String?  // email
+  sellerWebsite    String?  // strona www
+  sellerBankName   String?  // nazwa banku
+  sellerBankAccount String? // numer konta bankowego (IBAN)
+  
+  // Nagłówek i stopka
+  headerText       String?  @db.Text  // tekst nad tabelą (np. dodatkowe informacje)
+  footerText       String?  @db.Text  // tekst pod tabelą (np. informacje prawne, podziękowania)
+  
+  // Ustawienia wydruku
+  paperSize        String   @default("A4")  // A4, Letter
+  fontSize         Int      @default(14)  // bazowy rozmiar fontu w px
+  fontFamily       String   @default("system-ui, sans-serif")  // font
+  primaryColor     String   @default("#111111")  // kolor główny tekstu
+  accentColor      String   @default("#2563eb")  // kolor akcentów (nagłówki tabeli)
+  
+  // Domyślne teksty
+  paymentTermsText String?  @db.Text  // warunki płatności
+  thanksText       String?  // podziękowanie na końcu (np. "Dziękujemy za skorzystanie z naszych usług")
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// Szablon dokumentów (potwierdzenia, karty meldunkowe, itp.)
+model DocumentTemplate {
+  id               String   @id @default(cuid())
+  
+  // Typ szablonu: CONFIRMATION (potwierdzenie rezerwacji), REGISTRATION_CARD (karta meldunkowa)
+  templateType     String   @unique  // CONFIRMATION, REGISTRATION_CARD
+  
+  // Logo – z InvoiceTemplate lub oddzielne
+  useInvoiceLogo   Boolean  @default(true)  // używaj logo z szablonu faktury
+  logoBase64       String?  @db.MediumText  // alternatywne logo (jeśli useInvoiceLogo=false)
+  logoUrl          String?
+  logoWidth        Int      @default(150)
+  logoPosition     String   @default("left")
+  
+  // Dane hotelu (jeśli inne niż na fakturze)
+  useInvoiceSeller Boolean  @default(true)  // używaj danych sprzedawcy z szablonu faktury
+  hotelName        String?
+  hotelAddress     String?
+  hotelPostalCode  String?
+  hotelCity        String?
+  hotelPhone       String?
+  hotelEmail       String?
+  hotelWebsite     String?
+  
+  // Nagłówek i stopka
+  title            String?  // tytuł dokumentu (np. "POTWIERDZENIE REZERWACJI")
+  headerText       String?  @db.Text  // tekst nagłówka
+  footerText       String?  @db.Text  // tekst stopki
+  
+  // Treść dodatkowa
+  termsText        String?  @db.Text  // warunki/regulamin (dla potwierdzenia)
+  welcomeText      String?  @db.Text  // tekst powitalny
+  
+  // Ustawienia wydruku
+  fontSize         Int      @default(14)
+  fontFamily       String   @default("system-ui, sans-serif")
+  primaryColor     String   @default("#111111")
+  accentColor      String   @default("#2563eb")
+  
+  // Pola specyficzne dla karty meldunkowej
+  showIdField      Boolean  @default(true)  // pole na dokument tożsamości
+  showSignatureField Boolean @default(true)  // pole na podpis
+  showVehicleField Boolean  @default(false)  // pole na numer rejestracyjny pojazdu
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// Kursy walut - obsługa walut obcych
+model CurrencyExchangeRate {
+  id               String   @id @default(cuid())
+  
+  // Kod waluty źródłowej (ISO 4217)
+  fromCurrency     String   @default("PLN")  // np. PLN
+  // Kod waluty docelowej (ISO 4217)
+  toCurrency       String   // np. EUR, USD, GBP
+  
+  // Kursy
+  buyRate          Decimal  @db.Decimal(12, 6)  // kurs kupna (bank kupuje walutę)
+  sellRate         Decimal  @db.Decimal(12, 6)  // kurs sprzedaży (bank sprzedaje walutę)
+  midRate          Decimal  @db.Decimal(12, 6)  // kurs średni
+  
+  // Źródło kursu
+  source           String   @default("MANUAL")  // MANUAL, NBP, ECB, CUSTOM
+  sourceReference  String?  // numer tabeli NBP, itp.
+  
+  // Data obowiązywania
+  effectiveDate    DateTime // data, od której kurs obowiązuje
+  expiresAt        DateTime? // data wygaśnięcia (null = bezterminowo)
+  
+  // Status
+  isActive         Boolean  @default(true)
+  
+  // Audyt
+  createdBy        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@unique([fromCurrency, toCurrency, effectiveDate])
+  @@index([fromCurrency, toCurrency])
+  @@index([effectiveDate])
+  @@index([isActive])
+}
+
+// Historia transakcji przewalutowania
+model CurrencyConversion {
+  id               String   @id @default(cuid())
+  
+  // Powiązania
+  transactionId    String?  // opcjonalne powiązanie z transakcją finansową
+  reservationId    String?  // opcjonalne powiązanie z rezerwacją
+  
+  // Kwoty
+  originalAmount   Decimal  @db.Decimal(12, 2)
+  originalCurrency String   // waluta oryginalna (np. EUR)
+  convertedAmount  Decimal  @db.Decimal(12, 2)
+  convertedCurrency String  @default("PLN") // waluta docelowa
+  
+  // Użyty kurs
+  exchangeRateId   String?  // powiązanie z użytym kursem
+  appliedRate      Decimal  @db.Decimal(12, 6)  // zastosowany kurs
+  rateType         String   @default("MID")  // BUY, SELL, MID
+  
+  // Marża/spread
+  spreadPercent    Decimal? @db.Decimal(5, 2)  // dodatkowa marża (%)
+  spreadAmount     Decimal? @db.Decimal(12, 2) // kwota marży
+  
+  // Audyt
+  convertedBy      String?
+  convertedAt      DateTime @default(now())
+  
+  @@index([reservationId])
+  @@index([transactionId])
+  @@index([originalCurrency])
+  @@index([convertedAt])
+}
+
+// Vouchery/bony podarunkowe
+model GiftVoucher {
+  id               String   @id @default(cuid())
+  
+  // Kod vouchera (unikalny, do wprowadzenia przez gościa)
+  code             String   @unique
+  
+  // Typ vouchera
+  type             String   @default("MONETARY")  // MONETARY (kwotowy), PERCENTAGE (%), FIXED_DISCOUNT, FREE_NIGHT, PACKAGE
+  
+  // Wartość
+  originalValue    Decimal  @db.Decimal(12, 2)  // początkowa wartość (lub % dla PERCENTAGE)
+  currentBalance   Decimal  @db.Decimal(12, 2)  // aktualne saldo (dla częściowego wykorzystania)
+  currency         String   @default("PLN")
+  
+  // Ograniczenia
+  minPurchaseAmount Decimal? @db.Decimal(12, 2)  // minimalna kwota zakupu do użycia
+  maxDiscountAmount Decimal? @db.Decimal(12, 2)  // maksymalna kwota rabatu (dla %)
+  maxUsages        Int?     // maksymalna liczba użyć (null = bez limitu)
+  usageCount       Int      @default(0)         // aktualna liczba użyć
+  
+  // Ważność
+  validFrom        DateTime @default(now())
+  validUntil       DateTime?  // data ważności (null = bezterminowo)
+  
+  // Status
+  status           String   @default("ACTIVE")  // ACTIVE, USED, EXPIRED, CANCELLED, SUSPENDED
+  
+  // Dane nabywcy/obdarowanego
+  purchaserName    String?  // kto kupił voucher
+  purchaserEmail   String?
+  purchaserPhone   String?
+  recipientName    String?  // kto otrzymał voucher
+  recipientEmail   String?
+  recipientMessage String?  @db.Text  // wiadomość od kupującego
+  
+  // Dane sprzedaży
+  purchaseDate     DateTime?
+  purchasePrice    Decimal? @db.Decimal(12, 2)  // cena zakupu (może różnić się od wartości)
+  purchaseTransactionId String?  // ID transakcji zakupu
+  
+  // Ograniczenia użycia
+  allowedServices  Json?    // lista dozwolonych usług (null = wszystkie)
+  allowedRoomTypes Json?    // lista dozwolonych typów pokoi
+  blackoutDates    Json?    // daty wyłączone z użycia
+  
+  // Kampania/promocja
+  campaignId       String?  // ID kampanii (jeśli voucher z promocji)
+  campaignName     String?  // nazwa kampanii
+  
+  // Audyt
+  createdBy        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  // Relacje
+  redemptions      VoucherRedemption[]
+  
+  @@index([code])
+  @@index([status])
+  @@index([validUntil])
+  @@index([purchaserEmail])
+  @@index([recipientEmail])
+  @@index([type])
+}
+
+// Historia wykorzystania voucherów
+model VoucherRedemption {
+  id               String   @id @default(cuid())
+  
+  // Powiązania
+  voucherId        String
+  voucher          GiftVoucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  reservationId    String?
+  transactionId    String?
+  
+  // Kwoty
+  redeemedAmount   Decimal  @db.Decimal(12, 2)  // wykorzystana kwota
+  discountAmount   Decimal  @db.Decimal(12, 2)  // kwota rabatu (dla % lub FIXED)
+  originalTotal    Decimal? @db.Decimal(12, 2)  // oryginalna kwota przed rabatem
+  finalTotal       Decimal? @db.Decimal(12, 2)  // końcowa kwota po rabacie
+  
+  // Saldo przed/po
+  balanceBefore    Decimal  @db.Decimal(12, 2)
+  balanceAfter     Decimal  @db.Decimal(12, 2)
+  
+  // Dane gościa
+  guestName        String?
+  guestEmail       String?
+  
+  // Audyt
+  redeemedBy       String?  // pracownik
+  redeemedAt       DateTime @default(now())
+  notes            String?  @db.Text
+  
+  @@index([voucherId])
+  @@index([reservationId])
+  @@index([redeemedAt])
+}
+
+// Szablony/typy voucherów (do szybkiego tworzenia)
+model VoucherTemplate {
+  id               String   @id @default(cuid())
+  
+  // Nazwa i opis
+  name             String   // np. "Voucher 100 PLN", "Weekend SPA"
+  description      String?  @db.Text
+  
+  // Typ i wartość
+  type             String   @default("MONETARY")
+  defaultValue     Decimal  @db.Decimal(12, 2)
+  defaultPrice     Decimal? @db.Decimal(12, 2)  // cena sprzedaży (null = równa wartości)
+  currency         String   @default("PLN")
+  
+  // Domyślne ograniczenia
+  defaultValidityDays Int?  // ważność w dniach od zakupu
+  defaultMinPurchase  Decimal? @db.Decimal(12, 2)
+  defaultMaxDiscount  Decimal? @db.Decimal(12, 2)
+  defaultMaxUsages    Int?
+  
+  // Dozwolone usługi/pokoje
+  allowedServices  Json?
+  allowedRoomTypes Json?
+  
+  // Grafika (do wydruku/maila)
+  imageUrl         String?
+  templateHtml     String?  @db.Text  // szablon HTML do wydruku
+  
+  // Status
+  isActive         Boolean  @default(true)
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@index([isActive])
+  @@index([type])
+}
+
+// Szablon paragonu fiskalnego (nagłówek, stopka, nazwy pozycji)
+model FiscalReceiptTemplate {
+  id               String   @id @default(cuid())
+  
+  // Nagłówek paragonu (drukowany na górze - do 3 linii)
+  headerLine1      String?  // np. "HOTEL ŁABĘDŹ"
+  headerLine2      String?  // np. "ul. Przykładowa 1, 00-000 Miasto"
+  headerLine3      String?  // np. "NIP: 123-456-78-90"
+  
+  // Stopka paragonu (drukowana na dole - do 3 linii)
+  footerLine1      String?  // np. "Dziękujemy za wizytę!"
+  footerLine2      String?  // np. "Zapraszamy ponownie"
+  footerLine3      String?  // np. "www.hotel.pl"
+  
+  // Nazwy pozycji dla różnych typów transakcji
+  // Obsługiwane placeholdery: {roomNumber}, {guestName}, {checkIn}, {checkOut}, {nights}
+  itemNameRoom     String   @default("Nocleg")  // typ ROOM
+  itemNameDeposit  String   @default("Zaliczka")  // typ DEPOSIT
+  itemNameMinibar  String   @default("Minibar")  // typ MINIBAR
+  itemNameService  String   @default("Usługa")  // typ SERVICE / inne
+  itemNameLocalTax String   @default("Opłata miejscowa")  // typ LOCAL_TAX
+  itemNameParking  String   @default("Parking")  // typ PARKING
+  
+  // Domyślna stawka VAT dla usług hotelowych (%)
+  defaultVatRate   Int      @default(8)
+  
+  // Czy drukować numer pokoju w nazwie pozycji
+  includeRoomNumber Boolean @default(true)
+  
+  // Czy drukować datę pobytu w opisie
+  includeStayDates Boolean @default(false)
+  
+  // Format numeru pokoju w nazwie pozycji (np. "Nocleg pok. {roomNumber}")
+  roomNumberFormat String   @default("pok. {roomNumber}")
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
