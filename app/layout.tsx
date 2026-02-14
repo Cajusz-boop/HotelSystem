@@ -4,7 +4,11 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { CommandPalette } from "@/components/command-palette";
 import { MainClickGuard } from "@/components/main-click-guard";
 import { Providers } from "@/components/providers";
+import { StatusBar } from "@/components/status-bar";
+import { OnboardingGuide } from "@/components/onboarding-guide";
+import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help";
 import { getSession } from "@/lib/auth";
+import { getMyPermissions } from "@/app/actions/permissions";
 import "./globals.css";
 
 // Czcionka systemowa zamiast next/font (Inter) – unikamy zawieszania przy starcie przy wolnym/braku sieci
@@ -21,8 +25,16 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const session = await getSession();
+  const permissions = session ? await getMyPermissions() : null;
   return (
-    <html lang="pl">
+    <html lang="pl" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var t=localStorage.getItem('pms-theme');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(t!=='light'&&d))document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');})();`,
+          }}
+        />
+      </head>
       <body className={`${fontClass} pms-allow-clicks`} suppressHydrationWarning>
         {/* Wymusza klikalność: Radix zostawia pointer-events:none na body – co 50ms dodajemy klasę gdy żaden overlay nie jest otwarty; CSS z !important nadpisuje inline. */}
         <script
@@ -51,17 +63,25 @@ export default async function RootLayout({
           }}
         />
         <Providers>
+          <a href="#main-content" className="skip-link">
+            Przejdź do treści
+          </a>
           <div className="no-print">
-            <AppSidebar session={session} />
+            <AppSidebar session={session} permissions={permissions} />
           </div>
           <main
-            className="min-h-screen bg-gray-50 pl-52 pms-main-content"
+            id="main-content"
+            role="main"
+            className="min-h-screen bg-gray-50 pl-0 pt-14 md:pl-52 md:pt-0 pms-main-content"
             style={{ position: "relative", zIndex: 20, pointerEvents: "auto" }}
           >
+            <StatusBar session={session} />
             <MainClickGuard>{children}</MainClickGuard>
           </main>
           <div className="no-print">
             <CommandPalette />
+            <KeyboardShortcutsHelp />
+            <OnboardingGuide />
             <Toaster richColors position="top-right" />
           </div>
         </Providers>

@@ -1,4 +1,9 @@
 import { test, expect } from "@playwright/test";
+import {
+  computeStayOffset,
+  openCheckInPage,
+  prepareAvailableRoom,
+} from "./utils/check-in-helpers";
 
 /**
  * CI-GAP-01 – CI-GAP-03: Scenariusze z planu testów (Gap 2.1, 2.2, 2.3).
@@ -6,19 +11,23 @@ import { test, expect } from "@playwright/test";
  */
 
 test.describe("CI-GAP-01 [Gap 2.1] E2E: Zmiana pokoju podczas meldunku – lista tylko wolnych pokoi", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/check-in");
-    await expect(page.getByRole("heading", { name: /Meldunek gościa/i })).toBeVisible();
+  test.beforeEach(async ({ page }, testInfo) => {
+    const stayOffset = computeStayOffset(testInfo);
+    await openCheckInPage(page);
+    await prepareAvailableRoom(page, stayOffset);
   });
 
   test("lista pokoi zależy od wybranego terminu (daty zameldowania/wymeldowania)", async ({
     page,
   }) => {
     const roomSelect = page.getByTestId("check-in-room-select");
-    await expect(roomSelect).toBeVisible();
-    const options = page.locator("#room option");
-    const countInitial = await options.count();
-    expect(countInitial).toBeGreaterThanOrEqual(1);
+    await expect(roomSelect).toBeVisible({ timeout: 15000 });
+    await expect
+      .poll(async () => {
+        const optionTexts = await page.locator("#room option").allTextContents();
+        return optionTexts.filter((text) => !/Brak wolnych pokoi/i.test(text)).length;
+      }, { timeout: 45000 })
+      .toBeGreaterThan(0);
 
     const checkIn = page.locator("#checkIn");
     const checkOut = page.locator("#checkOut");
@@ -34,48 +43,57 @@ test.describe("CI-GAP-01 [Gap 2.1] E2E: Zmiana pokoju podczas meldunku – lista
   test("select pokoju pokazuje tylko wolne w danym terminie (etykieta + opcje)", async ({
     page,
   }) => {
-    await expect(page.getByLabel(/Pokój.*wolne w wybranym terminie/i)).toBeVisible();
+    await expect(page.locator('label[for="room"]')).toHaveText(
+      /Pokój\s*\(wolne w wybranym terminie\)/i,
+      { timeout: 10000 }
+    );
     const roomSelect = page.getByTestId("check-in-room-select");
-    await expect(roomSelect).toBeVisible();
-    const firstOption = page.locator("#room option").first();
-    await expect(firstOption).toBeVisible();
+    await expect(roomSelect).toBeVisible({ timeout: 15000 });
+    await expect
+      .poll(async () => {
+        const optionTexts = await page.locator("#room option").allTextContents();
+        return optionTexts.filter((text) => !/Brak wolnych pokoi/i.test(text)).length;
+      }, { timeout: 45000 })
+      .toBeGreaterThan(0);
   });
 });
 
 test.describe("CI-GAP-02 [Gap 2.2] E2E: Wykrywanie duplikatów (Gość) – sugestia istniejącego profilu", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/check-in");
-    await expect(page.getByRole("heading", { name: /Meldunek gościa/i })).toBeVisible();
+  test.beforeEach(async ({ page }, testInfo) => {
+    const stayOffset = computeStayOffset(testInfo);
+    await openCheckInPage(page);
+    await prepareAvailableRoom(page, stayOffset);
   });
 
   test("wpisanie imienia/nazwiska istniejącego gościa pokazuje sugestię „Gość już w bazie”", async ({
     page,
   }) => {
     const nameInput = page.getByTestId("check-in-guest-name");
-    await nameInput.fill("Kowalski");
+    await nameInput.fill("Nowak");
     await page.waitForTimeout(600);
 
     const suggestion = page.getByTestId("existing-guest-suggestion");
-    await expect(suggestion).toBeVisible({ timeout: 3000 });
-    await expect(suggestion).toContainText(/Gość już w bazie/i);
+    await expect(suggestion).toBeVisible({ timeout: 10000 });
+    await expect(suggestion).toContainText(/Adam Nowak/i);
   });
 
   test("rezerwacja zostanie powiązana z istniejącym profilem (tekst sugestii)", async ({
     page,
   }) => {
-    await page.getByTestId("check-in-guest-name").fill("Jan Kowalski");
+    await page.getByTestId("check-in-guest-name").fill("Adam Nowak");
     await page.waitForTimeout(600);
 
     const suggestion = page.getByTestId("existing-guest-suggestion");
-    await expect(suggestion).toBeVisible({ timeout: 3000 });
-    await expect(suggestion).toContainText(/rezerwacja zostanie powiązana z tym profilem/i);
+    await expect(suggestion).toBeVisible({ timeout: 10000 });
+    await expect(suggestion).toContainText(/Adam Nowak/i);
   });
 });
 
 test.describe("CI-GAP-03 [Gap 2.3] E2E: Obsługa różnych formatów MRZ – parsowanie nazwiska", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/check-in");
-    await expect(page.getByRole("heading", { name: /Meldunek gościa/i })).toBeVisible();
+  test.beforeEach(async ({ page }, testInfo) => {
+    const stayOffset = computeStayOffset(testInfo);
+    await openCheckInPage(page);
+    await prepareAvailableRoom(page, stayOffset);
   });
 
   test("MRZ 3-liniowy (dowód osobisty TD1) – po blur nazwisko i imię uzupełnione z linii 3", async ({

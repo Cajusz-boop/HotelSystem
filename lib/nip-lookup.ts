@@ -17,8 +17,9 @@ export interface CompanyFromNip {
   country: string;
 }
 
+/** Zwraca tylko cyfry z NIP. Nie obcina do 10 – walidacja „dokładnie 10” jest w lookup. */
 function normalizeNip(nip: string): string {
-  return nip.replace(/\D/g, "").slice(0, 10);
+  return nip.replace(/\D/g, "");
 }
 
 /** Parsuje adres typu "ULICA NR, 00-000 MIASTO" na address, postalCode, city */
@@ -96,10 +97,11 @@ async function fetchFullNameFromUrl(nip10: string): Promise<string | null> {
  * Adres: zawsze z WL.
  */
 export async function lookupCompanyByNip(nip: string): Promise<NipLookupResult> {
-  const raw = normalizeNip(nip);
-  if (raw.length !== 10) {
+  const digits = normalizeNip(nip);
+  if (digits.length !== 10) {
     return { success: false, error: "NIP musi mieć 10 cyfr" };
   }
+  const raw = digits;
 
   const fullName = await fetchFullNameFromUrl(raw);
 

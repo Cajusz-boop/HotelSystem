@@ -8,7 +8,7 @@ test.describe("Negatywne i brzegowe", () => {
     page,
   }) => {
     await page.goto("/front-office");
-    await expect(page.getByRole("heading", { name: /Tape Chart/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("heading", { name: /Grafik|Tape Chart/i })).toBeVisible({ timeout: 5000 });
     const cell = page.getByTestId("cell-106-2026-04-02");
     await expect(cell).toBeVisible({ timeout: 5000 });
     await cell.evaluate((el) => (el as HTMLElement).click());

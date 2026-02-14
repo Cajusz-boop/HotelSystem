@@ -15,6 +15,8 @@ export interface SessionPayload {
   name: string;
   role: string;
   exp: number;
+  /** Ustawione gdy hasło użytkownika wygasło – wymusza zmianę hasła */
+  passwordExpired?: boolean;
 }
 
 /** Zwraca sesję z cookie (userId, email, name, role) lub null */
@@ -31,6 +33,7 @@ export async function getSession(): Promise<SessionPayload | null> {
       name: payload.name as string,
       role: payload.role as string,
       exp: payload.exp as number,
+      passwordExpired: payload.passwordExpired === true,
     };
   } catch {
     return null;
@@ -38,18 +41,22 @@ export async function getSession(): Promise<SessionPayload | null> {
 }
 
 /** Tworzy token sesji i zwraca ustawienia cookie (do ustawienia w response) */
-export async function createSessionToken(payload: {
-  userId: string;
-  email: string;
-  name: string;
-  role: string;
-}): Promise<{ name: string; value: string; options: { httpOnly: true; secure: boolean; sameSite: "lax"; path: string; maxAge: number } }> {
+export async function createSessionToken(
+  payload: {
+    userId: string;
+    email: string;
+    name: string;
+    role: string;
+    passwordExpired?: boolean;
+  }
+): Promise<{ name: string; value: string; options: { httpOnly: true; secure: boolean; sameSite: "lax"; path: string; maxAge: number } }> {
   const exp = Math.floor(Date.now() / 1000) + SESSION_DURATION_DAYS * 24 * 60 * 60;
   const token = await new SignJWT({
     userId: payload.userId,
     email: payload.email,
     name: payload.name,
     role: payload.role,
+    ...(payload.passwordExpired && { passwordExpired: true }),
   })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime(exp)
@@ -65,6 +72,28 @@ export async function createSessionToken(payload: {
       maxAge: SESSION_DURATION_DAYS * 24 * 60 * 60,
     },
   };
+}
+
+/** Token tymczasowy na krok 2FA (zawiera tylko userId), ważny 5 min. */
+const PENDING_2FA_DURATION_SEC = 5 * 60;
+
+export async function createPending2FAToken(userId: string): Promise<string> {
+  const exp = Math.floor(Date.now() / 1000) + PENDING_2FA_DURATION_SEC;
+  const token = await new SignJWT({ userId, purpose: "2fa" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime(exp)
+    .sign(getSecret());
+  return token;
+}
+
+export async function verifyPending2FAToken(token: string): Promise<{ userId: string } | null> {
+  try {
+    const { payload } = await jwtVerify(token, getSecret());
+    if (payload.purpose !== "2fa" || !payload.userId) return null;
+    return { userId: payload.userId as string };
+  } catch {
+    return null;
+  }
 }
 
 export { COOKIE_NAME };

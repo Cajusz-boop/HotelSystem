@@ -27,3 +27,18 @@ npm-debug.log*
 
 # POSNET bridge spool
 posnet-bridge/spool
+
+# Manager agent state (manager.py)
+.manager_state.txt
+
+# Python / scripts state
+__pycache__
+.batch_*
+.scenarios_*
+.done_task.txt
+
+# Test / build artifacts
+test-results
+playwright-report
+_next_out.txt
+tsconfig.tsbuildinfo

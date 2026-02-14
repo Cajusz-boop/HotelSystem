@@ -9,7 +9,7 @@ import { test, expect } from "@playwright/test";
 test.describe("Gap Analysis – Tape Chart: nawigacja w czasie", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/front-office");
-    await expect(page.getByRole("heading", { name: /Tape Chart/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("heading", { name: /Grafik|Tape Chart/i })).toBeVisible({ timeout: 5000 });
   });
 
   test("GAP 1.1: Czy użytkownik może przejść do innego miesiąca (np. maj) – przycisk / wybór daty?", async ({
@@ -127,7 +127,7 @@ test.describe("Gap Analysis – Raporty: eksport", () => {
 test.describe("Gap Analysis – Tape Chart: drukowanie / eksport", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/front-office");
-    await expect(page.getByRole("heading", { name: /Tape Chart/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("heading", { name: /Grafik|Tape Chart/i })).toBeVisible({ timeout: 5000 });
   });
 
   test("GAP 1.4: Czy można wydrukować lub wyeksportować (PDF) fragment grafiku?", async ({
@@ -145,7 +145,7 @@ test.describe("Gap Analysis – Tape Chart: drukowanie / eksport", () => {
 test.describe("TC-GAP-01 – TC-GAP-04 (Tape Chart – scenariusze z planu)", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/front-office");
-    await expect(page.getByRole("heading", { name: /Tape Chart/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("heading", { name: /Grafik|Tape Chart/i })).toBeVisible({ timeout: 5000 });
   });
 
   test("TC-GAP-01 [Gap 1.2] Visual/Manual: Sticky Headers przy scrollowaniu – nagłówki dni i kolumna pokoi pozostają widoczne", async ({

@@ -1,4 +1,4 @@
-import { getRoomsForCennik, getCennikForDate } from "@/app/actions/rooms";
+import { getRoomsForCennik, getCennikForDate, getRatePlansForDate } from "@/app/actions/rooms";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { CennikPrintButton } from "@/components/cennik-print-button";
@@ -15,9 +15,10 @@ export default async function CennikWydrukPage({
 }) {
   const params = await Promise.resolve(searchParams);
   const dateParam = typeof params.date === "string" ? params.date.trim() : undefined;
-  const result = dateParam
-    ? await getCennikForDate(dateParam)
-    : await getRoomsForCennik();
+  const [result, ratePlansResult] = await Promise.all([
+    dateParam ? getCennikForDate(dateParam) : getRoomsForCennik(),
+    dateParam ? getRatePlansForDate(dateParam) : Promise.resolve({ success: true as const, data: [] as { id: string; roomTypeName: string; validFrom: string; validTo: string; price: number; isNonRefundable: boolean }[] }),
+  ]);
   if (!result.success || !result.data) {
     return (
       <div className="p-8">
@@ -33,6 +34,7 @@ export default async function CennikWydrukPage({
   }
 
   const rooms = result.data;
+  const ratePlansOnDate = ratePlansResult.success && ratePlansResult.data ? ratePlansResult.data : [];
   const year = new Date().getFullYear();
   const title = dateParam ? `Cennik na dzień ${dateParam}` : "Cennik pokoi";
   const subtitle = dateParam
@@ -72,6 +74,32 @@ export default async function CennikWydrukPage({
         <p className="mb-4 text-sm text-muted-foreground">
           {subtitle}
         </p>
+
+        {dateParam && ratePlansOnDate.length > 0 && (
+          <section className="mb-6">
+            <h2 className="mb-2 text-base font-semibold">Stawki sezonowe na dzień {dateParam}</h2>
+            <table className="w-full max-w-xl text-left text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="px-4 py-2 font-medium">Typ pokoju</th>
+                  <th className="px-4 py-2 font-medium">Okres</th>
+                  <th className="px-4 py-2 font-medium">Cena (PLN / dobę)</th>
+                  <th className="px-4 py-2 font-medium">Non-refund</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ratePlansOnDate.map((p) => (
+                  <tr key={p.id} className="border-b last:border-0">
+                    <td className="px-4 py-2 font-medium">{p.roomTypeName}</td>
+                    <td className="px-4 py-2">{p.validFrom} – {p.validTo}</td>
+                    <td className="px-4 py-2">{p.price.toFixed(2)} PLN</td>
+                    <td className="px-4 py-2">{p.isNonRefundable ? "Tak" : "Nie"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
 
         <table className="w-full text-left text-sm">
           <thead>

@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireExternalApiKey } from "@/lib/api-auth";
+import { checkApiRateLimit } from "@/lib/rate-limit";
 
 /**
  * GET /api/v1/external/availability
  * Dla Channel Managera: dostępność pokoi w podanym zakresie dat.
  * Query: from (YYYY-MM-DD), to (YYYY-MM-DD), roomType (opcjonalnie)
  * Opcjonalna autoryzacja: jeśli ustawiono EXTERNAL_API_KEY w .env, wymagany nagłówek X-API-Key lub Authorization: Bearer <key>
+ * Rate limit: 100 req/min na klucz API lub IP.
  */
 export async function GET(request: NextRequest) {
+  const rateLimitRes = checkApiRateLimit(request);
+  if (rateLimitRes) return rateLimitRes;
   const authError = requireExternalApiKey(request);
   if (authError) return authError;
 

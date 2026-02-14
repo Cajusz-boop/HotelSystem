@@ -6,7 +6,7 @@ import { test, expect } from "@playwright/test";
 test.describe("Edycja rezerwacji", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/front-office");
-    await expect(page.getByRole("heading", { name: /Tape Chart/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("heading", { name: /Grafik|Tape Chart/i })).toBeVisible({ timeout: 5000 });
   });
 
   test("ER-01: klik w pasek otwiera Sheet Edycja rezerwacji z polami zgodnymi z rezerwacją", async ({

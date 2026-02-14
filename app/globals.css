@@ -65,6 +65,14 @@
     z-index: 20;
     pointer-events: auto !important;
   }
+  /* WCAG 2.1: link „Przejdź do treści” – widoczny po fokusie (klawiatura). */
+  .skip-link {
+    @apply absolute left-[-9999px] z-[100] rounded bg-primary px-4 py-2 text-primary-foreground;
+  }
+  .skip-link:focus {
+    @apply left-4 top-4 outline-none ring-2 ring-ring;
+    position: absolute;
+  }
 }
 
 @media print {
@@ -73,5 +81,54 @@
   }
   main {
     padding-left: 0 !important;
+  }
+  
+  /* Tape Chart print styles */
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+  
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  
+  /* Hide sidebar and header during print */
+  aside,
+  nav,
+  header:first-of-type,
+  [data-sidebar],
+  [data-hide-print="true"] {
+    display: none !important;
+  }
+  
+  /* Room rows page breaks */
+  [data-testid^="room-row-"] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  
+  /* Reservation bars should not break */
+  [data-testid="reservation-bar"] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  
+  /* Force page break after every N rows */
+  [data-testid^="room-row-"]:nth-child(15n) {
+    page-break-after: always;
+  }
+  
+  /* Grid container adjustments */
+  .flex-1.overflow-auto {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+  
+  /* Reset transforms and positions for print */
+  .sticky {
+    position: relative !important;
   }
 }
