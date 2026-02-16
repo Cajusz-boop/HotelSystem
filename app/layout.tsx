@@ -31,7 +31,7 @@ export default async function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var t=localStorage.getItem('pms-theme');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(t!=='light'&&d))document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');})();`,
+            __html: `(function(){var t=localStorage.getItem('pms-theme');if(t==='dark')document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');})();`,
           }}
         />
       </head>
@@ -72,7 +72,7 @@ export default async function RootLayout({
           <main
             id="main-content"
             role="main"
-            className="min-h-screen bg-gray-50 pt-11 md:pt-0 md:pl-12 pms-main-content"
+            className="min-h-screen bg-background pt-11 md:pt-0 md:pl-12 pms-main-content"
             style={{ position: "relative", zIndex: 20, pointerEvents: "auto" }}
           >
             <StatusBar session={session} />

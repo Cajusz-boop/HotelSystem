@@ -39,6 +39,7 @@
     "node_modules",
     "Test",
     "**/*.spec.ts",
-    "**/*.spec.tsx"
+    "**/*.spec.tsx",
+    "prisma/migrate-kwhotel.ts"
   ]
 }

@@ -9,12 +9,13 @@ out
 dist
 build
 
-# Env (has DATABASE_URL)
+# Env (has DATABASE_URL and secrets)
 .env
 .env.local
 .env.staging
 .env.production
 .env.*.local
+.env.deploy
 
 # Prisma
 prisma/migrations/**/migration_lock.toml
@@ -42,3 +43,13 @@ test-results
 playwright-report
 _next_out.txt
 tsconfig.tsbuildinfo
+
+# Deploy artifacts
+deploy_mydevil.zip
+deploy_standalone.zip
+prisma_full_schema.sql
+prisma_safe_schema.sql
+prisma_clean_schema.sql
+prisma_alter_tables.sql
+prisma_diff.sql
+_deploy_schema_diff.sql

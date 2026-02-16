@@ -22,16 +22,17 @@ xcopy /E /I /Y node_modules\.prisma .next\standalone\node_modules\.prisma
 echo.
 echo === 4/4 Pakowanie i wysylanie (ZIP - omija problem scp z linkami na Windows) ===
 if exist deploy_mydevil.zip del deploy_mydevil.zip
-powershell -Command "Compress-Archive -Path app.js, .next\standalone, .next\static -DestinationPath deploy_mydevil.zip -Force"
+REM Usun cache webpacka ze standalone (zbedny na produkcji, duzo MB)
+if exist ".next\standalone\.next\cache" rmdir /S /Q ".next\standalone\.next\cache"
+REM Pakuj z prawidlowa struktura: .next\standalone i .next\static w ZIP-ie
+REM (po unzip na serwerze pliki laduja od razu w .next/standalone i .next/static)
+powershell -Command "$tmp = 'deploy_tmp'; if(Test-Path $tmp){Remove-Item $tmp -Recurse -Force}; New-Item -ItemType Directory -Path $tmp\.next -Force | Out-Null; Copy-Item '.next\standalone' -Destination \"$tmp\.next\standalone\" -Recurse; Copy-Item '.next\static' -Destination \"$tmp\.next\static\" -Recurse; Copy-Item 'app.js' -Destination $tmp\; Compress-Archive -Path \"$tmp\*\" -DestinationPath deploy_mydevil.zip -Force; Remove-Item $tmp -Recurse -Force"
 scp deploy_mydevil.zip karczma-labedz@s5.mydevil.net:domains/hotel.karczma-labedz.pl/public_nodejs/
 
 echo.
 echo Na serwerze (SSH) wykonaj:
 echo   cd ~/domains/hotel.karczma-labedz.pl/public_nodejs
-echo   unzip -o deploy_mydevil.zip
-echo   mkdir -p .next
 echo   rm -rf .next/standalone .next/static
-echo   mv standalone .next/
-echo   mv static .next/
+echo   unzip -o deploy_mydevil.zip
 echo   devil www restart hotel.karczma-labedz.pl
 pause

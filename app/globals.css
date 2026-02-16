@@ -3,48 +3,78 @@
 @tailwind utilities;
 
 @layer base {
+  /* ── KWHotel Light Theme ─────────────────────────── */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 210 25% 97%;
+    --foreground: 215 25% 17%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 215 25% 17%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    --popover-foreground: 215 25% 17%;
+    --primary: 213 72% 37%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 30% 94%;
+    --secondary-foreground: 215 25% 17%;
+    --muted: 210 22% 94%;
+    --muted-foreground: 215 14% 46%;
+    --accent: 213 35% 91%;
+    --accent-foreground: 215 25% 17%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 18% 86%;
+    --input: 214 18% 86%;
+    --ring: 213 72% 37%;
+    --radius: 0.375rem;
+
+    /* KWHotel-specific tokens */
+    --kw-sidebar-bg: 213 55% 20%;
+    --kw-sidebar-fg: 210 25% 92%;
+    --kw-sidebar-active: 213 72% 37%;
+    --kw-sidebar-hover: 213 45% 28%;
+    --kw-header-bg: 0 0% 100%;
+    --kw-header-border: 213 72% 37%;
+    --kw-saturday: 213 60% 94%;
+    --kw-sunday: 0 60% 95%;
+    --kw-today-bg: 48 96% 89%;
+    --kw-today-border: 45 93% 47%;
+    --kw-past: 210 10% 93%;
+    --kw-grid-border: 214 18% 86%;
+    --kw-room-label-bg: 210 20% 97%;
   }
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --background: 220 20% 10%;
+    --foreground: 210 30% 92%;
+    --card: 220 20% 13%;
+    --card-foreground: 210 30% 92%;
+    --popover: 220 20% 13%;
+    --popover-foreground: 210 30% 92%;
+    --primary: 213 72% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 25% 18%;
+    --secondary-foreground: 210 30% 92%;
+    --muted: 217 25% 18%;
+    --muted-foreground: 215 18% 62%;
+    --accent: 217 25% 18%;
+    --accent-foreground: 210 30% 92%;
+    --destructive: 0 62% 35%;
+    --destructive-foreground: 210 30% 92%;
+    --border: 217 20% 22%;
+    --input: 217 20% 22%;
+    --ring: 213 72% 50%;
+
+    --kw-sidebar-bg: 220 20% 8%;
+    --kw-sidebar-fg: 210 25% 85%;
+    --kw-sidebar-active: 213 72% 50%;
+    --kw-sidebar-hover: 220 20% 16%;
+    --kw-header-bg: 220 20% 13%;
+    --kw-header-border: 213 72% 50%;
+    --kw-saturday: 213 30% 15%;
+    --kw-sunday: 0 30% 16%;
+    --kw-today-bg: 48 50% 18%;
+    --kw-today-border: 45 70% 40%;
+    --kw-past: 220 15% 12%;
+    --kw-grid-border: 217 20% 22%;
+    --kw-room-label-bg: 220 20% 12%;
   }
 }
 
@@ -147,4 +177,59 @@
 .scrollbar-thin::-webkit-scrollbar-thumb {
   background-color: hsl(var(--border));
   border-radius: 2px;
+}
+
+/* ── KWHotel Sidebar ──────────────────────────────── */
+.kw-sidebar {
+  background: hsl(var(--kw-sidebar-bg));
+  color: hsl(var(--kw-sidebar-fg));
+}
+.kw-sidebar-item {
+  color: hsl(var(--kw-sidebar-fg) / 0.75);
+  transition: background-color 150ms, color 150ms;
+}
+.kw-sidebar-item:hover {
+  background-color: hsl(var(--kw-sidebar-hover));
+  color: hsl(var(--kw-sidebar-fg));
+}
+.kw-sidebar-item.active {
+  background-color: hsl(var(--kw-sidebar-active));
+  color: hsl(var(--primary-foreground));
+}
+
+/* ── KWHotel Tape Chart grid cells ────────────────── */
+.kw-cell-saturday {
+  background-color: hsl(var(--kw-saturday));
+}
+.kw-cell-sunday {
+  background-color: hsl(var(--kw-sunday));
+}
+.kw-cell-today {
+  background-color: hsl(var(--kw-today-bg));
+}
+.kw-cell-past {
+  background-color: hsl(var(--kw-past));
+}
+.kw-header-today {
+  background-color: hsl(var(--kw-today-bg));
+  border-bottom: 2px solid hsl(var(--kw-today-border));
+  font-weight: 700;
+  color: hsl(215 25% 17%);
+}
+.kw-header-saturday {
+  background-color: hsl(var(--kw-saturday));
+  color: hsl(213 72% 37%);
+}
+.kw-header-sunday {
+  background-color: hsl(var(--kw-sunday));
+  color: hsl(0 72% 45%);
+}
+.kw-header-default {
+  background-color: hsl(var(--kw-room-label-bg));
+}
+.kw-today-column {
+  background-color: hsl(var(--kw-today-bg) / 0.4);
+}
+.kw-today-column-line {
+  border-left: 2px solid hsl(var(--kw-today-border));
 }

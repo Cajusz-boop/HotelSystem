@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   type DragEndEvent,
@@ -26,6 +26,7 @@ import {
   Eye,
   Layers,
   BedDouble,
+  Waves,
   ListFilter,
   Filter,
   Hand,
@@ -76,7 +77,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-function RoomRowDroppable({
+const RoomRowDroppable = memo(function RoomRowDroppable({
   room,
   rowIdx,
   dates,
@@ -104,8 +105,8 @@ function RoomRowDroppable({
         ref={setNodeRef}
         data-testid={`room-row-${room.number}`}
         className={cn(
-          "sticky left-0 z-[60] flex items-center gap-1.5 border-b border-r bg-card px-2 py-1",
-          isOver && "bg-primary/10 ring-1 ring-primary"
+          "sticky left-0 z-[60] flex items-center gap-1.5 border-b border-r border-[hsl(var(--kw-grid-border))] px-2 py-1",
+          isOver ? "bg-primary/10 ring-1 ring-primary" : "bg-card"
         )}
         style={{
           gridColumn: 1,
@@ -116,21 +117,24 @@ function RoomRowDroppable({
         {children}
       </div>
       {dates.map((dateStr, colIdx) => {
-        const isWeekend = isWeekendDate(dateStr);
+        const saturday = isSaturdayDate(dateStr);
+        const sunday = isSundayDate(dateStr);
+        const isBlocked = blockedRanges?.some(
+          (range) => dateStr >= range.startDate && dateStr <= range.endDate
+        );
+        const isFocused = focusedDateIdx === colIdx;
         return (
         <div
           key={`cell-${room.number}-${colIdx}`}
-          data-testid={`cell-${room.number}-${dateStr}`}
           data-cell
-          role="button"
-          tabIndex={0}
+          data-date={dateStr}
+          data-room={room.number}
           className={cn(
-            "cursor-grab active:cursor-grabbing border-b border-r bg-background hover:bg-accent/30 transition-colors duration-75 select-none",
-            isWeekend && "bg-muted/30",
-            blockedRanges?.some(
-              (range) => dateStr >= range.startDate && dateStr <= range.endDate
-            ) && "bg-destructive/20 cursor-not-allowed opacity-70 hover:bg-destructive/20",
-            focusedDateIdx === colIdx && "ring-2 ring-inset ring-primary bg-primary/10"
+            "cursor-grab active:cursor-grabbing border-b border-r border-[hsl(var(--kw-grid-border))] bg-card select-none",
+            saturday && "kw-cell-saturday",
+            sunday && "kw-cell-sunday",
+            isBlocked && "bg-destructive/20 cursor-not-allowed opacity-70",
+            isFocused && "ring-2 ring-inset ring-primary bg-primary/10"
           )}
           style={{
             gridColumn: colIdx + 2,
@@ -139,43 +143,25 @@ function RoomRowDroppable({
             minHeight: rowHeightPx,
           }}
           onClick={() => {
-            const isBlocked = blockedRanges?.some(
-              (range) => dateStr >= range.startDate && dateStr <= range.endDate
-            );
             if (isBlocked) {
               toast.info("Pokój zablokowany w tym terminie (Room Block).");
               return;
             }
             onCellClick?.(room.number, dateStr);
           }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              const isBlocked = blockedRanges?.some(
-                (range) => dateStr >= range.startDate && dateStr <= range.endDate
-              );
-              if (isBlocked) {
-                toast.info("Pokój zablokowany w tym terminie (Room Block).");
-                return;
-              }
-              onCellClick?.(room.number, dateStr);
-            }
-          }}
-          title={
-            blockedRanges?.find(
-              (range) => dateStr >= range.startDate && dateStr <= range.endDate
-            )?.reason ?? undefined
-          }
+          title={isBlocked ? (blockedRanges?.find(
+            (range) => dateStr >= range.startDate && dateStr <= range.endDate
+          )?.reason ?? undefined) : undefined}
         />
         );
       })}
     </>
   );
-}
+});
 
 /** Wysokość rzędu – 34px: kompaktowy widok, żeby zmieścić więcej pokoi bez scrollowania */
 const ROW_HEIGHT_PX = 34;
-const ROOM_LABEL_WIDTH_PX = 180;
+const ROOM_LABEL_WIDTH_PX = 120;
 const HEADER_ROW_PX = 40;
 /** Margines wewnętrzny paska – 1px dla minimalnej przerwy przy stylu podziału dni (paski równo z kwadracikami) */
 const BAR_PADDING_PX = 1;
@@ -183,9 +169,9 @@ const BAR_PADDING_PX = 1;
 /** Skale widoku grafiku – określają liczbę dni i szerokość kolumny */
 type ViewScale = "day" | "week" | "month" | "year";
 const VIEW_SCALE_CONFIG: Record<ViewScale, { days: number; columnWidth: number; label: string }> = {
-  day: { days: 7, columnWidth: 120, label: "Dzień" },
-  week: { days: 14, columnWidth: 80, label: "Tydzień" },
-  month: { days: 31, columnWidth: 48, label: "Miesiąc" },
+  day: { days: 14, columnWidth: 120, label: "Dzień" },
+  week: { days: 28, columnWidth: 80, label: "Tydzień" },
+  month: { days: 60, columnWidth: 48, label: "Miesiąc" },
   year: { days: 365, columnWidth: 12, label: "Rok" },
 };
 
@@ -207,6 +193,18 @@ function isWeekendDate(dateStr: string): boolean {
   const d = new Date(dateStr + "Z");
   const w = d.getUTCDay();
   return w === 0 || w === 6; // Nd / So
+}
+
+function isSaturdayDate(dateStr: string): boolean {
+  return new Date(dateStr + "Z").getUTCDay() === 6;
+}
+
+function isSundayDate(dateStr: string): boolean {
+  return new Date(dateStr + "Z").getUTCDay() === 0;
+}
+
+function isPastDate(dateStr: string, todayStr: string): boolean {
+  return dateStr < todayStr;
 }
 
 function formatDateHeader(dateStr: string, todayStr: string): string {
@@ -270,7 +268,7 @@ export function TapeChart({
   initialHighlightReservationId?: string;
   reservationGroups: ReservationGroupSummary[];
 }) {
-  const today = useMemo(() => new Date(2026, 1, 7), []); // Feb 7, 2026
+  const today = useMemo(() => new Date(), []);
   const todayStr = useMemo(() => {
     const y = today.getFullYear();
     const m = String(today.getMonth() + 1).padStart(2, "0");
@@ -341,7 +339,7 @@ export function TapeChart({
     { id: "prices", label: "Ceny" },
   ] as const;
 
-  const [viewStartDate, setViewStartDate] = useState<Date>(() => new Date(today));
+  const [viewStartDate, setViewStartDate] = useState<Date>(() => addDays(new Date(today), -7));
   const [viewScale, setViewScale] = useState<ViewScale>(DEFAULT_VIEW_SCALE);
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
   const [highlightedReservationId, setHighlightedReservationId] = useState<string | null>(
@@ -477,7 +475,7 @@ export function TapeChart({
     if (goToDateValue) {
       const d = new Date(goToDateValue + "T12:00:00");
       if (!Number.isNaN(d.getTime())) {
-        setViewStartDate(d);
+        setViewStartDate(addDays(d, -7));
         setGoToDateOpen(false);
         setGoToDateValue("");
       }
@@ -486,10 +484,10 @@ export function TapeChart({
   // Skok nawigacji zależny od skali widoku
   const navigationStep = useMemo(() => {
     switch (viewScale) {
-      case "day": return 1;
-      case "week": return 7;
-      case "month": return 14;
-      case "year": return 30;
+      case "day": return 7;
+      case "week": return 14;
+      case "month": return 30;
+      case "year": return 90;
     }
   }, [viewScale]);
 
@@ -499,6 +497,11 @@ export function TapeChart({
   const handleNext = () => {
     setViewStartDate(addDays(viewStartDate, navigationStep));
   };
+  const handleGoToToday = useCallback(() => {
+    setViewStartDate(addDays(new Date(today), -7));
+    didScrollToTodayRef.current = false;
+  }, [today]);
+
   const handleOpenExportDialog = () => {
     // Initialize with current view range
     setExportStartDate(dates[0] ?? viewStartDateStr);
@@ -529,6 +532,7 @@ export function TapeChart({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const gridWrapperRef = useRef<HTMLDivElement>(null);
   const didPanRef = useRef(false);
+  const didScrollToTodayRef = useRef(false);
 
   /** Szerokość kolumny dat (może być większa przy minmax gdy siatka się rozciąga) */
   const [effectiveColumnWidthPx, setEffectiveColumnWidthPx] = useState(COLUMN_WIDTH_PX);
@@ -689,7 +693,7 @@ export function TapeChart({
     const res = reservations.find((r) => r.id === initialHighlightReservationId);
     if (res) {
       const d = new Date(res.checkIn + "Z");
-      if (!Number.isNaN(d.getTime())) setViewStartDate(d);
+      if (!Number.isNaN(d.getTime())) setViewStartDate(addDays(d, -3));
     }
     const t = setTimeout(() => {
       const bar = scrollContainerRef.current?.querySelector(
@@ -701,6 +705,23 @@ export function TapeChart({
     }, 300);
     return () => clearTimeout(t);
   }, [initialHighlightReservationId, reservations]);
+
+  // Scroll to "today" column on mount (and when handleGoToToday resets the flag)
+  useEffect(() => {
+    if (didScrollToTodayRef.current || initialHighlightReservationId) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const todayIdx = dates.indexOf(todayStr);
+    if (todayIdx < 0) return;
+    const t = setTimeout(() => {
+      if (didScrollToTodayRef.current) return;
+      didScrollToTodayRef.current = true;
+      const scrollTarget = Math.max(0, todayIdx * COLUMN_WIDTH_PX - 20);
+      container.scrollLeft = scrollTarget;
+    }, 100);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dates, todayStr]);
 
   useEffect(() => {
     if (!moreMenuOpen) return;
@@ -1122,17 +1143,21 @@ export function TapeChart({
         </div>
       )}
       <header
-        className="relative z-[100] flex shrink-0 flex-col border-b bg-card no-print"
+        className="relative z-[100] flex shrink-0 flex-col border-b border-[hsl(var(--kw-header-border))] bg-card no-print"
         role="toolbar"
         data-hide-print="true"
         aria-label="Nawigacja grafiku"
-        style={{ pointerEvents: "auto" }}
+        style={{ pointerEvents: "auto", borderTopWidth: '3px', borderTopColor: 'hsl(var(--kw-header-border))' }}
       >
         {/* Row 1: Navigation + Primary Actions */}
         <div className="flex items-center justify-between gap-2 px-3 py-2 md:px-4">
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handlePrev} aria-label="Tydzień wstecz">
               <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 px-2.5 gap-1 font-semibold" onClick={handleGoToToday} aria-label="Wróć do dziś" title="Wróć do dziś">
+              <CalendarDays className="h-3.5 w-3.5" />
+              Dziś
             </Button>
             <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleNext} aria-label="Tydzień naprzód">
               <ChevronRight className="h-4 w-4" />
@@ -1215,9 +1240,9 @@ export function TapeChart({
               className={cn(
                 "flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs",
                 occupancyStats.percentage >= 80
-                  ? "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400"
+                  ? "border-green-500/50 bg-green-50 text-green-700"
                   : occupancyStats.percentage >= 50
-                    ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
+                    ? "border-yellow-500/50 bg-yellow-50 text-yellow-700"
                     : "border-muted bg-muted/30 text-muted-foreground"
               )}
               title={`${occupancyStats.occupiedNights} z ${occupancyStats.totalNights} pokojo-nocy zajętych`}
@@ -1299,7 +1324,7 @@ export function TapeChart({
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
               {moreMenuOpen && (
-                <div className="absolute right-0 top-full mt-1 z-[200] w-56 rounded-md border bg-card shadow-lg py-1">
+                <div className="absolute right-0 top-full mt-1 z-[200] w-56 rounded-md border border-[hsl(var(--kw-grid-border))] bg-card shadow-lg py-1">
                   <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { setGroupReservationSheetOpen(true); setMoreMenuOpen(false); }}>
                     <Users className="h-4 w-4 text-muted-foreground" /> Rezerwacja grupowa
                   </button>
@@ -1348,7 +1373,7 @@ export function TapeChart({
         </div>
 
         {/* Row 2: Quick Stats Bar */}
-        <div className="flex items-center gap-3 border-t bg-muted/10 px-3 py-1.5 md:px-4 text-xs">
+        <div className="flex items-center gap-3 border-t border-[hsl(var(--kw-grid-border))] bg-[hsl(var(--kw-room-label-bg))] px-3 py-1.5 md:px-4 text-xs">
           <button type="button" className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-md px-1.5 py-0.5 hover:bg-muted/50" title="Dzisiejsze przyjazdy – kliknij aby zobaczyć listę" onClick={() => { setQuickStatsTab("arrivals"); setQuickStatsOpen(true); }}>
             <LogIn className="h-3.5 w-3.5 text-green-600" />
             <span>Przyjazdy:</span>
@@ -1382,7 +1407,7 @@ export function TapeChart({
 
         {/* Collapsible Filters Row */}
         {filtersOpen && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t bg-muted/5 px-3 py-2 md:px-4">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-[hsl(var(--kw-grid-border))] bg-card px-3 py-2 md:px-4">
             <div className="flex items-center gap-1.5">
               <Search className="h-3.5 w-3.5 text-muted-foreground" />
               <input
@@ -1481,6 +1506,7 @@ export function TapeChart({
       <div
         ref={scrollContainerRef}
         className="flex-1 overflow-auto p-1.5 sm:p-2 md:p-3 min-h-0"
+        style={{ willChange: "scroll-position" }}
       >
         <DndContext
           sensors={sensors}
@@ -1501,29 +1527,32 @@ export function TapeChart({
                 gridTemplateRows: gridRows,
               }}
             >
-            {/* Sticky corner cell – stała wysokość, żeby paski nie nachodziły na daty */}
+            {/* Sticky corner cell */}
             <div
-              className="sticky left-0 top-0 z-[60] flex items-center border-b border-r bg-muted/50 px-3 py-2 text-sm font-medium"
-              style={{ gridColumn: 1, gridRow: 1, minHeight: HEADER_ROW_PX, maxHeight: HEADER_ROW_PX }}
+              className="sticky left-0 top-0 z-[60] flex items-center border-b border-r border-[hsl(var(--kw-grid-border))] px-3 py-2 text-sm font-semibold"
+              style={{ gridColumn: 1, gridRow: 1, minHeight: HEADER_ROW_PX, maxHeight: HEADER_ROW_PX, background: 'hsl(var(--kw-room-label-bg))' }}
             >
               Pokój
             </div>
 
-            {/* Sticky date headers */}
+            {/* Sticky date headers – KWHotel style: Saturday blue, Sunday red, today yellow */}
             {dates.map((dateStr, i) => {
               const isToday = dateStr === todayStr;
-              const isWeekend = isWeekendDate(dateStr);
+              const saturday = isSaturdayDate(dateStr);
+              const sunday = isSundayDate(dateStr);
               return (
                 <div
                   key={dateStr}
                   data-date-header
                   className={cn(
-                    "sticky top-0 z-[60] flex items-center justify-center border-b px-2 py-2 text-center text-xs font-medium cursor-grab active:cursor-grabbing",
+                    "sticky top-0 z-[60] flex items-center justify-center border-b border-r border-[hsl(var(--kw-grid-border))] px-2 py-2 text-center text-xs font-medium cursor-grab active:cursor-grabbing",
                     isToday
-                      ? "bg-primary/20 text-primary font-bold text-[13px]"
-                      : isWeekend
-                        ? "bg-muted/80 text-muted-foreground"
-                        : "bg-muted/50"
+                      ? "kw-header-today text-[13px]"
+                      : saturday
+                        ? "kw-header-saturday"
+                        : sunday
+                          ? "kw-header-sunday"
+                          : "kw-header-default"
                   )}
                   style={{
                     gridColumn: i + 2,
@@ -1538,11 +1567,11 @@ export function TapeChart({
               );
             })}
 
-            {/* Podświetlenie kolumny "dziś" – wyrazna linia + subtelne tło */}
+            {/* Today column highlight – KWHotel yellow */}
             {dates.indexOf(todayStr) >= 0 && (
               <>
                 <div
-                  className="pointer-events-none z-[5] bg-primary/5"
+                  className="pointer-events-none z-[5] kw-today-column"
                   style={{
                     gridColumn: `${dates.indexOf(todayStr) + 2} / ${dates.indexOf(todayStr) + 3}`,
                     gridRow: "1 / -1",
@@ -1550,7 +1579,7 @@ export function TapeChart({
                   aria-hidden="true"
                 />
                 <div
-                  className="pointer-events-none z-[6] border-l-2 border-primary/60"
+                  className="pointer-events-none z-[6] kw-today-column-line"
                   style={{
                     gridColumn: `${dates.indexOf(todayStr) + 2} / ${dates.indexOf(todayStr) + 3}`,
                     gridRow: "1 / -1",
@@ -1584,11 +1613,11 @@ export function TapeChart({
                   setCreateSheetOpen(true);
                 }}
               >
-                <div className="flex items-center gap-1.5 min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0" title={room.type}>
                   <span className="font-bold text-xs leading-none">{room.number}</span>
-                  <span className="text-[10px] text-muted-foreground truncate leading-none">
-                    {room.type}
-                  </span>
+                  {/widok|jezioro/i.test(room.type) || (room.roomFeatures ?? []).some((f) => /widok|jezioro/i.test(f)) ? (
+                    <Waves className="h-3 w-3 text-blue-500 shrink-0" aria-label="Z widokiem na jezioro" />
+                  ) : null}
                   {hostelMode && (
                     <span className="text-[10px] text-muted-foreground leading-none">
                       ({occupancyToday.get(room.number) ?? 0})
@@ -1751,7 +1780,7 @@ export function TapeChart({
             </div>
         </DndContext>
       </div>
-      <section className="border-t border-border bg-muted/20 no-print" data-hide-print="true">
+      <section className="border-t border-[hsl(var(--kw-grid-border))] bg-[hsl(var(--kw-room-label-bg))] no-print" data-hide-print="true">
         <button
           type="button"
           className="flex w-full items-center justify-between px-4 py-1.5 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"

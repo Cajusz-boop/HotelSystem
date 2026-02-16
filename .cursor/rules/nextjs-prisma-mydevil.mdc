@@ -7,35 +7,78 @@ alwaysApply: true
 
 ## 1. Kontekst infrastruktury
 
-- **Serwer:** MyDevil (FreeBSD 14).
-- **Node:** Hostowany przez Passenger.
-- **Baza danych:** MySQL (MariaDB).
-- **Deploy:** Aplikacja działa w trybie `standalone`.
+- **Serwer produkcyjny:** MyDevil (FreeBSD 14), domena `hotel.karczma-labedz.pl`.
+- **Node:** Hostowany przez Phusion Passenger.
+- **Baza danych:** MySQL 8 (MariaDB) na `mysql5.mydevil.net`.
+- **Deploy:** Aplikacja dziala w trybie `standalone` (Next.js 14.2.x).
+- **Punkt wejscia:** `app.js` -> `.next/standalone/server.js`.
 
-## 2. Zarządzanie bazą danych (krytyczne)
+## 2. Deploy na produkcje (jedna komenda)
 
-Każda zmiana w pliku `prisma/schema.prisma` **musi** być odzwierciedlona w bazie danych. Nie zakładaj, że baza zaktualizuje się sama.
+```powershell
+.\scripts\deploy-to-mydevil.ps1
+```
 
-### Workflow przy zmianie schematu
+Skrypt automatycznie: build -> SQL diff -> usun stary .next -> ZIP+upload -> mysql --force -> restart.
+Konfiguracja w `.env.deploy`. Dokumentacja w `DEPLOY-MYDEVIL.md`.
 
-**Lokalnie (Windows):**
+## 3. Zarzadzanie baza danych (krytyczne)
 
-1. Po edycji `schema.prisma` uruchom: `npx prisma db push` (historia migracji jest niespójna).
+Kazda zmiana w `prisma/schema.prisma` **musi** byc odzwierciedlona w bazie. Nie zakladaj, ze baza zaktualizuje sie sama.
+
+### Lokalnie (Windows)
+
+1. Po edycji `schema.prisma` uruchom: `npx prisma db push`.
 2. Wygeneruj klienta: `npx prisma generate`.
 
-**Produkcja (MyDevil):**
+### Produkcja (MyDevil) — WAZNE OGRANICZENIA
 
-1. Po deployu plików aplikacji zaktualizuj strukturę bazy na serwerze.
-2. **Metoda zalecana (automatyczna):** Skrypt `deploy-to-mydevil.ps1` na końcu uruchamia przez SSH `npx prisma db push` na serwerze – baza aktualizuje się przy każdym deployu.
-3. **Metoda ręczna:** Jeśli deploy bez tego kroku – wejdź SSH i wpisz `npx prisma db push` w katalogu aplikacji (wymaga `DATABASE_URL` w `~/.bash_profile`).
-4. **Metoda awaryjna (SQL):** Gdy `db push` nie jest możliwe – przygotuj zapytania SQL (`ALTER TABLE`, `CREATE TABLE`) do wykonania w PhpMyAdmin.
+- **`npx prisma db push` NIE DZIALA na FreeBSD** — brak binarki `schema-engine` dla FreeBSD14. Nie probuj.
+- **Metoda zalecana:** Skrypt `deploy-to-mydevil.ps1` generuje SQL diff lokalnie (Windows) i wykonuje go na serwerze przez `mysql --force` (krok 3 i 6 skryptu).
+- **Metoda reczna:** Wygeneruj SQL lokalnie: `npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script`, zamien `CREATE TABLE` na `CREATE TABLE IF NOT EXISTS`, wyslij na serwer i wykonaj: `mysql --force -h mysql5.mydevil.net -u USER -pPASS DB < plik.sql`.
+- **Metoda awaryjna:** PhpMyAdmin — SQL lub Import pliku.
 
-## 3. Unikanie błędów runtime (Prisma)
+## 4. Deploy — znane pulapki (nie powtarzaj tych bledow!)
 
-W pliku `prisma/schema.prisma` w sekcji `generator client` **zawsze** muszą być ustawione `binaryTargets` dla obu środowisk:
+1. **ZAWSZE usun stary `.next` LOKALNIE przed buildem i na serwerze przed wgraniem nowego.** Stary `.next` powoduje `ENOENT: pages-manifest.json` przy buildzie. SCP/unzip doklada pliki, nie nadpisuje — stare pliki (np. `webpack-runtime.js` z `vendor-chunks`) powoduja `MODULE_NOT_FOUND`. Skrypt robi to automatycznie (krok 2 i krok 6).
+2. **`CREATE TABLE IF NOT EXISTS`** — uzyj zawsze przy imporcie schematu, zeby nie nadpisac istniejacych tabel z danymi.
+3. **Stare tabele moga nie miec nowych kolumn** — `IF NOT EXISTS` pomija istniejace tabele. Jesli dodano nowe kolumny do istniejacych modeli, potrzebny jest `ALTER TABLE` (skrypt deployu generuje pelny schemat, `mysql --force` ignoruje duplikaty).
+4. **Po pierwszym deployu tabela `User` jest pusta** — trzeba dodac admina przez SQL lub seed. Szczegoly w `DEPLOY-MYDEVIL.md`.
+5. **PowerShell 5.1: `Join-Path` przyjmuje TYLKO 2 argumenty.** Zamiast `Join-Path A B C` uzywaj `Join-Path (Join-Path A B) C`.
+6. **Komendy SSH ze znakami `<` `>` `&`:** NIE przekazuj ich jako argument `ssh $target $cmd` — PowerShell interpretuje te znaki. Zapisz komende do pliku i przekaz przez stdin: `Get-Content plik.sh | ssh $target "bash -s"`.
+7. **Walidacja ZIP:** Skrypt sprawdza rozmiar ZIP (musi byc > 10 MB). Jesli jest mniejszy, standalone sie nie skopiował — build przerwie sie z bledem.
+8. **Walidacja SSH:** Skrypt sprawdza marker `DEPLOY_SSH_OK` w odpowiedzi SSH. Jesli go brak, deploy sie nie powiodl.
+
+## 5. Unikanie bledow runtime (Prisma)
+
+W `prisma/schema.prisma` w sekcji `generator client` **zawsze** musza byc:
 
 ```prisma
 binaryTargets = ["native", "freebsd14"]
 ```
 
-(Nawet przy `engineType = "client"` trzymaj te wartości dla spójności i na wypadek zmiany silnika.)
+(Nawet przy `engineType = "client"` trzymaj te wartosci dla spojnosci.)
+
+## 6. Terminal — PowerShell na Windows
+
+- Shell to PowerShell — nie uzywaj skladni bash (`&&`, heredoc `<<EOF`).
+- Lacz komendy przez `;` zamiast `&&`.
+- Nie uzywaj `head`, `tail`, `grep` — to komendy linux, nie PowerShell.
+
+## 7. SSH i deploy — interaktywne haslo
+
+- **Agent NIE MOZE wpisac hasla interaktywnie** w SSH/SCP. Komendy wymagajace hasla SSH beda wisiec w nieskonczonosc.
+- **Jesli klucz SSH nie jest skonfigurowany:** Nie probuj uruchamiac ssh/scp z agenta. Zamiast tego daj uzytkownikowi dokladne kroki:
+  1. Otworz terminal PowerShell w Cursorze (Terminal -> New Terminal)
+  2. Wpisz: `powershell -ExecutionPolicy Bypass -File .\scripts\deploy-to-mydevil.ps1`
+  3. Skrypt zapyta o haslo SSH 3 razy — wpisz je za kazdym razem (haslo nie bedzie widoczne, to normalne)
+  4. Poczekaj az skrypt sie zakonczy — na koncu pokaze "[OK] Deploy zakonczony pomyslnie!"
+  5. Odswiez strone: https://hotel.karczma-labedz.pl
+- **Jesli uzytkownik musi wejsc na serwer recznie (SSH):**
+  1. Otworz terminal PowerShell
+  2. Wpisz: `ssh karczma-labedz@panel5.mydevil.net`
+  3. Wpisz haslo SSH (nie bedzie widoczne) i nacisnij Enter
+  4. Jestes na serwerze — podawaj komendy do wpisania jedna po drugiej (nie kopiuj blokow — terminal SSH psuje wklejanie znakami `^[[200~`)
+  5. Po zakonczeniu wpisz `exit` zeby wyjsc z SSH
+- **Jesli klucz SSH jest skonfigurowany** (`~/.ssh/mydevil_key`): Agent moze uruchamiac ssh/scp bez przeszkod.
+- **Przy deploy zawsze sprawdz najpierw:** `Test-Path "$env:USERPROFILE\.ssh\mydevil_key"` — jesli false, kieruj uzytkownika do recznego uruchomienia skryptu lub konfiguracji klucza SSH (instrukcja w `DEPLOY-MYDEVIL.md`).

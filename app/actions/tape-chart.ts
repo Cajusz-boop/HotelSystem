@@ -133,6 +133,10 @@ function mapReservationToTapeChart(r: {
 /** Opcje dla getTapeChartData – filtr roomIds (np. dla MICE: tylko sale konferencyjne). */
 export interface GetTapeChartDataOptions {
   roomIds?: string[];
+  /** Początek zakresu dat (YYYY-MM-DD). Domyślnie: 90 dni wstecz. */
+  dateFrom?: string;
+  /** Koniec zakresu dat (YYYY-MM-DD). Domyślnie: 400 dni w przód. */
+  dateTo?: string;
 }
 
 /** Pobiera dane do Tape Chart: rezerwacje i pokoje. Działa także gdy w bazie brak RateCode / rateCodeId (stary schemat). */
@@ -170,18 +174,42 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
   let groups: Array<{ id: string; name: string | null; _count: { reservations: number } }>;
 
   const propertyId = await getEffectivePropertyId();
+
+  const now = new Date();
+  const defaultFrom = new Date(now);
+  defaultFrom.setDate(defaultFrom.getDate() - 90);
+  const defaultTo = new Date(now);
+  defaultTo.setDate(defaultTo.getDate() + 400);
+
+  const dateFrom = options?.dateFrom ? new Date(options.dateFrom + "T00:00:00Z") : defaultFrom;
+  const dateTo = options?.dateTo ? new Date(options.dateTo + "T23:59:59Z") : defaultTo;
+
   const roomWhere = {
     activeForSale: true,
     ...(propertyId ? { propertyId } : {}),
     ...(filterByRoomIds ? { id: { in: roomIds! } } : {}),
   };
-  const reservationWhere = filterByRoomIds ? { roomId: { in: roomIds! } } : {};
-  const blockWhere = filterByRoomIds ? { roomId: { in: roomIds! } } : {};
+  const reservationWhere = {
+    ...(filterByRoomIds ? { roomId: { in: roomIds! } } : {}),
+    checkOut: { gte: dateFrom },
+    checkIn: { lte: dateTo },
+  };
+  const blockWhere = {
+    ...(filterByRoomIds ? { roomId: { in: roomIds! } } : {}),
+    endDate: { gte: dateFrom },
+    startDate: { lte: dateTo },
+  };
   try {
     const [resResult, roomResult, blockResult, groupResult] = await Promise.all([
       prisma.reservation.findMany({
         where: reservationWhere,
-        include: { guest: true, room: true, rateCode: true, group: true, parkingBookings: { include: { parkingSpot: true } } },
+        include: {
+          guest: { select: { name: true, isBlacklisted: true } },
+          room: { select: { number: true } },
+          rateCode: true,
+          group: true,
+          parkingBookings: { include: { parkingSpot: true } },
+        },
         orderBy: { checkIn: "asc" },
       }),
       prisma.room.findMany({
@@ -216,7 +244,12 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
       const [resResult, roomResult, blockResult, groupResult] = await Promise.all([
         prisma.reservation.findMany({
           where: reservationWhere,
-          include: { guest: true, room: true, group: true, parkingBookings: { include: { parkingSpot: true } } },
+          include: {
+            guest: { select: { name: true, isBlacklisted: true } },
+            room: { select: { number: true } },
+            group: true,
+            parkingBookings: { include: { parkingSpot: true } },
+          },
           orderBy: { checkIn: "asc" },
         }),
         prisma.room.findMany({
