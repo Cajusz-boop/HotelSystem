@@ -29,6 +29,14 @@ npm-debug.log*
 # POSNET bridge spool
 posnet-bridge/spool
 
+# Symplex bridge state and local config
+symplex-bridge/.sync-state.json
+symplex-bridge/.env
+symplex-bridge/sync.log
+symplex-bridge/run-sync.bat
+symplex-bridge/incoming
+symplex-bridge/processed
+
 # Manager agent state (manager.py)
 .manager_state.txt
 
