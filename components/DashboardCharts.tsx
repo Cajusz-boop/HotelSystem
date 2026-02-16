@@ -46,10 +46,10 @@ export function DashboardCharts({
             <LineChart data={occupancyData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} tickSuffix="%" />
+              <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
               <Tooltip
                 contentStyle={{ fontSize: 12 }}
-                formatter={(value: number) => [value, "Obłożenie %"]}
+                formatter={(value: number | undefined) => [value != null ? value : 0, "Obłożenie %"]}
                 labelFormatter={(label) => `Data: ${label}`}
               />
               <Legend />
@@ -71,7 +71,7 @@ export function DashboardCharts({
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip
                 contentStyle={{ fontSize: 12 }}
-                formatter={(value: number) => [`${value.toFixed(2)} PLN`, "Przychód"]}
+                formatter={(value: number | undefined) => [`${(value ?? 0).toFixed(2)} PLN`, "Przychód"]}
                 labelFormatter={(label) => `Data: ${label}`}
               />
               <Legend />

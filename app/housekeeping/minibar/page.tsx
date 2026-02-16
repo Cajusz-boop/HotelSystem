@@ -76,7 +76,7 @@ export default function MinibarPage() {
     <div className="flex flex-col gap-6 p-6 md:p-8">
       <div className="flex items-center gap-4">
         <Link href="/housekeeping" className="text-sm text-primary hover:underline">
-          ← Gospodarka
+          ← Housekeeping
         </Link>
         <h1 className="text-2xl font-semibold">Minibar – pozycje</h1>
       </div>

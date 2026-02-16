@@ -4,6 +4,12 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 
+/** Filtr dla auditLog.findMany – obiekt where */
+type AuditLogWhereInput = Record<string, unknown>;
+/** Filtr dla loginLog.findMany – obiekt where */
+type LoginLogWhereInput = Record<string, unknown>;
+type UserRow = { id: string; name: string };
+
 export type AuditTrailItem = {
   id: string;
   timestamp: Date;
@@ -32,7 +38,7 @@ export async function getAuditTrail(params: {
   if (!allowed) return { success: false, error: "Brak uprawnień do raportów" };
 
   const limit = Math.min(params.limit ?? 500, 2000);
-  const where: Parameters<typeof prisma.auditLog.findMany>[0]["where"] = {};
+  const where: AuditLogWhereInput = {};
 
   if (params.fromDate || params.toDate) {
     const ts: { gte?: Date; lte?: Date } = {};
@@ -55,7 +61,18 @@ export async function getAuditTrail(params: {
     take: limit,
   });
 
-  const userIds = [...new Set(logs.map((l) => l.userId).filter(Boolean))] as string[];
+  type AuditLogRow = {
+    id: string;
+    timestamp: Date;
+    userId: string | null;
+    actionType: string;
+    entityType: string;
+    entityId: string | null;
+    oldValue: unknown;
+    newValue: unknown;
+    ipAddress: string | null;
+  };
+  const userIds = [...new Set(logs.map((l: AuditLogRow) => l.userId).filter(Boolean))] as string[];
   const users =
     userIds.length > 0
       ? await prisma.user.findMany({
@@ -63,9 +80,9 @@ export async function getAuditTrail(params: {
           select: { id: true, name: true },
         })
       : [];
-  const userMap = new Map(users.map((u) => [u.id, u.name]));
+  const userMap = new Map((users as UserRow[]).map((u: UserRow) => [u.id, u.name]));
 
-  const data: AuditTrailItem[] = logs.map((l) => ({
+  const data: AuditTrailItem[] = (logs as AuditLogRow[]).map((l: AuditLogRow) => ({
     id: l.id,
     timestamp: l.timestamp,
     userId: l.userId,
@@ -94,7 +111,7 @@ export async function getAuditEntityTypes(): Promise<
     by: ["entityType"],
     orderBy: { entityType: "asc" },
   });
-  return { success: true, data: result.map((r) => r.entityType) };
+  return { success: true, data: result.map((r: { entityType: string }) => r.entityType) };
 }
 
 export type UserForReport = { id: string; name: string; email: string };
@@ -139,7 +156,7 @@ export async function getLoginReport(params: {
   if (!allowed) return { success: false, error: "Brak uprawnień do raportów" };
 
   const limit = Math.min(params.limit ?? 500, 2000);
-  const where: Parameters<typeof prisma.loginLog.findMany>[0]["where"] = {};
+  const where: LoginLogWhereInput = {};
 
   if (params.fromDate || params.toDate) {
     const loggedAt: { gte?: Date; lte?: Date } = {};
@@ -161,7 +178,8 @@ export async function getLoginReport(params: {
     take: limit,
   });
 
-  const userIds = [...new Set(logs.map((l) => l.userId).filter(Boolean))] as string[];
+  type LoginLogRow = { id: string; userId: string | null; email: string; loggedAt: Date; ipAddress: string | null; success: boolean };
+  const userIds = [...new Set(logs.map((l: LoginLogRow) => l.userId).filter(Boolean))] as string[];
   const users =
     userIds.length > 0
       ? await prisma.user.findMany({
@@ -169,9 +187,9 @@ export async function getLoginReport(params: {
           select: { id: true, name: true },
         })
       : [];
-  const userMap = new Map(users.map((u) => [u.id, u.name]));
+  const userMap = new Map((users as UserRow[]).map((u: UserRow) => [u.id, u.name]));
 
-  const data: LoginLogItem[] = logs.map((l) => ({
+  const data: LoginLogItem[] = (logs as LoginLogRow[]).map((l: LoginLogRow) => ({
     id: l.id,
     userId: l.userId,
     email: l.email,

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { getEffectivePropertyId } from "@/app/actions/properties";
 import { MiceGrafikClient } from "./mice-grafik-client";
 import { FrontOfficeError } from "@/app/front-office/front-office-error";
-import type { Reservation, ReservationGroupSummary, Room } from "@/lib/tape-chart-types";
+import type { Reservation, Room } from "@/lib/tape-chart-types";
 
 export const metadata = {
   title: "Grafik sal – MICE",

@@ -88,7 +88,7 @@ export default function CampingPage() {
     });
   };
 
-  useEffect(() => load(), [dateFrom, dateTo]);
+  useEffect(() => load(), [dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps -- load uses dateFrom/dateTo
 
   const handleCreateBooking = async (e: React.FormEvent) => {
     e.preventDefault();

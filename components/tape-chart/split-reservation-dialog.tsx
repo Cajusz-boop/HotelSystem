@@ -70,7 +70,7 @@ export function SplitReservationDialog({
       onSplit(result.data.first as Reservation, result.data.second as Reservation);
       onOpenChange(false);
     } else {
-      setError(result.success ? null : result.error ?? "Błąd");
+      setError("error" in result ? (result.error ?? "Błąd") : null);
     }
   };
 

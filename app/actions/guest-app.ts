@@ -15,7 +15,7 @@ export interface GuestAppReservation {
   nights: number;
   roomNumber: string;
   roomType: string;
-  roomFloor: number;
+  roomFloor: string | null;
   status: string;
   adults: number;
   children: number;
@@ -141,11 +141,14 @@ export async function getGuestAppData(
       const checkOutDate = new Date(r.checkOut);
       const nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
       
-      // Oblicz płatności
-      const totalAmount = Number(r.totalPrice || 0);
-      const paidAmount = r.transactions
-        .filter((t) => t.type === "PAYMENT" && t.status === "COMPLETED")
+      // Oblicz płatności (suma obciążeń ACTIVE = do zapłaty; płatności = ujemne kwoty lub type PAYMENT)
+      const charges = r.transactions
+        .filter((t) => t.status === "ACTIVE" && Number(t.amount) > 0)
         .reduce((sum, t) => sum + Number(t.amount), 0);
+      const paidAmount = r.transactions
+        .filter((t) => t.status === "ACTIVE" && Number(t.amount) < 0)
+        .reduce((sum, t) => sum + Math.abs(Number(t.amount)), 0);
+      const totalAmount = charges;
       
       // Klucz cyfrowy - sprawdź czy jest aktywny
       const digitalKey = r.digitalKeyCode as { code: string; validFrom: string; validTo: string } | null;
@@ -164,8 +167,8 @@ export async function getGuestAppData(
         roomType: r.room.type,
         roomFloor: r.room.floor,
         status: r.status,
-        adults: r.adults,
-        children: r.children,
+        adults: r.adults ?? 0,
+        children: r.children ?? 0,
         totalAmount,
         paidAmount,
         balanceDue: totalAmount - paidAmount,
@@ -323,7 +326,8 @@ export async function sendGuestMessage(
     }
     
     // Pobierz rezerwację (opcjonalnie)
-    let reservation = null;
+    type ReservationWithRoom = { guestId: string | null; room: { number: string } } | null;
+    let reservation: ReservationWithRoom = null;
     if (reservationId) {
       reservation = await prisma.reservation.findUnique({
         where: { id: reservationId },
@@ -347,7 +351,7 @@ export async function sendGuestMessage(
         guestId: tokenRecord.guestId,
         guestName: tokenRecord.guest.name,
         reservationId: reservationId || null,
-        roomNumber: reservation?.room.number ?? null,
+        roomNumber: reservation?.room?.number ?? null,
         category,
         message: message.slice(0, 1000),
         sentAt: new Date().toISOString(),

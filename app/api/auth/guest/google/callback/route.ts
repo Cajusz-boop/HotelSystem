@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       }),
     });
     if (!tokenRes.ok) {
-      const err = await tokenRes.text();
+      await tokenRes.text();
       return NextResponse.redirect(`${guestAppUrl}?error=token`);
     }
     const tokenData = (await tokenRes.json()) as { access_token?: string };

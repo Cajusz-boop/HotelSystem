@@ -36,7 +36,7 @@ export async function GET(
     });
 
     // Pobierz szablon faktury dla logo/danych sprzedawcy (jeśli używany)
-    let invoiceTemplate = await prisma.invoiceTemplate.findUnique({
+    const invoiceTemplate = await prisma.invoiceTemplate.findUnique({
       where: { templateType: "DEFAULT" },
     });
 
@@ -69,7 +69,7 @@ export async function GET(
     const nights = Math.ceil(
       (new Date(reservation.checkOut).getTime() - new Date(reservation.checkIn).getTime()) / (1000 * 60 * 60 * 24)
     );
-    const totalAmount = reservation.totalAmount ? Number(reservation.totalAmount).toFixed(2) : null;
+    const totalAmount = null; // Reservation nie ma totalAmount – można obliczyć z transakcji
 
     // Dane hotelu
     let hotelName = template.hotelName || HOTEL_NAME;

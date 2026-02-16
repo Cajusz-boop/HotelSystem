@@ -72,7 +72,7 @@ export function OwnerReservationForm({ properties }: { properties: Property[] })
       nextEnd.setDate(nextEnd.getDate() + 1);
       setEndDate(nextEnd.toISOString().slice(0, 10));
     } else {
-      toast.error(result.error ?? "Błąd tworzenia rezerwacji");
+      toast.error("error" in result ? (result.error ?? "Błąd tworzenia rezerwacji") : "Błąd tworzenia rezerwacji");
     }
   };
 

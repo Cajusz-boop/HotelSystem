@@ -15,6 +15,7 @@ import {
   type RoomBlockInput,
 } from "@/lib/validations/schemas";
 import type { RoomStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
@@ -38,35 +39,55 @@ function toUiRoom(r: {
   };
 }
 
-/** Cena efektywna na datę: RatePlan (jeśli data w okresie) → Room.price → RoomType.basePrice */
+/**
+ * Cena efektywna na datę: RatePlan (jeśli data w okresie) → Room.price → RoomType.basePrice.
+ * @param roomNumber - numer pokoju
+ * @param dateStr - data YYYY-MM-DD
+ * @returns cena (number) lub undefined gdy brak pokoju/nieprawidłowa data
+ */
 export async function getEffectivePriceForRoomOnDate(
   roomNumber: string,
   dateStr: string
 ): Promise<number | undefined> {
-  const date = new Date(dateStr + "T12:00:00Z");
+  if (!roomNumber?.trim() || !dateStr?.trim()) return undefined;
+  const date = new Date(dateStr.trim() + "T12:00:00Z");
   if (Number.isNaN(date.getTime())) return undefined;
-  const room = await prisma.room.findUnique({ where: { number: roomNumber } });
+  const room = await prisma.room.findUnique({ where: { number: roomNumber.trim() } });
   if (!room) return undefined;
-  const roomType = await prisma.roomType.findUnique({ where: { name: room.type } }).catch(() => null);
-  const ratePlan = await prisma.ratePlan.findFirst({
-    where: {
-      roomTypeId: roomType?.id ?? "",
-      validFrom: { lte: date },
-      validTo: { gte: date },
-    },
-    orderBy: { validFrom: "desc" },
-  }).catch(() => null);
+  let roomType: Awaited<ReturnType<typeof prisma.roomType.findUnique>> = null;
+  try {
+    roomType = await prisma.roomType.findUnique({ where: { name: room.type } });
+  } catch (error) {
+    console.error("[getEffectivePriceForRoom] roomType.findUnique error:", error instanceof Error ? error.message : String(error));
+  }
+  let ratePlan: Awaited<ReturnType<typeof prisma.ratePlan.findFirst>> = null;
+  try {
+    ratePlan = await prisma.ratePlan.findFirst({
+      where: {
+        roomTypeId: roomType?.id ?? "",
+        validFrom: { lte: date },
+        validTo: { gte: date },
+      },
+      orderBy: { validFrom: "desc" },
+    });
+  } catch (error) {
+    console.error("[getEffectivePriceForRoom] ratePlan.findFirst error:", error instanceof Error ? error.message : String(error));
+  }
   if (ratePlan?.price != null) return Number(ratePlan.price);
   if (room.price != null) return Number(room.price);
   if (roomType?.basePrice != null) return Number(roomType.basePrice);
   return undefined;
 }
 
-/** Batch: ceny efektywne na daty (klucz `${roomNumber}-${dateStr}`) */
+/**
+ * Batch: ceny efektywne na daty (klucz `${roomNumber}-${dateStr}`).
+ * @param requests - tablica { roomNumber, dateStr }
+ * @returns obiekt Record<key, price>
+ */
 export async function getEffectivePricesBatch(
   requests: { roomNumber: string; dateStr: string }[]
 ): Promise<Record<string, number>> {
-  if (requests.length === 0) return {};
+  if (!Array.isArray(requests) || requests.length === 0) return {};
   const result: Record<string, number> = {};
   const rooms = await prisma.room.findMany({
     where: { number: { in: Array.from(new Set(requests.map((r) => r.roomNumber))) } },
@@ -74,17 +95,27 @@ export async function getEffectivePricesBatch(
   });
   const roomByNumber = new Map(rooms.map((r) => [r.number, r]));
   const typeNames = Array.from(new Set(rooms.map((r) => r.type)));
-  const roomTypes = await prisma.roomType.findMany({
-    where: { name: { in: typeNames } },
-    select: { id: true, name: true, basePrice: true },
-  }).catch(() => []);
+  let roomTypes: Array<{ id: string; name: string; basePrice: Prisma.Decimal | null }> = [];
+  try {
+    roomTypes = await prisma.roomType.findMany({
+      where: { name: { in: typeNames } },
+      select: { id: true, name: true, basePrice: true },
+    });
+  } catch (error) {
+    console.error("[getEffectivePricesBatch] roomType.findMany error:", error instanceof Error ? error.message : String(error));
+  }
   const typeByName = new Map(roomTypes.map((t) => [t.name, t]));
-  const ratePlans = typeNames.length > 0
-    ? await prisma.ratePlan.findMany({
+  let ratePlans: Array<{ roomTypeId: string; validFrom: Date; validTo: Date; price: Prisma.Decimal }> = [];
+  if (typeNames.length > 0) {
+    try {
+      ratePlans = await prisma.ratePlan.findMany({
         where: { roomType: { name: { in: typeNames } } },
         select: { roomTypeId: true, validFrom: true, validTo: true, price: true },
-      }).catch(() => [])
-    : [];
+      });
+    } catch (error) {
+      console.error("[getEffectivePricesBatch] ratePlan.findMany error:", error instanceof Error ? error.message : String(error));
+    }
+  }
   for (const { roomNumber, dateStr } of requests) {
     const key = `${roomNumber}-${dateStr}`;
     const room = roomByNumber.get(roomNumber);
@@ -115,16 +146,26 @@ export async function getRatePlanInfoForRoomDate(
   if (Number.isNaN(date.getTime())) return { isNonRefundable: false };
   const room = await prisma.room.findUnique({ where: { number: roomNumber } });
   if (!room) return { isNonRefundable: false };
-  const roomType = await prisma.roomType.findUnique({ where: { name: room.type } }).catch(() => null);
+  let roomType: Awaited<ReturnType<typeof prisma.roomType.findUnique>> = null;
+  try {
+    roomType = await prisma.roomType.findUnique({ where: { name: room.type } });
+  } catch (error) {
+    console.error("[getRatePlanInfoForRoomDate] roomType.findUnique error:", error instanceof Error ? error.message : String(error));
+  }
   if (!roomType) return { isNonRefundable: false };
-  const plan = await prisma.ratePlan.findFirst({
-    where: {
-      roomTypeId: roomType.id,
-      validFrom: { lte: date },
-      validTo: { gte: date },
-    },
-    orderBy: { validFrom: "desc" },
-  }).catch(() => null);
+  let plan: Awaited<ReturnType<typeof prisma.ratePlan.findFirst>> = null;
+  try {
+    plan = await prisma.ratePlan.findFirst({
+      where: {
+        roomTypeId: roomType.id,
+        validFrom: { lte: date },
+        validTo: { gte: date },
+      },
+      orderBy: { validFrom: "desc" },
+    });
+  } catch (error) {
+    console.error("[getRatePlanInfoForRoomDate] ratePlan.findFirst error:", error instanceof Error ? error.message : String(error));
+  }
   return { isNonRefundable: plan?.isNonRefundable ?? false };
 }
 
@@ -138,10 +179,10 @@ export async function getRooms(): Promise<
         where: { activeForSale: true },
         orderBy: { number: "asc" },
       }),
-      prisma.roomType.findMany({ select: { name: true, basePrice: true } }).catch(() => []),
+      prisma.roomType.findMany({ select: { name: true, basePrice: true } }).catch(() => [] as { name: string; basePrice: unknown }[]),
     ]);
-    const typePrice = new Map(
-      roomTypes.map((t) => [t.name, t.basePrice != null ? Number(t.basePrice) : undefined])
+    const typePrice = new Map<string, number | undefined>(
+      roomTypes.map((t) => [t.name, t.basePrice != null ? Number(t.basePrice) : undefined] as [string, number | undefined])
     );
     return {
       success: true,
@@ -150,7 +191,7 @@ export async function getRooms(): Promise<
           r.price != null ? Number(r.price) : typePrice.get(r.type);
         return {
           ...toUiRoom(r),
-          price: effectivePrice ?? toUiRoom(r).price,
+          price: effectivePrice ?? undefined,
         };
       }),
     };
@@ -206,10 +247,10 @@ export async function getRoomsForManagement(): Promise<
         where: propertyId ? { propertyId } : {},
         orderBy: { number: "asc" },
       }),
-      prisma.roomType.findMany({ select: { name: true, basePrice: true } }).catch(() => []),
+      prisma.roomType.findMany({ select: { id: true, name: true, basePrice: true } }).catch(() => [] as { id: string; name: string; basePrice: unknown }[]),
     ]);
-    const typeData = new Map(
-      roomTypes.map((t) => [t.name, { basePrice: t.basePrice != null ? Number(t.basePrice) : null, id: t.id }])
+    const typeData = new Map<string, { basePrice: number | null; id: string }>(
+      roomTypes.map((t) => [t.name, { basePrice: t.basePrice != null ? Number(t.basePrice) : null, id: t.id }]) as [string, { basePrice: number | null; id: string }][]
     );
     return {
       success: true,
@@ -313,9 +354,26 @@ export async function createRoom(data: CreateRoomInput): Promise<
         number: created.number,
         type: created.type,
         status: created.status as string,
-        price: created.price != null ? Number(created.price) : typePrice != null ? Number(typePrice) : undefined,
+        price: created.price != null ? Number(created.price) : typePrice != null ? Number(typePrice) : null,
         reason: created.reason ?? undefined,
-        beds: created.beds ?? undefined,
+        beds: created.beds ?? 1,
+        bedTypes: [],
+        photos: [],
+        amenities: [],
+        inventory: [],
+        connectedRooms: [],
+        floor: created.floor ?? null,
+        building: created.building ?? null,
+        view: created.view ?? null,
+        exposure: created.exposure ?? null,
+        maxOccupancy: created.maxOccupancy ?? 2,
+        surfaceArea: created.surfaceArea != null ? Number(created.surfaceArea) : null,
+        description: created.description ?? null,
+        technicalNotes: created.technicalNotes ?? null,
+        nextServiceDate: created.nextServiceDate?.toISOString().slice(0, 10) ?? null,
+        nextServiceNote: created.nextServiceNote ?? null,
+        roomFeatures: (created.roomFeatures as string[] | null) ?? [],
+        roomTypeId: null,
         activeForSale: created.activeForSale,
       },
     };
@@ -1133,7 +1191,7 @@ export async function updateRoomPrice(roomId: string, price: number): Promise<Ac
     const prev = await prisma.room.findUnique({ where: { id: roomId } });
     if (!prev) return { success: false, error: "Pokój nie istnieje" };
 
-    const updated = await prisma.room.update({
+    await prisma.room.update({
       where: { id: roomId },
       data: { price },
     });
@@ -1292,7 +1350,7 @@ export async function updateRoom(
 
     const updated = await prisma.room.update({
       where: { id: roomId },
-      data: updateData,
+      data: updateData as Prisma.RoomUpdateInput,
     });
 
     // Pobierz RoomType ID na podstawie nazwy typu
@@ -1894,7 +1952,14 @@ export async function updateCleaningScheduleStatus(
     const updateData: { status: string; completedAt?: Date; completedBy?: string | null } = { status };
     if (status === "COMPLETED") {
       updateData.completedAt = new Date();
-      const session = completedBy ? null : await getSession().catch(() => null);
+      let session: Awaited<ReturnType<typeof getSession>> = null;
+      if (!completedBy) {
+        try {
+          session = await getSession();
+        } catch (error) {
+          console.error("[updateCleaningScheduleStatus] getSession error:", error instanceof Error ? error.message : String(error));
+        }
+      }
       updateData.completedBy = completedBy ?? session?.name ?? null;
     } else {
       updateData.completedAt = undefined;

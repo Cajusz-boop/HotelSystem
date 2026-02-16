@@ -1,5 +1,6 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
 export type ActionResult<T = void> =
@@ -35,7 +36,7 @@ export async function createGroupQuote(
         name: trimmedName,
         validUntil: validUntil ? new Date(validUntil + "T12:00:00Z") : null,
         totalAmount: totalAmount != null ? totalAmount : null,
-        items: items && items.length > 0 ? (items as object) : null,
+        items: (items && items.length > 0 ? items : Prisma.JsonNull) as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -72,7 +73,7 @@ export async function updateGroupQuote(
         name: trimmedName,
         validUntil: validUntil ? new Date(validUntil + "T12:00:00Z") : null,
         totalAmount: totalAmount != null ? totalAmount : null,
-        items: items && items.length > 0 ? (items as object) : null,
+        items: (items && items.length > 0 ? items : Prisma.JsonNull) as unknown as Prisma.InputJsonValue,
       },
     });
 
@@ -138,7 +139,7 @@ export async function createEventOrder(
         name: trimmedName,
         eventType: validType,
         quoteId: quoteId?.trim() || null,
-        roomIds: roomIds?.length ? roomIds : null,
+        roomIds: (roomIds?.length ? roomIds : Prisma.JsonNull) as unknown as Prisma.InputJsonValue,
         dateFrom: from,
         dateTo: to,
         status: validStatus,
@@ -195,7 +196,7 @@ export async function updateEventOrder(
         name: trimmedName,
         ...(validType ? { eventType: validType } : {}),
         quoteId: quoteId?.trim() || null,
-        roomIds: roomIds?.length ? roomIds : null,
+        roomIds: (roomIds?.length ? roomIds : Prisma.JsonNull) as unknown as Prisma.InputJsonValue,
         dateFrom: from,
         dateTo: to,
         status: validStatus,

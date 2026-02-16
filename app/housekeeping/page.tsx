@@ -19,7 +19,6 @@ import {
   getHousekeeperPerformanceReport,
   type HousekeepingRoom,
   type CleaningPriority,
-  type CleaningScheduleItem,
   type CleaningScheduleStatus,
 } from "@/app/actions/rooms";
 import { getEffectivePropertyId } from "@/app/actions/properties";
@@ -385,7 +384,7 @@ export default function HousekeepingPage() {
   if (isLoading) {
     return (
       <div className="flex flex-col gap-6 p-6 pl-[13rem]">
-        <h1 className="text-2xl font-semibold">Gospodarka</h1>
+        <h1 className="text-2xl font-semibold">Housekeeping</h1>
         <p className="text-muted-foreground">Ładowanie…</p>
         <p className="text-xs text-muted-foreground">(max 10 s – jeśli dłużej, pojawi się błąd i przycisk „Ponów”)</p>
       </div>
@@ -395,7 +394,7 @@ export default function HousekeepingPage() {
   if (isError && error) {
     return (
       <div className="flex flex-col gap-6 p-6 pl-[13rem]">
-        <h1 className="text-2xl font-semibold">Gospodarka</h1>
+        <h1 className="text-2xl font-semibold">Housekeeping</h1>
         <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4">
           <p className="mb-2 text-sm font-medium text-destructive">Błąd ładowania danych</p>
           <p className="mb-4 text-sm text-muted-foreground">{error instanceof Error ? error.message : "Nie udało się załadować listy pokoi."}</p>
@@ -410,7 +409,7 @@ export default function HousekeepingPage() {
   return (
     <div className="flex flex-col gap-6 p-6 md:p-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-semibold">Gospodarka</h1>
+        <h1 className="text-2xl font-semibold">Housekeeping</h1>
         <div className="flex items-center gap-2">
           {online ? (
             <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -494,7 +493,7 @@ export default function HousekeepingPage() {
                     setSyncing(false);
                     return;
                   }
-                  const serverByRoomId = new Map(res.data.map((r) => [r.id, r]));
+                  const _serverByRoomId = new Map(res.data.map((r) => [r.id, r]));
                   Promise.all(
                     pendingUpdates.map((p) =>
                       updateRoomStatus({
@@ -613,14 +612,14 @@ export default function HousekeepingPage() {
                           <span
                             className={cn(
                               "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-                              item.priority === "VIP" && "bg-amber-100 text-amber-800",
+                              item.priority === "VIP_ARRIVAL" && "bg-amber-100 text-amber-800",
                               item.priority === "DEPARTURE" && "bg-blue-100 text-blue-800",
-                              item.priority === "STAYOVER" && "bg-gray-100 text-gray-700"
+                              item.priority === "STAY_OVER" && "bg-gray-100 text-gray-700"
                             )}
                           >
-                            {item.priority === "VIP" && <Star className="h-3 w-3" />}
+                            {item.priority === "VIP_ARRIVAL" && <Star className="h-3 w-3" />}
                             {item.priority === "DEPARTURE" && <ArrowDownCircle className="h-3 w-3" />}
-                            {item.priority === "STAYOVER" && <MinusIcon className="h-3 w-3" />}
+                            {item.priority === "STAY_OVER" && <MinusIcon className="h-3 w-3" />}
                             {item.priority}
                           </span>
                         )}
@@ -1010,22 +1009,22 @@ export default function HousekeepingPage() {
               />
             </div>
             {/* Priorytet sprzątania */}
-            <div className="mb-3 flex items-center gap-2">
-              <span className="text-xs font-medium text-muted-foreground">Priorytet:</span>
-              <div className="flex gap-1">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground shrink-0">Priorytet:</span>
+              <div className="flex flex-wrap gap-1">
                 {PRIORITY_OPTIONS.map(({ value, label, icon: PriorityIcon, color }) => (
                   <Button
                     key={String(value)}
                     type="button"
                     size="sm"
                     variant={room.cleaningPriority === value || (!room.cleaningPriority && value === null) ? "default" : "ghost"}
-                    className={cn("h-7 px-2", room.cleaningPriority !== value && value !== null && color)}
+                    className={cn("h-7 px-2 shrink-0", room.cleaningPriority !== value && value !== null && color)}
                     onClick={() => handlePriorityChange(room.id, value)}
                     disabled={priorityMutation.isPending}
                     title={label}
                   >
                     <PriorityIcon className="h-3.5 w-3.5" />
-                    <span className="ml-1 text-xs hidden sm:inline">{label}</span>
+                    <span className="ml-1 text-xs">{label}</span>
                   </Button>
                 ))}
               </div>

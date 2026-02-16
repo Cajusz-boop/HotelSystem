@@ -13,14 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getHotelEvents, createHotelEvent, deleteHotelEvent } from "@/app/actions/hotel-events";
 import {
-  getHotelEvents,
-  createHotelEvent,
-  deleteHotelEvent,
   EVENT_TYPE_LABELS,
   type HotelEventEntry,
   type HotelEventType,
-} from "@/app/actions/hotel-events";
+} from "@/lib/hotel-events-types";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 
@@ -56,7 +54,7 @@ export default function WydarzeniaPage() {
       if (result.success && result.data) {
         setEvents(result.data);
       } else {
-        toast.error(result.error || "Błąd ładowania");
+        toast.error("error" in result ? (result.error ?? "Błąd ładowania") : "Błąd ładowania");
       }
     } finally {
       setLoading(false);
@@ -65,7 +63,7 @@ export default function WydarzeniaPage() {
 
   useEffect(() => {
     load();
-  }, [from, to]);
+  }, [from, to]); // eslint-disable-line react-hooks/exhaustive-deps -- load uses from/to
 
   const prevMonth = () => {
     if (month === 1) {
@@ -115,7 +113,7 @@ export default function WydarzeniaPage() {
         setFormOpen(false);
         setEvents((prev) => [...prev, result.data!].sort((a, b) => a.startDate.localeCompare(b.startDate)));
       } else {
-        toast.error(result.error || "Błąd zapisu");
+        toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
       }
     } finally {
       setSubmitting(false);
@@ -129,7 +127,7 @@ export default function WydarzeniaPage() {
       toast.success("Wydarzenie usunięte");
       setEvents((prev) => prev.filter((e) => e.id !== id));
     } else {
-      toast.error(result.error || "Błąd usunięcia");
+      toast.error("error" in result ? (result.error ?? "Błąd usunięcia") : "Błąd usunięcia");
     }
   };
 

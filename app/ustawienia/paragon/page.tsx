@@ -28,7 +28,7 @@ export default function ParagonPage() {
         setTemplate(result.data);
         setEdited({});
       } else {
-        toast.error(result.error || "Błąd ładowania szablonu");
+        toast.error("error" in result ? (result.error ?? "Błąd ładowania szablonu") : "Błąd ładowania szablonu");
       }
     } finally {
       setLoading(false);
@@ -70,7 +70,7 @@ export default function ParagonPage() {
         setTemplate(result.data);
         setEdited({});
       } else {
-        toast.error(result.error || "Błąd zapisu");
+        toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
       }
     } finally {
       setSaving(false);

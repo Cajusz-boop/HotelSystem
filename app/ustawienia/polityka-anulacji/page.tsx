@@ -30,7 +30,7 @@ export default function PolitykaAnulacjiPage() {
       if (result.success && result.data) {
         setTemplates(result.data);
       } else {
-        toast.error(result.error || "Błąd ładowania szablonów");
+        toast.error("error" in result ? (result.error ?? "Błąd ładowania szablonów") : "Błąd ładowania szablonów");
       }
     } finally {
       setLoading(false);
@@ -71,7 +71,7 @@ export default function PolitykaAnulacjiPage() {
       if (result.success) {
         toast.success("Szablony polityki anulacji zapisane");
       } else {
-        toast.error(result.error || "Błąd zapisu");
+        toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
       }
     } finally {
       setSaving(false);

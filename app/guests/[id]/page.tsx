@@ -25,9 +25,11 @@ export default async function GuestEditPage({
   return (
     <div className="p-6 max-w-2xl mx-auto">
       <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/front-office" className="hover:text-foreground">Recepcja</Link>
+        <Link href="/kontrahenci" className="hover:text-foreground">Kontrahenci</Link>
         <span>/</span>
-        <span>Edycja klienta</span>
+        <Link href="/kontrahenci?tab=goscie" className="hover:text-foreground">Goście</Link>
+        <span>/</span>
+        <span>Karta gościa</span>
       </div>
       <h1 className="text-2xl font-semibold mb-6">Karta gościa – {guest.name}</h1>
       <GuestCardClient guest={guest} history={history} />

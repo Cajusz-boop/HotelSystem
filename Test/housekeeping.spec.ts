@@ -49,6 +49,38 @@ test.describe("Housekeeping – widok mobilny / offline-first", () => {
     ).toBeVisible({ timeout: 5000 });
   });
 
+  test("HK-05: etykiety priorytetów nie są obcięte (overflow) – wszystkie widoczne", async ({
+    page,
+  }) => {
+    await expect(page.getByText(/Gospodarka/i).first()).toBeVisible({ timeout: 10000 });
+
+    const firstRoom = page.locator("text=Priorytet:").first();
+    if (!(await firstRoom.isVisible().catch(() => false))) {
+      test.skip(true, "Brak sekcji priorytetu na stronie");
+      return;
+    }
+
+    const priorityLabels = ["VIP przyjazd", "Wymeldowanie", "Przedłużenie", "Normalny", "Brak"];
+
+    for (const label of priorityLabels) {
+      const btn = page.getByRole("button", { name: label }).first();
+      await expect(
+        btn,
+        `Przycisk priorytetu "${label}" powinien być widoczny i nie obcięty`
+      ).toBeVisible({ timeout: 5000 });
+
+      const box = await btn.boundingBox();
+      expect(
+        box,
+        `Przycisk "${label}" musi mieć wymiary (nie może być schowany)`
+      ).not.toBeNull();
+      if (box) {
+        expect(box.width, `Przycisk "${label}" jest za wąski – tekst może być obcięty`).toBeGreaterThan(20);
+        expect(box.height, `Przycisk "${label}" jest za niski – tekst może być obcięty`).toBeGreaterThan(10);
+      }
+    }
+  });
+
   test("HK-06: Zgłoś usterkę – formularz (przyczyna) i przycisk Zgłoś usterkę", async ({
     page,
   }) => {

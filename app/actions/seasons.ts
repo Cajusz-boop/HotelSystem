@@ -84,7 +84,7 @@ export async function isDateInPeakSeason(dateStr: string): Promise<boolean> {
   const row = await prisma.hotelConfig.findUnique({ where: { id: "default" } });
   const raw = row?.seasons;
   if (!Array.isArray(raw)) return false;
-  const [y, m, d] = dateStr.split("-").map(Number);
+  const [_y, m, d] = dateStr.split("-").map(Number);
   if (!m || !d) return false;
   const mmdd = `${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   for (const e of raw) {

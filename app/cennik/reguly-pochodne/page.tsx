@@ -47,7 +47,7 @@ export default function RegulyPochodnePage() {
       setValue("");
       toast.success("Reguła dodana.");
     } else {
-      toast.error(r.error ?? "Błąd");
+      toast.error("error" in r ? (r.error ?? "Błąd") : "Błąd");
     }
   };
 

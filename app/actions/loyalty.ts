@@ -662,7 +662,7 @@ export async function addLoyaltyPoints(
     }
 
     // Pobierz konfigurację programu dla bonusu tier
-    const program = await prisma.loyaltyProgram.findUnique({
+    const _program = await prisma.loyaltyProgram.findUnique({
       where: { id: "default" },
     });
 

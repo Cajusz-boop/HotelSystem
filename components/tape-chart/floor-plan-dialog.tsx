@@ -122,7 +122,7 @@ export function FloorPlanDialog({
                   let statusLabel = ROOM_STATUS_LABELS[room.status] || room.status;
 
                   if (isOccupied) {
-                    const resColor =
+                    const _resColor =
                       statusBg?.["CHECKED_IN"] || RESERVATION_STATUS_BG["CHECKED_IN"];
                     bgColor = "";
                     borderColor = "border-green-500";

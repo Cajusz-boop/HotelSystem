@@ -36,7 +36,7 @@ export async function GET(
     });
 
     // Pobierz szablon faktury dla logo/danych sprzedawcy (jeśli używany)
-    let invoiceTemplate = await prisma.invoiceTemplate.findUnique({
+    const invoiceTemplate = await prisma.invoiceTemplate.findUnique({
       where: { templateType: "DEFAULT" },
     });
 
@@ -295,13 +295,13 @@ export async function GET(
     ${template.showIdField ? `
     <tr>
       <td class="label">Nr dowodu / paszportu</td>
-      <td class="value">${reservation.guest.idNumber ? escapeHtml(reservation.guest.idNumber) : `<span class="input-line"></span>`}</td>
+      <td class="value">${reservation.guest.documentNumber ? escapeHtml(reservation.guest.documentNumber) : `<span class="input-line"></span>`}</td>
     </tr>
     ` : ""}
     <tr>
       <td class="label">Adres</td>
       <td class="value">
-        ${reservation.guest.address ? escapeHtml(reservation.guest.address) : `<span class="input-line"></span>`}
+        ${[reservation.guest.street, reservation.guest.postalCode, reservation.guest.city, reservation.guest.country].filter(Boolean).join(", ") ? escapeHtml([reservation.guest.street, reservation.guest.postalCode, reservation.guest.city, reservation.guest.country].filter(Boolean).join(", ")) : `<span class="input-line"></span>`}
       </td>
     </tr>
     <tr>
@@ -329,7 +329,7 @@ export async function GET(
     ${template.showVehicleField ? `
     <tr>
       <td class="label">Nr rejestracyjny pojazdu</td>
-      <td class="value">${reservation.vehiclePlate ? escapeHtml(reservation.vehiclePlate) : `<span class="input-line"></span>`}</td>
+      <td class="value">${`<span class="input-line"></span>`}</td>
     </tr>
     ` : ""}
   </table>

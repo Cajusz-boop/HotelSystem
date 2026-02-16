@@ -63,7 +63,7 @@ export function MinibarAddDialog({
         onOpenChange(false);
         onSuccess?.();
       } else {
-        toast.error(result.error ?? "Błąd");
+        toast.error("error" in result ? (result.error ?? "Błąd") : "Błąd");
       }
     } finally {
       setSaving(false);
@@ -80,7 +80,7 @@ export function MinibarAddDialog({
           <p className="text-sm text-muted-foreground">Ładowanie…</p>
         ) : items.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Brak pozycji minibaru. Dodaj je w module Gospodarka / Minibar.
+            Brak pozycji minibaru. Dodaj je w module Housekeeping / Minibar.
           </p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">

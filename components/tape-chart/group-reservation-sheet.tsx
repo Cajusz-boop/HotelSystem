@@ -154,7 +154,7 @@ export function GroupReservationSheet({
     const result = await createGroupReservation(payload);
     setSaving(false);
     if (!result.success) {
-      setError(result.error ?? "Nie udało się utworzyć rezerwacji grupowej.");
+      setError("error" in result ? (result.error ?? "Nie udało się utworzyć rezerwacji grupowej.") : "Nie udało się utworzyć rezerwacji grupowej.");
       return;
     }
     toast.success("Rezerwacja grupowa utworzona.");

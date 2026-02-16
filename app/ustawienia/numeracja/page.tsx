@@ -55,7 +55,7 @@ export default function NumeracjaPage() {
       if (configsResult.success && configsResult.data) {
         setConfigs(configsResult.data);
       } else {
-        toast.error(configsResult.error || "Błąd ładowania konfiguracji");
+        toast.error("error" in configsResult ? (configsResult.error ?? "Błąd ładowania konfiguracji") : "Błąd ładowania konfiguracji");
       }
 
       if (countersResult.success && countersResult.data) {
@@ -117,7 +117,7 @@ export default function NumeracjaPage() {
           return newState;
         });
       } else {
-        toast.error(result.error || "Błąd zapisu");
+        toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
       }
     } finally {
       setSaving(null);

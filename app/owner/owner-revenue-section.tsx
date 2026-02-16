@@ -51,7 +51,7 @@ export function OwnerRevenueSection({ properties }: { properties: Property[] }) 
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- run once on mount
 
   return (
     <section className="mb-8 rounded-lg border bg-card p-6 shadow-sm">

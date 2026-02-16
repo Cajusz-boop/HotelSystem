@@ -15,11 +15,16 @@ const KSEF_VERIFY_PATH = "/web/verify";
 const KSEF_TEST_BASE = "https://ksef-test.mf.gov.pl";
 const KSEF_PROD_BASE = "https://ksef.mf.gov.pl";
 
+/** URL bramki KSeF (test lub prod). */
+export function getKsefBaseUrl(): string {
+  return getEffectiveKsefEnv() === "test" ? KSEF_TEST_BASE : KSEF_PROD_BASE;
+}
+
 /**
  * Generuje link weryfikacyjny do faktury na portalu KSeF.
  */
 export function getKsefVerifyUrl(ksefUuid: string): string {
   if (!ksefUuid?.trim()) return "";
-  const base = getEffectiveKsefEnv() === "test" ? KSEF_TEST_BASE : KSEF_PROD_BASE;
+  const base = getKsefBaseUrl();
   return `${base}${KSEF_VERIFY_PATH}/${encodeURIComponent(ksefUuid.trim())}`;
 }

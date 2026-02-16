@@ -3,31 +3,11 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { MEAL_TYPES, MEAL_PLAN_MEALS, type MealType } from "@/lib/meals-constants";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
   | { success: false; error: string };
-
-const MEAL_TYPES = ["BREAKFAST", "LUNCH", "DINNER"] as const;
-export type MealType = (typeof MEAL_TYPES)[number];
-
-const MEAL_PLAN_MEALS: Record<string, MealType[]> = {
-  RO: [],
-  BB: ["BREAKFAST"],
-  HB: ["BREAKFAST", "DINNER"],
-  FB: ["BREAKFAST", "LUNCH", "DINNER"],
-  AI: ["BREAKFAST", "LUNCH", "DINNER"],
-  BB_PLUS: ["BREAKFAST"],
-  HB_PLUS: ["BREAKFAST", "DINNER"],
-  FB_PLUS: ["BREAKFAST", "LUNCH", "DINNER"],
-  UAI: ["BREAKFAST", "LUNCH", "DINNER"],
-};
-
-const MEAL_LABELS: Record<string, string> = {
-  BREAKFAST: "Śniadanie",
-  LUNCH: "Obiad",
-  DINNER: "Kolacja",
-};
 
 /** Oczekiwana liczba posiłków wg planów wyżywienia – rezerwacje z checkIn<=date<checkOut, status CONFIRMED/CHECKED_IN. */
 export async function getExpectedMealsForDate(dateStr: string): Promise<
@@ -188,7 +168,7 @@ export async function getMealReport(dateStr: string): Promise<
       getExpectedMealsForDate(dateStr),
       getMealConsumptionsForDate(dateStr),
     ]);
-    if (!expRes.success || !expRes.data) return { success: false, error: expRes.error ?? "Błąd" };
+    if (!expRes.success || !expRes.data) return { success: false, error: "error" in expRes ? (expRes.error ?? "Błąd") : "Błąd" };
 
     const consumed = { breakfast: 0, lunch: 0, dinner: 0 };
     if (consRes.success && consRes.data) {
@@ -320,4 +300,3 @@ export async function getMealCountByDateReport(
   }
 }
 
-export { MEAL_LABELS, MEAL_TYPES, MEAL_PLAN_MEALS };

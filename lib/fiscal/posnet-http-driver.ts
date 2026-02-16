@@ -559,7 +559,7 @@ const posnetHttpDriver: FiscalDriver = {
       return {
         success: false,
         errorCode: "VALIDATION_ERROR",
-        errorMessage: "Numer oryginalnego paragonu jest wymagany",
+        error: "Numer oryginalnego paragonu jest wymagany",
       };
     }
 
@@ -567,7 +567,7 @@ const posnetHttpDriver: FiscalDriver = {
       return {
         success: false,
         errorCode: "VALIDATION_ERROR",
-        errorMessage: "Powód storna jest wymagany",
+        error: "Powód storna jest wymagany",
       };
     }
 
@@ -575,7 +575,7 @@ const posnetHttpDriver: FiscalDriver = {
       return {
         success: false,
         errorCode: "VALIDATION_ERROR",
-        errorMessage: "Kwota storna musi być większa od zera",
+        error: "Kwota storna musi być większa od zera",
       };
     }
 
@@ -598,7 +598,6 @@ const posnetHttpDriver: FiscalDriver = {
           reason: request.reason,
           amount: request.amount,
           items: processedItems,
-          operatorId: request.operatorId,
           operatorNote: request.operatorNote,
           model: model,
           protocolVersion: config.protocolVersion,
@@ -620,7 +619,7 @@ const posnetHttpDriver: FiscalDriver = {
         return {
           success: false,
           errorCode,
-          errorMessage: `[${config.displayName}] Storno: ${errorMessage}`,
+          error: `[${config.displayName}] Storno: ${errorMessage}`,
         };
       }
 
@@ -634,7 +633,6 @@ const posnetHttpDriver: FiscalDriver = {
         success: true,
         originalReceiptNumber: request.originalReceiptNumber,
         stornoAmount: request.amount,
-        stornoDate: new Date(),
       };
     } catch (e) {
       const msg =
@@ -643,7 +641,7 @@ const posnetHttpDriver: FiscalDriver = {
             ? `Timeout storna POSNET (${timeoutMs} ms) - model: ${config.displayName}`
             : e.message
           : "Błąd połączenia z POSNET bridge podczas storna";
-      return { success: false, errorMessage: msg };
+      return { success: false, error: msg };
     } finally {
       clearTimeout(timeout);
     }

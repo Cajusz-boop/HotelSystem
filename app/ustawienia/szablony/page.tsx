@@ -37,7 +37,7 @@ export default function SzablonyPage() {
         setTemplate(result.data);
         setEdited({});
       } else {
-        toast.error(result.error || "Błąd ładowania szablonu");
+        toast.error("error" in result ? (result.error ?? "Błąd ładowania szablonu") : "Błąd ładowania szablonu");
       }
     } finally {
       setLoading(false);
@@ -79,7 +79,7 @@ export default function SzablonyPage() {
         setTemplate(result.data);
         setEdited({});
       } else {
-        toast.error(result.error || "Błąd zapisu");
+        toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
       }
     } finally {
       setSaving(false);
@@ -129,7 +129,7 @@ export default function SzablonyPage() {
           return newEdited;
         });
       } else {
-        toast.error(result.error || "Błąd usuwania logo");
+        toast.error("error" in result ? (result.error ?? "Błąd usuwania logo") : "Błąd usuwania logo");
       }
     } finally {
       setSaving(false);
@@ -234,6 +234,7 @@ export default function SzablonyPage() {
               {logoPreviewSrc && (
                 <div className="border rounded-lg p-4 bg-white">
                   <p className="text-sm text-muted-foreground mb-2">Podgląd:</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- preview data URL */}
                   <img
                     src={logoPreviewSrc}
                     alt="Logo podgląd"

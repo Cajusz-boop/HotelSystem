@@ -1,7 +1,7 @@
 "use client";
 
 import { useDraggable } from "@dnd-kit/core";
-import { CheckCircle, Users, Star, CreditCard, MessageSquare } from "lucide-react";
+import { Users, Star } from "lucide-react";
 import type { Reservation } from "@/lib/tape-chart-types";
 import { RESERVATION_STATUS_COLORS, RESERVATION_STATUS_BG } from "@/lib/tape-chart-types";
 import { cn } from "@/lib/utils";
@@ -100,13 +100,22 @@ export function ReservationBar({
     data: { type: "reservation", reservation },
   });
 
+  const paymentEdgeColor =
+    reservation.paymentStatus === "PAID"
+      ? "rgb(22 163 74)"
+      : reservation.paymentStatus === "PARTIAL"
+        ? "rgb(234 179 8)"
+        : reservation.paymentStatus === "UNPAID"
+          ? "rgb(239 68 68)"
+          : undefined;
+
   return (
     <div
       ref={setNodeRef}
       data-testid="reservation-bar"
       data-reservation-id={reservation.id}
       className={cn(
-        "relative z-10 flex h-full min-h-[44px] flex-col justify-center gap-0.5 rounded-md px-2 py-1.5 text-xs text-white shadow-md overflow-hidden",
+        "relative z-10 flex h-full min-h-[28px] flex-col justify-center gap-0 rounded-md text-[11px] leading-tight text-white shadow-sm overflow-hidden",
         colorClass,
         isPlaceholder && "border-2 border-dashed opacity-80",
         isDragging && "z-50 cursor-grabbing opacity-90",
@@ -122,42 +131,32 @@ export function ReservationBar({
       {...listeners}
       {...attributes}
     >
-      <span className="min-w-0 truncate">
-        {reservation.vip && <Star className="inline-block h-3 w-3 mr-0.5 text-yellow-300 fill-yellow-300" aria-label="VIP" />}
-        {displayName}
-        {paxText}
-        {bedsText}
-        {timeText}
-      </span>
-      {priceText && <span className="truncate text-[10px] leading-tight opacity-95">{priceText}</span>}
-      {isGroupReservation && reservation.groupName && (
-        <span className="truncate text-[10px] leading-tight opacity-90 flex items-center gap-0.5">
-          <Users className="h-2.5 w-2.5 shrink-0" aria-hidden />
-          {reservation.groupName}
-        </span>
-      )}
-      {/* Payment status indicator */}
-      {reservation.paymentStatus && (
-        <span className={cn(
-          "absolute left-1.5 bottom-1.5 flex items-center gap-0.5 text-[9px] rounded px-1",
-          reservation.paymentStatus === "PAID" && "bg-green-600/80",
-          reservation.paymentStatus === "PARTIAL" && "bg-yellow-600/80",
-          reservation.paymentStatus === "UNPAID" && "bg-red-600/80"
-        )}>
-          <CreditCard className="h-2.5 w-2.5" aria-hidden />
-          {reservation.paymentStatus === "PAID" ? "Opł." : reservation.paymentStatus === "PARTIAL" ? "Częśc." : "Nieopł."}
-        </span>
-      )}
-      {/* Notes indicator */}
-      {reservation.notes && (
-        <MessageSquare 
-          className="absolute right-1.5 bottom-1.5 h-3 w-3 shrink-0 text-white/90" 
-          aria-label="Ma uwagi" 
-          title={`Uwagi: ${reservation.notes}`}
+      {/* Payment status edge indicator */}
+      {paymentEdgeColor && (
+        <div
+          className="absolute left-0 top-0 bottom-0 w-[3px]"
+          style={{ backgroundColor: paymentEdgeColor }}
+          aria-hidden
         />
       )}
-      {(reservation.status === "CHECKED_IN" || reservation.status === "CONFIRMED") && (
-        <CheckCircle className="absolute right-1.5 top-1/2 h-3 w-3 shrink-0 -translate-y-1/2 opacity-90" aria-hidden />
+      <div className={cn("flex flex-col justify-center gap-0 min-w-0", paymentEdgeColor ? "pl-2 pr-2 py-0.5" : "px-2 py-0.5")}>
+        <span className="min-w-0 truncate font-medium text-[11px] leading-none">
+          {reservation.vip && <Star className="inline-block h-2.5 w-2.5 mr-0.5 text-yellow-300 fill-yellow-300" aria-label="VIP" />}
+          {displayName}
+          <span className="font-normal opacity-80">
+            {paxText}
+            {bedsText}
+          </span>
+          {priceText && <span className="font-normal opacity-70 ml-1">{priceText}</span>}
+        </span>
+      </div>
+      {/* Notes indicator - compact dot */}
+      {reservation.notes && (
+        <span
+          title={`Uwagi: ${reservation.notes}`}
+          className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-white/70"
+          aria-label="Ma uwagi"
+        />
       )}
     </div>
   );

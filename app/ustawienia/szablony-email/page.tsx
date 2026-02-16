@@ -336,7 +336,7 @@ export default function SzablonyEmailPage() {
           <li>Użyj <code className="bg-muted px-1 rounded">{"{{nazwa}}"}</code> aby wstawić zmienną (np. {"{{guestName}}"} dla imienia gościa).</li>
           <li>Użyj <code className="bg-muted px-1 rounded">{"{{#zmienna}}...{{/zmienna}}"}</code> aby wyświetlić fragment tylko gdy zmienna istnieje.</li>
           <li>Nieaktywne szablony nie będą używane do wysyłki (system użyje domyślnych).</li>
-          <li>Przycisk "Przywróć domyślny" usuwa niestandardowe zmiany i przywraca oryginalny szablon.</li>
+          <li>Przycisk &quot;Przywróć domyślny&quot; usuwa niestandardowe zmiany i przywraca oryginalny szablon.</li>
         </ul>
       </div>
     </div>

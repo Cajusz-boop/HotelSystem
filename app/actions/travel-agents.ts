@@ -202,7 +202,7 @@ export async function getTravelAgentById(
           checkIn: r.checkIn,
           checkOut: r.checkOut,
           status: r.status,
-          totalAmount: r.totalAmount?.toNumber() ?? 0,
+          totalAmount: 0, // Reservation nie ma totalAmount – można obliczyć z transakcji
           agentCommission: r.agentCommission?.toNumber() ?? null,
         })),
       },
@@ -535,7 +535,7 @@ export async function getTravelAgentStats(): Promise<
           include: {
             _count: { select: { reservations: true } },
             reservations: {
-              select: { totalAmount: true, agentCommission: true },
+              select: { agentCommission: true },
             },
           },
           orderBy: { reservations: { _count: "desc" } },
@@ -614,7 +614,6 @@ export async function getTravelAgentBalance(
           select: {
             id: true,
             status: true,
-            totalAmount: true,
             agentCommission: true,
           },
         },
@@ -636,7 +635,7 @@ export async function getTravelAgentBalance(
     let totalCommission = 0;
 
     for (const res of agent.reservations) {
-      const amount = res.totalAmount?.toNumber() ?? 0;
+      const amount = 0; // Reservation nie ma totalAmount – można obliczyć z transakcji
       // Oblicz prowizję: jeśli jest podana na rezerwacji, użyj jej; w przeciwnym razie oblicz wg domyślnej stawki
       const commission =
         res.agentCommission?.toNumber() ??
@@ -647,7 +646,6 @@ export async function getTravelAgentBalance(
 
       switch (res.status) {
         case "CONFIRMED":
-        case "GUARANTEED":
           byStatus.confirmed.count++;
           byStatus.confirmed.revenue += amount;
           byStatus.confirmed.commission += commission;

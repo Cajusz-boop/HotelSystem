@@ -15,7 +15,8 @@ import {
   type GroupReservationInput,
   type SplitReservationInput,
 } from "@/lib/validations/schemas";
-import type { ReservationStatus, Prisma, RoomStatus } from "@prisma/client";
+import type { ReservationStatus, RoomStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { createOrUpdateCompany } from "@/app/actions/companies";
 import { getEffectivePropertyId } from "@/app/actions/properties";
 import {
@@ -104,23 +105,23 @@ function toUiReservation(r: {
   marketSegment?: string | null;
   tripPurpose?: string | null;
   mealPlan?: string | null;
-  roomPreferences?: Record<string, unknown> | null;
+  roomPreferences?: unknown;
   pax: number | null;
   adults?: number | null;
   children?: number | null;
-  childrenAges?: number[] | null;
-  petInfo?: Record<string, unknown> | null;
+  childrenAges?: unknown;
+  petInfo?: unknown;
   paymentStatus?: string | null;
-  securityDeposit?: Record<string, unknown> | null;
-  cardGuarantee?: Record<string, unknown> | null;
-  advancePayment?: Record<string, unknown> | null;
+  securityDeposit?: unknown;
+  cardGuarantee?: unknown;
+  advancePayment?: unknown;
   cancellationReason?: string | null;
   cancellationCode?: string | null;
   cancelledAt?: Date | null;
   cancelledBy?: string | null;
-  alerts?: Record<string, unknown> | null;
+  alerts?: unknown;
   agentId?: string | null;
-  agentData?: Record<string, unknown> | null;
+  agentData?: unknown;
   bedsBooked?: number | null;
   notes?: string | null;
   internalNotes?: string | null;
@@ -181,7 +182,11 @@ function toUiReservation(r: {
   };
 }
 
-/** Pobiera gościa po ID (karta gościa – edycja klienta). */
+/**
+ * Pobiera gościa po ID (karta gościa – edycja klienta).
+ * @param guestId - ID gościa
+ * @returns ActionResult z danymi gościa lub błędem
+ */
 export async function getGuestById(
   guestId: string
 ): Promise<
@@ -242,14 +247,22 @@ export async function getGuestById(
     gdprNotes: string | null;
   }>
 > {
+  if (!guestId || typeof guestId !== "string" || !guestId.trim()) {
+    return { success: false, error: "ID gościa jest wymagane" };
+  }
   try {
-    const session = await getSession().catch(() => null);
+    let session: Awaited<ReturnType<typeof getSession>> = null;
+    try {
+      session = await getSession();
+    } catch (error) {
+      console.error("[getGuestById] getSession error:", error instanceof Error ? error.message : String(error));
+    }
     if (session) {
       const allowed = await can(session.role, "module.guests");
       if (!allowed) return { success: false, error: "Brak uprawnień do przeglądania karty gościa" };
     }
     const guest = await prisma.guest.findUnique({
-      where: { id: guestId },
+      where: { id: guestId.trim() },
     });
     if (!guest)
       return { success: false, error: "Gość nie istnieje" };
@@ -320,7 +333,12 @@ export async function getGuestById(
   }
 }
 
-/** Szuka gości po imieniu/nazwisku lub MRZ (Gap 2.2 – wykrywanie duplikatów) */
+/**
+ * Szuka gości po imieniu/nazwisku lub MRZ (wykrywanie duplikatów).
+ * @param name - fragment imienia/nazwiska (min. 2 znaki)
+ * @param mrz - opcjonalnie MRZ (min. 5 znaków)
+ * @returns ActionResult z tablicą { id, name } (max 5 wyników)
+ */
 export async function findGuestByNameOrMrz(
   name: string,
   mrz?: string
@@ -360,13 +378,86 @@ export async function findGuestByNameOrMrz(
   }
 }
 
-/** Lista rezerwacji gościa (historia pobytów) – do kartoteki gościa */
+/** Wynik wyszukiwania gościa do formularza meldunkowego (autouzupełnianie) */
+export interface GuestCheckInSuggestion {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  dateOfBirth: string | null; // YYYY-MM-DD
+}
+
+/**
+ * Wyszukiwanie gości do autouzupełniania formularza meldunkowego.
+ * Szuka po imieniu/nazwisku, emailu lub numerze telefonu (min. 2 znaki).
+ * Można wpisywać w dowolne pole – wynik uzupełni resztę.
+ */
+export async function findGuestsForCheckIn(
+  query: string
+): Promise<ActionResult<GuestCheckInSuggestion[]>> {
+  try {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      return { success: true, data: [] };
+    }
+    const digitsOnly = trimmed.replace(/\D/g, "");
+    const hasDigits = digitsOnly.length >= 2;
+
+    const conditions: Prisma.GuestWhereInput[] = [
+      { name: { contains: trimmed } },
+      { email: { contains: trimmed } },
+      { phone: { contains: trimmed } },
+    ];
+    if (hasDigits) {
+      conditions.push({ phone: { contains: digitsOnly } });
+    }
+
+    const guests = await prisma.guest.findMany({
+      where: { OR: conditions, isBlacklisted: false },
+      take: 8,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        dateOfBirth: true,
+      },
+      orderBy: { name: "asc" },
+    });
+
+    const data: GuestCheckInSuggestion[] = guests.map((g) => ({
+      id: g.id,
+      name: g.name,
+      email: g.email ?? null,
+      phone: g.phone ?? null,
+      dateOfBirth: g.dateOfBirth
+        ? g.dateOfBirth.toISOString().slice(0, 10)
+        : null,
+    }));
+
+    return { success: true, data };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd wyszukiwania gościa",
+    };
+  }
+}
+
+/**
+ * Lista rezerwacji gościa (historia pobytów) – do kartoteki gościa.
+ * @param guestId - ID gościa
+ * @returns ActionResult z tablicą rezerwacji (toUiReservation)
+ */
 export async function getReservationsByGuestId(
   guestId: string
 ): Promise<ActionResult<ReturnType<typeof toUiReservation>[]>> {
+  if (!guestId || typeof guestId !== "string" || !guestId.trim()) {
+    return { success: false, error: "ID gościa jest wymagane" };
+  }
   try {
     const list = await prisma.reservation.findMany({
-      where: { guestId },
+      where: { guestId: guestId.trim() },
       orderBy: { checkIn: "desc" },
       include: {
         guest: true,
@@ -385,7 +476,11 @@ export async function getReservationsByGuestId(
   }
 }
 
-/** Tworzy nową rezerwację; zwraca pełny obiekt rezerwacji do dodania do Tape Chart */
+/**
+ * Tworzy nową rezerwację; zwraca pełny obiekt rezerwacji do dodania do Tape Chart.
+ * @param input - dane rezerwacji (walidowane przez reservationSchema)
+ * @returns ActionResult z toUiReservation lub błędem walidacji/zapisu
+ */
 export async function createReservation(
   input: ReservationInput
 ): Promise<ActionResult<ReturnType<typeof toUiReservation>>> {
@@ -399,21 +494,44 @@ export async function createReservation(
   const ip = getClientIp(headersList);
 
   try {
-    let guest = await prisma.guest.findFirst({ where: { name: data.guestName } });
+    const guestEmail = data.guestEmail?.trim() || null;
+    const guestPhone = data.guestPhone?.trim() || null;
+    const guestIdInput = data.guestId?.trim() || null;
+
+    let guest: { id: string; name: string; isBlacklisted: boolean } | null = null;
+
+    if (guestIdInput) {
+      guest = await prisma.guest.findUnique({
+        where: { id: guestIdInput },
+        select: { id: true, name: true, isBlacklisted: true },
+      });
+      if (!guest) {
+        return { success: false, error: "Wybrany gość nie istnieje w bazie. Wybierz innego lub wpisz dane nowego gościa." };
+      }
+    }
+
+    if (!guest) {
+      guest = await prisma.guest.findFirst({
+        where: { name: data.guestName },
+        select: { id: true, name: true, isBlacklisted: true },
+      });
+    }
+
     let guestMatched = false;
     if (!guest) {
       guest = await prisma.guest.create({
         data: {
           name: data.guestName,
+          ...(guestEmail ? { email: guestEmail } : {}),
+          ...(guestPhone ? { phone: guestPhone } : {}),
           ...(data.mrz != null && data.mrz !== "" ? { mrz: encrypt(data.mrz) } : {}),
-          ...(data.guestDateOfBirth != null && data.guestDateOfBirth !== "" 
-            ? { dateOfBirth: new Date(data.guestDateOfBirth) } 
+          ...(data.guestDateOfBirth != null && data.guestDateOfBirth !== ""
+            ? { dateOfBirth: new Date(data.guestDateOfBirth) }
             : {}),
         },
       });
     } else {
       guestMatched = true;
-      // Sprawdź, czy gość jest na czarnej liście
       if (guest.isBlacklisted) {
         return {
           success: false,
@@ -421,16 +539,18 @@ export async function createReservation(
         };
       }
 
-      // Aktualizuj dane gościa jeśli podano
-      const updateData: { mrz?: string; dateOfBirth?: Date } = {};
+      const updateData: { mrz?: string; dateOfBirth?: Date; email?: string | null; phone?: string | null } = {};
       if (data.mrz != null && data.mrz !== "") updateData.mrz = encrypt(data.mrz);
       if (data.guestDateOfBirth != null && data.guestDateOfBirth !== "") {
         updateData.dateOfBirth = new Date(data.guestDateOfBirth);
       }
+      if (guestEmail) updateData.email = guestEmail;
+      if (guestPhone) updateData.phone = guestPhone;
       if (Object.keys(updateData).length > 0) {
         guest = await prisma.guest.update({
           where: { id: guest.id },
           data: updateData,
+          select: { id: true, name: true, isBlacklisted: true },
         });
       }
     }
@@ -489,15 +609,25 @@ export async function createReservation(
       overbookingAllowed = true;
     }
     const nights = Math.round((checkOutDate.getTime() - checkInDate.getTime()) / (24 * 60 * 60 * 1000));
-    const roomType = await prisma.roomType.findUnique({ where: { name: room.type } }).catch(() => null);
+    let roomType: Awaited<ReturnType<typeof prisma.roomType.findUnique>> = null;
+    try {
+      roomType = await prisma.roomType.findUnique({ where: { name: room.type } });
+    } catch (error) {
+      console.error("[createReservation] roomType.findUnique error:", error instanceof Error ? error.message : String(error));
+    }
     if (roomType) {
-      const plan = await prisma.ratePlan.findFirst({
-        where: {
-          roomTypeId: roomType.id,
-          validFrom: { lte: checkInDate },
-          validTo: { gte: checkInDate },
-        },
-      }).catch(() => null);
+      let plan: Awaited<ReturnType<typeof prisma.ratePlan.findFirst>> = null;
+      try {
+        plan = await prisma.ratePlan.findFirst({
+          where: {
+            roomTypeId: roomType.id,
+            validFrom: { lte: checkInDate },
+            validTo: { gte: checkInDate },
+          },
+        });
+      } catch (error) {
+        console.error("[createReservation] ratePlan.findFirst error:", error instanceof Error ? error.message : String(error));
+      }
       if (plan) {
         if (plan.minStayNights != null && nights < plan.minStayNights) {
           return { success: false, error: `Min. długość pobytu dla tej stawki sezonowej: ${plan.minStayNights} nocy.` };
@@ -541,7 +671,7 @@ export async function createReservation(
         checkOutTime: data.checkOutTime?.trim() || null,
         eta: data.eta?.trim() || null,
         etd: data.etd?.trim() || null,
-        status: data.status,
+        status: data.status as ReservationStatus,
         source: data.source ?? null,
         channel: data.channel ?? null,
         marketSegment: data.marketSegment ?? null,
@@ -629,14 +759,22 @@ export async function createReservation(
   }
 }
 
-/** Ustawia / usuwa gościa z czarnej listy. */
+/**
+ * Ustawia lub usuwa gościa z czarnej listy.
+ * @param guestId - ID gościa
+ * @param isBlacklisted - true = na czarnej liście, false = zdjęcie z listy
+ * @returns ActionResult z isBlacklisted
+ */
 export async function updateGuestBlacklist(
   guestId: string,
   isBlacklisted: boolean
 ): Promise<ActionResult<{ isBlacklisted: boolean }>> {
+  if (!guestId || typeof guestId !== "string" || !guestId.trim()) {
+    return { success: false, error: "ID gościa jest wymagane" };
+  }
   try {
     await prisma.guest.update({
-      where: { id: guestId },
+      where: { id: guestId.trim() },
       data: { isBlacklisted },
     });
     return { success: true, data: { isBlacklisted } };
@@ -859,11 +997,11 @@ export async function anonymizeGuestData(
         documentExpiry: null,
         documentIssuedBy: null,
         mrz: null,
-        preferences: null,
-        mealPreferences: null,
+        preferences: Prisma.JsonNull,
+        mealPreferences: Prisma.JsonNull,
         healthAllergies: null,
         healthNotes: null,
-        favoriteMinibarItems: null,
+        favoriteMinibarItems: Prisma.JsonNull,
         staffNotes: null,
         // Zachowaj flagi lojalnościowe ale zresetuj dane
         loyaltyCardNumber: null,
@@ -1091,9 +1229,9 @@ export async function exportGuestData(
       })),
     };
 
-    // Audit log
+    // Audit log (READ not in Prisma enum – use UPDATE for export access)
     await createAuditLog({
-      actionType: "READ",
+      actionType: "UPDATE",
       entityType: "GuestDataExport",
       entityId: guestId,
       newValue: { exportedAt: exportData.exportDate },
@@ -1256,7 +1394,8 @@ export async function getGuestAutoFillData(
     const { guestId, name, mrz, email, phone } = options;
 
     // Znajdź gościa
-    let guest = null;
+    type GuestWithReservations = Awaited<ReturnType<typeof prisma.guest.findUnique<{ where: { id: string }; include: { reservations: { select: { id: true; checkIn: true; checkOut: true; pax: true; rateCodeId: true; mealPlan: true; roomPreferences: true; room: { select: { type: true; floor: true } } }; orderBy: { checkIn: "desc" }; take: 20 } } }>>>;
+    let guest: GuestWithReservations = null;
 
     if (guestId) {
       guest = await prisma.guest.findUnique({
@@ -1270,7 +1409,7 @@ export async function getGuestAutoFillData(
               pax: true,
               rateCodeId: true,
               mealPlan: true,
-              preferences: true,
+              roomPreferences: true,
               room: {
                 select: { type: true, floor: true },
               },
@@ -1312,7 +1451,7 @@ export async function getGuestAutoFillData(
                 pax: true,
                 rateCodeId: true,
                 mealPlan: true,
-                preferences: true,
+                roomPreferences: true,
                 room: {
                   select: { type: true, floor: true },
                 },
@@ -1375,7 +1514,7 @@ export async function getGuestAutoFillData(
       }
 
       // Bed type z preferencji
-      const prefs = res.preferences as Record<string, string> | null;
+      const prefs = res.roomPreferences as Record<string, string> | null;
       if (prefs?.bedType && !preferredBedType) {
         preferredBedType = prefs.bedType;
       }
@@ -1808,15 +1947,25 @@ export async function createGroupReservation(
         }
         const nights = Math.round((checkOutDate.getTime() - checkInDate.getTime()) / (24 * 60 * 60 * 1000));
 
-        const roomType = await trx.roomType.findUnique({ where: { name: room.type } }).catch(() => null);
+        let roomType: Awaited<ReturnType<typeof trx.roomType.findUnique>> = null;
+        try {
+          roomType = await trx.roomType.findUnique({ where: { name: room.type } });
+        } catch (error) {
+          console.error("[createGroupReservation] roomType.findUnique error:", error instanceof Error ? error.message : String(error));
+        }
         if (roomType) {
-          const plan = await trx.ratePlan.findFirst({
-            where: {
-              roomTypeId: roomType.id,
-              validFrom: { lte: checkInDate },
-              validTo: { gte: checkInDate },
-            },
-          }).catch(() => null);
+          let plan: Awaited<ReturnType<typeof trx.ratePlan.findFirst>> = null;
+          try {
+            plan = await trx.ratePlan.findFirst({
+              where: {
+                roomTypeId: roomType.id,
+                validFrom: { lte: checkInDate },
+                validTo: { gte: checkInDate },
+              },
+            });
+          } catch (error) {
+            console.error("[createGroupReservation] ratePlan.findFirst error:", error instanceof Error ? error.message : String(error));
+          }
           if (plan) {
             if (plan.minStayNights != null && nights < plan.minStayNights) {
               throw new Error(`Min. długość pobytu dla tej stawki: ${plan.minStayNights} nocy.`);
@@ -1837,7 +1986,7 @@ export async function createGroupReservation(
             roomId: room.id,
             checkIn: new Date(res.checkIn),
             checkOut: new Date(res.checkOut),
-            status: res.status,
+            status: res.status as ReservationStatus,
             source: res.source ?? null,
             channel: res.channel ?? null,
             marketSegment: res.marketSegment ?? null,
@@ -2106,16 +2255,17 @@ export async function updateReservation(
     if (input.eta !== undefined) data.eta = (input.eta === "" || input.eta == null) ? null : input.eta;
     if (input.etd !== undefined) data.etd = (input.etd === "" || input.etd == null) ? null : input.etd;
     if (input.status !== undefined) {
-      if (input.status === "" || (typeof input.status === "string" && !input.status.trim())) {
+      const statusStr = String(input.status ?? "").trim();
+      if (!statusStr) {
         return { success: false, error: "Wybierz status rezerwacji" };
       }
-      data.status = input.status;
+      data.status = input.status as ReservationStatus;
     }
-    if (input.source !== undefined) data.source = (input.source === "" || input.source == null) ? null : input.source;
-    if (input.channel !== undefined) data.channel = (input.channel === "" || input.channel == null) ? null : input.channel;
-    if (input.marketSegment !== undefined) data.marketSegment = (input.marketSegment === "" || input.marketSegment == null) ? null : input.marketSegment;
-    if (input.tripPurpose !== undefined) data.tripPurpose = (input.tripPurpose === "" || input.tripPurpose == null) ? null : input.tripPurpose;
-    if (input.mealPlan !== undefined) data.mealPlan = (input.mealPlan === "" || input.mealPlan == null) ? null : input.mealPlan;
+    if (input.source !== undefined) data.source = (input.source == null || String(input.source).trim() === "") ? null : input.source;
+    if (input.channel !== undefined) data.channel = (input.channel == null || String(input.channel).trim() === "") ? null : input.channel;
+    if (input.marketSegment !== undefined) data.marketSegment = (input.marketSegment == null || String(input.marketSegment).trim() === "") ? null : input.marketSegment;
+    if (input.tripPurpose !== undefined) data.tripPurpose = (input.tripPurpose == null || String(input.tripPurpose).trim() === "") ? null : input.tripPurpose;
+    if (input.mealPlan !== undefined) data.mealPlan = (input.mealPlan == null || String(input.mealPlan).trim() === "") ? null : input.mealPlan;
     if (input.roomPreferences !== undefined) data.roomPreferences = input.roomPreferences ?? null;
     if (input.pax !== undefined) data.pax = input.pax ?? null;
     if (input.adults !== undefined) data.adults = input.adults ?? null;
@@ -2224,21 +2374,36 @@ export async function updateReservation(
 
     const nights = Math.round((effCheckOut.getTime() - effCheckIn.getTime()) / (24 * 60 * 60 * 1000));
     const roomIdForPlan = data.roomId ?? prev.roomId;
-    const roomForPlan = await prisma.room.findUnique({
-      where: { id: roomIdForPlan },
-      select: { type: true },
-    }).catch(() => null);
-    const roomTypeForPlan = roomForPlan
-      ? await prisma.roomType.findUnique({ where: { name: roomForPlan.type } }).catch(() => null)
-      : null;
+    let roomForPlan: { type: string } | null = null;
+    try {
+      roomForPlan = await prisma.room.findUnique({
+        where: { id: roomIdForPlan },
+        select: { type: true },
+      });
+    } catch (error) {
+      console.error("[updateReservation] room.findUnique (for plan) error:", error instanceof Error ? error.message : String(error));
+    }
+    let roomTypeForPlan: Awaited<ReturnType<typeof prisma.roomType.findUnique>> = null;
+    if (roomForPlan) {
+      try {
+        roomTypeForPlan = await prisma.roomType.findUnique({ where: { name: roomForPlan.type } });
+      } catch (error) {
+        console.error("[updateReservation] roomType.findUnique error:", error instanceof Error ? error.message : String(error));
+      }
+    }
     if (roomTypeForPlan) {
-      const plan = await prisma.ratePlan.findFirst({
-        where: {
-          roomTypeId: roomTypeForPlan.id,
-          validFrom: { lte: effCheckIn },
-          validTo: { gte: effCheckIn },
-        },
-      }).catch(() => null);
+      let plan: Awaited<ReturnType<typeof prisma.ratePlan.findFirst>> = null;
+      try {
+        plan = await prisma.ratePlan.findFirst({
+          where: {
+            roomTypeId: roomTypeForPlan.id,
+            validFrom: { lte: effCheckIn },
+            validTo: { gte: effCheckIn },
+          },
+        });
+      } catch (error) {
+        console.error("[updateReservation] ratePlan.findFirst error:", error instanceof Error ? error.message : String(error));
+      }
       if (plan) {
         if (plan.minStayNights != null && nights < plan.minStayNights) {
           return { success: false, error: `Min. długość pobytu dla tej stawki sezonowej: ${plan.minStayNights} nocy.` };
@@ -2306,7 +2471,7 @@ export async function updateReservation(
 
     const updated = await prisma.reservation.update({
       where: { id: reservationId },
-      data,
+      data: data as Prisma.ReservationUpdateInput,
       include: { guest: true, room: true, rateCode: true },
     });
 
@@ -2529,6 +2694,50 @@ export async function updateReservationStatus(
     });
     if (!prev) return { success: false, error: "Rezerwacja nie istnieje" };
 
+    // Przy check-out: ostrzeżenie o nieopłaconych rachunkach z restauracji
+    if (status === "CHECKED_OUT" && prev.status !== "CHECKED_OUT") {
+      const unpaidCharges = await prisma.transaction.aggregate({
+        where: {
+          reservationId,
+          status: "ACTIVE",
+          OR: [
+            { category: "F_B" },
+            { type: { in: ["RESTAURANT", "GASTRONOMY", "POSTING"] } },
+          ],
+        },
+        _sum: { amount: true },
+        _count: true,
+      });
+      const restaurantTotal = Number(unpaidCharges._sum.amount ?? 0);
+      const restaurantCount = unpaidCharges._count ?? 0;
+      if (restaurantTotal > 0 && restaurantCount > 0) {
+        // Sprawdź czy jest wystarczająca ilość płatności na pokrycie
+        const payments = await prisma.transaction.aggregate({
+          where: {
+            reservationId,
+            status: "ACTIVE",
+            type: { in: ["PAYMENT", "DEPOSIT"] },
+          },
+          _sum: { amount: true },
+        });
+        const allCharges = await prisma.transaction.aggregate({
+          where: {
+            reservationId,
+            status: "ACTIVE",
+            type: { notIn: ["PAYMENT", "DEPOSIT", "VOID", "REFUND"] },
+          },
+          _sum: { amount: true },
+        });
+        const totalPaid = Number(payments._sum.amount ?? 0);
+        const totalOwed = Number(allCharges._sum.amount ?? 0);
+        if (totalOwed > totalPaid) {
+          console.warn(
+            `[checkout-warn] Rezerwacja ${reservationId}: nieopłacone rachunki restauracyjne: ${restaurantCount} szt., ${restaurantTotal.toFixed(2)} PLN. Saldo: ${(totalOwed - totalPaid).toFixed(2)} PLN do zapłaty.`
+          );
+        }
+      }
+    }
+
     const updated = await prisma.reservation.update({
       where: { id: reservationId },
       data: { status },
@@ -2637,14 +2846,22 @@ async function updateGuestStayStats(guestId: string, checkOutDate: Date): Promis
   }
 }
 
-/** Usuwa rezerwację. Gdy rezerwacja należała do grupy i była ostatnia – usuwa pustą grupę (spójność rooming list). */
+/**
+ * Usuwa rezerwację. Gdy rezerwacja należała do grupy i była ostatnia – usuwa pustą grupę.
+ * @param reservationId - ID rezerwacji
+ * @returns ActionResult
+ */
 export async function deleteReservation(reservationId: string): Promise<ActionResult> {
+  if (!reservationId || typeof reservationId !== "string" || !reservationId.trim()) {
+    return { success: false, error: "ID rezerwacji jest wymagane" };
+  }
   const headersList = await headers();
   const ip = getClientIp(headersList);
+  const id = reservationId.trim();
 
   try {
     const prev = await prisma.reservation.findUnique({
-      where: { id: reservationId },
+      where: { id },
       include: { guest: true, room: true },
     });
     if (!prev) return { success: false, error: "Rezerwacja nie istnieje" };
@@ -2652,7 +2869,7 @@ export async function deleteReservation(reservationId: string): Promise<ActionRe
     const oldUi = toUiReservation(prev);
     const groupIdToCheck = prev.groupId;
 
-    await prisma.reservation.delete({ where: { id: reservationId } });
+    await prisma.reservation.delete({ where: { id } });
 
     // Jeżeli rezerwacja należała do grupy – jeśli to była ostatnia, usuń pustą grupę
     if (groupIdToCheck) {
@@ -2660,14 +2877,18 @@ export async function deleteReservation(reservationId: string): Promise<ActionRe
         where: { groupId: groupIdToCheck },
       });
       if (remaining === 0) {
-        await prisma.reservationGroup.delete({ where: { id: groupIdToCheck } }).catch(() => {});
+        try {
+          await prisma.reservationGroup.delete({ where: { id: groupIdToCheck } });
+        } catch (error) {
+          console.error("[deleteReservation] reservationGroup.delete error:", error instanceof Error ? error.message : String(error));
+        }
       }
     }
 
     await createAuditLog({
       actionType: "DELETE",
       entityType: "Reservation",
-      entityId: reservationId,
+      entityId: id,
       oldValue: oldUi as unknown as Record<string, unknown>,
       newValue: null,
       ipAddress: ip,
@@ -2683,10 +2904,17 @@ export async function deleteReservation(reservationId: string): Promise<ActionRe
   }
 }
 
-/** Szuka rezerwacji po numerze potwierdzenia */
+/**
+ * Szuka rezerwacji po numerze potwierdzenia.
+ * @param confirmationNumber - numer potwierdzenia (min. 3 znaki)
+ * @returns ActionResult z rezerwacją lub null gdy brak
+ */
 export async function findReservationByConfirmationNumber(
   confirmationNumber: string
 ): Promise<ActionResult<ReturnType<typeof toUiReservation> | null>> {
+  if (!confirmationNumber || typeof confirmationNumber !== "string") {
+    return { success: true, data: null };
+  }
   try {
     const trimmed = confirmationNumber.trim().toUpperCase();
     if (trimmed.length < 3) {
@@ -3091,7 +3319,7 @@ export async function generateReservationVoucher(
       where: { id: reservationId },
       include: {
         guest: true,
-        room: { include: { roomType: true } },
+        room: true,
         rateCode: true,
         parkingBookings: { include: { parkingSpot: true } },
         company: true,
@@ -3166,7 +3394,7 @@ export async function generateReservationVoucher(
         nights,
         roomNumber: reservation.room.number,
         roomType: reservation.room.type,
-        roomDescription: reservation.room.roomType?.description ?? undefined,
+        roomDescription: reservation.room.description ?? undefined,
         pax: reservation.pax ?? undefined,
         adults: reservation.adults ?? undefined,
         children: reservation.children ?? undefined,
@@ -3238,7 +3466,7 @@ export async function generateReservationVoucherHTML(
   const voucherResult = await generateReservationVoucher(reservationId, options);
 
   if (!voucherResult.success || !voucherResult.data) {
-    return { success: false, error: voucherResult.error ?? "Błąd generowania vouchera" };
+    return { success: false, error: "error" in voucherResult ? (voucherResult.error ?? "Błąd generowania vouchera") : "Błąd generowania vouchera" };
   }
 
   const v = voucherResult.data;
@@ -3827,10 +4055,10 @@ export async function autoConfirmRequestReservations(
     const thresholdDate = new Date();
     thresholdDate.setHours(thresholdDate.getHours() - hoursThreshold);
 
-    // Znajdź rezerwacje REQUEST starsze niż próg
+    // Znajdź rezerwacje REQUEST starsze niż próg (w Prisma enum brak REQUEST – zapytanie zwróci [] jeśli brak takiego statusu)
     const requestReservations = await prisma.reservation.findMany({
       where: {
-        status: "REQUEST",
+        status: "REQUEST" as ReservationStatus,
         createdAt: {
           lte: thresholdDate,
         },
@@ -3869,7 +4097,7 @@ export async function autoConfirmRequestReservations(
         where: {
           id: { not: reservation.id },
           roomId: reservation.roomId,
-          status: { in: ["CONFIRMED", "GUARANTEED", "CHECKED_IN"] },
+          status: { in: ["CONFIRMED", "CHECKED_IN"] },
           OR: [
             {
               AND: [
@@ -3984,23 +4212,23 @@ export async function getRequestReservationsStats(): Promise<
     const threshold72h = new Date(now.getTime() - 72 * 60 * 60 * 1000);
 
     const [total, olderThan24h, olderThan48h, olderThan72h, byRoom, oldest] = await Promise.all([
-      prisma.reservation.count({ where: { status: "REQUEST" } }),
+      prisma.reservation.count({ where: { status: "REQUEST" as ReservationStatus } }),
       prisma.reservation.count({
-        where: { status: "REQUEST", createdAt: { lte: threshold24h } },
+        where: { status: "REQUEST" as ReservationStatus, createdAt: { lte: threshold24h } },
       }),
       prisma.reservation.count({
-        where: { status: "REQUEST", createdAt: { lte: threshold48h } },
+        where: { status: "REQUEST" as ReservationStatus, createdAt: { lte: threshold48h } },
       }),
       prisma.reservation.count({
-        where: { status: "REQUEST", createdAt: { lte: threshold72h } },
+        where: { status: "REQUEST" as ReservationStatus, createdAt: { lte: threshold72h } },
       }),
       prisma.reservation.groupBy({
         by: ["roomId"],
-        where: { status: "REQUEST" },
+        where: { status: "REQUEST" as ReservationStatus },
         _count: { id: true },
       }),
       prisma.reservation.findFirst({
-        where: { status: "REQUEST" },
+        where: { status: "REQUEST" as ReservationStatus },
         orderBy: { createdAt: "asc" },
         select: { createdAt: true },
       }),
@@ -4058,7 +4286,7 @@ export async function confirmAllRequestsForRoom(
     const requestReservations = await prisma.reservation.findMany({
       where: {
         roomId: room.id,
-        status: "REQUEST",
+        status: "REQUEST" as ReservationStatus,
         checkIn: { gte: new Date() },
       },
     });
@@ -4183,7 +4411,6 @@ export async function createWalkIn(
     // Pobierz pokój
     const room = await prisma.room.findUnique({
       where: { number: input.roomNumber },
-      include: { roomType: true },
     });
 
     if (!room) {
@@ -4220,7 +4447,7 @@ export async function createWalkIn(
     const conflictingReservation = await prisma.reservation.findFirst({
       where: {
         roomId: room.id,
-        status: { in: ["CONFIRMED", "GUARANTEED", "CHECKED_IN"] },
+        status: { in: ["CONFIRMED", "CHECKED_IN"] },
         OR: [
           {
             AND: [{ checkIn: { lte: checkIn } }, { checkOut: { gt: checkIn } }],
@@ -4272,7 +4499,7 @@ export async function createWalkIn(
     const confirmationNumber = await generateConfirmationNumber();
 
     // Pobierz kod stawki jeśli podany
-    let rateCode = null;
+    let rateCode: Awaited<ReturnType<typeof prisma.rateCode.findUnique>> = null;
     if (input.rateCodeId) {
       rateCode = await prisma.rateCode.findUnique({
         where: { id: input.rateCodeId },
@@ -4391,14 +4618,13 @@ export async function getAvailableRoomsForWalkIn(): Promise<
     // Pobierz wszystkie pokoje aktywne
     const allRooms = await prisma.room.findMany({
       where: { activeForSale: true },
-      include: { roomType: true },
       orderBy: [{ floor: "asc" }, { number: "asc" }],
     });
 
     // Pobierz zajęte pokoje dzisiaj
     const occupiedRoomIds = await prisma.reservation.findMany({
       where: {
-        status: { in: ["CONFIRMED", "GUARANTEED", "CHECKED_IN"] },
+        status: { in: ["CONFIRMED", "CHECKED_IN"] },
         checkIn: { lte: todayStart },
         checkOut: { gt: todayStart },
       },
@@ -4417,7 +4643,7 @@ export async function getAvailableRoomsForWalkIn(): Promise<
         floor: room.floor,
         beds: room.beds,
         maxOccupancy: room.maxOccupancy,
-        price: room.roomType?.basePrice ? Number(room.roomType.basePrice) : null,
+        price: room.price ? Number(room.price) : null,
       }));
 
     return { success: true, data: availableRooms };
@@ -4439,14 +4665,13 @@ export async function getWalkInSuggestedPrice(
   try {
     const room = await prisma.room.findUnique({
       where: { number: roomNumber },
-      include: { roomType: true },
     });
 
     if (!room) {
       return { success: false, error: "Pokój nie istnieje" };
     }
 
-    const basePrice = room.roomType?.basePrice ? Number(room.roomType.basePrice) : 0;
+    const basePrice = room.price ? Number(room.price) : 0;
 
     return {
       success: true,
@@ -4548,7 +4773,6 @@ export async function autoAssignRoom(
 
     const allRooms = await prisma.room.findMany({
       where: roomQuery,
-      include: { roomType: true },
     });
 
     if (allRooms.length === 0) {
@@ -4563,7 +4787,7 @@ export async function autoAssignRoom(
     // Pobierz zajęte pokoje w tym terminie
     const occupiedReservations = await prisma.reservation.findMany({
       where: {
-        status: { in: ["CONFIRMED", "GUARANTEED", "CHECKED_IN", "REQUEST"] },
+        status: { in: ["CONFIRMED", "CHECKED_IN"] },
         OR: [
           {
             AND: [{ checkIn: { lte: checkInDate } }, { checkOut: { gt: checkInDate } }],
@@ -4719,7 +4943,7 @@ export async function createReservationWithAutoAssign(
     if (!autoAssignResult.success || !autoAssignResult.data) {
       return {
         success: false,
-        error: autoAssignResult.error ?? "Nie udało się automatycznie przypisać pokoju",
+        error: "error" in autoAssignResult ? (autoAssignResult.error ?? "Nie udało się automatycznie przypisać pokoju") : "Nie udało się automatycznie przypisać pokoju",
       };
     }
 
@@ -4768,7 +4992,7 @@ export async function reassignRoomForReservation(
     if (!autoAssignResult.success || !autoAssignResult.data) {
       return {
         success: false,
-        error: autoAssignResult.error ?? "Nie udało się znaleźć alternatywnego pokoju",
+        error: "error" in autoAssignResult ? (autoAssignResult.error ?? "Nie udało się znaleźć alternatywnego pokoju") : "Nie udało się znaleźć alternatywnego pokoju",
       };
     }
 
@@ -5612,6 +5836,75 @@ export async function findAllDuplicateCandidates(
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd wyszukiwania duplikatów",
+    };
+  }
+}
+
+/**
+ * Sprawdza saldo rezerwacji przed check-outem.
+ * Zwraca informacje o nieopłaconych rachunkach restauracyjnych i ogólnym saldzie.
+ */
+export async function getCheckoutBalanceWarning(
+  reservationId: string
+): Promise<ActionResult<{
+  hasUnpaidBalance: boolean;
+  totalOwed: number;
+  totalPaid: number;
+  balance: number;
+  restaurantCharges: number;
+  restaurantCount: number;
+}>> {
+  try {
+    const charges = await prisma.transaction.aggregate({
+      where: {
+        reservationId,
+        status: "ACTIVE",
+        type: { notIn: ["PAYMENT", "DEPOSIT", "VOID", "REFUND"] },
+      },
+      _sum: { amount: true },
+    });
+    const payments = await prisma.transaction.aggregate({
+      where: {
+        reservationId,
+        status: "ACTIVE",
+        type: { in: ["PAYMENT", "DEPOSIT"] },
+      },
+      _sum: { amount: true },
+    });
+    const restaurant = await prisma.transaction.aggregate({
+      where: {
+        reservationId,
+        status: "ACTIVE",
+        OR: [
+          { category: "F_B" },
+          { type: { in: ["RESTAURANT", "GASTRONOMY", "POSTING"] } },
+        ],
+      },
+      _sum: { amount: true },
+      _count: true,
+    });
+
+    const totalOwed = Number(charges._sum.amount ?? 0);
+    const totalPaid = Number(payments._sum.amount ?? 0);
+    const balance = totalOwed - totalPaid;
+    const restaurantCharges = Number(restaurant._sum.amount ?? 0);
+    const restaurantCount = restaurant._count ?? 0;
+
+    return {
+      success: true,
+      data: {
+        hasUnpaidBalance: balance > 0,
+        totalOwed: Math.round(totalOwed * 100) / 100,
+        totalPaid: Math.round(totalPaid * 100) / 100,
+        balance: Math.round(balance * 100) / 100,
+        restaurantCharges: Math.round(restaurantCharges * 100) / 100,
+        restaurantCount,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd sprawdzania salda",
     };
   }
 }

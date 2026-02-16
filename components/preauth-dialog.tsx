@@ -54,7 +54,7 @@ export function PreauthDialog({
       setList((prev) => [{ id: r.data!.id, amount: r.data!.amount, status: r.data!.status, createdAt: new Date().toISOString() }, ...prev]);
       toast.success(`Blokada ${r.data.amount} PLN utworzona`);
     } else {
-      toast.error(r.error ?? "Błąd");
+      toast.error("error" in r ? (r.error ?? "Błąd") : "Błąd");
     }
   };
 
@@ -66,7 +66,7 @@ export function PreauthDialog({
       setList((prev) => prev.map((p) => (p.id === preauthId ? { ...p, status: "CAPTURED" } : p)));
       toast.success("Zaliczka pobrana z karty");
     } else {
-      toast.error(r.error ?? "Błąd");
+      toast.error("error" in r ? (r.error ?? "Błąd") : "Błąd");
     }
   };
 
@@ -78,7 +78,7 @@ export function PreauthDialog({
       setList((prev) => prev.map((p) => (p.id === preauthId ? { ...p, status: "RELEASED" } : p)));
       toast.success("Blokada zwolniona");
     } else {
-      toast.error(r.error ?? "Błąd");
+      toast.error("error" in r ? (r.error ?? "Błąd") : "Błąd");
     }
   };
 

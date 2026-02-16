@@ -12,7 +12,6 @@ import type {
   PeriodicReportRequest,
   PeriodicReportResult,
   PeriodicReportData,
-  PeriodicZReportEntry,
   FiscalStornoRequest,
   FiscalStornoResult,
 } from "./types";
@@ -25,7 +24,7 @@ let mockStornoCounter = 1;
 let mockReceiptCounter = 0;
 let mockTotalGross = 0;
 let mockTotalVat = 0;
-let mockStornoAmount = 0;
+let _mockStornoAmount = 0;
 
 /** Historia raportów Z (dla symulacji raportów okresowych) */
 interface MockZReportHistory {
@@ -309,7 +308,7 @@ const noOpDriver: FiscalDriver = {
       return {
         success: false,
         errorCode: "VALIDATION_ERROR",
-        errorMessage: "Numer oryginalnego paragonu jest wymagany",
+        error: "Numer oryginalnego paragonu jest wymagany",
       };
     }
 
@@ -318,7 +317,7 @@ const noOpDriver: FiscalDriver = {
       return {
         success: false,
         errorCode: "VALIDATION_ERROR",
-        errorMessage: "Powód storna jest wymagany",
+        error: "Powód storna jest wymagany",
       };
     }
 
@@ -327,7 +326,7 @@ const noOpDriver: FiscalDriver = {
       return {
         success: false,
         errorCode: "VALIDATION_ERROR",
-        errorMessage: "Kwota storna musi być większa od zera",
+        error: "Kwota storna musi być większa od zera",
       };
     }
 
@@ -348,7 +347,7 @@ const noOpDriver: FiscalDriver = {
         return {
           success: false,
           errorCode: "ALREADY_STORNOED",
-          errorMessage: `Paragon ${request.originalReceiptNumber} został już wcześniej stornowany`,
+          error: `Paragon ${request.originalReceiptNumber} został już wcześniej stornowany`,
         };
       }
 
@@ -357,7 +356,7 @@ const noOpDriver: FiscalDriver = {
         return {
           success: false,
           errorCode: "AMOUNT_EXCEEDED",
-          errorMessage: `Kwota storna (${request.amount.toFixed(2)} PLN) przekracza kwotę oryginalnego paragonu (${originalReceipt.amount.toFixed(2)} PLN)`,
+          error: `Kwota storna (${request.amount.toFixed(2)} PLN) przekracza kwotę oryginalnego paragonu (${originalReceipt.amount.toFixed(2)} PLN)`,
         };
       }
 
@@ -369,7 +368,7 @@ const noOpDriver: FiscalDriver = {
     const stornoNumber = `STORNO-${String(mockStornoCounter++).padStart(6, "0")}`;
 
     // Aktualizuj statystyki
-    mockStornoAmount += request.amount;
+    _mockStornoAmount += request.amount;
 
     // Mapowanie powodu storna na czytelny tekst
     const reasonDescriptions: Record<string, string> = {
@@ -396,7 +395,6 @@ const noOpDriver: FiscalDriver = {
       stornoNumber,
       stornoAmount: request.amount,
       originalReceiptNumber: request.originalReceiptNumber,
-      stornoDate: new Date(),
     };
   },
 };

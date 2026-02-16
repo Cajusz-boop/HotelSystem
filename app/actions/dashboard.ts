@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getEffectivePropertyId } from "@/app/actions/properties";
 import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { unstable_cache } from "next/cache";
 
 /** Maks. zakres dat raportu (dni) – unikanie timeoutu przy bardzo dużym zakresie (np. 2 lata). */
 const MAX_REPORT_DAYS = 366;
@@ -40,20 +41,18 @@ export interface DashboardData {
   todayCheckIns: ArrivalItem[];
 }
 
-/** Pobiera dane do Dashboardu: przyjazdy (dzisiaj/jutro), pokoje DIRTY, OOO */
-export async function getDashboardData(): Promise<DashboardData> {
-  const today = new Date();
+/** Wewnętrzna logika dashboardu (cacheable – parametry zamiast cookies). */
+async function _getDashboardDataInternal(propertyId: string | null, todayDateStr: string): Promise<DashboardData> {
+  const today = new Date(todayDateStr + "T00:00:00");
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const dayAfter = new Date(tomorrow);
   dayAfter.setDate(dayAfter.getDate() + 1);
   const todayStr = toDateOnly(today);
-  const tomorrowStr = toDateOnly(tomorrow);
   const startOfToday = new Date(today);
   startOfToday.setHours(0, 0, 0, 0);
 
-  const propertyId = await getEffectivePropertyId();
   const baseWhere = propertyId ? { propertyId } : {};
   const [arrivals, dirtyRooms, oooRooms] = await Promise.all([
     prisma.reservation.findMany({
@@ -119,6 +118,19 @@ export async function getDashboardData(): Promise<DashboardData> {
   };
 }
 
+const getCachedDashboardData = unstable_cache(
+  _getDashboardDataInternal,
+  ["dashboard-data"],
+  { revalidate: 60 }
+);
+
+/** Pobiera dane do Dashboardu: przyjazdy (dzisiaj/jutro), pokoje DIRTY, OOO */
+export async function getDashboardData(): Promise<DashboardData> {
+  const propertyId = await getEffectivePropertyId();
+  const todayStr = toDateOnly(new Date());
+  return getCachedDashboardData(propertyId, todayStr);
+}
+
 export interface KpiReport {
   from: string;
   to: string;
@@ -130,23 +142,18 @@ export interface KpiReport {
   revPar: number | null;
 }
 
-/** KPI dla okresu: Occupancy, ADR, RevPAR. Pokój dostępny = activeForSale. Sprzedane noce = rezerwacje CONFIRMED/CHECKED_IN/CHECKED_OUT. Przychód = transakcje ROOM w okresie. */
-export async function getKpiReport(
+/** Wewnętrzna logika KPI (cacheable). */
+async function _getKpiReportInternal(
   fromStr: string,
-  toStr: string
+  toStr: string,
+  propertyId: string | null
 ): Promise<{ success: true; data: KpiReport } | { success: false; error: string }> {
-  const session = await getSession();
-  if (session) {
-    const allowed = await can(session.role, "reports.kpi");
-    if (!allowed) return { success: false, error: "Brak uprawnień do raportu KPI" };
-  }
   try {
     const from = new Date(fromStr + "T00:00:00Z");
     const to = new Date(toStr + "T23:59:59.999Z");
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) {
       return { success: false, error: "Nieprawidłowy zakres dat" };
     }
-    const propertyId = await getEffectivePropertyId();
     const roomWhere = { activeForSale: true, ...(propertyId ? { propertyId } : {}) };
     const days = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000)));
     const roomCount = await prisma.room.count({ where: roomWhere });
@@ -214,6 +221,26 @@ export async function getKpiReport(
   }
 }
 
+const getCachedKpiReport = unstable_cache(
+  _getKpiReportInternal,
+  ["kpi-report"],
+  { revalidate: 60 }
+);
+
+/** KPI dla okresu: Occupancy, ADR, RevPAR. Pokój dostępny = activeForSale. Sprzedane noce = rezerwacje CONFIRMED/CHECKED_IN/CHECKED_OUT. Przychód = transakcje ROOM w okresie. */
+export async function getKpiReport(
+  fromStr: string,
+  toStr: string
+): Promise<{ success: true; data: KpiReport } | { success: false; error: string }> {
+  const session = await getSession();
+  if (session) {
+    const allowed = await can(session.role, "reports.kpi");
+    if (!allowed) return { success: false, error: "Brak uprawnień do raportu KPI" };
+  }
+  const propertyId = await getEffectivePropertyId();
+  return getCachedKpiReport(fromStr, toStr, propertyId);
+}
+
 export type OccupancyReportDay = {
   date: string;
   totalRooms: number;
@@ -228,16 +255,12 @@ export type OccupancyReport = {
   avgOccupancyPercent: number;
 };
 
-/** Raport obłożenia (Occupancy Report %): obłożenie dzienne w okresie. */
-export async function getOccupancyReport(
+/** Wewnętrzna logika raportu obłożenia (cacheable). */
+async function _getOccupancyReportInternal(
   fromStr: string,
-  toStr: string
+  toStr: string,
+  propertyId: string | null
 ): Promise<{ success: true; data: OccupancyReport } | { success: false; error: string }> {
-  const session = await getSession();
-  if (session) {
-    const allowed = await can(session.role, "reports.kpi");
-    if (!allowed) return { success: false, error: "Brak uprawnień do raportu obłożenia" };
-  }
   try {
     const from = new Date(fromStr + "T00:00:00Z");
     const to = new Date(toStr + "T23:59:59.999Z");
@@ -246,7 +269,6 @@ export async function getOccupancyReport(
     }
     const rangeErr = checkReportDateRange(from, to);
     if (rangeErr) return { success: false, error: rangeErr };
-    const propertyId = await getEffectivePropertyId();
     const roomWhere = { activeForSale: true, ...(propertyId ? { propertyId } : {}) };
     const rooms = await prisma.room.findMany({
       where: roomWhere,
@@ -304,6 +326,26 @@ export async function getOccupancyReport(
   }
 }
 
+const getCachedOccupancyReport = unstable_cache(
+  _getOccupancyReportInternal,
+  ["occupancy-report"],
+  { revalidate: 60 }
+);
+
+/** Raport obłożenia (Occupancy Report %): obłożenie dzienne w okresie. */
+export async function getOccupancyReport(
+  fromStr: string,
+  toStr: string
+): Promise<{ success: true; data: OccupancyReport } | { success: false; error: string }> {
+  const session = await getSession();
+  if (session) {
+    const allowed = await can(session.role, "reports.kpi");
+    if (!allowed) return { success: false, error: "Brak uprawnień do raportu obłożenia" };
+  }
+  const propertyId = await getEffectivePropertyId();
+  return getCachedOccupancyReport(fromStr, toStr, propertyId);
+}
+
 export type RevParReportDay = {
   date: string;
   totalRooms: number;
@@ -319,23 +361,18 @@ export type RevParReport = {
   avgRevPar: number;
 };
 
-/** Raport RevPAR (Revenue Per Available Room) – dzienny przychód z pokoi / liczba dostępnych pokoi. */
-export async function getRevParReport(
+/** Wewnętrzna logika raportu RevPAR (cacheable). */
+async function _getRevParReportInternal(
   fromStr: string,
-  toStr: string
+  toStr: string,
+  propertyId: string | null
 ): Promise<{ success: true; data: RevParReport } | { success: false; error: string }> {
-  const session = await getSession();
-  if (session) {
-    const allowed = await can(session.role, "reports.kpi");
-    if (!allowed) return { success: false, error: "Brak uprawnień do raportu RevPAR" };
-  }
   try {
     const from = new Date(fromStr + "T00:00:00Z");
     const to = new Date(toStr + "T23:59:59.999Z");
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) {
       return { success: false, error: "Nieprawidłowy zakres dat" };
     }
-    const propertyId = await getEffectivePropertyId();
     const roomWhere = { activeForSale: true, ...(propertyId ? { propertyId } : {}) };
     const totalRooms = await prisma.room.count({ where: roomWhere });
     if (totalRooms === 0) {
@@ -398,6 +435,26 @@ export async function getRevParReport(
       error: e instanceof Error ? e.message : "Błąd raportu RevPAR",
     };
   }
+}
+
+const getCachedRevParReport = unstable_cache(
+  _getRevParReportInternal,
+  ["revpar-report"],
+  { revalidate: 60 }
+);
+
+/** Raport RevPAR (Revenue Per Available Room) – dzienny przychód z pokoi / liczba dostępnych pokoi. */
+export async function getRevParReport(
+  fromStr: string,
+  toStr: string
+): Promise<{ success: true; data: RevParReport } | { success: false; error: string }> {
+  const session = await getSession();
+  if (session) {
+    const allowed = await can(session.role, "reports.kpi");
+    if (!allowed) return { success: false, error: "Brak uprawnień do raportu RevPAR" };
+  }
+  const propertyId = await getEffectivePropertyId();
+  return getCachedRevParReport(fromStr, toStr, propertyId);
 }
 
 export type AdrReportDay = {
@@ -582,25 +639,25 @@ export async function getRevenueBySegmentReport(
       return { success: false, error: "Nieprawidłowy zakres dat" };
     }
 
-    const transactions = await prisma.transaction.findMany({
+    const allTx = await prisma.transaction.findMany({
       where: {
         createdAt: { gte: from, lte: to },
         type: { not: "VOID" },
-        reservationId: { not: null },
       },
       select: { amount: true, reservationId: true },
     });
+    const transactions = allTx.filter((t) => t.reservationId != null);
 
     const reservationIds = [...new Set(transactions.map((t) => t.reservationId).filter(Boolean))] as string[];
     const reservations = await prisma.reservation.findMany({
       where: { id: { in: reservationIds } },
       select: { id: true, marketSegment: true },
     });
-    const segmentByRes = new Map(reservations.map((r) => [r.id, r.marketSegment ?? "—"]));
+    const segmentByRes = new Map<string, string>(reservations.map((r) => [r.id, (r.marketSegment ?? "—") as string]));
 
     const bySegment = new Map<string, { amount: number; reservations: Set<string> }>();
     for (const tx of transactions) {
-      const seg = tx.reservationId ? (segmentByRes.get(tx.reservationId) ?? "—") : "—";
+      const seg: string = tx.reservationId ? (segmentByRes.get(tx.reservationId) ?? "—") : "—";
       const cur = bySegment.get(seg) ?? { amount: 0, reservations: new Set<string>() };
       cur.amount += Number(tx.amount);
       if (tx.reservationId) cur.reservations.add(tx.reservationId);
@@ -657,25 +714,25 @@ export async function getRevenueByRoomTypeReport(
       return { success: false, error: "Nieprawidłowy zakres dat" };
     }
 
-    const transactions = await prisma.transaction.findMany({
+    const allTx = await prisma.transaction.findMany({
       where: {
         createdAt: { gte: from, lte: to },
         type: { not: "VOID" },
-        reservationId: { not: null },
       },
       select: { amount: true, reservationId: true },
     });
+    const transactions = allTx.filter((t) => t.reservationId != null);
 
     const reservationIds = [...new Set(transactions.map((t) => t.reservationId).filter(Boolean))] as string[];
     const reservations = await prisma.reservation.findMany({
       where: { id: { in: reservationIds } },
       select: { id: true, room: { select: { type: true } } },
     });
-    const roomTypeByRes = new Map(reservations.map((r) => [r.id, r.room?.type ?? "—"]));
+    const roomTypeByRes = new Map<string, string>(reservations.map((r) => [r.id, (r.room?.type ?? "—") as string]));
 
     const byRoomType = new Map<string, { amount: number; reservations: Set<string> }>();
     for (const tx of transactions) {
-      const rt = tx.reservationId ? (roomTypeByRes.get(tx.reservationId) ?? "—") : "—";
+      const rt: string = tx.reservationId ? (roomTypeByRes.get(tx.reservationId) ?? "—") : "—";
       const cur = byRoomType.get(rt) ?? { amount: 0, reservations: new Set<string>() };
       cur.amount += Number(tx.amount);
       if (tx.reservationId) cur.reservations.add(tx.reservationId);
@@ -732,25 +789,25 @@ export async function getRevenueBySourceReport(
       return { success: false, error: "Nieprawidłowy zakres dat" };
     }
 
-    const transactions = await prisma.transaction.findMany({
+    const allTx = await prisma.transaction.findMany({
       where: {
         createdAt: { gte: from, lte: to },
         type: { not: "VOID" },
-        reservationId: { not: null },
       },
       select: { amount: true, reservationId: true },
     });
+    const transactions = allTx.filter((t) => t.reservationId != null);
 
     const reservationIds = [...new Set(transactions.map((t) => t.reservationId).filter(Boolean))] as string[];
     const reservations = await prisma.reservation.findMany({
       where: { id: { in: reservationIds } },
       select: { id: true, source: true },
     });
-    const sourceByRes = new Map(reservations.map((r) => [r.id, r.source ?? "—"]));
+    const sourceByRes = new Map<string, string>(reservations.map((r) => [r.id, (r.source ?? "—") as string]));
 
     const bySource = new Map<string, { amount: number; reservations: Set<string> }>();
     for (const tx of transactions) {
-      const src = tx.reservationId ? (sourceByRes.get(tx.reservationId) ?? "—") : "—";
+      const src: string = tx.reservationId ? (sourceByRes.get(tx.reservationId) ?? "—") : "—";
       const cur = bySource.get(src) ?? { amount: 0, reservations: new Set<string>() };
       cur.amount += Number(tx.amount);
       if (tx.reservationId) cur.reservations.add(tx.reservationId);
@@ -807,25 +864,25 @@ export async function getRevenueByChannelReport(
       return { success: false, error: "Nieprawidłowy zakres dat" };
     }
 
-    const transactions = await prisma.transaction.findMany({
+    const allTx = await prisma.transaction.findMany({
       where: {
         createdAt: { gte: from, lte: to },
         type: { not: "VOID" },
-        reservationId: { not: null },
       },
       select: { amount: true, reservationId: true },
     });
+    const transactions = allTx.filter((t) => t.reservationId != null);
 
     const reservationIds = [...new Set(transactions.map((t) => t.reservationId).filter(Boolean))] as string[];
     const reservations = await prisma.reservation.findMany({
       where: { id: { in: reservationIds } },
       select: { id: true, channel: true },
     });
-    const channelByRes = new Map(reservations.map((r) => [r.id, r.channel ?? "—"]));
+    const channelByRes = new Map<string, string>(reservations.map((r) => [r.id, (r.channel ?? "—") as string]));
 
     const byChannel = new Map<string, { amount: number; reservations: Set<string> }>();
     for (const tx of transactions) {
-      const ch = tx.reservationId ? (channelByRes.get(tx.reservationId) ?? "—") : "—";
+      const ch: string = tx.reservationId ? (channelByRes.get(tx.reservationId) ?? "—") : "—";
       const cur = byChannel.get(ch) ?? { amount: 0, reservations: new Set<string>() };
       cur.amount += Number(tx.amount);
       if (tx.reservationId) cur.reservations.add(tx.reservationId);
@@ -882,25 +939,25 @@ export async function getRevenueByGuestSegmentReport(
       return { success: false, error: "Nieprawidłowy zakres dat" };
     }
 
-    const transactions = await prisma.transaction.findMany({
+    const allTx = await prisma.transaction.findMany({
       where: {
         createdAt: { gte: from, lte: to },
         type: { not: "VOID" },
-        reservationId: { not: null },
       },
       select: { amount: true, reservationId: true },
     });
+    const transactions = allTx.filter((t) => t.reservationId != null);
 
     const reservationIds = [...new Set(transactions.map((t) => t.reservationId).filter(Boolean))] as string[];
     const reservations = await prisma.reservation.findMany({
       where: { id: { in: reservationIds } },
       select: { id: true, guest: { select: { segment: true } } },
     });
-    const guestSegmentByRes = new Map(reservations.map((r) => [r.id, r.guest?.segment ?? "—"]));
+    const guestSegmentByRes = new Map<string, string>(reservations.map((r) => [r.id, (r.guest?.segment ?? "—") as string]));
 
     const byGuestSegment = new Map<string, { amount: number; reservations: Set<string> }>();
     for (const tx of transactions) {
-      const seg = tx.reservationId ? (guestSegmentByRes.get(tx.reservationId) ?? "—") : "—";
+      const seg: string = tx.reservationId ? (guestSegmentByRes.get(tx.reservationId) ?? "—") : "—";
       const cur = byGuestSegment.get(seg) ?? { amount: 0, reservations: new Set<string>() };
       cur.amount += Number(tx.amount);
       if (tx.reservationId) cur.reservations.add(tx.reservationId);
@@ -957,25 +1014,25 @@ export async function getRevenueByRateCodeReport(
       return { success: false, error: "Nieprawidłowy zakres dat" };
     }
 
-    const transactions = await prisma.transaction.findMany({
+    const allTx = await prisma.transaction.findMany({
       where: {
         createdAt: { gte: from, lte: to },
         type: { not: "VOID" },
-        reservationId: { not: null },
       },
       select: { amount: true, reservationId: true },
     });
+    const transactions = allTx.filter((t) => t.reservationId != null);
 
     const reservationIds = [...new Set(transactions.map((t) => t.reservationId).filter(Boolean))] as string[];
     const reservations = await prisma.reservation.findMany({
       where: { id: { in: reservationIds } },
       select: { id: true, rateCode: { select: { code: true } } },
     });
-    const rateCodeByRes = new Map(reservations.map((r) => [r.id, r.rateCode?.code ?? "—"]));
+    const rateCodeByRes = new Map<string, string>(reservations.map((r) => [r.id, (r.rateCode?.code ?? "—") as string]));
 
     const byRateCode = new Map<string, { amount: number; reservations: Set<string> }>();
     for (const tx of transactions) {
-      const rc = tx.reservationId ? (rateCodeByRes.get(tx.reservationId) ?? "—") : "—";
+      const rc: string = tx.reservationId ? (rateCodeByRes.get(tx.reservationId) ?? "—") : "—";
       const cur = byRateCode.get(rc) ?? { amount: 0, reservations: new Set<string>() };
       cur.amount += Number(tx.amount);
       if (tx.reservationId) cur.reservations.add(tx.reservationId);
@@ -1573,7 +1630,7 @@ export async function getReservationsPeriodReport(
       },
       _sum: { amount: true },
     });
-    const amountByRes = new Map(sums.map((s) => [s.reservationId!, Number(s._sum.amount ?? 0)]));
+    const amountByRes = new Map<string, number>(sums.map((s) => [s.reservationId!, Number(s._sum.amount ?? 0)]));
 
     const rows: ReservationsPeriodRow[] = reservations.map((r) => ({
       id: r.id,
@@ -1977,7 +2034,7 @@ export async function getYearOverYearReport(
       }),
     ]);
 
-    const dayMs = 24 * 60 * 60 * 1000;
+    const _dayMs = 24 * 60 * 60 * 1000;
     const roomIdsSet = new Set(roomIds);
     for (let m = 1; m <= 12; m++) {
       const key = `${year}-${String(m).padStart(2, "0")}`;

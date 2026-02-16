@@ -5,10 +5,8 @@ import {
   getTransferBookings,
   createTransferBooking,
   updateTransferBookingStatus,
-  TRANSFER_TYPES,
-  DIRECTIONS,
-  STATUSES,
 } from "@/app/actions/transfers";
+import { TRANSFER_TYPES, DIRECTIONS, STATUSES } from "@/lib/transfers-constants";
 import { getActiveReservationsForCharge } from "@/app/actions/spa";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

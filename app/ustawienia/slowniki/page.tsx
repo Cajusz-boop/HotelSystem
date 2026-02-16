@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   getReservationDictionaries,
   updateReservationDictionaries,
@@ -105,7 +104,7 @@ export default function SlownikiPage() {
       if (result.success && result.data) {
         setConfig(result.data);
       } else {
-        toast.error(result.error || "Błąd ładowania słowników");
+        toast.error("error" in result ? (result.error ?? "Błąd ładowania słowników") : "Błąd ładowania słowników");
       }
     } finally {
       setLoading(false);
@@ -131,7 +130,7 @@ export default function SlownikiPage() {
       if (result.success) {
         toast.success("Słowniki zapisane");
       } else {
-        toast.error(result.error || "Błąd zapisu");
+        toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
       }
     } finally {
       setSaving(false);

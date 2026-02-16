@@ -4,10 +4,11 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createReservation, findGuestByNameOrMrz } from "@/app/actions/reservations";
+import { createReservation, findGuestsForCheckIn, type GuestCheckInSuggestion } from "@/app/actions/reservations";
 import { getAvailableRoomsForDates } from "@/app/actions/rooms";
 import { lookupCompanyByNip, createOrUpdateCompany, type CompanyFromNip } from "@/app/actions/companies";
-import { getFormFieldsForForm, type CustomFormField } from "@/app/actions/hotel-config";
+import { getFormFieldsForForm } from "@/app/actions/hotel-config";
+import type { CustomFormField } from "@/lib/hotel-config-types";
 import { parseMRZ } from "@/lib/mrz";
 import { isValidNipChecksum } from "@/lib/nip-checksum";
 import { toast } from "sonner";
@@ -66,7 +67,9 @@ export function GuestCheckInForm() {
   const [room, setRoom] = useState("101");
   const [rooms, setRooms] = useState<Array<{ number: string; type: string; status: string }>>([]);
   const [uploadStatus, setUploadStatus] = useState<"idle" | "processing" | "done" | "error">("idle");
-  const [existingGuestMatch, setExistingGuestMatch] = useState<{ name: string } | null>(null);
+  const [guestSuggestions, setGuestSuggestions] = useState<GuestCheckInSuggestion[]>([]);
+  const [selectedGuest, setSelectedGuest] = useState<GuestCheckInSuggestion | null>(null);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [nipInput, setNipInput] = useState("");
   const [companyData, setCompanyData] = useState<CompanyFromNip | null>(null);
   const [nipLoading, setNipLoading] = useState(false);
@@ -74,6 +77,7 @@ export function GuestCheckInForm() {
   const [customFormFields, setCustomFormFields] = useState<CustomFormField[]>([]);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, string | number | boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const justSelectedRef = useRef(false);
 
   const loadAvailableRooms = useCallback(() => {
     getAvailableRoomsForDates(checkInStr, checkOutStr).then((r) => {
@@ -106,22 +110,42 @@ export function GuestCheckInForm() {
     });
   }, []);
 
+  /** Wyszukiwanie gości po imieniu, telefonie lub emailu – cross-field, min. 2 znaki */
   useEffect(() => {
-    if (!name.trim() && !mrz.trim()) {
-      setExistingGuestMatch(null);
+    if (justSelectedRef.current) {
+      justSelectedRef.current = false;
+      return;
+    }
+    const q = name.trim() || phone.trim() || email.trim();
+    if (q.length < 2) {
+      setGuestSuggestions([]);
+      setSuggestionsOpen(false);
       return;
     }
     const t = setTimeout(() => {
-      findGuestByNameOrMrz(name, mrz || undefined).then((res) => {
+      findGuestsForCheckIn(q).then((res) => {
         if (res.success && res.data?.length) {
-          setExistingGuestMatch({ name: res.data[0].name });
+          setGuestSuggestions(res.data);
+          setSuggestionsOpen(true);
         } else {
-          setExistingGuestMatch(null);
+          setGuestSuggestions([]);
+          setSuggestionsOpen(false);
         }
       });
-    }, 400);
+    }, 350);
     return () => clearTimeout(t);
-  }, [name, mrz]);
+  }, [name, phone, email]);
+
+  const selectGuest = useCallback((g: GuestCheckInSuggestion) => {
+    justSelectedRef.current = true;
+    setName(g.name);
+    setEmail(g.email ?? "");
+    setPhone(g.phone ?? "");
+    setDateOfBirth(g.dateOfBirth ?? "");
+    setSelectedGuest(g);
+    setGuestSuggestions([]);
+    setSuggestionsOpen(false);
+  }, []);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -237,8 +261,17 @@ export function GuestCheckInForm() {
       }
     });
 
+    const useSelectedGuest =
+      selectedGuest &&
+      name.trim() === selectedGuest.name &&
+      (email.trim() || "") === (selectedGuest.email ?? "") &&
+      (phone.trim() || "") === (selectedGuest.phone ?? "");
+
     const result = await createReservation({
       guestName: name.trim(),
+      ...(useSelectedGuest ? { guestId: selectedGuest.id } : {}),
+      guestEmail: email.trim() || undefined,
+      guestPhone: phone.trim() || undefined,
       room,
       checkIn: checkInStr,
       checkOut: checkOutStr,
@@ -266,6 +299,7 @@ export function GuestCheckInForm() {
       setPhone("");
       setDateOfBirth("");
       setMrz("");
+      setSelectedGuest(null);
       setCompanyData(null);
       setNipInput("");
       setCustomFieldValues((prev) => {
@@ -369,47 +403,70 @@ export function GuestCheckInForm() {
         )}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="name">Imię i nazwisko</Label>
-        <Input
-          id="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Nazwisko, Imię"
-          required
-          data-testid="check-in-guest-name"
-        />
-        {existingGuestMatch && (
-          <p
-            className="flex items-center gap-1 text-sm text-amber-600 dark:text-amber-500"
-            role="status"
-            data-testid="existing-guest-suggestion"
-          >
+      <div className="relative space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Wpisz imię, email lub telefon – pojawią się propozycje z bazy. Wybierz gościa, aby uzupełnić resztę pól.
+        </p>
+        <div className="space-y-2">
+          <Label htmlFor="name">Imię i nazwisko</Label>
+          <Input
+            id="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Nazwisko, Imię"
+            required
+            data-testid="check-in-guest-name"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="opcjonalnie – wpisz, aby wyszukać"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="phone">Telefon</Label>
+          <Input
+            id="phone"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="opcjonalnie – wpisz, aby wyszukać"
+          />
+        </div>
+        {selectedGuest && (
+          <p className="flex items-center gap-1 text-sm text-amber-600 dark:text-amber-500" role="status">
             <UserCheck className="h-4 w-4 shrink-0" />
-            Gość już w bazie: {existingGuestMatch.name} – rezerwacja zostanie powiązana z tym profilem.
+            Gość z bazy: {selectedGuest.name} – rezerwacja zostanie powiązana z tym profilem.
           </p>
         )}
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
-        <Input
-          id="email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="opcjonalnie"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="phone">Telefon</Label>
-        <Input
-          id="phone"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder="opcjonalnie"
-        />
+        {suggestionsOpen && guestSuggestions.length > 0 && (
+          <div
+            className="z-10 max-h-48 overflow-auto rounded-md border border-border bg-popover py-1 shadow-md"
+            data-testid="guest-suggestions-dropdown"
+            role="listbox"
+          >
+            {guestSuggestions.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                role="option"
+                className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                onClick={() => selectGuest(g)}
+              >
+                <span className="font-medium">{g.name}</span>
+                {(g.email || g.phone) && (
+                  <span className="text-xs text-muted-foreground">
+                    {[g.email, g.phone].filter(Boolean).join(" · ")}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">

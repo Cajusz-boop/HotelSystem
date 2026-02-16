@@ -62,7 +62,8 @@ export default function IntegracjePage() {
         toast.error(result.error);
         return;
       }
-      const { content, filename, apiSent } = result.data;
+      const { content, filename } = result.data;
+      const apiSent = "apiSent" in result.data ? result.data.apiSent : false;
       const mime =
         system === "optima" || system === "subiekt"
           ? "application/xml"

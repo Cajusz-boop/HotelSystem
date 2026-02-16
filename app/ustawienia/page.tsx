@@ -20,8 +20,8 @@ const settingsItems = [
   {
     href: "/ustawienia/uzytkownicy",
     icon: Users,
-    title: "Użytkownicy – limity rabatowe",
-    description: "Maksymalny rabat procentowy i kwotowy per użytkownik (np. max 10% lub 500 PLN)",
+    title: "Użytkownicy",
+    description: "Dodawaj, edytuj i usuwaj konta pracowników. Limity rabatowe i role (Recepcja, Manager, Housekeeping, Właściciel)",
   },
   {
     href: "/ustawienia/szablony-email",

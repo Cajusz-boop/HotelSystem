@@ -65,7 +65,7 @@ export function RoomBlockSheet({
     });
     setSaving(false);
     if (!result.success) {
-      setError(result.error ?? "Nie udało się dodać blokady.");
+      setError("error" in result ? (result.error ?? "Nie udało się dodać blokady.") : "Nie udało się dodać blokady.");
       return;
     }
     toast.success("Pokój zablokowany w wybranym okresie.");
@@ -85,7 +85,7 @@ export function RoomBlockSheet({
     const result = await deleteRoomBlock(deleteId);
     setSaving(false);
     if (!result.success) {
-      toast.error(result.error ?? "Nie udało się usunąć blokady.");
+      toast.error("error" in result ? (result.error ?? "Nie udało się usunąć blokady.") : "Nie udało się usunąć blokady.");
       return;
     }
     toast.success("Blokada usunięta.");

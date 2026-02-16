@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Key,
@@ -73,7 +72,7 @@ export default function GuestAppPage() {
   // Load data on mount
   useEffect(() => {
     loadData();
-  }, [token]);
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps -- loadData defined below, intentional mount + token
   
   const loadData = async () => {
     setLoading(true);
@@ -126,7 +125,7 @@ export default function GuestAppPage() {
     }
     
     setGeneratingKey(false);
-  }, [selectedReservation, token]);
+  }, [selectedReservation, token]); // eslint-disable-line react-hooks/exhaustive-deps -- loadData stable, no need in deps
   
   // Copy key to clipboard
   const copyKeyToClipboard = useCallback(() => {

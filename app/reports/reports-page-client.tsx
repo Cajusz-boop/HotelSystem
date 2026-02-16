@@ -66,7 +66,7 @@ export function ReportsPageClient({
   const [policeDate, setPoliceDate] = useState(formatDateForInput(new Date()));
 
   const [mealReportDate, setMealReportDate] = useState(formatDateForInput(new Date()));
-  const [mealReport, setMealReport] = useState<Awaited<ReturnType<typeof getMealReport>>["data"] | null>(null);
+  const [mealReport, setMealReport] = useState<Extract<Awaited<ReturnType<typeof getMealReport>>, { success: true }>["data"] | null>(null);
   const [mealReportLoading, setMealReportLoading] = useState(false);
 
   const [mealCountFrom, setMealCountFrom] = useState(() => formatDateForInput(thirtyDaysAgo()));

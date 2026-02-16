@@ -207,7 +207,7 @@ function parseResponse(response: Buffer): ParsedResponse {
 }
 
 /** Parsuje numer paragonu/faktury z odpowiedzi (np. "0;12345" lub "OK;12345"). */
-function parseReceiptNumber(response: Buffer): string | undefined {
+function _parseReceiptNumber(response: Buffer): string | undefined {
   const parsed = parseResponse(response);
   return parsed.receiptNumber;
 }
@@ -373,7 +373,7 @@ async function printInvoiceImpl(request: FiscalInvoiceRequest): Promise<FiscalIn
 /**
  * Drukuje raport X (niefiskalny) – informacyjny, nie zamyka dnia.
  */
-async function printXReportImpl(request?: FiscalReportRequest): Promise<FiscalReportResult> {
+async function printXReportImpl(_request?: FiscalReportRequest): Promise<FiscalReportResult> {
   if (!host || port <= 0) {
     return {
       success: false,
@@ -420,7 +420,7 @@ async function printXReportImpl(request?: FiscalReportRequest): Promise<FiscalRe
  * Drukuje raport Z (fiskalny) – zamyka dobę, zeruje liczniki.
  * UWAGA: Operacja nieodwracalna, wymagana prawem raz dziennie.
  */
-async function printZReportImpl(request?: FiscalReportRequest): Promise<FiscalReportResult> {
+async function printZReportImpl(_request?: FiscalReportRequest): Promise<FiscalReportResult> {
   if (!host || port <= 0) {
     return {
       success: false,
@@ -539,7 +539,7 @@ async function printStornoImpl(request: FiscalStornoRequest): Promise<FiscalStor
     return {
       success: false,
       errorCode: "CONFIG_ERROR",
-      errorMessage: "Skonfiguruj FISCAL_NOVITUS_HOST i FISCAL_NOVITUS_PORT",
+      error: "Skonfiguruj FISCAL_NOVITUS_HOST i FISCAL_NOVITUS_PORT",
     };
   }
 
@@ -548,7 +548,7 @@ async function printStornoImpl(request: FiscalStornoRequest): Promise<FiscalStor
     return {
       success: false,
       errorCode: "VALIDATION_ERROR",
-      errorMessage: "Numer oryginalnego paragonu jest wymagany",
+      error: "Numer oryginalnego paragonu jest wymagany",
     };
   }
 
@@ -556,7 +556,7 @@ async function printStornoImpl(request: FiscalStornoRequest): Promise<FiscalStor
     return {
       success: false,
       errorCode: "VALIDATION_ERROR",
-      errorMessage: "Powód storna jest wymagany",
+      error: "Powód storna jest wymagany",
     };
   }
 
@@ -564,7 +564,7 @@ async function printStornoImpl(request: FiscalStornoRequest): Promise<FiscalStor
     return {
       success: false,
       errorCode: "VALIDATION_ERROR",
-      errorMessage: "Kwota storna musi być większa od zera",
+      error: "Kwota storna musi być większa od zera",
     };
   }
 
@@ -600,13 +600,13 @@ async function printStornoImpl(request: FiscalStornoRequest): Promise<FiscalStor
             return {
               success: false,
               errorCode: "RECEIPT_NOT_FOUND",
-              errorMessage: `Nie znaleziono paragonu ${request.originalReceiptNumber} w pamięci drukarki`,
+              error: `Nie znaleziono paragonu ${request.originalReceiptNumber} w pamięci drukarki`,
             };
           }
           return {
             success: false,
             errorCode: openParsed.errorCode,
-            errorMessage: openParsed.errorMessage || "Błąd otwarcia dokumentu storna",
+            error: openParsed.errorMessage || "Błąd otwarcia dokumentu storna",
           };
         }
 
@@ -626,14 +626,14 @@ async function printStornoImpl(request: FiscalStornoRequest): Promise<FiscalStor
               return {
                 success: false,
                 errorCode: lineParsed.errorCode,
-                errorMessage: lineParsed.errorMessage || `Błąd pozycji storna: ${item.name}`,
+                error: lineParsed.errorMessage || `Błąd pozycji storna: ${item.name}`,
               };
             }
           }
         }
 
-        // Zamknięcie dokumentu storna z kwotą
-        const closeData = request.amount.toFixed(2);
+        // Zamknięcie dokumentu storna z kwotą (amount zwalidowane wyżej)
+        const closeData = (request.amount as number).toFixed(2);
         const closeResp = await sendFrame(socket, buildFrame(CMD_STORNO_CLOSE, closeData));
         const closeParsed = parseResponse(closeResp);
 
@@ -641,7 +641,7 @@ async function printStornoImpl(request: FiscalStornoRequest): Promise<FiscalStor
           return {
             success: false,
             errorCode: closeParsed.errorCode,
-            errorMessage: closeParsed.errorMessage || "Błąd zamknięcia dokumentu storna",
+            error: closeParsed.errorMessage || "Błąd zamknięcia dokumentu storna",
           };
         }
 
@@ -650,7 +650,6 @@ async function printStornoImpl(request: FiscalStornoRequest): Promise<FiscalStor
           stornoNumber: closeParsed.receiptNumber ? `NOV-S-${closeParsed.receiptNumber}` : undefined,
           originalReceiptNumber: request.originalReceiptNumber,
           stornoAmount: request.amount,
-          stornoDate: new Date(),
         };
       } finally {
         socket.destroy();
@@ -661,7 +660,7 @@ async function printStornoImpl(request: FiscalStornoRequest): Promise<FiscalStor
     return {
       success: false,
       errorCode: errorMessage.includes("timeout") ? "TIMEOUT" : "CONNECTION_ERROR",
-      errorMessage,
+      error: errorMessage,
     };
   }
 }

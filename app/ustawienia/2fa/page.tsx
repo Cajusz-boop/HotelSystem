@@ -115,6 +115,7 @@ export default function TwoFAPage() {
             Zeskanuj kod QR w aplikacji authenticator (Google Authenticator, Authy itp.) lub wpisz secret ręcznie.
           </p>
           <div className="flex justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element -- data URL from QR lib */}
             <img src={qrDataUrl} alt="QR kod 2FA" className="rounded border" />
           </div>
           <p className="text-xs text-muted-foreground font-mono break-all">
