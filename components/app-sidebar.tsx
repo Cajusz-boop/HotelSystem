@@ -325,7 +325,7 @@ function IconRail({
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 z-30 hidden h-screen flex-col border-r border-border bg-card md:flex",
+        "fixed left-0 top-0 z-30 hidden h-screen flex-col kw-sidebar md:flex",
         ICON_RAIL_WIDTH
       )}
     >
@@ -339,28 +339,25 @@ function IconRail({
               href={href}
               title={label}
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-lg transition-colors",
-                isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                "kw-sidebar-item flex h-9 w-9 items-center justify-center rounded-lg",
+                isActive && "active"
               )}
             >
               <Icon className="h-[18px] w-[18px]" />
             </Link>
           );
         })}
-        {/* "More" button to open full drawer */}
         <button
           type="button"
           onClick={onMoreClick}
           title={t("sidebar.moreMenu")}
-          className="mt-1 flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          className="kw-sidebar-item mt-1 flex h-9 w-9 items-center justify-center rounded-lg"
         >
           <MoreHorizontal className="h-[18px] w-[18px]" />
         </button>
       </nav>
-      <div className="flex flex-col items-center gap-1 border-t border-border py-2">
-        <ThemeToggle />
+      <div className="flex flex-col items-center gap-1 border-t border-white/10 py-2">
+        <ThemeToggle variant="sidebar" />
       </div>
     </aside>
   );
@@ -513,8 +510,6 @@ function SessionBlock({
   return (
     <div className="mt-auto border-t border-border pt-2">
       <div className="flex items-center gap-2 px-2 pb-1">
-        <ThemeToggle />
-        <span className="text-xs text-muted-foreground">{t("sidebar.theme")}</span>
         <LanguageSwitcher />
       </div>
       {session ? (
@@ -565,19 +560,18 @@ export function AppSidebar({
       <IconRail pathname={pathname} permissions={permissions} onMoreClick={openDrawer} />
 
       {/* Mobile: topbar with hamburger */}
-      <header className="fixed left-0 right-0 top-0 z-40 flex h-11 items-center justify-between gap-2 border-b border-border bg-card px-3 md:hidden">
+      <header className="fixed left-0 right-0 top-0 z-40 flex h-11 items-center justify-between gap-2 border-b border-border bg-card px-3 md:hidden" style={{ borderBottomColor: 'hsl(var(--kw-header-border))' }}>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Otwórz menu" onClick={openDrawer}>
             <Menu className="h-5 w-5" />
           </Button>
           <span className="text-sm font-semibold">Hotel PMS</span>
         </div>
-        <ThemeToggle />
       </header>
 
       {/* Drawer — shared between mobile hamburger and desktop "more" button */}
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent side="left" className="flex w-72 flex-col p-0">
+        <SheetContent side="left" className="flex w-72 flex-col p-0 border-r border-[hsl(var(--kw-header-border))]">
           <SheetHeader className="sr-only">
             <SheetTitle>Menu</SheetTitle>
           </SheetHeader>
