@@ -1,0 +1,50 @@
+---
+description: Jak naprawic lokalny serwer dev (Next.js) gdy zwraca bledy 500 lub nie odpowiada
+alwaysApply: true
+---
+
+# Naprawa lokalnego serwera deweloperskiego
+
+Gdy uzytkownik zglasza bledy 500, biala strone lub brak odpowiedzi na `localhost:3011`:
+
+## 1. Sprawdz czy serwer zyje
+
+```powershell
+netstat -ano | Select-String ":3011 " | Select-String "LISTENING"
+```
+
+- Jesli port zajety — sprawdz logi terminala, w ktorym uruchomiono `npm run dev`. Szukaj `uncaughtException`, `ECONNRESET`, `MODULE_NOT_FOUND`.
+- Jesli port wolny — serwer nie dziala, przejdz do kroku 3.
+
+## 2. Zabij stary proces jesli serwer jest martwy ale port zajety
+
+```powershell
+Stop-Process -Id <PID> -Force -ErrorAction SilentlyContinue
+```
+
+PID odczytaj z `netstat` (ostatnia kolumna).
+
+## 3. Uruchom serwer z czystym .next
+
+```powershell
+npm run dev:clean
+```
+
+To usuwa `.next` i startuje `next dev -p 3011`. Stary `.next` to najczestsza przyczyna bledow 500 — stale pliki webpack/vendor-chunks powoduja `MODULE_NOT_FOUND` lub niezgodnosc modulow.
+
+## 4. Poczekaj na kompilacje
+
+Pierwsza kompilacja po czystym starcie trwa 10-20 sekund. Nie panikuj jesli przegladarka nie odpowiada od razu — sprawdz logi terminala, czy widac `Compiled /front-office` i zapytania `prisma:query`.
+
+## Produkcja (MyDevil)
+
+Po deployu na MyDevil wystarczy restart:
+
+```bash
+devil www restart hotel.karczma-labedz.pl
+```
+
+Jesli po restarcie nadal 500:
+1. Usun stary `.next` na serwerze: `rm -rf ~/domains/hotel.karczma-labedz.pl/public_nodejs/.next`
+2. Wgraj ponownie ZIP ze standalone
+3. Sprawdz czy SQL z nowymi kolumnami zostal wykonany
