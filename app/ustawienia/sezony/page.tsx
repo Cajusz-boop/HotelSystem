@@ -32,7 +32,7 @@ export default function SezonyPage() {
       if (result.success && result.data) {
         setSeasons(result.data);
       } else {
-        toast.error(result.error || "Błąd ładowania sezonów");
+        toast.error("error" in result ? (result.error ?? "Błąd ładowania sezonów") : "Błąd ładowania sezonów");
       }
     } finally {
       setLoading(false);
@@ -73,7 +73,7 @@ export default function SezonyPage() {
       if (result.success) {
         toast.success("Sezony zapisane");
       } else {
-        toast.error(result.error || "Błąd zapisu");
+        toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
       }
     } finally {
       setSaving(false);

@@ -131,7 +131,7 @@ export default function BiuraPodrozyPage() {
       activeOnly,
     });
     setLoading(false);
-    if (res.success) {
+    if (res.success && res.data) {
       setAgents(res.data.agents);
       setTotal(res.data.total);
     } else {
@@ -152,7 +152,7 @@ export default function BiuraPodrozyPage() {
     setStatsLoading(true);
     const res = await getTravelAgentStats();
     setStatsLoading(false);
-    if (res.success) {
+    if (res.success && res.data) {
       setStats(res.data);
     }
   }, []);
@@ -266,7 +266,7 @@ export default function BiuraPodrozyPage() {
     const res = await getTravelAgentById(agentId);
     setDetailsLoading(false);
 
-    if (res.success) {
+    if (res.success && res.data) {
       const agent = res.data;
       setSelectedAgent(agent);
       setEditCode(agent.code);
@@ -297,7 +297,7 @@ export default function BiuraPodrozyPage() {
       setAgentBalance(null);
       const balanceRes = await getTravelAgentBalance(agentId);
       setBalanceLoading(false);
-      if (balanceRes.success) {
+      if (balanceRes.success && balanceRes.data) {
         setAgentBalance(balanceRes.data);
       }
     } else {

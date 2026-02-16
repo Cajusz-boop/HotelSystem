@@ -33,7 +33,7 @@ export async function findOrCreateGuestByOAuth(
           email: trimmedEmail,
           photoUrl: pictureUrl?.trim() || null,
         },
-        select: { id: true, name: true, email: true },
+        select: { id: true, name: true, email: true, photoUrl: true },
       });
     } else if (pictureUrl?.trim() && !guest.photoUrl) {
       await prisma.guest.update({

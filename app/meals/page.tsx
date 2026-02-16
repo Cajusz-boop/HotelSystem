@@ -7,8 +7,8 @@ import {
   getReservationsWithMealPlanForDate,
   getMealConsumptionsForDate,
   recordMealConsumption,
-  MEAL_PLAN_MEALS,
 } from "@/app/actions/meals";
+import { MEAL_PLAN_MEALS } from "@/lib/meals-constants";
 import { chargeMealConsumptionsToReservation } from "@/app/actions/finance";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,7 +46,7 @@ export default function MealsPage() {
     });
   };
 
-  useEffect(() => loadData(), [dateStr]);
+  useEffect(() => loadData(), [dateStr]); // eslint-disable-line react-hooks/exhaustive-deps -- loadData uses dateStr
 
   const handleRecord = async (reservationId: string, mealType: string, paxCount: number) => {
     const r = await recordMealConsumption(reservationId, dateStr, mealType as "BREAKFAST" | "LUNCH" | "DINNER", paxCount);

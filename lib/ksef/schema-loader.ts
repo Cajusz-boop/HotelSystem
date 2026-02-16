@@ -9,7 +9,7 @@ import * as path from "path";
 
 const SCHEMA_DIR = path.join(__dirname, "schemas");
 const FA2_FILENAME = "FA_2.xsd";
-const DEFAULT_XSD_URL = "https://www.gov.pl/web/kas/ksef-pliki-do-pobrania";
+const _DEFAULT_XSD_URL = "https://www.gov.pl/web/kas/ksef-pliki-do-pobrania";
 
 export function getFa2XsdPath(): string {
   return path.join(SCHEMA_DIR, FA2_FILENAME);

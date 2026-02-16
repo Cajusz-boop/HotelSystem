@@ -61,11 +61,9 @@ export async function searchKioskReservation(
           lt: dayAfterTomorrow,
         },
         OR: [
-          { guest: { lastName: { contains: searchTerm, } } },
-          { guest: { firstName: { contains: searchTerm, } } },
-          { guest: { name: { contains: searchTerm, } } },
-          { id: { contains: searchTerm, } },
-          { id: { startsWith: searchTerm.toLowerCase(), } },
+          { guest: { name: { contains: searchTerm } } },
+          { id: { contains: searchTerm } },
+          { id: { startsWith: searchTerm.toLowerCase() } },
         ],
       },
       include: {
@@ -82,18 +80,21 @@ export async function searchKioskReservation(
       const checkOutDate = new Date(r.checkOut);
       const nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
       
+      const nameParts = r.guest.name.trim().split(/\s+/);
+      const guestFirstName = nameParts[0] ?? "";
+      const guestLastName = nameParts.slice(1).join(" ") || "";
       return {
         id: r.id,
         guestName: r.guest.name,
-        guestFirstName: r.guest.firstName,
-        guestLastName: r.guest.lastName,
+        guestFirstName,
+        guestLastName,
         checkIn: r.checkIn.toISOString().slice(0, 10),
         checkOut: r.checkOut.toISOString().slice(0, 10),
         nights,
         roomNumber: r.room.number,
         roomType: r.room.type,
-        adults: r.adults,
-        children: r.children,
+        adults: r.adults ?? 0,
+        children: r.children ?? 0,
         status: r.status,
         notes: r.notes,
         isToday: checkInDate.getTime() === today.getTime(),
@@ -151,14 +152,16 @@ export async function getKioskReservationById(
     
     const checkOutDate = new Date(reservation.checkOut);
     const nights = Math.ceil((checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60 * 60 * 24));
-    
+    const nameParts = reservation.guest.name.trim().split(/\s+/);
+    const guestFirstName = nameParts[0] ?? "";
+    const guestLastName = nameParts.slice(1).join(" ") || "";
     return {
       success: true,
       data: {
         id: reservation.id,
         guestName: reservation.guest.name,
-        guestFirstName: reservation.guest.firstName,
-        guestLastName: reservation.guest.lastName,
+        guestFirstName,
+        guestLastName,
         guestEmail: reservation.guest.email,
         guestPhone: reservation.guest.phone,
         checkIn: reservation.checkIn.toISOString().slice(0, 10),
@@ -166,8 +169,8 @@ export async function getKioskReservationById(
         nights,
         roomNumber: reservation.room.number,
         roomType: reservation.room.type,
-        adults: reservation.adults,
-        children: reservation.children,
+        adults: reservation.adults ?? 0,
+        children: reservation.children ?? 0,
         status: reservation.status,
         notes: reservation.notes,
         isToday: checkInDate.getTime() === today.getTime(),

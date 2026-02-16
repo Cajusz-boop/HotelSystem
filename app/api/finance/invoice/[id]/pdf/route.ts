@@ -82,6 +82,19 @@ async function generateInvoiceHtml(id: string): Promise<string> {
       });
     }
 
+    // Pobierz transakcje rezerwacji, żeby rozbić fakturę na pozycje
+    const transactions = invoice.reservationId
+      ? await prisma.transaction.findMany({
+          where: {
+            reservationId: invoice.reservationId,
+            status: "ACTIVE",
+            type: { notIn: ["PAYMENT", "DEPOSIT", "VOID", "REFUND", "DISCOUNT"] },
+            amount: { gt: 0 },
+          },
+          orderBy: { createdAt: "asc" },
+        })
+      : [];
+
     const date = new Date(invoice.issuedAt).toLocaleDateString("pl-PL", {
       day: "2-digit",
       month: "2-digit",
@@ -91,6 +104,58 @@ async function generateInvoiceHtml(id: string): Promise<string> {
     const vat = Number(invoice.amountVat);
     const gross = Number(invoice.amountGross);
     const vatRate = Number(invoice.vatRate);
+
+    // Buduj pozycje faktury z transakcji
+    const TYPE_LABELS: Record<string, string> = {
+      ROOM: "Nocleg",
+      LOCAL_TAX: "Opłata miejscowa",
+      MINIBAR: "Minibar",
+      GASTRONOMY: "Gastronomia",
+      RESTAURANT: "Restauracja",
+      POSTING: "Restauracja",
+      SPA: "SPA / Wellness",
+      PARKING: "Parking",
+      LAUNDRY: "Pralnia",
+      PHONE: "Telefon",
+      TRANSPORT: "Transfer",
+      ATTRACTION: "Atrakcje",
+      RENTAL: "Wypożyczalnia",
+      OTHER: "Usługa dodatkowa",
+    };
+
+    type InvoiceLine = { name: string; quantity: number; netAmount: number; vatAmount: number; grossAmount: number };
+    const lineItems: InvoiceLine[] = [];
+
+    if (transactions.length > 0) {
+      // Grupuj transakcje wg typu i opisu (restauracja z opisem = osobna linia)
+      const grouped = new Map<string, { name: string; total: number }>();
+      for (const tx of transactions) {
+        const txType = tx.type;
+        const isRestaurant = txType === "GASTRONOMY" || txType === "RESTAURANT" || txType === "POSTING";
+        const label = isRestaurant && tx.description
+          ? tx.description.split(" | ")[0] || TYPE_LABELS[txType] || txType
+          : TYPE_LABELS[txType] || txType;
+        const key = isRestaurant ? `restaurant-${tx.id}` : txType;
+        const existing = grouped.get(key);
+        if (existing) {
+          existing.total += Number(tx.amount);
+        } else {
+          grouped.set(key, { name: label, total: Number(tx.amount) });
+        }
+      }
+
+      for (const [, { name, total }] of grouped) {
+        const lineGross = Math.round(total * 100) / 100;
+        const lineNet = Math.round((lineGross / (1 + vatRate / 100)) * 100) / 100;
+        const lineVat = Math.round((lineGross - lineNet) * 100) / 100;
+        lineItems.push({ name, quantity: 1, netAmount: lineNet, vatAmount: lineVat, grossAmount: lineGross });
+      }
+    }
+
+    // Fallback: jeśli brak transakcji, jedna linia "Usługa hotelowa"
+    if (lineItems.length === 0) {
+      lineItems.push({ name: "Usługa hotelowa", quantity: 1, netAmount: net, vatAmount: vat, grossAmount: gross });
+    }
 
     // Dane sprzedawcy z szablonu lub fallback
     const sellerName = template.sellerName || HOTEL_NAME;
@@ -265,13 +330,14 @@ async function generateInvoiceHtml(id: string): Promise<string> {
       </tr>
     </thead>
     <tbody>
+      ${lineItems.map((item, idx) => `
       <tr>
-        <td>1</td>
-        <td>Usługa hotelowa</td>
-        <td class="text-right">${net.toFixed(2)}</td>
-        <td class="text-right">${vat.toFixed(2)}</td>
-        <td class="text-right">${gross.toFixed(2)}</td>
-      </tr>
+        <td>${idx + 1}</td>
+        <td>${escapeHtml(item.name)}</td>
+        <td class="text-right">${item.netAmount.toFixed(2)}</td>
+        <td class="text-right">${item.vatAmount.toFixed(2)}</td>
+        <td class="text-right">${item.grossAmount.toFixed(2)}</td>
+      </tr>`).join("")}
     </tbody>
   </table>
 

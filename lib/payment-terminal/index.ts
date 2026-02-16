@@ -73,23 +73,23 @@ async function loadDriver(type: PaymentTerminalType): Promise<PaymentTerminalDri
   switch (type) {
     case "INGENICO":
       if (!ingenicoDriver) {
-        const module = await import("./ingenico-driver");
-        ingenicoDriver = module.default || module.ingenicoDriver;
+        const mod = await import("./ingenico-driver");
+        ingenicoDriver = mod.default || mod.ingenicoDriver;
       }
       return ingenicoDriver;
       
     case "VERIFONE":
       if (!verifoneDriver) {
-        const module = await import("./verifone-driver");
-        verifoneDriver = module.default || module.verifoneDriver;
+        const mod = await import("./verifone-driver");
+        verifoneDriver = mod.default || mod.verifoneDriver;
       }
       return verifoneDriver;
       
     case "MOCK":
     default:
       if (!mockDriver) {
-        const module = await import("./mock-driver");
-        mockDriver = module.default || module.mockDriver;
+        const mod = await import("./mock-driver");
+        mockDriver = mod.default || mod.mockDriver;
       }
       return mockDriver;
   }

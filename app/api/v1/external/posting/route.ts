@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireExternalApiKey } from "@/lib/api-auth";
 import { checkApiRateLimit } from "@/lib/rate-limit";
 import { isFiscalEnabled, printFiscalReceipt, buildReceiptRequest } from "@/lib/fiscal";
+
+interface PostingItem {
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  category?: string;
+}
 
 interface PostingBody {
   reservationId?: string;
@@ -10,13 +18,32 @@ interface PostingBody {
   amount: number;
   type?: string;
   description?: string;
+  /** Szczegolowe pozycje (np. dania z restauracji Bistro) */
+  items?: PostingItem[];
+  /** Numer rachunku POS (np. numer rachunku z Bistro) */
+  receiptNumber?: string;
+  /** Nazwa kelnera / kasjera */
+  cashierName?: string;
+  /** Zrodlo systemu POS */
+  posSystem?: string;
 }
 
 /**
  * POST /api/v1/external/posting
- * Dla systemów POS (restauracja) i zewnętrznych softów konferencyjnych:
- * obciążenie pokoju/rezerwacji kwotą.
- * Opcjonalna autoryzacja: jeśli ustawiono EXTERNAL_API_KEY w .env, wymagany nagłówek X-API-Key lub Authorization: Bearer <key>
+ * Dla systemów POS (restauracja Bistro, Symplex) i zewnętrznych softów:
+ * obciążenie pokoju/rezerwacji kwotą z opcjonalną listą pozycji.
+ *
+ * Body (JSON):
+ *   roomNumber | reservationId – identyfikacja pokoju/rezerwacji
+ *   amount – kwota łączna
+ *   type – typ obciążenia (domyślnie POSTING, np. RESTAURANT, BAR)
+ *   description – opis (np. "Restauracja – obiad")
+ *   items[] – opcjonalna lista pozycji: { name, quantity, unitPrice, category? }
+ *   receiptNumber – numer rachunku POS
+ *   cashierName – kelner/kasjer
+ *   posSystem – nazwa systemu (np. "Symplex Bistro")
+ *
+ * Autoryzacja: nagłówek X-API-Key lub Authorization: Bearer <key>
  * Rate limit: 100 req/min na klucz API lub IP.
  */
 export async function POST(request: NextRequest) {
@@ -27,7 +54,17 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json()) as PostingBody;
-    const { reservationId, roomNumber, amount, type = "POSTING", description } = body;
+    const {
+      reservationId,
+      roomNumber,
+      amount,
+      type = "POSTING",
+      description,
+      items,
+      receiptNumber,
+      cashierName,
+      posSystem,
+    } = body;
 
     if (typeof amount !== "number" || amount <= 0) {
       return NextResponse.json(
@@ -83,11 +120,41 @@ export async function POST(request: NextRequest) {
     }
 
     const txType = type.toUpperCase().slice(0, 20);
+
+    // Build description with item details if present
+    const itemsDescription = items?.length
+      ? items.map((it) => `${it.name} x${it.quantity} (${it.unitPrice.toFixed(2)} PLN)`).join(", ")
+      : undefined;
+
+    const fullDescription = [
+      description,
+      itemsDescription ? `Pozycje: ${itemsDescription}` : null,
+      cashierName ? `Kelner: ${cashierName}` : null,
+    ]
+      .filter(Boolean)
+      .join(" | ") || undefined;
+
+    // Store items, receipt and POS metadata as externalRef JSON
+    const externalRefData = {
+      ...(receiptNumber ? { receiptNumber } : {}),
+      ...(cashierName ? { cashierName } : {}),
+      ...(posSystem ? { posSystem } : {}),
+      ...(items?.length ? { items } : {}),
+    };
+    const externalRef =
+      Object.keys(externalRefData).length > 0
+        ? JSON.stringify(externalRefData)
+        : undefined;
+
     const tx = await prisma.transaction.create({
       data: {
         reservationId: resId,
         amount,
         type: txType,
+        description: fullDescription,
+        category: "F_B",
+        subcategory: "RESTAURANT",
+        externalRef,
         isReadOnly: false,
       },
     });
@@ -99,7 +166,7 @@ export async function POST(request: NextRequest) {
         reservationId: resId,
         amount: Number(tx.amount),
         type: txType,
-        description: description ?? undefined,
+        description: fullDescription ?? undefined,
       });
       const fiscalResult = await printFiscalReceipt(receiptRequest);
       if (!fiscalResult.success && fiscalResult.error) {
@@ -108,13 +175,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Rewalidacja stron, żeby recepcja zobaczyła nowe obciążenie
+    revalidatePath("/front-office");
+    revalidatePath("/");
+
     return NextResponse.json({
       success: true,
       transactionId: tx.id,
       reservationId: resId,
       amount: Number(tx.amount),
       type: tx.type,
-      description: description ?? null,
+      description: fullDescription ?? null,
+      itemsCount: items?.length ?? 0,
       fiscalError: fiscalError ?? undefined,
     });
   } catch (e) {

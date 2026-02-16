@@ -340,6 +340,9 @@ export type AgentData = z.infer<typeof agentDataSchema>;
 // --- Rezerwacja (dla formularzy i Server Actions) ---
 const reservationBaseSchema = z.object({
   guestName: z.string().min(1, "Nazwa gościa wymagana").max(200),
+  guestId: z.string().max(100).optional().nullable(), // ID istniejącego gościa – powiązanie z profilem
+  guestEmail: z.string().email("Nieprawidłowy email").optional().or(z.literal("")),
+  guestPhone: z.string().max(50).optional(),
   guestDateOfBirth: dateString.optional().nullable(), // data urodzenia gościa (YYYY-MM-DD)
   room: z.string().min(1, "Pokój wymagany").max(20),
   companyId: z.string().optional().nullable(),

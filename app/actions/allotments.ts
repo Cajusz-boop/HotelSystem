@@ -70,9 +70,10 @@ export async function getAllotments(filter?: {
       orderBy: { startDate: "asc" },
     });
 
+    type AllotmentRow = (typeof allotments)[number];
     return {
       success: true,
-      data: allotments.map((a) => ({
+      data: allotments.map((a: AllotmentRow) => ({
         id: a.id,
         companyName: a.companyName,
         roomTypeId: a.roomTypeId,

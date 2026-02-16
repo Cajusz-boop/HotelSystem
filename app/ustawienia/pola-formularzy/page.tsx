@@ -12,15 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getFormFieldsConfig, updateFormFieldsConfig } from "@/app/actions/hotel-config";
 import {
-  getFormFieldsConfig,
-  updateFormFieldsConfig,
   FORM_TYPE_LABELS,
   type FormFieldsConfig,
   type CustomFormField,
   type FormType,
   type CustomFormFieldType,
-} from "@/app/actions/hotel-config";
+} from "@/lib/hotel-config-types";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, GripVertical, Save } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -50,7 +49,7 @@ export default function PolaFormularzyPage() {
       if (result.success && result.data) {
         setConfig(result.data);
       } else {
-        toast.error(result.error || "Błąd ładowania konfiguracji");
+        toast.error("error" in result ? (result.error ?? "Błąd ładowania konfiguracji") : "Błąd ładowania konfiguracji");
       }
     } finally {
       setLoading(false);
@@ -111,7 +110,7 @@ export default function PolaFormularzyPage() {
       if (result.success) {
         toast.success("Konfiguracja zapisana");
       } else {
-        toast.error(result.error || "Błąd zapisu");
+        toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
       }
     } finally {
       setSaving(false);

@@ -16,7 +16,7 @@ import { buildFa2Xml, type InvoiceForKsef, type SellerForKsef } from "@/lib/ksef
 import { sendInvoice, sendInvoiceBatch, getInvoiceStatus, getInvoiceUpo } from "@/lib/ksef/api-client";
 import { parseKsef400Error } from "@/lib/ksef/parse-error";
 import { checkBuyerNipActive } from "@/lib/ksef/nip-validate";
-import { getEffectiveKsefEnv } from "@/lib/ksef/env";
+import { getEffectiveKsefEnv, getKsefBaseUrl } from "@/lib/ksef/env";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
@@ -142,12 +142,16 @@ export async function terminateKsefSession(sessionId: string): Promise<ActionRes
   }
 
   const result = await terminateSession(session.sessionToken);
-  await prisma.ksefSession.delete({ where: { id: sessionId } }).catch(() => {});
+  try {
+    await prisma.ksefSession.delete({ where: { id: sessionId } });
+  } catch (error) {
+    console.error("[terminateKsefSession] ksefSession.delete error:", error instanceof Error ? error.message : String(error));
+  }
 
   if (!result.success) {
     return { success: false, error: result.error };
   }
-  return { success: true };
+  return { success: true, data: undefined };
 }
 
 /**
@@ -172,7 +176,7 @@ export async function keepAliveKsefSession(sessionId: string): Promise<ActionRes
     where: { id: sessionId },
     data: { lastKeepAliveAt: new Date() },
   });
-  return { success: true };
+  return { success: true, data: undefined };
 }
 
 /** Margines: sesja uznana za "wygasłą" na 2 min przed tokenExpiresAt (żeby zdążyć przed wysyłką). */
@@ -240,7 +244,7 @@ export async function validateInvoiceXmlForKsef(xmlString: string): Promise<Acti
   if (!result.valid) {
     return { success: false, error: result.error ?? "Błąd walidacji XML faktury" };
   }
-  return { success: true };
+  return { success: true, data: undefined };
 }
 
 /**
@@ -317,7 +321,11 @@ export async function sendInvoiceToKsef(invoiceId: string): Promise<
 
   // E8: Sesja wygasła (401/403) – usuń sesję z cache i spróbuj raz z nową sesją (re-init)
   if (!sendRes.ok && (sendRes.status === 401 || sendRes.status === 403)) {
-    await prisma.ksefSession.delete({ where: { id: sessionRes.data.sessionId } }).catch(() => {});
+    try {
+      await prisma.ksefSession.delete({ where: { id: sessionRes.data.sessionId } });
+    } catch (error) {
+      console.error("[sendInvoiceToKsef] ksefSession.delete (401/403) error:", error instanceof Error ? error.message : String(error));
+    }
     const sessionRes2 = await getOrCreateValidKsefSession(null);
     if (sessionRes2.success) {
       sendRes = await sendInvoice(sessionRes2.data.sessionToken, xml);
@@ -340,13 +348,17 @@ export async function sendInvoiceToKsef(invoiceId: string): Promise<
       sendRes.status >= 400 && sendRes.status < 500
         ? parseKsef400Error(sendRes.error ?? "")
         : sendRes.error ?? undefined;
-    await prisma.invoice.update({
-      where: { id: invoiceId },
-      data: {
-        ksefStatus: "REJECTED",
-        ksefErrorMessage: errorMsg,
-      },
-    }).catch(() => {});
+    try {
+      await prisma.invoice.update({
+        where: { id: invoiceId },
+        data: {
+          ksefStatus: "REJECTED",
+          ksefErrorMessage: errorMsg,
+        },
+      });
+    } catch (error) {
+      console.error("[sendInvoiceToKsef] invoice.update REJECTED error:", error instanceof Error ? error.message : String(error));
+    }
     await ksefAudit("CREATE", invoiceId, { operation: "SEND", invoiceId, error: errorMsg ?? sendRes.error });
     await notifyManagerKsefRejected(invoice.number, errorMsg ?? sendRes.error ?? null);
     return {
@@ -449,33 +461,43 @@ export async function sendBatchToKsef(invoiceIds: string[]): Promise<
   let queued = 0;
   const refs: string[] = [];
   for (let i = 0; i < results.length; i++) {
-    if (results[i].ok) {
+    const r = results[i];
+    if (r === undefined) continue;
+    if (r.ok) {
       sent++;
-      if (results[i].referenceNumber) refs.push(results[i].referenceNumber!);
-      await prisma.invoice.update({
-        where: { id: invoiceIds[i] },
-        data: {
-          ksefReferenceNumber: results[i].referenceNumber ?? undefined,
-          ksefStatus: "PENDING",
-          ksefErrorMessage: null,
-        },
-      }).catch(() => {});
-    } else if (results[i].status === 0 || (results[i].status != null && results[i].status >= 500)) {
+      if (r.referenceNumber) refs.push(r.referenceNumber);
+      try {
+        await prisma.invoice.update({
+          where: { id: invoiceIds[i] },
+          data: {
+            ksefReferenceNumber: r.referenceNumber ?? undefined,
+            ksefStatus: "PENDING",
+            ksefErrorMessage: null,
+          },
+        });
+      } catch (error) {
+        console.error("[sendBatchToKsef] invoice.update PENDING error:", error instanceof Error ? error.message : String(error));
+      }
+    } else if (r.status === 0 || (r.status != null && r.status >= 500)) {
       queued++;
-      await queueInvoiceForKsef(invoiceIds[i], results[i].error ?? (results[i].status === 0 ? "Brak połączenia" : "Bramka MF niedostępna (5xx)"));
+      await queueInvoiceForKsef(invoiceIds[i], r.error ?? (r.status === 0 ? "Brak połączenia" : "Bramka MF niedostępna (5xx)"));
     } else {
       failed++;
       const errorMsg =
-        results[i].status != null && results[i].status >= 400 && results[i].status < 500
-          ? parseKsef400Error(results[i].error ?? "")
-          : results[i].error ?? undefined;
-      await prisma.invoice.update({
-        where: { id: invoiceIds[i] },
-        data: {
-          ksefStatus: "REJECTED",
-          ksefErrorMessage: errorMsg,
-        },
-      }).catch(() => {});
+        r.status != null && r.status >= 400 && r.status < 500
+          ? parseKsef400Error(r.error ?? "")
+          : r.error ?? undefined;
+      try {
+        await prisma.invoice.update({
+          where: { id: invoiceIds[i] },
+          data: {
+            ksefStatus: "REJECTED",
+            ksefErrorMessage: errorMsg,
+          },
+        });
+      } catch (error) {
+        console.error("[sendBatchToKsef] invoice.update REJECTED error:", error instanceof Error ? error.message : String(error));
+      }
       const inv = await prisma.invoice.findUnique({ where: { id: invoiceIds[i] }, select: { number: true } });
       await notifyManagerKsefRejected(inv?.number ?? invoiceIds[i], errorMsg ?? null);
     }
@@ -516,12 +538,20 @@ export async function processKsefPendingQueue(): Promise<{ processed: number; se
   for (const p of pending) {
     const res = await sendInvoiceToKsef(p.invoiceId);
     if (res.success) {
-      await prisma.ksefPendingSend.delete({ where: { invoiceId: p.invoiceId } }).catch(() => {});
+      try {
+        await prisma.ksefPendingSend.delete({ where: { invoiceId: p.invoiceId } });
+      } catch (error) {
+        console.error("[processKsefPendingQueue] ksefPendingSend.delete (success) error:", error instanceof Error ? error.message : String(error));
+      }
       sent++;
     } else {
       failed++;
       if (!res.error?.includes("dodana do kolejki")) {
-        await prisma.ksefPendingSend.delete({ where: { invoiceId: p.invoiceId } }).catch(() => {});
+        try {
+          await prisma.ksefPendingSend.delete({ where: { invoiceId: p.invoiceId } });
+        } catch (error) {
+          console.error("[processKsefPendingQueue] ksefPendingSend.delete (failed) error:", error instanceof Error ? error.message : String(error));
+        }
       }
     }
   }
@@ -631,10 +661,7 @@ export async function downloadUpo(invoiceId: string): Promise<
     };
   }
 
-  let upoUrl =
-    (res.data?.upoUrl as string) ??
-    (res.data?.url as string) ??
-    "";
+  let upoUrl = (res.data?.upoUrl as string) ?? "";
 
   const storageDir = process.env.KSEF_UPO_STORAGE_DIR?.trim();
   if (storageDir && (res.data?.raw || upoUrl)) {
@@ -693,7 +720,7 @@ export async function getKsefConfig(): Promise<ActionResult<KsefConfig>> {
       ? `${nip.slice(0, 3)}****${nip.slice(-3)}`
       : null;
   const tokenSet = !!(process.env.KSEF_AUTH_TOKEN?.trim());
-  const baseUrl = env === "test" ? KSEF_TEST_BASE : KSEF_PROD_BASE;
+  const baseUrl = getKsefBaseUrl();
   return {
     success: true,
     data: {

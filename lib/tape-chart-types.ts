@@ -1,5 +1,5 @@
-/** Status pokoju – zgodnie z dummy-data.json i Room Guard */
-export type RoomStatus = "CLEAN" | "DIRTY" | "OOO" | "INSPECTION";
+/** Status pokoju – zgodnie z Prisma RoomStatus */
+export type RoomStatus = "CLEAN" | "DIRTY" | "OOO" | "INSPECTION" | "INSPECTED" | "CHECKOUT_PENDING" | "MAINTENANCE";
 
 /** Status rezerwacji – określa kolor paska na grafiku */
 export type ReservationStatus = "CONFIRMED" | "CHECKED_IN" | "CHECKED_OUT" | "CANCELLED" | "NO_SHOW";

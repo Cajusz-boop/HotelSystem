@@ -23,6 +23,7 @@ export function validateInvoiceXml(xmlString: string): ValidateResult {
   try {
     let parsed = false;
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- dynamic require for optional dependency
       const FXParser = require("fast-xml-parser").XMLParser;
       if (FXParser) {
         new FXParser({ ignoreAttributes: false }).parse(trimmed);
@@ -68,9 +69,13 @@ function wellFormedCheck(xml: string): void {
 
 function validateWithXsdSync(xml: string, xsdPath: string): ValidateResult {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- sync APIs for xmllint subprocess
     const { execSync } = require("child_process");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fs = require("fs");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const path = require("path");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const tmpFile = path.join(require("os").tmpdir(), `ksef-validate-${Date.now()}.xml`);
     fs.writeFileSync(tmpFile, xml, "utf8");
     try {

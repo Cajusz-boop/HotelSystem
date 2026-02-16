@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { getAuditTrail, getAuditEntityTypes, type AuditTrailItem } from "@/app/actions/audit";
 import { toast } from "sonner";
-import { FileText, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 const ACTION_LABELS: Record<string, string> = {
   CREATE: "Utworzenie",

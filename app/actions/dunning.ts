@@ -1,5 +1,6 @@
 "use server";
 
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { getFolioSummary } from "@/app/actions/finance";
@@ -174,7 +175,7 @@ export async function getOverdueReservations(
       else if (daysOverdue >= config.level2Days) suggestedLevel = 2;
       else if (daysOverdue >= config.level1Days) suggestedLevel = 1;
 
-      const alreadySentLevels = [...new Set(res.dunningLogs.map((l) => l.level))].sort(
+      const alreadySentLevels = ([...new Set(res.dunningLogs.map((l) => l.level))] as number[]).sort(
         (a, b) => a - b
       );
       if (alreadySentLevels.length >= config.maxReminders) continue;
@@ -423,7 +424,7 @@ export async function saveDunningConfig(
 
     await prisma.property.update({
       where: { id: propertyId },
-      data: { dunningConfig: merged },
+      data: { dunningConfig: merged as Prisma.InputJsonValue },
     });
 
     revalidatePath("/ustawienia");

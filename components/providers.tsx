@@ -1,9 +1,43 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState, useLayoutEffect } from "react";
+import { useState, useEffect, useLayoutEffect } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { I18nProvider } from "@/components/i18n-provider";
+
+const KEEP_ALIVE_INTERVAL_MS = 4 * 60 * 1000; // 4 minuty
+
+/**
+ * Ping /api/health co 4 min żeby:
+ *  - Passenger nie uśpił procesu Node po bezczynności
+ *  - Połączenie z bazą nie wygasło (MariaDB wait_timeout)
+ * Działa tylko gdy karta przeglądarki jest aktywna (document.hidden).
+ */
+function useKeepAlive() {
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval>;
+
+    function ping() {
+      if (document.hidden) return;
+      fetch("/api/health", { method: "GET", cache: "no-store" }).catch(() => {});
+    }
+
+    // Pierwsze rozgrzanie zaraz po załadowaniu strony
+    ping();
+    timer = setInterval(ping, KEEP_ALIVE_INTERVAL_MS);
+
+    // Gdy użytkownik wraca na kartę po dłuższej nieobecności – natychmiast pinguj
+    function onVisibilityChange() {
+      if (!document.hidden) ping();
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -11,7 +45,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 30 * 1000, // 30 s
+            staleTime: 5 * 60 * 1000, // 5 min – dane nie są refetchowane przy powrocie na zakładkę
+            gcTime: 10 * 60 * 1000, // 10 min – dane żyją w pamięci nawet po odmontowaniu komponentu
           },
         },
       })
@@ -25,6 +60,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       document.body.style.removeProperty("pointer-events");
     }
   }, []);
+
+  useKeepAlive();
 
   return (
     <ThemeProvider>

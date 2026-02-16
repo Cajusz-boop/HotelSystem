@@ -1,6 +1,6 @@
 "use server";
 
-import prisma from "@/lib/db";
+import { prisma } from "@/lib/db";
 import { createAuditLog, getClientIp } from "@/lib/audit";
 import { headers } from "next/headers";
 import type { ActionResult } from "./reservations";
@@ -546,7 +546,7 @@ export async function changeWaitlistStatus(
     ipAddress: ip,
   });
 
-  return { success: true };
+  return { success: true, data: undefined };
 }
 
 /**
@@ -601,7 +601,7 @@ export async function convertWaitlistToReservation(
     ipAddress: ip,
   });
 
-  return { success: true };
+  return { success: true, data: undefined };
 }
 
 /**
@@ -640,7 +640,7 @@ export async function deleteWaitlistEntry(id: string): Promise<ActionResult<void
     ipAddress: ip,
   });
 
-  return { success: true };
+  return { success: true, data: undefined };
 }
 
 // -------------------------------------------------------------------

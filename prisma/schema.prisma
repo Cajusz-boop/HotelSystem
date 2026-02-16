@@ -324,6 +324,7 @@ model Room {
 
   @@unique([number])
   @@index([propertyId])
+  @@index([propertyId, status])
 }
 
 model RoomGroup {
@@ -709,6 +710,8 @@ model Reservation {
 
   @@index([checkIn, checkOut])
   @@index([roomId])
+  @@index([status, checkIn, checkOut])
+  @@index([roomId, checkIn, checkOut])
   @@index([rateCodeId])
   @@index([companyId])
   @@index([groupId])
@@ -986,6 +989,7 @@ model Transaction {
   notes          String?  @db.Text  // notatki wewnętrzne
 
   @@index([reservationId])
+  @@index([reservationId, status])
   @@index([appliesToTransactionId])
   @@index([refundedTransactionId])
   @@index([paymentMethod])

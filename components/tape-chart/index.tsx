@@ -35,6 +35,13 @@ import {
   ListChecks,
   DoorOpen,
   AlertTriangle,
+  ChevronDown,
+  MoreHorizontal,
+  SlidersHorizontal,
+  LogIn,
+  LogOut,
+  SprayCan,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -61,6 +68,7 @@ import { StatusColorsDialog } from "./status-colors-dialog";
 import { MonthlyOverviewDialog } from "./monthly-overview-dialog";
 import { FloorPlanDialog } from "./floor-plan-dialog";
 import { DailyMovementsDialog } from "./daily-movements-dialog";
+import { QuickStatsDialog, type QuickStatsTab } from "./quick-stats-dialog";
 import {
   Dialog,
   DialogContent,
@@ -96,7 +104,7 @@ function RoomRowDroppable({
         ref={setNodeRef}
         data-testid={`room-row-${room.number}`}
         className={cn(
-          "sticky left-0 z-[60] flex items-center gap-2 border-b border-r bg-card px-3 py-2",
+          "sticky left-0 z-[60] flex items-center gap-1.5 border-b border-r bg-card px-2 py-1",
           isOver && "bg-primary/10 ring-1 ring-primary"
         )}
         style={{
@@ -107,7 +115,9 @@ function RoomRowDroppable({
       >
         {children}
       </div>
-      {dates.map((dateStr, colIdx) => (
+      {dates.map((dateStr, colIdx) => {
+        const isWeekend = isWeekendDate(dateStr);
+        return (
         <div
           key={`cell-${room.number}-${colIdx}`}
           data-testid={`cell-${room.number}-${dateStr}`}
@@ -115,7 +125,8 @@ function RoomRowDroppable({
           role="button"
           tabIndex={0}
           className={cn(
-            "cursor-grab active:cursor-grabbing border-b border-r bg-background hover:bg-muted/50 select-none",
+            "cursor-grab active:cursor-grabbing border-b border-r bg-background hover:bg-accent/30 transition-colors duration-75 select-none",
+            isWeekend && "bg-muted/30",
             blockedRanges?.some(
               (range) => dateStr >= range.startDate && dateStr <= range.endDate
             ) && "bg-destructive/20 cursor-not-allowed opacity-70 hover:bg-destructive/20",
@@ -156,17 +167,18 @@ function RoomRowDroppable({
             )?.reason ?? undefined
           }
         />
-      ))}
+        );
+      })}
     </>
   );
 }
 
-/** Wysokość rzędu – min. 56px dla Fitts's Law (większe strefy kliknięcia, mniej pomyłek) */
-const ROW_HEIGHT_PX = 56;
-const ROOM_LABEL_WIDTH_PX = 160;
+/** Wysokość rzędu – 34px: kompaktowy widok, żeby zmieścić więcej pokoi bez scrollowania */
+const ROW_HEIGHT_PX = 34;
+const ROOM_LABEL_WIDTH_PX = 180;
 const HEADER_ROW_PX = 40;
-/** Margines wewnętrzny paska – 6px dla wyraźnej przerwy między sąsiednimi rezerwacjami */
-const BAR_PADDING_PX = 6;
+/** Margines wewnętrzny paska – 1px dla minimalnej przerwy przy stylu podziału dni (paski równo z kwadracikami) */
+const BAR_PADDING_PX = 1;
 
 /** Skale widoku grafiku – określają liczbę dni i szerokość kolumny */
 type ViewScale = "day" | "week" | "month" | "year";
@@ -191,6 +203,12 @@ const WEEKDAY_SHORT: Record<number, string> = {
   6: "So",
 };
 
+function isWeekendDate(dateStr: string): boolean {
+  const d = new Date(dateStr + "Z");
+  const w = d.getUTCDay();
+  return w === 0 || w === 6; // Nd / So
+}
+
 function formatDateHeader(dateStr: string, todayStr: string): string {
   const d = new Date(dateStr + "Z");
   const w = d.getUTCDay();
@@ -198,7 +216,7 @@ function formatDateHeader(dateStr: string, todayStr: string): string {
   const month = d.getUTCMonth() + 1;
   const label = `${WEEKDAY_SHORT[w]} ${day}.${String(month).padStart(2, "0")}`;
   const isToday = dateStr === todayStr;
-  return isToday ? `${label} •` : label;
+  return isToday ? `DZIŚ ${day}.${String(month).padStart(2, "0")}` : label;
 }
 
 const DEFAULT_VIEW_SCALE: ViewScale = "month";
@@ -266,8 +284,7 @@ export function TapeChart({
   useEffect(() => setGroups(reservationGroups), [reservationGroups]);
 
   const [roomFilter, setRoomFilter] = useState("");
-  const [showRoomSearch, setShowRoomSearch] = useState(false);
-  const [showClientSearch, setShowClientSearch] = useState(false);
+  // Room/client search fields are always visible in the filters panel
   const [clientSearchTerm, setClientSearchTerm] = useState("");
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [showGroupOnly, setShowGroupOnly] = useState(false);
@@ -278,6 +295,8 @@ export function TapeChart({
   const [monthlyDialogOpen, setMonthlyDialogOpen] = useState(false);
   const [floorPlanDialogOpen, setFloorPlanDialogOpen] = useState(false);
   const [dailyMovementsDialogOpen, setDailyMovementsDialogOpen] = useState(false);
+  const [quickStatsOpen, setQuickStatsOpen] = useState(false);
+  const [quickStatsTab, setQuickStatsTab] = useState<QuickStatsTab>("arrivals");
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
   const [exportStartDate, setExportStartDate] = useState("");
@@ -292,6 +311,10 @@ export function TapeChart({
   const [statusBg, setStatusBg] = useState<Record<string, string> | null>(null);
   const [statusTab, setStatusTab] = useState<"statuses" | "custom" | "sources" | "prices">("statuses");
   const [colorMode, setColorMode] = useState<"status" | "source">("status");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [footerOpen, setFooterOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
 
   const reservations = useTapeChartStore((s) => s.reservations);
   const setReservations = useTapeChartStore((s) => s.setReservations);
@@ -507,16 +530,34 @@ export function TapeChart({
   const gridWrapperRef = useRef<HTMLDivElement>(null);
   const didPanRef = useRef(false);
 
+  /** Szerokość kolumny dat (może być większa przy minmax gdy siatka się rozciąga) */
+  const [effectiveColumnWidthPx, setEffectiveColumnWidthPx] = useState(COLUMN_WIDTH_PX);
+  useEffect(() => {
+    const el = gridWrapperRef.current;
+    if (!el || dates.length === 0) return;
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      const dateAreaWidth = rect.width - ROOM_LABEL_WIDTH_PX;
+      if (dateAreaWidth > 0) {
+        setEffectiveColumnWidthPx(Math.max(COLUMN_WIDTH_PX, dateAreaWidth / dates.length));
+      }
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [dates.length, COLUMN_WIDTH_PX]);
+
   const getDateFromClientX = useCallback(
     (clientX: number): string | null => {
       const gridEl = gridWrapperRef.current;
       if (!gridEl) return null;
       const gridLeft = gridEl.getBoundingClientRect().left;
-      const col = Math.floor((clientX - gridLeft - ROOM_LABEL_WIDTH_PX) / COLUMN_WIDTH_PX);
+      const col = Math.floor((clientX - gridLeft - ROOM_LABEL_WIDTH_PX) / effectiveColumnWidthPx);
       if (col < 0 || col >= dates.length) return null;
       return dates[col] ?? null;
     },
-    [dates, COLUMN_WIDTH_PX]
+    [dates, effectiveColumnWidthPx]
   );
 
   const handleResize = useCallback(
@@ -529,7 +570,7 @@ export function TapeChart({
         );
         toast.success("Datę rezerwacji zaktualizowano");
       } else if (!result.success) {
-        toast.error(result.error ?? "Błąd aktualizacji");
+        toast.error("error" in result ? (result.error ?? "Błąd aktualizacji") : "Błąd aktualizacji");
       }
     },
     [setReservations]
@@ -538,7 +579,8 @@ export function TapeChart({
   const handleGridPointerDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     const target = e.target;
-    if (!(target instanceof HTMLElement) || !target.closest("[data-cell]")) return;
+    // Przeciąganie kwadracika (komórka dnia) lub nagłówka daty = przewijanie w lewo/prawo
+    if (!(target instanceof HTMLElement) || !target.closest("[data-cell], [data-date-header]")) return;
     const ref = scrollContainerRef.current;
     if (!ref) return;
     const startX = e.clientX;
@@ -630,6 +672,18 @@ export function TapeChart({
     return { percentage, occupiedNights, totalNights };
   }, [displayRooms.length, dates, filteredReservations]);
 
+  const todayQuickStats = useMemo(() => {
+    const arrivals = reservations.filter(
+      (r) => r.checkIn === todayStr && r.status !== "CANCELLED" && r.status !== "NO_SHOW"
+    ).length;
+    const departures = reservations.filter(
+      (r) => r.checkOut === todayStr && (r.status === "CHECKED_IN" || r.status === "CHECKED_OUT")
+    ).length;
+    const dirtyRooms = allRooms.filter((r) => r.status === "DIRTY").length;
+    const checkedInNow = reservations.filter((r) => r.status === "CHECKED_IN").length;
+    return { arrivals, departures, dirtyRooms, checkedInNow };
+  }, [reservations, todayStr, allRooms]);
+
   useEffect(() => {
     if (!initialHighlightReservationId || !scrollContainerRef.current) return;
     const res = reservations.find((r) => r.id === initialHighlightReservationId);
@@ -648,7 +702,18 @@ export function TapeChart({
     return () => clearTimeout(t);
   }, [initialHighlightReservationId, reservations]);
 
-  const [privacyMode, setPrivacyMode] = useState(true);
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [moreMenuOpen]);
+
+  const [privacyMode, setPrivacyMode] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [ghostPreview, setGhostPreview] = useState<{
     roomNumber: string;
@@ -701,17 +766,14 @@ export function TapeChart({
           gridRow: row + 1,
           gridColumnStart: startIdx + 2,
           gridColumnEnd: endIdx + 2,
-          left: ROOM_LABEL_WIDTH_PX + startIdx * COLUMN_WIDTH_PX,
-          width: (endIdx - startIdx) * COLUMN_WIDTH_PX,
-          top: HEADER_ROW_PX + (row - 1) * ROW_HEIGHT_PX,
         };
       })
       .filter((p): p is NonNullable<typeof p> => p != null);
-  }, [filteredReservations, roomRowIndex, dateIndex, dates, COLUMN_WIDTH_PX]);
+  }, [filteredReservations, roomRowIndex, dateIndex, dates]);
 
   const roomByNumber = useMemo(() => new Map(allRooms.map((r) => [r.number, r])), [allRooms]);
 
-  // Ghost preview placement for drag-and-drop
+  // Ghost preview placement for drag-and-drop (używa grid jak paski – równo z kwadracikami)
   const ghostPlacement = useMemo(() => {
     if (!ghostPreview || !activeId) return null;
     const row = roomRowIndex.get(ghostPreview.roomNumber);
@@ -725,11 +787,11 @@ export function TapeChart({
     if (!activeReservation) return null;
     return {
       reservation: { ...activeReservation, room: ghostPreview.roomNumber },
-      left: ROOM_LABEL_WIDTH_PX + startIdx * COLUMN_WIDTH_PX,
-      width: (endIdx - startIdx) * COLUMN_WIDTH_PX,
-      top: HEADER_ROW_PX + (row - 1) * ROW_HEIGHT_PX,
+      gridColumnStart: startIdx + 2,
+      gridColumnEnd: endIdx + 2,
+      gridRow: row + 1,
     };
-  }, [ghostPreview, activeId, roomRowIndex, dateIndex, dates, reservations, COLUMN_WIDTH_PX]);
+  }, [ghostPreview, activeId, roomRowIndex, dateIndex, dates, reservations]);
 
   // Anuluj drag przy zmianie zoomu/skali – unikamy błędnego collision (stale recty) i niespójnego layoutu (D10)
   useEffect(() => {
@@ -737,7 +799,7 @@ export function TapeChart({
       setActiveId(null);
       setGhostPreview(null);
     }
-  }, [zoomIndex, viewScale]);
+  }, [zoomIndex, viewScale]); // eslint-disable-line react-hooks/exhaustive-deps -- clear selection on zoom/scale change only
 
   const sourceSummary = useMemo(() => {
     const counts = new Map<string, number>();
@@ -967,7 +1029,7 @@ export function TapeChart({
                 r.status === "CONFIRMED"
             );
             if (res) {
-              updateReservationStatus({ reservationId: res.id, status: "CHECKED_IN" }).then((result) => {
+              updateReservationStatus(res.id, "CHECKED_IN").then((result) => {
                 if (result.success && result.data) {
                   setReservations((prev) =>
                     prev.map((r) => (r.id === res.id ? { ...r, status: "CHECKED_IN" } : r))
@@ -992,7 +1054,7 @@ export function TapeChart({
                 r.status === "CHECKED_IN"
             );
             if (res) {
-              updateReservationStatus({ reservationId: res.id, status: "CHECKED_OUT" }).then((result) => {
+              updateReservationStatus(res.id, "CHECKED_OUT").then((result) => {
                 if (result.success && result.data) {
                   setReservations((prev) =>
                     prev.map((r) => (r.id === res.id ? { ...r, status: "CHECKED_OUT" } : r))
@@ -1047,9 +1109,9 @@ export function TapeChart({
     }
   }, [clientSearchTerm, reservations]);
 
-  /* Stała szerokość pierwszej kolumny (160px), żeby paski rezerwacji były dokładnie w kratkach. */
+  /* Stała szerokość pierwszej kolumny (160px). Kolumny dat rozciągają się do końca okna (minmax). */
   /* Stała wysokość wiersza nagłówka (40px), żeby paski nie nachodziły na daty. */
-  const gridColumns = `${ROOM_LABEL_WIDTH_PX}px repeat(${dates.length}, ${COLUMN_WIDTH_PX}px)`;
+  const gridColumns = `${ROOM_LABEL_WIDTH_PX}px repeat(${dates.length}, minmax(${COLUMN_WIDTH_PX}px, 1fr))`;
   const gridRows = `${HEADER_ROW_PX}px repeat(${displayRooms.length}, ${ROW_HEIGHT_PX}px)`;
 
   return (
@@ -1060,388 +1122,365 @@ export function TapeChart({
         </div>
       )}
       <header
-        className="relative z-[100] flex shrink-0 flex-col gap-3 border-b bg-card px-3 py-3 sm:px-4 sm:py-3 md:px-6 md:py-4 no-print"
+        className="relative z-[100] flex shrink-0 flex-col border-b bg-card no-print"
         role="toolbar"
         data-hide-print="true"
         aria-label="Nawigacja grafiku"
         style={{ pointerEvents: "auto" }}
       >
-        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <h1 className="text-lg font-semibold sm:text-xl">Grafik</h1>
-            <span className="text-sm text-muted-foreground">
-              {displayRooms.length} pokoi · {filteredReservations.length} rezerwacji
-            </span>
-          </div>
+        {/* Row 1: Navigation + Primary Actions */}
+        <div className="flex items-center justify-between gap-2 px-3 py-2 md:px-4">
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => undo()}
-              disabled={!canUndo}
-              className="gap-1.5"
-              aria-label="Cofnij (Ctrl+Z)"
-            >
-              <Undo2 className="h-4 w-4" />
-              Cofnij
+            <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handlePrev} aria-label="Tydzień wstecz">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleNext} aria-label="Tydzień naprzód">
+              <ChevronRight className="h-4 w-4" />
             </Button>
             <Button
-              type="button"
-              variant="secondary"
+              variant={goToDateOpen ? "default" : "outline"}
               size="sm"
-              onClick={() => redo()}
-              disabled={!canRedo}
-              className="gap-1.5"
-              aria-label="Ponów (Ctrl+Y)"
+              className="gap-1 h-8"
+              onClick={() => setGoToDateOpen((v) => !v)}
+              aria-label="Przejdź do daty"
+              aria-expanded={goToDateOpen}
             >
-              <Redo2 className="h-4 w-4" />
-              Ponów
+              <CalendarPlus className="h-3.5 w-3.5" />
+              Data
             </Button>
-            <div className="flex items-center gap-2">
-              <label htmlFor="privacy-mode" className="text-sm font-medium text-muted-foreground">
-                Tryb prywatności
-              </label>
-              <Switch id="privacy-mode" checked={privacyMode} onCheckedChange={setPrivacyMode} />
-            </div>
-          </div>
-        </div>
+            {goToDateOpen && (
+              <div className="flex items-center gap-1.5 rounded-md border bg-muted/40 px-2 py-1">
+                <input
+                  type="date"
+                  value={goToDateValue}
+                  onChange={(e) => setGoToDateValue(e.target.value)}
+                  className="rounded border border-input bg-background px-2 py-0.5 text-sm h-7"
+                  aria-label="Data do przejścia"
+                />
+                <Button type="button" size="sm" className="h-7" onClick={handleGoToDate}>
+                  Idź
+                </Button>
+              </div>
+            )}
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handlePrev} aria-label="Tydzień wstecz">
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleNext} aria-label="Tydzień naprzód" className="gap-1">
-            Naprz.
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={goToDateOpen ? "default" : "outline"}
-            size="sm"
-            onClick={() => setGoToDateOpen((v) => !v)}
-            className="gap-1"
-            aria-label="Przejdź do daty"
-            aria-expanded={goToDateOpen}
-          >
-            <CalendarPlus className="h-4 w-4" />
-            Data
-          </Button>
-          {goToDateOpen && (
-            <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
-              <input
-                type="date"
-                value={goToDateValue}
-                onChange={(e) => setGoToDateValue(e.target.value)}
-                className="rounded border border-input bg-background px-2 py-1 text-sm"
-                aria-label="Data do przejścia"
-              />
-              <Button type="button" size="sm" onClick={handleGoToDate}>
-                Przejdź
-              </Button>
+            <div className="mx-1 h-5 w-px bg-border" />
+
+            <div className="flex items-center rounded-md border bg-muted/30" role="group" aria-label="Skala widoku">
+              {(Object.keys(VIEW_SCALE_CONFIG) as ViewScale[]).map((scale) => (
+                <Button
+                  key={scale}
+                  variant={viewScale === scale ? "default" : "ghost"}
+                  size="sm"
+                  className={cn(
+                    "rounded-none first:rounded-l-md last:rounded-r-md border-0 h-8 px-2.5 text-xs",
+                    viewScale === scale && "bg-primary text-primary-foreground"
+                  )}
+                  onClick={() => setViewScale(scale)}
+                  title={`Widok: ${VIEW_SCALE_CONFIG[scale].label} (${VIEW_SCALE_CONFIG[scale].days} dni)`}
+                >
+                  {VIEW_SCALE_CONFIG[scale].label}
+                </Button>
+              ))}
             </div>
-          )}
-          {/* Przełącznik skali widoku */}
-          <div className="flex items-center rounded-md border bg-muted/30" role="group" aria-label="Skala widoku">
-            {(Object.keys(VIEW_SCALE_CONFIG) as ViewScale[]).map((scale) => (
+
+            <div className="flex items-center gap-0.5 rounded-md border bg-muted/30 px-0.5" role="group" aria-label="Zoom">
               <Button
-                key={scale}
-                variant={viewScale === scale ? "default" : "ghost"}
+                variant="ghost"
                 size="sm"
-                className={cn(
-                  "rounded-none first:rounded-l-md last:rounded-r-md border-0",
-                  viewScale === scale && "bg-primary text-primary-foreground"
-                )}
-                onClick={() => setViewScale(scale)}
-                title={`Widok: ${VIEW_SCALE_CONFIG[scale].label} (${VIEW_SCALE_CONFIG[scale].days} dni)`}
+                className="h-7 w-7 p-0"
+                onClick={handleZoomOut}
+                disabled={zoomIndex === 0}
+                title="Zoom out"
+                aria-label="Zmniejsz gęstość widoku"
               >
-                {VIEW_SCALE_CONFIG[scale].label}
+                <ZoomOut className="h-3.5 w-3.5" />
               </Button>
-            ))}
-          </div>
-          {/* Kontrolka zoom (gęstość widoku) */}
-          <div className="flex items-center gap-1 rounded-md border bg-muted/30 px-1" role="group" aria-label="Zoom">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={handleZoomOut}
-              disabled={zoomIndex === 0}
-              title="Zmniejsz gęstość (zoom out)"
-              aria-label="Zmniejsz gęstość widoku (zoom out)"
-            >
-              <ZoomOut className="h-4 w-4" />
-            </Button>
-            <span className="min-w-[3rem] text-center text-xs font-medium text-muted-foreground" aria-hidden="true">
-              {Math.round(zoomMultiplier * 100)}%
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={handleZoomIn}
-              disabled={zoomIndex === ZOOM_LEVELS.length - 1}
-              title="Zwiększ gęstość (zoom in)"
-              aria-label="Zwiększ gęstość widoku (zoom in)"
-            >
-              <ZoomIn className="h-4 w-4" />
-            </Button>
-          </div>
-          {/* Wskaźnik zajętości */}
-          <div
-            className={cn(
-              "flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm",
-              occupancyStats.percentage >= 80
-                ? "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400"
-                : occupancyStats.percentage >= 50
-                  ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
-                  : "border-muted bg-muted/30 text-muted-foreground"
-            )}
-            title={`${occupancyStats.occupiedNights} z ${occupancyStats.totalNights} pokojo-nocy zajętych`}
-          >
-            <span className="font-semibold">{occupancyStats.percentage}%</span>
-            <span className="text-xs opacity-75">zajętości</span>
-          </div>
-          <Button variant="default" size="sm" className="gap-1" onClick={handleCreateReservationClick}>
-            <CalendarPlus className="h-4 w-4" />
-            Zarezerwuj
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            onClick={() => setGroupReservationSheetOpen(true)}
-          >
-            <Users className="h-4 w-4" />
-            Rezerwacja grupowa
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            onClick={() => setRoomBlockSheetOpen(true)}
-          >
-            <Ban className="h-4 w-4" />
-            Wyłącz pokój
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            onClick={() => setMonthlyDialogOpen(true)}
-          >
-            <CalendarDays className="h-4 w-4" />
-            Widok miesięczny
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            onClick={() => setFloorPlanDialogOpen(true)}
-          >
-            <Building2 className="h-4 w-4" />
-            Plan pięter
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            onClick={() => setDailyMovementsDialogOpen(true)}
-          >
-            <ListChecks className="h-4 w-4" />
-            Przyjazdy/wyjazdy
-          </Button>
-          <Button 
-            variant={previewMode ? "default" : "outline"} 
-            size="sm" 
-            className="gap-1" 
-            onClick={togglePreviewMode}
-          >
-            <Eye className="h-4 w-4" />
-            {previewMode ? "Zakończ podgląd" : "Podgląd"}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            onClick={() => setLegendDialogOpen(true)}
-            title="Legenda statusów rezerwacji"
-          >
-            <Layers className="h-4 w-4" />
-            Legenda
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            onClick={() => setStatusColorsDialogOpen(true)}
-            title="Kolory statusów rezerwacji"
-          >
-            <Filter className="h-4 w-4" />
-            Kolory
-          </Button>
-          <div className="flex items-center rounded-md border border-input bg-background">
-            <Button
-              variant={colorMode === "status" ? "default" : "ghost"}
-              size="sm"
-              className="rounded-r-none"
-              onClick={() => setColorMode("status")}
-              title="Koloruj wg statusu rezerwacji"
-            >
-              Status
-            </Button>
-            <Button
-              variant={colorMode === "source" ? "default" : "ghost"}
-              size="sm"
-              className="rounded-l-none"
-              onClick={() => setColorMode("source")}
-              title="Koloruj wg źródła/kanału rezerwacji"
-            >
-              Kanał
-            </Button>
-          </div>
-          <Button variant="outline" size="sm" className="gap-1" onClick={handleOpenExportDialog}>
-            <Printer className="h-4 w-4" />
-            Eksport PDF
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant={showRoomSearch ? "default" : "outline"}
-            size="sm"
-            className="gap-1"
-            onClick={() => setShowRoomSearch((v) => !v)}
-          >
-            <Search className="h-4 w-4" />
-            Wyszukaj pokój
-          </Button>
-          {showRoomSearch && (
-            <input
-              type="text"
-              value={roomFilter}
-              onChange={(e) => setRoomFilter(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-              placeholder="Numer lub typ pokoju"
-            />
-          )}
-          {allAvailableFeatures.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-muted-foreground">Cechy:</span>
-              {allAvailableFeatures.map((feat) => (
-                <label key={feat} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={roomFeaturesFilter.includes(feat)}
-                    onChange={(e) => {
-                      setRoomFeaturesFilter((prev) =>
-                        e.target.checked ? [...prev, feat] : prev.filter((x) => x !== feat)
-                      );
-                    }}
-                    className="rounded border-input"
-                  />
-                  {feat}
-                </label>
-              ))}
-            </div>
-          )}
-          <Button
-            variant={showClientSearch ? "default" : "outline"}
-            size="sm"
-            className="gap-1"
-            onClick={() => setShowClientSearch((v) => !v)}
-          >
-            <UserSearch className="h-4 w-4" />
-            Szukaj klienta
-          </Button>
-          {showClientSearch && (
-            <input
-              type="text"
-              value={clientSearchTerm}
-              onChange={(e) => setClientSearchTerm(e.target.value)}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-              placeholder="Imię lub nazwisko gościa"
-            />
-          )}
-          {groups.length > 0 && (
-            <select
-              value={selectedGroupId ?? ""}
-              onChange={(e) => setSelectedGroupId(e.target.value || null)}
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">Wszystkie grupy</option>
-              {groups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name ?? "Bez nazwy"} ({group.reservationCount})
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <ListFilter className="h-4 w-4" />
-            Tylko grupowe
-            <Switch checked={showGroupOnly} onCheckedChange={setShowGroupOnly} />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Layers className="h-4 w-4" />
-            Grupowanie
-            <Switch checked={groupingEnabled} onCheckedChange={setGroupingEnabled} />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <BedDouble className="h-4 w-4" />
-            Tryb hostel
-            <Switch checked={hostelMode} onCheckedChange={setHostelMode} />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <DoorOpen className="h-4 w-4" />
-            Tylko wolne
-            <Switch checked={showOnlyFreeRooms} onCheckedChange={setShowOnlyFreeRooms} />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <AlertTriangle className="h-4 w-4" />
-            Konflikty
-            <Switch checked={highlightConflicts} onCheckedChange={setHighlightConflicts} />
-            {highlightConflicts && conflictingReservationIds.size > 0 && (
-              <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">
-                {conflictingReservationIds.size}
-              </span>
-            )}
-          </label>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Filter className="h-4 w-4" />
-            Styl podziału dni
-            <Switch checked={styleSplitByDay} onCheckedChange={setStyleSplitByDay} />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Hand className="h-4 w-4" />
-            Przenoszenie bez Shift
-            <Switch checked={dragWithoutShift} onCheckedChange={setDragWithoutShift} />
-          </label>
-          {/* Multi-select indicator */}
-          {selectedReservationIds.size > 0 && (
-            <div className="flex items-center gap-2 rounded-md border border-amber-500 bg-amber-500/10 px-3 py-1">
-              <span className="text-sm font-medium text-amber-700">
-                Zaznaczono: {selectedReservationIds.size}
+              <span className="min-w-[2.5rem] text-center text-xs font-medium text-muted-foreground" aria-hidden="true">
+                {Math.round(zoomMultiplier * 100)}%
               </span>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 px-2 text-xs"
-                onClick={() => setSelectedReservationIds(new Set())}
+                className="h-7 w-7 p-0"
+                onClick={handleZoomIn}
+                disabled={zoomIndex === ZOOM_LEVELS.length - 1}
+                title="Zoom in"
+                aria-label="Zwiększ gęstość widoku"
               >
-                Wyczyść
+                <ZoomIn className="h-3.5 w-3.5" />
               </Button>
             </div>
-          )}
+
+            <div
+              className={cn(
+                "flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs",
+                occupancyStats.percentage >= 80
+                  ? "border-green-500/50 bg-green-500/10 text-green-700 dark:text-green-400"
+                  : occupancyStats.percentage >= 50
+                    ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400"
+                    : "border-muted bg-muted/30 text-muted-foreground"
+              )}
+              title={`${occupancyStats.occupiedNights} z ${occupancyStats.totalNights} pokojo-nocy zajętych`}
+            >
+              <span className="font-bold text-sm">{occupancyStats.percentage}%</span>
+              <span className="opacity-75">zajętości</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {selectedReservationIds.size > 0 && (
+              <div className="flex items-center gap-1.5 rounded-md border border-amber-500 bg-amber-500/10 px-2.5 py-1">
+                <span className="text-xs font-medium text-amber-700">
+                  Zaznaczono: {selectedReservationIds.size}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 px-1.5 text-[10px]"
+                  onClick={() => setSelectedReservationIds(new Set())}
+                >
+                  Wyczyść
+                </Button>
+              </div>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => undo()}
+              disabled={!canUndo}
+              aria-label="Cofnij (Ctrl+Z)"
+              title="Cofnij (Ctrl+Z)"
+            >
+              <Undo2 className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => redo()}
+              disabled={!canRedo}
+              aria-label="Ponów (Ctrl+Y)"
+              title="Ponów (Ctrl+Y)"
+            >
+              <Redo2 className="h-4 w-4" />
+            </Button>
+
+            <div className="mx-1 h-5 w-px bg-border" />
+
+            <Button variant="default" size="sm" className="gap-1.5 h-8 font-semibold" onClick={handleCreateReservationClick}>
+              <Plus className="h-4 w-4" />
+              Zarezerwuj
+            </Button>
+
+            <Button
+              variant={filtersOpen ? "secondary" : "outline"}
+              size="sm"
+              className="gap-1 h-8"
+              onClick={() => setFiltersOpen((v) => !v)}
+              title="Filtry i wyszukiwanie"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Filtry
+              <ChevronDown className={cn("h-3 w-3 transition-transform", filtersOpen && "rotate-180")} />
+            </Button>
+
+            <div className="relative" ref={moreMenuRef}>
+              <Button
+                variant={moreMenuOpen ? "secondary" : "outline"}
+                size="sm"
+                className="h-8 w-8 p-0"
+                onClick={() => setMoreMenuOpen((v) => !v)}
+                title="Więcej opcji"
+                aria-label="Więcej opcji"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+              {moreMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-[200] w-56 rounded-md border bg-card shadow-lg py-1">
+                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { setGroupReservationSheetOpen(true); setMoreMenuOpen(false); }}>
+                    <Users className="h-4 w-4 text-muted-foreground" /> Rezerwacja grupowa
+                  </button>
+                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { setRoomBlockSheetOpen(true); setMoreMenuOpen(false); }}>
+                    <Ban className="h-4 w-4 text-muted-foreground" /> Wyłącz pokój
+                  </button>
+                  <div className="mx-2 my-1 h-px bg-border" />
+                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { setMonthlyDialogOpen(true); setMoreMenuOpen(false); }}>
+                    <CalendarDays className="h-4 w-4 text-muted-foreground" /> Widok miesięczny
+                  </button>
+                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { setFloorPlanDialogOpen(true); setMoreMenuOpen(false); }}>
+                    <Building2 className="h-4 w-4 text-muted-foreground" /> Plan pięter
+                  </button>
+                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { setDailyMovementsDialogOpen(true); setMoreMenuOpen(false); }}>
+                    <ListChecks className="h-4 w-4 text-muted-foreground" /> Przyjazdy/wyjazdy
+                  </button>
+                  <div className="mx-2 my-1 h-px bg-border" />
+                  <button type="button" className={cn("flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50", previewMode && "text-primary font-medium")} onClick={() => { togglePreviewMode(); setMoreMenuOpen(false); }}>
+                    <Eye className="h-4 w-4 text-muted-foreground" /> {previewMode ? "Zakończ podgląd" : "Podgląd"}
+                  </button>
+                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { setLegendDialogOpen(true); setMoreMenuOpen(false); }}>
+                    <Layers className="h-4 w-4 text-muted-foreground" /> Legenda
+                  </button>
+                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { setStatusColorsDialogOpen(true); setMoreMenuOpen(false); }}>
+                    <Filter className="h-4 w-4 text-muted-foreground" /> Kolory statusów
+                  </button>
+                  <div className="mx-2 my-1 h-px bg-border" />
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <div className="flex items-center rounded-md border border-input bg-background">
+                      <button type="button" className={cn("px-2.5 py-1 text-xs rounded-l-md", colorMode === "status" ? "bg-primary text-primary-foreground" : "hover:bg-muted/50")} onClick={() => setColorMode("status")}>Status</button>
+                      <button type="button" className={cn("px-2.5 py-1 text-xs rounded-r-md", colorMode === "source" ? "bg-primary text-primary-foreground" : "hover:bg-muted/50")} onClick={() => setColorMode("source")}>Kanał</button>
+                    </div>
+                  </div>
+                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { handleOpenExportDialog(); setMoreMenuOpen(false); }}>
+                    <Printer className="h-4 w-4 text-muted-foreground" /> Eksport PDF
+                  </button>
+                  <div className="mx-2 my-1 h-px bg-border" />
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-xs text-muted-foreground">Prywatność</span>
+                    <Switch id="privacy-mode" checked={privacyMode} onCheckedChange={setPrivacyMode} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
+
+        {/* Row 2: Quick Stats Bar */}
+        <div className="flex items-center gap-3 border-t bg-muted/10 px-3 py-1.5 md:px-4 text-xs">
+          <button type="button" className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-md px-1.5 py-0.5 hover:bg-muted/50" title="Dzisiejsze przyjazdy – kliknij aby zobaczyć listę" onClick={() => { setQuickStatsTab("arrivals"); setQuickStatsOpen(true); }}>
+            <LogIn className="h-3.5 w-3.5 text-green-600" />
+            <span>Przyjazdy:</span>
+            <span className="font-bold text-foreground">{todayQuickStats.arrivals}</span>
+          </button>
+          <div className="h-3 w-px bg-border" />
+          <button type="button" className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-md px-1.5 py-0.5 hover:bg-muted/50" title="Dzisiejsze wyjazdy – kliknij aby zobaczyć listę" onClick={() => { setQuickStatsTab("departures"); setQuickStatsOpen(true); }}>
+            <LogOut className="h-3.5 w-3.5 text-blue-600" />
+            <span>Wyjazdy:</span>
+            <span className="font-bold text-foreground">{todayQuickStats.departures}</span>
+          </button>
+          <div className="h-3 w-px bg-border" />
+          <button type="button" className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-md px-1.5 py-0.5 hover:bg-muted/50" title="Pokoje do posprzątania – kliknij aby zobaczyć listę" onClick={() => { setQuickStatsTab("dirty"); setQuickStatsOpen(true); }}>
+            <SprayCan className="h-3.5 w-3.5 text-amber-500" />
+            <span>Do sprzątania:</span>
+            <span className={cn("font-bold", todayQuickStats.dirtyRooms > 0 ? "text-amber-600" : "text-foreground")}>{todayQuickStats.dirtyRooms}</span>
+          </button>
+          <div className="h-3 w-px bg-border" />
+          <button type="button" className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors rounded-md px-1.5 py-0.5 hover:bg-muted/50" title="Aktualnie zameldowani goście – kliknij aby zobaczyć listę" onClick={() => { setQuickStatsTab("checkedIn"); setQuickStatsOpen(true); }}>
+            <BedDouble className="h-3.5 w-3.5 text-primary" />
+            <span>Zameldowani:</span>
+            <span className="font-bold text-foreground">{todayQuickStats.checkedInNow}</span>
+          </button>
+          <div className="h-3 w-px bg-border" />
+          <div className="flex items-center gap-1.5 text-muted-foreground">
+            <span>{displayRooms.length} pokoi</span>
+            <span className="text-muted-foreground/60">·</span>
+            <span>{filteredReservations.length} rez.</span>
+          </div>
+        </div>
+
+        {/* Collapsible Filters Row */}
+        {filtersOpen && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t bg-muted/5 px-3 py-2 md:px-4">
+            <div className="flex items-center gap-1.5">
+              <Search className="h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                type="text"
+                value={roomFilter}
+                onChange={(e) => setRoomFilter(e.target.value)}
+                className="h-7 w-36 rounded-md border border-input bg-background px-2 text-xs"
+                placeholder="Numer / typ pokoju"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <UserSearch className="h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                type="text"
+                value={clientSearchTerm}
+                onChange={(e) => setClientSearchTerm(e.target.value)}
+                className="h-7 w-40 rounded-md border border-input bg-background px-2 text-xs"
+                placeholder="Imię / nazwisko gościa"
+              />
+            </div>
+            {groups.length > 0 && (
+              <select
+                value={selectedGroupId ?? ""}
+                onChange={(e) => setSelectedGroupId(e.target.value || null)}
+                className="h-7 rounded-md border border-input bg-background px-2 text-xs"
+              >
+                <option value="">Wszystkie grupy</option>
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name ?? "Bez nazwy"} ({group.reservationCount})
+                  </option>
+                ))}
+              </select>
+            )}
+            {allAvailableFeatures.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Cechy:</span>
+                {allAvailableFeatures.map((feat) => (
+                  <label key={feat} className="flex items-center gap-1 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={roomFeaturesFilter.includes(feat)}
+                      onChange={(e) => {
+                        setRoomFeaturesFilter((prev) =>
+                          e.target.checked ? [...prev, feat] : prev.filter((x) => x !== feat)
+                        );
+                      }}
+                      className="rounded border-input h-3.5 w-3.5"
+                    />
+                    {feat}
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <div className="mx-1 h-4 w-px bg-border" />
+
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" title="Pokaż tylko rezerwacje należące do grup (np. wycieczki, konferencje)">
+              <ListFilter className="h-3.5 w-3.5" /> Tylko grupowe
+              <Switch checked={showGroupOnly} onCheckedChange={setShowGroupOnly} className="scale-75" />
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" title="Grupuj pokoje wg typu (np. Standard, Deluxe) zamiast listy numerów">
+              <Layers className="h-3.5 w-3.5" /> Grupowanie
+              <Switch checked={groupingEnabled} onCheckedChange={setGroupingEnabled} className="scale-75" />
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" title="Tryb hostelowy – sprzedaż pojedynczych łóżek w pokoju wieloosobowym">
+              <BedDouble className="h-3.5 w-3.5" /> Hostel
+              <Switch checked={hostelMode} onCheckedChange={setHostelMode} className="scale-75" />
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" title="Pokaż tylko pokoje bez rezerwacji w widocznym zakresie dat">
+              <DoorOpen className="h-3.5 w-3.5" /> Wolne
+              <Switch checked={showOnlyFreeRooms} onCheckedChange={setShowOnlyFreeRooms} className="scale-75" />
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" title="Podświetl rezerwacje nakładające się na ten sam pokój (konflikty terminów)">
+              <AlertTriangle className="h-3.5 w-3.5" /> Konflikty
+              <Switch checked={highlightConflicts} onCheckedChange={setHighlightConflicts} className="scale-75" />
+              {highlightConflicts && conflictingReservationIds.size > 0 && (
+                <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] text-white leading-none">
+                  {conflictingReservationIds.size}
+                </span>
+              )}
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" title="Pokaż przerwy między dniami na paskach rezerwacji (lepsza czytelność przy krótkich pobytach)">
+              <Filter className="h-3.5 w-3.5" /> Podział dni
+              <Switch checked={styleSplitByDay} onCheckedChange={setStyleSplitByDay} className="scale-75" />
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer" title="Przeciągaj rezerwacje bez trzymania klawisza Shift (wygodniejsze, ale łatwiej o przypadkowe przesunięcie)">
+              <Hand className="h-3.5 w-3.5" /> Drag bez Shift
+              <Switch checked={dragWithoutShift} onCheckedChange={setDragWithoutShift} className="scale-75" />
+            </label>
+          </div>
+        )}
       </header>
 
-      {/* Grid wrapper – scrollable; przeciąganie komórki = przewijanie tabeli; mniejszy padding na tablecie */}
+      {/* Grid wrapper – scrollable; przeciąganie komórki = przewijanie w lewo/prawo; wypełnia do końca okna */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-auto p-3 sm:p-4 md:p-6 cursor-grab active:cursor-grabbing min-h-0"
+        className="flex-1 overflow-auto p-1.5 sm:p-2 md:p-3 min-h-0"
       >
         <DndContext
           sensors={sensors}
@@ -1452,11 +1491,11 @@ export function TapeChart({
         >
           <div
             ref={gridWrapperRef}
-            className="relative inline-block w-max min-w-full"
+            className="relative w-full min-w-max cursor-grab active:cursor-grabbing"
             onMouseDown={handleGridPointerDown}
           >
             <div
-              className="inline-grid w-max min-w-full"
+              className="grid w-full min-w-max"
               style={{
                 gridTemplateColumns: gridColumns,
                 gridTemplateRows: gridRows,
@@ -1473,14 +1512,18 @@ export function TapeChart({
             {/* Sticky date headers */}
             {dates.map((dateStr, i) => {
               const isToday = dateStr === todayStr;
+              const isWeekend = isWeekendDate(dateStr);
               return (
                 <div
                   key={dateStr}
+                  data-date-header
                   className={cn(
-                    "sticky top-0 z-[60] flex items-center justify-center border-b px-2 py-2 text-center text-sm font-medium",
+                    "sticky top-0 z-[60] flex items-center justify-center border-b px-2 py-2 text-center text-xs font-medium cursor-grab active:cursor-grabbing",
                     isToday
-                      ? "bg-primary/20 text-primary font-bold"
-                      : "bg-muted/50"
+                      ? "bg-primary/20 text-primary font-bold text-[13px]"
+                      : isWeekend
+                        ? "bg-muted/80 text-muted-foreground"
+                        : "bg-muted/50"
                   )}
                   style={{
                     gridColumn: i + 2,
@@ -1495,18 +1538,26 @@ export function TapeChart({
               );
             })}
 
-            {/* Podświetlenie kolumny "dziś" */}
+            {/* Podświetlenie kolumny "dziś" – wyrazna linia + subtelne tło */}
             {dates.indexOf(todayStr) >= 0 && (
-              <div
-                className="pointer-events-none absolute z-[5] bg-primary/10"
-                style={{
-                  left: ROOM_LABEL_WIDTH_PX + dates.indexOf(todayStr) * COLUMN_WIDTH_PX,
-                  top: 0,
-                  width: COLUMN_WIDTH_PX,
-                  height: "100%",
-                }}
-                aria-hidden="true"
-              />
+              <>
+                <div
+                  className="pointer-events-none z-[5] bg-primary/5"
+                  style={{
+                    gridColumn: `${dates.indexOf(todayStr) + 2} / ${dates.indexOf(todayStr) + 3}`,
+                    gridRow: "1 / -1",
+                  }}
+                  aria-hidden="true"
+                />
+                <div
+                  className="pointer-events-none z-[6] border-l-2 border-primary/60"
+                  style={{
+                    gridColumn: `${dates.indexOf(todayStr) + 2} / ${dates.indexOf(todayStr) + 3}`,
+                    gridRow: "1 / -1",
+                  }}
+                  aria-hidden="true"
+                />
+              </>
             )}
 
             {/* Room rows: sticky first column (droppable) + day cells */}
@@ -1533,31 +1584,28 @@ export function TapeChart({
                   setCreateSheetOpen(true);
                 }}
               >
-                <div className="flex flex-col">
-                  <span className="font-medium">{room.number}</span>
-                  {(groupingEnabled || hostelMode) && (
-                    <span className="text-xs uppercase text-muted-foreground">
-                      {room.type}
-                    </span>
-                  )}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="font-bold text-xs leading-none">{room.number}</span>
+                  <span className="text-[10px] text-muted-foreground truncate leading-none">
+                    {room.type}
+                  </span>
                   {hostelMode && (
-                    <span className="text-xs text-muted-foreground">
-                      Goście dziś: {occupancyToday.get(room.number) ?? 0}
+                    <span className="text-[10px] text-muted-foreground leading-none">
+                      ({occupancyToday.get(room.number) ?? 0})
                     </span>
-                  )}
-                  {!groupingEnabled && !hostelMode && (
-                    <span className="text-xs text-muted-foreground">{room.type}</span>
                   )}
                 </div>
-                <RoomStatusIcon status={room.status} showLabel />
+                <RoomStatusIcon status={room.status} showLabel={false} compact />
               </RoomRowDroppable>
             ))}
 
             </div>
-            {/* Reservation bars – overlay; overflow hidden, żeby paski nie wychodziły poza linie ani na daty */}
-            <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 50 }}>
-              <div className="relative w-full h-full pointer-events-none overflow-hidden">
-                {reservationPlacements.map(({ reservation, left, width, top }) => {
+            {/* Reservation bars – overlay w siatce, paski równo z kwadracikami */}
+            <div
+              className="absolute inset-0 pointer-events-none overflow-hidden"
+              style={{ zIndex: 50, gridTemplateColumns: gridColumns, gridTemplateRows: gridRows, display: "grid" }}
+            >
+              {reservationPlacements.map(({ reservation, gridRow, gridColumnStart, gridColumnEnd }) => {
                   const room = roomByNumber.get(reservation.room);
                   const priceKey = `${reservation.room}-${reservation.checkIn}`;
                   const pricePerNight =
@@ -1573,11 +1621,7 @@ export function TapeChart({
                     pricePerNight != null && pricePerNight > 0
                       ? nights * pricePerNight
                       : undefined;
-                  const padding = styleSplitByDay ? BAR_PADDING_PX : 2;
-                  const barLeft = Math.round(left + padding);
-                  const barTop = Math.round(top + padding);
-                  const barWidth = Math.round(Math.max(width - padding * 2, COLUMN_WIDTH_PX / 3));
-                  const barHeight = Math.max(ROW_HEIGHT_PX - padding * 2, 12);
+                  const padding = styleSplitByDay ? BAR_PADDING_PX : 0;
                   // Source-based coloring
                   const reservationSource = reservation.rateCodeName ?? reservation.rateCode ?? "Recepcja";
                   const sourceColor = sourceColors.get(reservationSource);
@@ -1588,7 +1632,7 @@ export function TapeChart({
                   <div
                     key={reservation.id}
                     className={cn(
-                      "absolute pointer-events-auto overflow-hidden",
+                      "pointer-events-auto overflow-hidden flex items-center",
                       previewMode ? "cursor-default" : "cursor-grab active:cursor-grabbing",
                       highlightedReservationId === reservation.id &&
                         "ring-2 ring-primary rounded-md z-10",
@@ -1599,13 +1643,12 @@ export function TapeChart({
                       highlightedReservationId === reservation.id ? "true" : undefined
                     }
                     data-selected={selectedReservationIds.has(reservation.id) ? "true" : undefined}
+                    data-reservation-id={reservation.id}
                     style={{
-                      left: barLeft,
-                      top: barTop,
-                      width: barWidth,
-                      height: barHeight,
-                      minHeight: barHeight,
-                      maxHeight: barHeight,
+                      gridColumn: `${gridColumnStart} / ${gridColumnEnd}`,
+                      gridRow,
+                      padding: padding,
+                      minHeight: ROW_HEIGHT_PX - padding * 2,
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1687,19 +1730,17 @@ export function TapeChart({
                   </div>
                 );
                 })}
-                {/* Ghost preview for drag-and-drop */}
+                {/* Ghost preview for drag-and-drop – grid, równo z kwadracikami */}
                 {ghostPlacement && (
                   <div
-                    className="absolute pointer-events-none"
+                    className="pointer-events-none flex items-center z-[100]"
                     style={{
-                      left: Math.round(ghostPlacement.left + (styleSplitByDay ? BAR_PADDING_PX : 2)),
-                      top: Math.round(ghostPlacement.top + (styleSplitByDay ? BAR_PADDING_PX : 2)),
-                      width: Math.round(Math.max(ghostPlacement.width - (styleSplitByDay ? BAR_PADDING_PX : 2) * 2, COLUMN_WIDTH_PX / 3)),
-                      height: Math.max(ROW_HEIGHT_PX - (styleSplitByDay ? BAR_PADDING_PX : 2) * 2, 12),
-                      zIndex: 100,
+                      gridColumn: `${ghostPlacement.gridColumnStart} / ${ghostPlacement.gridColumnEnd}`,
+                      gridRow: ghostPlacement.gridRow,
+                      padding: styleSplitByDay ? BAR_PADDING_PX : 0,
                     }}
                   >
-                    <div className="h-full w-full rounded-md border-2 border-dashed border-primary bg-primary/20 flex items-center justify-center">
+                    <div className="h-full w-full min-h-[12px] rounded-md border-2 border-dashed border-primary bg-primary/20 flex items-center justify-center">
                       <span className="text-xs text-primary font-medium truncate px-2">
                         {ghostPlacement.reservation.guestName}
                       </span>
@@ -1708,88 +1749,103 @@ export function TapeChart({
                 )}
               </div>
             </div>
-          </div>
         </DndContext>
       </div>
-      <section className="border-t border-border bg-muted/20 px-6 py-3 no-print" data-hide-print="true">
-        <div className="flex flex-wrap items-center gap-2">
-          {statusTabOptions.map((option) => (
-            <Button
-              key={option.id}
-              type="button"
-              variant={statusTab === option.id ? "default" : "outline"}
-              size="sm"
-              onClick={() => setStatusTab(option.id)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
-          {statusTab === "statuses" &&
-            statusLegendItems.map((item) => (
-              <div key={item.status} className="flex items-center gap-2">
-                <span
-                  className="inline-block h-3 w-6 rounded-sm border border-border"
-                  style={{ backgroundColor: item.color }}
-                  aria-hidden="true"
-                />
-                <span>{item.label}</span>
-              </div>
-            ))}
-          {statusTab === "custom" && (
-            <p className="text-muted-foreground">
-              Dodatkowe statusy możesz zdefiniować w module Rezerwacje &gt; Konfiguracja. Brak zdefiniowanych statusów.
-            </p>
-          )}
-          {statusTab === "sources" && (
-            <div className="flex flex-wrap gap-4">
-              {sourceSummary.length === 0 ? (
-                <p className="text-muted-foreground">Brak danych o źródłach rezerwacji.</p>
-              ) : (
-                sourceSummary.slice(0, 10).map(([source, count]) => (
-                  <div key={source} className="flex items-center gap-2 rounded-md border bg-background px-3 py-2">
+      <section className="border-t border-border bg-muted/20 no-print" data-hide-print="true">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between px-4 py-1.5 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"
+          onClick={() => setFooterOpen((v) => !v)}
+        >
+          <span className="flex items-center gap-2">
+            <Layers className="h-3.5 w-3.5" />
+            Legenda i statystyki
+          </span>
+          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", footerOpen && "rotate-180")} />
+        </button>
+        {footerOpen && (
+          <div className="px-4 pb-3">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              {statusTabOptions.map((option) => (
+                <Button
+                  key={option.id}
+                  type="button"
+                  variant={statusTab === option.id ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setStatusTab(option.id)}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              {statusTab === "statuses" &&
+                statusLegendItems.map((item) => (
+                  <div key={item.status} className="flex items-center gap-2">
                     <span
-                      className="inline-block h-4 w-4 rounded-sm shrink-0"
-                      style={{ backgroundColor: sourceColors.get(source) }}
+                      className="inline-block h-3 w-6 rounded-sm border border-border"
+                      style={{ backgroundColor: item.color }}
                       aria-hidden="true"
                     />
-                    <div>
-                      <p className="font-medium text-sm">{source}</p>
-                      <p className="text-xs text-muted-foreground">{count} rezerwacji</p>
-                    </div>
+                    <span className="text-xs">{item.label}</span>
                   </div>
-                ))
-              )}
-            </div>
-          )}
-          {statusTab === "prices" && (
-            <div>
-              {priceSummary ? (
-                <div className="flex flex-wrap gap-4">
-                  <div className="rounded-md border bg-background px-3 py-2">
-                    <p className="text-xs text-muted-foreground">Średnia stawka / noc</p>
-                    <p className="text-lg font-semibold">{priceSummary.avg} PLN</p>
-                  </div>
-                  <div className="rounded-md border bg-background px-3 py-2">
-                    <p className="text-xs text-muted-foreground">Zakres</p>
-                    <p className="text-lg font-semibold">
-                      {priceSummary.min} – {priceSummary.max} PLN
-                    </p>
-                  </div>
-                  <div className="rounded-md border bg-background px-3 py-2">
-                    <p className="text-xs text-muted-foreground">Rezerwacje z ceną</p>
-                    <p className="text-lg font-semibold">{priceSummary.count}</p>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-muted-foreground">
-                  Brak danych o cenach. Uzupełnij stawki w module Cennik, aby śledzić ceny na grafiku.
+                ))}
+              {statusTab === "custom" && (
+                <p className="text-xs text-muted-foreground">
+                  Dodatkowe statusy możesz zdefiniować w module Rezerwacje &gt; Konfiguracja.
                 </p>
               )}
+              {statusTab === "sources" && (
+                <div className="flex flex-wrap gap-3">
+                  {sourceSummary.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Brak danych o źródłach rezerwacji.</p>
+                  ) : (
+                    sourceSummary.slice(0, 10).map(([source, count]) => (
+                      <div key={source} className="flex items-center gap-1.5 rounded-md border bg-background px-2 py-1.5">
+                        <span
+                          className="inline-block h-3 w-3 rounded-sm shrink-0"
+                          style={{ backgroundColor: sourceColors.get(source) }}
+                          aria-hidden="true"
+                        />
+                        <div>
+                          <p className="font-medium text-xs">{source}</p>
+                          <p className="text-[10px] text-muted-foreground">{count} rez.</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+              {statusTab === "prices" && (
+                <div>
+                  {priceSummary ? (
+                    <div className="flex flex-wrap gap-3">
+                      <div className="rounded-md border bg-background px-2.5 py-1.5">
+                        <p className="text-[10px] text-muted-foreground">Śr. stawka / noc</p>
+                        <p className="text-sm font-semibold">{priceSummary.avg} PLN</p>
+                      </div>
+                      <div className="rounded-md border bg-background px-2.5 py-1.5">
+                        <p className="text-[10px] text-muted-foreground">Zakres</p>
+                        <p className="text-sm font-semibold">
+                          {priceSummary.min} – {priceSummary.max} PLN
+                        </p>
+                      </div>
+                      <div className="rounded-md border bg-background px-2.5 py-1.5">
+                        <p className="text-[10px] text-muted-foreground">Rez. z ceną</p>
+                        <p className="text-sm font-semibold">{priceSummary.count}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Brak danych o cenach.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </section>
       <MonthlyOverviewDialog
         open={monthlyDialogOpen}
@@ -1811,6 +1867,14 @@ export function TapeChart({
         onOpenChange={setDailyMovementsDialogOpen}
         reservations={reservations}
         initialDate={todayStr}
+      />
+      <QuickStatsDialog
+        open={quickStatsOpen}
+        onOpenChange={setQuickStatsOpen}
+        initialTab={quickStatsTab}
+        reservations={reservations}
+        allRooms={allRooms}
+        todayStr={todayStr}
       />
       <GroupReservationSheet
         open={groupReservationSheetOpen}

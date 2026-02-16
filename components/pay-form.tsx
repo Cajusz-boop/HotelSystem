@@ -27,7 +27,7 @@ export function PayForm({ token, amount }: PayFormProps) {
       if (data.success) {
         setPaid(true);
       } else {
-        setError(data.error ?? "Błąd płatności");
+        setError("error" in data ? (data.error ?? "Błąd płatności") : "Błąd płatności");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Błąd połączenia");

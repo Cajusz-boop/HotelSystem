@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +17,7 @@ import {
   getRoomsForManagement,
   createRoom,
   updateRoomActiveForSale,
+  updateRoomStatus,
   deleteRoom,
   getRoomTypes,
   ensureRoomTypes,
@@ -42,8 +44,9 @@ import {
   type RoomBlockItem,
   type RoomBlockType,
 } from "@/app/actions/rooms";
+import { getHotelConfig } from "@/app/actions/hotel-config";
 import { toast } from "sonner";
-import { BedDouble, Plus, Ban, CheckCircle, Trash2, Pencil, X, Tag, Settings2, ImageIcon, ClipboardList, Minus, Link2, Unlink, Wrench, AlertTriangle, Clock, CheckCircle2 } from "lucide-react";
+import { BedDouble, Plus, Ban, CheckCircle, Trash2, Pencil, X, Tag, Settings2, ImageIcon, ClipboardList, Minus, Link2, Unlink, Wrench, Clock, CheckCircle2 } from "lucide-react";
 
 const STATUS_LABELS: Record<string, string> = {
   CLEAN: "Czysty",
@@ -141,6 +144,101 @@ export default function PokojePage() {
   const [newBlockType, setNewBlockType] = useState<RoomBlockType>("RENOVATION");
   const [savingBlock, setSavingBlock] = useState(false);
 
+  // ── Inline editing w tabeli ──
+  const [inlineEditCell, setInlineEditCell] = useState<{ roomId: string; field: string } | null>(null);
+  const [inlineEditValue, setInlineEditValue] = useState<string>("");
+
+  const startInlineEdit = (room: RoomForManagement, field: string) => {
+    let val = "";
+    switch (field) {
+      case "number": val = room.number; break;
+      case "type": val = room.type; break;
+      case "status": val = room.status; break;
+      case "price": val = room.price != null ? String(room.price) : ""; break;
+      case "surfaceArea": val = room.surfaceArea != null ? String(room.surfaceArea) : ""; break;
+      case "floor": val = room.floor ?? ""; break;
+      case "building": val = room.building ?? ""; break;
+      case "view": val = room.view ?? ""; break;
+      case "maxOccupancy": val = String(room.maxOccupancy ?? 2); break;
+    }
+    setInlineEditCell({ roomId: room.id, field });
+    setInlineEditValue(val);
+  };
+
+  const cancelInlineEdit = () => {
+    setInlineEditCell(null);
+    setInlineEditValue("");
+  };
+
+  const saveInlineEdit = async () => {
+    if (!inlineEditCell) return;
+    const { roomId, field } = inlineEditCell;
+    const room = rooms.find((r) => r.id === roomId);
+    if (!room) return;
+
+    const data: Record<string, unknown> = {};
+    const v = inlineEditValue.trim();
+
+    switch (field) {
+      case "number": if (v === room.number || !v) { cancelInlineEdit(); return; } data.number = v; break;
+      case "type": if (v === room.type || !v) { cancelInlineEdit(); return; } data.type = v; break;
+      case "status": {
+        if (v === room.status) { cancelInlineEdit(); return; }
+        const statusResult = await updateRoomStatus({ roomId, status: v as "CLEAN" | "DIRTY" | "OOO" | "INSPECTION" | "INSPECTED" | "CHECKOUT_PENDING" | "MAINTENANCE" });
+        if (statusResult.success) {
+          setRooms((prev) => prev.map((rm) => rm.id === roomId ? { ...rm, status: v } : rm));
+          toast.success("Status zaktualizowany");
+        } else {
+          toast.error(statusResult.error ?? "Błąd zmiany statusu");
+        }
+        cancelInlineEdit();
+        return;
+      }
+      case "price": {
+        const num = v ? parseFloat(v) : null;
+        if (num === room.price) { cancelInlineEdit(); return; }
+        data.price = num;
+        break;
+      }
+      case "surfaceArea": {
+        const num = v ? parseFloat(v) : null;
+        if (num === room.surfaceArea) { cancelInlineEdit(); return; }
+        data.surfaceArea = num;
+        break;
+      }
+      case "floor": if (v === (room.floor ?? "")) { cancelInlineEdit(); return; } data.floor = v || null; break;
+      case "building": if (v === (room.building ?? "")) { cancelInlineEdit(); return; } data.building = v || null; break;
+      case "view": if (v === (room.view ?? "")) { cancelInlineEdit(); return; } data.view = v || null; break;
+      case "maxOccupancy": {
+        const num = v ? parseInt(v, 10) : 2;
+        if (num === room.maxOccupancy) { cancelInlineEdit(); return; }
+        data.maxOccupancy = num;
+        break;
+      }
+      default: cancelInlineEdit(); return;
+    }
+
+    const result = await updateRoom(roomId, data as Parameters<typeof updateRoom>[1]);
+    if (result.success && result.data) {
+      setRooms((prev) => prev.map((r) => (r.id === roomId ? result.data! : r)));
+      toast.success("Zapisano");
+    } else {
+      toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
+    }
+    cancelInlineEdit();
+  };
+
+  const handleInlineKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") { e.preventDefault(); saveInlineEdit(); }
+    if (e.key === "Escape") { cancelInlineEdit(); }
+  };
+
+  const isEditing = (roomId: string, field: string) =>
+    inlineEditCell?.roomId === roomId && inlineEditCell?.field === field;
+
+  // Piętra z konfiguracji hotelu
+  const [floorOptions, setFloorOptions] = useState<string[]>([]);
+
   // Predefiniowane opcje
   const viewOptions = ["", "morze", "góry", "miasto", "parking", "ogród", "basen", "las", "jezioro", "dziedziniec"];
   const exposureOptions = ["", "północ", "południe", "wschód", "zachód", "północny-wschód", "północny-zachód", "południowy-wschód", "południowy-zachód"];
@@ -223,7 +321,7 @@ export default function PokojePage() {
       toast.success(`Zaktualizowano zdjęcia pokoju ${editingPhotos.number}`);
       closePhotosDialog();
     } else {
-      toast.error(result.error ?? "Błąd zapisu");
+      toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
     }
   };
 
@@ -294,7 +392,7 @@ export default function PokojePage() {
       toast.success(`Zaktualizowano inwentaryzację pokoju ${editingInventory.number}`);
       closeInventoryDialog();
     } else {
-      toast.error(result.error ?? "Błąd zapisu");
+      toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
     }
   };
 
@@ -561,23 +659,49 @@ export default function PokojePage() {
     }
   };
 
-  const load = async () => {
-    setLoading(true);
-    await ensureRoomTypes();
-    const [roomsRes, typesRes] = await Promise.all([
-      getRoomsForManagement(),
-      getRoomTypes(),
-    ]);
-    setLoading(false);
-    if (roomsRes.success && roomsRes.data) setRooms(roomsRes.data);
-    else toast.error(roomsRes.success ? undefined : roomsRes.error);
-    if (typesRes.success && typesRes.data) setRoomTypes(typesRes.data);
-    getRoomGroups().then((r) => r.success && r.data && setRoomGroups(r.data));
+  const numericSort = (a: { number: string }, b: { number: string }) => {
+    const na = parseInt(a.number, 10);
+    const nb = parseInt(b.number, 10);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    if (!isNaN(na)) return -1;
+    if (!isNaN(nb)) return 1;
+    return a.number.localeCompare(b.number, "pl");
   };
 
+  const queryClient = useQueryClient();
+
+  const { data: _initialData, isLoading: queryLoading } = useQuery({
+    queryKey: ["pokoje-initial"],
+    queryFn: async () => {
+      await ensureRoomTypes();
+      const [roomsRes, typesRes, configRes, groupsRes] = await Promise.all([
+        getRoomsForManagement(),
+        getRoomTypes(),
+        getHotelConfig(),
+        getRoomGroups(),
+      ]);
+      return { roomsRes, typesRes, configRes, groupsRes };
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
   useEffect(() => {
-    load();
-  }, []);
+    if (!_initialData) return;
+    const { roomsRes, typesRes, configRes, groupsRes } = _initialData;
+    const loadedRooms = roomsRes.success && roomsRes.data ? roomsRes.data : [];
+    if (roomsRes.success && roomsRes.data) setRooms([...loadedRooms].sort(numericSort));
+    else if (!roomsRes.success) toast.error(roomsRes.error);
+    if (typesRes.success && typesRes.data) setRoomTypes(typesRes.data);
+    if (groupsRes.success && groupsRes.data) setRoomGroups(groupsRes.data);
+    const configFloors = configRes.success ? (configRes.data.floors ?? []) : [];
+    const usedFloors = [...new Set(loadedRooms.map((r) => r.floor).filter(Boolean))] as string[];
+    setFloorOptions([...new Set([...configFloors, ...usedFloors])]);
+    setLoading(false);
+  }, [_initialData]);
+
+  const load = useCallback(async () => {
+    queryClient.invalidateQueries({ queryKey: ["pokoje-initial"] });
+  }, [queryClient]);
 
   const handleAddRoom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -596,7 +720,7 @@ export default function PokojePage() {
     });
     setAdding(false);
     if (result.success && result.data) {
-      setRooms((prev) => [...prev, result.data!]);
+      setRooms((prev) => [...prev, result.data!].sort(numericSort));
       setNewNumber("");
       setNewType("");
       setNewPrice("");
@@ -802,7 +926,7 @@ export default function PokojePage() {
       toast.success(`Zaktualizowano szczegóły pokoju ${editingDetails.number}`);
       closeDetailsDialog();
     } else {
-      toast.error(result.error ?? "Błąd zapisu");
+      toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
     }
   };
 
@@ -928,16 +1052,209 @@ export default function PokojePage() {
               <tbody>
                 {rooms.map((r) => (
                   <tr key={r.id} className="border-b border-border">
-                    <td className="px-4 py-3 font-medium">{r.number}</td>
-                    <td className="px-4 py-3">{r.type}</td>
-                    <td className="px-4 py-3">{STATUS_LABELS[r.status] ?? r.status}</td>
-                    <td className="px-4 py-3">{r.price != null ? `${r.price} PLN` : "—"}</td>
-                    <td className="px-4 py-3">
-                      {r.surfaceArea != null ? `${r.surfaceArea} m²` : "—"}
+                    {/* Numer */}
+                    <td className="px-4 py-3 font-medium">
+                      {isEditing(r.id, "number") ? (
+                        <Input
+                          autoFocus
+                          value={inlineEditValue}
+                          onChange={(e) => setInlineEditValue(e.target.value)}
+                          onBlur={saveInlineEdit}
+                          onKeyDown={handleInlineKeyDown}
+                          className="h-7 w-20 text-sm"
+                        />
+                      ) : (
+                        <span
+                          className="cursor-pointer hover:underline decoration-dashed underline-offset-4"
+                          onClick={() => startInlineEdit(r, "number")}
+                          title="Kliknij aby edytować"
+                        >
+                          {r.number}
+                        </span>
+                      )}
                     </td>
-                    <td className="px-4 py-3">{r.floor ?? "—"}</td>
-                    <td className="px-4 py-3">{r.building ?? "—"}</td>
-                    <td className="px-4 py-3">{r.view ?? "—"}</td>
+                    {/* Typ */}
+                    <td className="px-4 py-3">
+                      {isEditing(r.id, "type") ? (
+                        roomTypes.length > 0 ? (
+                          <select
+                            autoFocus
+                            value={inlineEditValue}
+                            onChange={(e) => { setInlineEditValue(e.target.value); }}
+                            onBlur={saveInlineEdit}
+                            onKeyDown={handleInlineKeyDown}
+                            className="h-7 rounded border border-input bg-background px-2 text-sm"
+                          >
+                            {roomTypes.map((t) => (
+                              <option key={t.id} value={t.name}>{t.name}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <Input
+                            autoFocus
+                            value={inlineEditValue}
+                            onChange={(e) => setInlineEditValue(e.target.value)}
+                            onBlur={saveInlineEdit}
+                            onKeyDown={handleInlineKeyDown}
+                            className="h-7 w-24 text-sm"
+                          />
+                        )
+                      ) : (
+                        <span
+                          className="cursor-pointer hover:underline decoration-dashed underline-offset-4"
+                          onClick={() => startInlineEdit(r, "type")}
+                          title="Kliknij aby edytować"
+                        >
+                          {r.type}
+                        </span>
+                      )}
+                    </td>
+                    {/* Status */}
+                    <td className="px-4 py-3">
+                      {isEditing(r.id, "status") ? (
+                        <select
+                          autoFocus
+                          value={inlineEditValue}
+                          onChange={(e) => { setInlineEditValue(e.target.value); }}
+                          onBlur={saveInlineEdit}
+                          onKeyDown={handleInlineKeyDown}
+                          className="h-7 rounded border border-input bg-background px-2 text-sm"
+                        >
+                          {Object.entries(STATUS_LABELS).map(([val, label]) => (
+                            <option key={val} value={val}>{label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span
+                          className="cursor-pointer hover:underline decoration-dashed underline-offset-4"
+                          onClick={() => startInlineEdit(r, "status")}
+                          title="Kliknij aby edytować"
+                        >
+                          {STATUS_LABELS[r.status] ?? r.status}
+                        </span>
+                      )}
+                    </td>
+                    {/* Cena */}
+                    <td className="px-4 py-3">
+                      {isEditing(r.id, "price") ? (
+                        <Input
+                          autoFocus
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={inlineEditValue}
+                          onChange={(e) => setInlineEditValue(e.target.value)}
+                          onBlur={saveInlineEdit}
+                          onKeyDown={handleInlineKeyDown}
+                          className="h-7 w-24 text-sm"
+                        />
+                      ) : (
+                        <span
+                          className="cursor-pointer hover:underline decoration-dashed underline-offset-4"
+                          onClick={() => startInlineEdit(r, "price")}
+                          title="Kliknij aby edytować"
+                        >
+                          {r.price != null ? `${r.price} PLN` : "—"}
+                        </span>
+                      )}
+                    </td>
+                    {/* Metraż */}
+                    <td className="px-4 py-3">
+                      {isEditing(r.id, "surfaceArea") ? (
+                        <Input
+                          autoFocus
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={inlineEditValue}
+                          onChange={(e) => setInlineEditValue(e.target.value)}
+                          onBlur={saveInlineEdit}
+                          onKeyDown={handleInlineKeyDown}
+                          className="h-7 w-20 text-sm"
+                        />
+                      ) : (
+                        <span
+                          className="cursor-pointer hover:underline decoration-dashed underline-offset-4"
+                          onClick={() => startInlineEdit(r, "surfaceArea")}
+                          title="Kliknij aby edytować"
+                        >
+                          {r.surfaceArea != null ? `${r.surfaceArea} m²` : "—"}
+                        </span>
+                      )}
+                    </td>
+                    {/* Piętro */}
+                    <td className="px-4 py-3">
+                      {isEditing(r.id, "floor") ? (
+                        <select
+                          autoFocus
+                          value={inlineEditValue}
+                          onChange={(e) => { setInlineEditValue(e.target.value); }}
+                          onBlur={saveInlineEdit}
+                          onKeyDown={handleInlineKeyDown}
+                          className="h-7 rounded border border-input bg-background px-2 text-sm"
+                        >
+                          <option value="">— brak —</option>
+                          {floorOptions.map((f) => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span
+                          className="cursor-pointer hover:underline decoration-dashed underline-offset-4"
+                          onClick={() => startInlineEdit(r, "floor")}
+                          title="Kliknij aby edytować"
+                        >
+                          {r.floor ?? "—"}
+                        </span>
+                      )}
+                    </td>
+                    {/* Budynek */}
+                    <td className="px-4 py-3">
+                      {isEditing(r.id, "building") ? (
+                        <Input
+                          autoFocus
+                          value={inlineEditValue}
+                          onChange={(e) => setInlineEditValue(e.target.value)}
+                          onBlur={saveInlineEdit}
+                          onKeyDown={handleInlineKeyDown}
+                          className="h-7 w-28 text-sm"
+                        />
+                      ) : (
+                        <span
+                          className="cursor-pointer hover:underline decoration-dashed underline-offset-4"
+                          onClick={() => startInlineEdit(r, "building")}
+                          title="Kliknij aby edytować"
+                        >
+                          {r.building ?? "—"}
+                        </span>
+                      )}
+                    </td>
+                    {/* Widok */}
+                    <td className="px-4 py-3">
+                      {isEditing(r.id, "view") ? (
+                        <select
+                          autoFocus
+                          value={inlineEditValue}
+                          onChange={(e) => { setInlineEditValue(e.target.value); }}
+                          onBlur={saveInlineEdit}
+                          onKeyDown={handleInlineKeyDown}
+                          className="h-7 rounded border border-input bg-background px-2 text-sm"
+                        >
+                          <option value="">— brak —</option>
+                          {viewOptions.filter(v => v).map((v) => (
+                            <option key={v} value={v}>{v}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span
+                          className="cursor-pointer hover:underline decoration-dashed underline-offset-4"
+                          onClick={() => startInlineEdit(r, "view")}
+                          title="Kliknij aby edytować"
+                        >
+                          {r.view ?? "—"}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-1 max-w-[200px]">
                         {r.amenities.length > 0 ? (
@@ -1037,7 +1354,30 @@ export default function PokojePage() {
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">{r.maxOccupancy}</td>
+                    {/* Max osób */}
+                    <td className="px-4 py-3">
+                      {isEditing(r.id, "maxOccupancy") ? (
+                        <Input
+                          autoFocus
+                          type="number"
+                          min={1}
+                          max={20}
+                          value={inlineEditValue}
+                          onChange={(e) => setInlineEditValue(e.target.value)}
+                          onBlur={saveInlineEdit}
+                          onKeyDown={handleInlineKeyDown}
+                          className="h-7 w-16 text-sm"
+                        />
+                      ) : (
+                        <span
+                          className="cursor-pointer hover:underline decoration-dashed underline-offset-4"
+                          onClick={() => startInlineEdit(r, "maxOccupancy")}
+                          title="Kliknij aby edytować"
+                        >
+                          {r.maxOccupancy}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-1">
                         {r.roomFeatures.length > 0 ? (
@@ -1252,7 +1592,7 @@ export default function PokojePage() {
 
       {/* Dialog edycji szczegółów pokoju */}
       <Dialog open={!!editingDetails} onOpenChange={(open) => !open && closeDetailsDialog()}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings2 className="h-5 w-5" />
@@ -1281,13 +1621,17 @@ export default function PokojePage() {
                 <Label htmlFor="edit-floor" className="text-sm font-medium">
                   Piętro
                 </Label>
-                <Input
+                <select
                   id="edit-floor"
                   value={editedFloor}
                   onChange={(e) => setEditedFloor(e.target.value)}
-                  placeholder="np. 1, Parter"
-                  className="mt-1"
-                />
+                  className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                >
+                  <option value="">— brak —</option>
+                  {floorOptions.map((f) => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
               </div>
             </div>
 

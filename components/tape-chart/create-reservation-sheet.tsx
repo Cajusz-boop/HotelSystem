@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from "react";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetFooter,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -157,7 +157,7 @@ export function CreateReservationSheet({
         onCreated?.(result.data as Reservation);
         onOpenChange(false);
       } else {
-        setError(result.success ? null : result.error ?? null);
+        setError("error" in result ? (result.error ?? null) : null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Nieoczekiwany błąd");
@@ -169,11 +169,11 @@ export function CreateReservationSheet({
   if (!context) return null;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>Nowa rezerwacja</SheetTitle>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Nowa rezerwacja</DialogTitle>
+        </DialogHeader>
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div className="space-y-2">
             <Label htmlFor="create-guestName">Gość</Label>
@@ -350,16 +350,16 @@ export function CreateReservationSheet({
             />
           </div>
           {error && <p className="text-sm text-destructive" data-testid="create-reservation-error">{error}</p>}
-          <SheetFooter>
+          <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Anuluj
             </Button>
             <Button type="submit" disabled={saving} data-testid="create-reservation-save">
               {saving ? "Zapisywanie…" : "Zapisz"}
             </Button>
-          </SheetFooter>
+          </DialogFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

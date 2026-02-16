@@ -145,7 +145,7 @@ export async function sendDoorCodeSms(
     await logSms({
       type: "DOOR_CODE",
       recipientPhone: normalizedPhone,
-      recipientName: `${reservation.guest.firstName} ${reservation.guest.lastName}`,
+      recipientName: reservation.guest.name,
       messageBody: body,
       status: result.success ? "SENT" : "FAILED",
       errorMessage: result.error,
@@ -192,7 +192,7 @@ export async function sendRoomReadySms(
     await logSms({
       type: "ROOM_READY",
       recipientPhone: normalizedPhone,
-      recipientName: `${reservation.guest.firstName} ${reservation.guest.lastName}`,
+      recipientName: reservation.guest.name,
       messageBody: body,
       status: result.success ? "SENT" : "FAILED",
       errorMessage: result.error,
@@ -698,7 +698,7 @@ export async function sendPreArrivalReminderSms(
     });
     
     // Treść przypomnienia (max 160 znaków)
-    const guestName = reservation.guest.firstName || "Gość";
+    const guestName = reservation.guest.name || "Gość";
     const roomNumber = reservation.room.number;
     const body = `${guestName}, przypominamy o rezerwacji w naszym hotelu na ${formattedDate}. Pokój: ${roomNumber}. Do zobaczenia!`;
     
@@ -710,7 +710,7 @@ export async function sendPreArrivalReminderSms(
     await logSms({
       type: "REMINDER",
       recipientPhone: normalizedPhone,
-      recipientName: `${reservation.guest.firstName} ${reservation.guest.lastName}`,
+      recipientName: reservation.guest.name,
       messageBody: body,
       status: result.success ? "SENT" : "FAILED",
       errorMessage: result.error,
@@ -779,7 +779,7 @@ export async function sendBatchPreArrivalReminders(
           lt: nextDay,
         },
         status: {
-          in: ["CONFIRMED", "PENDING"],
+          in: ["CONFIRMED"],
         },
       },
       include: {
@@ -796,7 +796,7 @@ export async function sendBatchPreArrivalReminders(
     };
     
     for (const reservation of reservations) {
-      const guestName = `${reservation.guest.firstName} ${reservation.guest.lastName}`;
+      const guestName = reservation.guest.name;
       const phone = reservation.guest.phone?.trim();
       
       // Sprawdź czy gość ma numer telefonu
@@ -898,7 +898,7 @@ export async function getReservationsForReminder(
           lt: nextDay,
         },
         status: {
-          in: ["CONFIRMED", "PENDING"],
+          in: ["CONFIRMED"],
         },
       },
       include: {
@@ -919,7 +919,7 @@ export async function getReservationsForReminder(
         
         return {
           reservationId: r.id,
-          guestName: `${r.guest.firstName} ${r.guest.lastName}`,
+          guestName: r.guest.name,
           phone: r.guest.phone?.trim() ?? null,
           checkIn: r.checkIn,
           roomNumber: r.room.number,

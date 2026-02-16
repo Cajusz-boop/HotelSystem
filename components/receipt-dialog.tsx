@@ -78,7 +78,7 @@ export function ReceiptDialog({
         setBuyerNip("");
         setNotes("");
       } else {
-        toast.error(result.error || "Błąd wystawiania rachunku");
+        toast.error("error" in result ? (result.error ?? "Błąd wystawiania rachunku") : "Błąd wystawiania rachunku");
       }
     } finally {
       setLoading(false);

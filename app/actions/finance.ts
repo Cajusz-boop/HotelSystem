@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { createAuditLog, getClientIp } from "@/lib/audit";
 import { blindDropSchema } from "@/lib/validations/schemas";
@@ -18,6 +19,7 @@ import {
   supportsFiscalReports,
 } from "@/lib/fiscal";
 import type { 
+  FiscalConfig,
   FiscalReportRequest, 
   FiscalReportResult,
   PeriodicReportRequest,
@@ -118,14 +120,24 @@ export interface DocumentNumberingConfigData {
   exampleNumber: string | null;
 }
 
+/** Lista dozwolonych typów dokumentów do walidacji wejścia. */
+const VALID_DOCUMENT_TYPES: DocumentType[] = [
+  "INVOICE", "CORRECTION", "CONSOLIDATED_INVOICE", "RECEIPT", "ACCOUNTING_NOTE", "PROFORMA",
+];
+
 /**
  * Pobiera konfigurację numeracji dla danego typu dokumentu.
  * Jeśli nie istnieje, tworzy domyślną konfigurację.
+ * @param documentType - typ dokumentu (INVOICE, RECEIPT, itd.)
+ * @returns ActionResult z danymi konfiguracji lub komunikatem błędu
  */
 export async function getDocumentNumberingConfig(
   documentType: DocumentType
 ): Promise<ActionResult<DocumentNumberingConfigData>> {
   try {
+    if (!documentType || !VALID_DOCUMENT_TYPES.includes(documentType)) {
+      return { success: false, error: "Nieprawidłowy typ dokumentu" };
+    }
     let config = await prisma.documentNumberingConfig.findUnique({
       where: { documentType },
     });
@@ -173,7 +185,9 @@ export async function getDocumentNumberingConfig(
 }
 
 /**
- * Pobiera wszystkie konfiguracje numeracji.
+ * Pobiera wszystkie konfiguracje numeracji (dla wszystkich typów dokumentów).
+ * Tworzy brakujące konfiguracje z wartościami domyślnymi.
+ * @returns ActionResult z tablicą konfiguracji lub komunikatem błędu
  */
 export async function getAllDocumentNumberingConfigs(): Promise<ActionResult<DocumentNumberingConfigData[]>> {
   try {
@@ -228,6 +242,9 @@ export async function getAllDocumentNumberingConfigs(): Promise<ActionResult<Doc
 
 /**
  * Aktualizuje konfigurację numeracji dla danego typu dokumentu.
+ * @param documentType - typ dokumentu do aktualizacji
+ * @param data - pola do aktualizacji (prefix, separator, yearFormat, sequencePadding, resetYearly)
+ * @returns ActionResult z zaktualizowaną konfiguracją lub komunikatem błędu
  */
 export async function updateDocumentNumberingConfig(
   documentType: DocumentType,
@@ -240,6 +257,9 @@ export async function updateDocumentNumberingConfig(
   }
 ): Promise<ActionResult<DocumentNumberingConfigData>> {
   try {
+    if (!documentType || !VALID_DOCUMENT_TYPES.includes(documentType)) {
+      return { success: false, error: "Nieprawidłowy typ dokumentu" };
+    }
     // Walidacja
     if (data.prefix !== undefined && data.prefix.trim().length === 0) {
       return { success: false, error: "Prefix nie może być pusty" };
@@ -320,22 +340,28 @@ export async function updateDocumentNumberingConfig(
 /**
  * Generuje następny numer dokumentu dla danego typu.
  * Atomowa operacja - używa transakcji do uniknięcia duplikatów.
+ * @param documentType - typ dokumentu (INVOICE, RECEIPT, PROFORMA, itd.)
+ * @returns ActionResult z wygenerowanym numerem lub komunikatem błędu
  */
-export async function generateNextDocumentNumber(documentType: DocumentType): Promise<string> {
-  const year = new Date().getFullYear();
+export async function generateNextDocumentNumber(documentType: DocumentType): Promise<ActionResult<string>> {
+  try {
+    if (!documentType || !VALID_DOCUMENT_TYPES.includes(documentType)) {
+      return { success: false, error: "Nieprawidłowy typ dokumentu" };
+    }
+    const year = new Date().getFullYear();
 
-  // Pobierz konfigurację (lub utwórz domyślną)
-  const configResult = await getDocumentNumberingConfig(documentType);
-  if (!configResult.success || !configResult.data) {
-    // Fallback do starego formatu
-    const defaultConfig = DEFAULT_NUMBERING_CONFIGS[documentType];
-    return `${defaultConfig.prefix}/${year}/0001`;
-  }
+    // Pobierz konfigurację (lub utwórz domyślną)
+    const configResult = await getDocumentNumberingConfig(documentType);
+    if (!configResult.success || !configResult.data) {
+      // Fallback do starego formatu
+      const defaultConfig = DEFAULT_NUMBERING_CONFIGS[documentType];
+      return { success: true, data: `${defaultConfig.prefix}/${year}/0001` };
+    }
 
-  const config = configResult.data;
+    const config = configResult.data;
 
-  // Atomowa operacja na liczniku
-  const counter = await prisma.$transaction(async (tx) => {
+    // Atomowa operacja na liczniku
+    const counter = await prisma.$transaction(async (tx) => {
     // Znajdź lub utwórz licznik dla tego typu i roku
     let counter = await tx.documentNumberCounter.findUnique({
       where: { documentType_year: { documentType, year } },
@@ -442,11 +468,19 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
   const yearStr = config.yearFormat === "YY" ? String(year).slice(-2) : String(year);
   const seqStr = String(counter.lastSequence).padStart(config.sequencePadding, "0");
 
-  return `${config.prefix}${config.separator}${yearStr}${config.separator}${seqStr}`;
+  return { success: true, data: `${config.prefix}${config.separator}${yearStr}${config.separator}${seqStr}` };
+  } catch (e) {
+    console.error("[generateNextDocumentNumber]", e);
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd generowania numeru dokumentu",
+    };
+  }
 }
 
 /**
- * Pobiera aktualny stan liczników numeracji.
+ * Pobiera aktualny stan liczników numeracji dla wszystkich typów dokumentów i lat.
+ * @returns ActionResult z tablicą { documentType, year, lastSequence } lub komunikatem błędu
  */
 export async function getDocumentNumberCounters(): Promise<
   ActionResult<Array<{ documentType: string; year: number; lastSequence: number }>>
@@ -476,13 +510,17 @@ export async function getDocumentNumberCounters(): Promise<
 // END DOCUMENT NUMBERING CONFIGURATION
 // ============================================================
 
-/** Konfiguracja kasy fiskalnej (server-only – unika bundlowania modułu „net” w kliencie). */
-export async function getFiscalConfigAction() {
+/**
+ * Pobiera konfigurację kasy fiskalnej (server-only – unika bundlowania modułu „net” w kliencie).
+ * @returns Promise z obiektem FiscalConfig (enabled, driver, taxId, pointName, posnetModel, itd.)
+ */
+export async function getFiscalConfigAction(): Promise<FiscalConfig> {
   return getFiscalConfig();
 }
 
 /**
  * Sprawdza, czy sterownik obsługuje raporty fiskalne X, Z, okresowe i storno.
+ * @returns Obiekt z flagami supportsXReport, supportsZReport, supportsPeriodicReport, supportsStorno
  */
 export async function supportsFiscalReportsAction(): Promise<{
   supportsXReport: boolean;
@@ -495,13 +533,10 @@ export async function supportsFiscalReportsAction(): Promise<{
 
 /**
  * Drukuje raport X (niefiskalny) na kasie fiskalnej.
- * 
- * Raport X pokazuje aktualny stan kasy od ostatniego raportu Z:
- * - Sumę sprzedaży per stawka VAT
- * - Sumę płatności per typ
- * - Liczbę paragonów
- * 
+ * Raport X pokazuje aktualny stan kasy od ostatniego raportu Z (suma sprzedaży per VAT, płatności, liczba paragonów).
  * Można drukować wielokrotnie w ciągu dnia.
+ * @param options - opcjonalnie fetchData (pobierz dane z kasy), operatorNote (notatka operatora)
+ * @returns ActionResult z FiscalReportResult (reportNumber, reportData, success, error)
  */
 export async function printFiscalXReportAction(
   options?: { fetchData?: boolean; operatorNote?: string }
@@ -520,16 +555,17 @@ export async function printFiscalXReportAction(
 
     // Loguj operację
     await createAuditLog({
-      action: "FISCAL_X_REPORT",
+      actionType: "CREATE",
       entityType: "FISCAL",
       entityId: result.reportNumber ?? "X_REPORT",
-      details: {
+      newValue: {
+        fiscalAction: "X_REPORT",
         success: result.success,
         reportNumber: result.reportNumber,
         error: result.error,
         warning: result.warning,
       },
-      ip,
+      ipAddress: ip,
     });
 
     if (!result.success) {
@@ -548,13 +584,10 @@ export async function printFiscalXReportAction(
 
 /**
  * Drukuje raport Z (fiskalny) na kasie fiskalnej.
- * 
- * UWAGA: Raport Z jest nieodwracalny i wymagany prawem.
- * - Musi być wykonany raz dziennie (przed północą)
- * - Zeruje liczniki sprzedaży
- * - Zapisuje dane do pamięci fiskalnej
- * 
+ * UWAGA: Raport Z jest nieodwracalny; musi być wykonany raz dziennie (przed północą), zeruje liczniki.
  * Raport Z powinien być drukowany w ramach procedury Night Audit.
+ * @param options - opcjonalnie fetchData, operatorNote
+ * @returns ActionResult z FiscalReportResult
  */
 export async function printFiscalZReportAction(
   options?: { fetchData?: boolean; operatorNote?: string }
@@ -573,22 +606,22 @@ export async function printFiscalZReportAction(
 
     // Loguj operację (raport Z jest szczególnie ważny)
     await createAuditLog({
-      action: "FISCAL_Z_REPORT",
+      actionType: "CREATE",
       entityType: "FISCAL",
       entityId: result.reportNumber ?? "Z_REPORT",
-      details: {
+      newValue: {
+        fiscalAction: "Z_REPORT",
         success: result.success,
         reportNumber: result.reportNumber,
         error: result.error,
         warning: result.warning,
-        // Jeśli pobrano dane, zapisz podsumowanie
         ...(result.reportData && {
           totalGross: result.reportData.totalGross,
           totalVat: result.reportData.totalVat,
           receiptCount: result.reportData.receiptCount,
         }),
       },
-      ip,
+      ipAddress: ip,
     });
 
     if (!result.success) {
@@ -607,15 +640,9 @@ export async function printFiscalZReportAction(
 
 /**
  * Drukuje raport okresowy/miesięczny na kasie fiskalnej.
- * 
- * Raport okresowy to zestawienie wszystkich raportów Z z wybranego okresu.
- * Wymagany do rozliczenia miesięcznego z urzędem skarbowym.
- * 
- * @param options.dateFrom - Data początkowa okresu
- * @param options.dateTo - Data końcowa okresu
- * @param options.month - Miesiąc (1-12) dla raportu miesięcznego
- * @param options.year - Rok dla raportu miesięcznego
- * @param options.fetchData - Czy pobrać szczegółowe dane
+ * Raport okresowy to zestawienie raportów Z z wybranego okresu; wymagany do rozliczenia miesięcznego.
+ * @param options - reportType (PERIODIC|MONTHLY), dateFrom/dateTo lub month/year, fetchData, operatorNote
+ * @returns ActionResult z PeriodicReportResult (reportNumber, reportData, success, error)
  */
 export async function printFiscalPeriodicReportAction(
   options: {
@@ -696,17 +723,17 @@ export async function printFiscalPeriodicReportAction(
       : `${dateFrom.toLocaleDateString("pl-PL")} - ${dateTo.toLocaleDateString("pl-PL")}`;
 
     await createAuditLog({
-      action: "FISCAL_PERIODIC_REPORT",
+      actionType: "CREATE",
       entityType: "FISCAL",
       entityId: result.reportNumber ?? "PERIODIC_REPORT",
-      details: {
+      newValue: {
+        fiscalAction: "PERIODIC_REPORT",
         success: result.success,
         reportNumber: result.reportNumber,
         reportType,
         period: periodDesc,
         error: result.error,
         warning: result.warning,
-        // Jeśli pobrano dane, zapisz podsumowanie
         ...(result.reportData && {
           zReportCount: result.reportData.zReportCount,
           totalGross: result.reportData.totalGross,
@@ -714,7 +741,7 @@ export async function printFiscalPeriodicReportAction(
           totalReceiptCount: result.reportData.totalReceiptCount,
         }),
       },
-      ip,
+      ipAddress: ip,
     });
 
     if (!result.success) {
@@ -732,18 +759,9 @@ export async function printFiscalPeriodicReportAction(
 }
 
 /**
- * Wykonuje storno (anulowanie) paragonu fiskalnego.
- * 
- * Storno to dokument korygujący, który:
- * - NIE usuwa oryginalnego paragonu z pamięci fiskalnej
- * - Tworzy zapis korekty z odwołaniem do oryginału
- * - Jest wymagany przepisami przy zwrotach/korektach
- * 
- * @param options.originalReceiptNumber - Numer oryginalnego paragonu do anulowania
- * @param options.reason - Powód storna (CUSTOMER_RETURN, OPERATOR_ERROR, PRICE_CORRECTION, etc.)
- * @param options.amount - Kwota storna (brutto)
- * @param options.items - Opcjonalne pozycje do storna (jeśli częściowe)
- * @param options.operatorNote - Opcjonalna notatka operatora
+ * Wykonuje storno (anulowanie) paragonu fiskalnego. Storno tworzy zapis korekty z odwołaniem do oryginału; wymagane przy zwrotach.
+ * @param options - originalReceiptNumber (wymagany), reason (StornoReason), amount (brutto), items (opcjonalne), operatorNote
+ * @returns ActionResult z FiscalStornoResult (stornoNumber, success, error)
  */
 export async function printFiscalStornoAction(
   options: {
@@ -773,14 +791,16 @@ export async function printFiscalStornoAction(
       return { success: false, error: "Powód storna jest wymagany" };
     }
 
-    // Walidacja powodu storna
+    // Walidacja powodu storna (zgodne z lib/fiscal/types StornoReason)
     const validReasons: StornoReason[] = [
       "CUSTOMER_RETURN",
+      "CUSTOMER_CANCEL",
       "OPERATOR_ERROR",
-      "PRICE_CORRECTION",
-      "DUPLICATE_TRANSACTION",
-      "PAYMENT_ISSUE",
-      "CUSTOMER_COMPLAINT",
+      "PRICE_ERROR",
+      "QUANTITY_ERROR",
+      "WRONG_ITEM",
+      "DOUBLE_SCAN",
+      "TECHNICAL_ERROR",
       "OTHER",
     ];
     if (!validReasons.includes(options.reason)) {
@@ -829,36 +849,39 @@ export async function printFiscalStornoAction(
       }
     }
 
-    // Zbuduj żądanie storna
+    // Zbuduj żądanie storna (transactionId wymagane przez FiscalStornoRequest – pusty gdy brak powiązania)
     const request: FiscalStornoRequest = {
       originalReceiptNumber: options.originalReceiptNumber.trim(),
+      transactionId: "",
       reason: options.reason,
       amount: options.amount,
       items: options.items,
-      operatorId: options.operatorId,
       operatorNote: options.operatorNote,
     };
 
     // Wykonaj storno
     const result = await printFiscalStorno(request);
 
-    // Mapowanie powodów storna na czytelny tekst
+    // Mapowanie powodów storna na czytelny tekst (zgodne z lib/fiscal/types StornoReason)
     const reasonDescriptions: Record<StornoReason, string> = {
       CUSTOMER_RETURN: "Zwrot towaru",
+      CUSTOMER_CANCEL: "Rezygnacja klienta",
       OPERATOR_ERROR: "Błąd operatora",
-      PRICE_CORRECTION: "Korekta ceny",
-      DUPLICATE_TRANSACTION: "Duplikat transakcji",
-      PAYMENT_ISSUE: "Problem z płatnością",
-      CUSTOMER_COMPLAINT: "Reklamacja klienta",
+      PRICE_ERROR: "Błąd ceny",
+      QUANTITY_ERROR: "Błąd ilości",
+      WRONG_ITEM: "Pomyłka w pozycji",
+      DOUBLE_SCAN: "Podwójne zeskanowanie",
+      TECHNICAL_ERROR: "Błąd techniczny",
       OTHER: "Inny powód",
     };
 
     // Loguj operację (storno jest szczególnie ważne do audytu)
     await createAuditLog({
-      action: "FISCAL_STORNO",
+      actionType: "CREATE",
       entityType: "FISCAL",
       entityId: result.stornoNumber ?? options.originalReceiptNumber,
-      details: {
+      newValue: {
+        fiscalAction: "STORNO",
         success: result.success,
         originalReceiptNumber: options.originalReceiptNumber,
         stornoNumber: result.stornoNumber,
@@ -868,15 +891,15 @@ export async function printFiscalStornoAction(
         operatorNote: options.operatorNote,
         itemsCount: options.items?.length ?? 0,
         errorCode: result.errorCode,
-        errorMessage: result.errorMessage,
+        errorMessage: result.error,
       },
-      ip,
+      ipAddress: ip,
     });
 
     if (!result.success) {
       return { 
         success: false, 
-        error: result.errorMessage || "Błąd wykonania storna" 
+        error: result.error || "Błąd wykonania storna" 
       };
     }
 
@@ -900,7 +923,11 @@ export type ActionResult<T = void> =
   | { success: true; data: T }
   | { success: false; error: string };
 
-/** Night Audit: zamraża transakcje z daty < today (ustawia isReadOnly); automatycznie oznacza No-show (CONFIRMED, checkIn < dziś). */
+/**
+ * Night Audit: zamyka dobę – zamraża transakcje z daty &lt; dziś (isReadOnly), oznacza rezerwacje No-show (CONFIRMED, checkIn &lt; dziś).
+ * Można wykonać tylko raz na dobę.
+ * @returns ActionResult z closedCount, noShowCount, reportSummary (transactionsClosed, totalAmount)
+ */
 export async function runNightAudit(): Promise<
   ActionResult<{ closedCount: number; noShowCount: number; reportSummary: Record<string, number> }>
 > {
@@ -995,32 +1022,42 @@ export interface ManagementReportData {
   vatPercent: number;
 }
 
-/** Raport dobowy (Management Report) – transakcje z danego dnia */
+/**
+ * Raport dobowy (Management Report) – transakcje z danego dnia.
+ * @param dateStr - data w formacie YYYY-MM-DD
+ * @returns ActionResult z ManagementReportData (date, totalAmount, transactionCount, byType, transactions, currency, vatPercent)
+ */
 export async function getManagementReportData(
   dateStr: string
 ): Promise<ActionResult<ManagementReportData>> {
+  if (!dateStr || typeof dateStr !== "string" || !dateStr.trim()) {
+    return { success: false, error: "Data jest wymagana (format YYYY-MM-DD)" };
+  }
   const session = await getSession();
   if (session) {
     const allowed = await can(session.role, "reports.management");
     if (!allowed) return { success: false, error: "Brak uprawnień do raportu dobowego" };
   }
-  const dayStart = new Date(dateStr + "T00:00:00.000Z");
+  const dayStart = new Date(dateStr.trim() + "T00:00:00.000Z");
   const dayEnd = new Date(dayStart);
   dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
   if (Number.isNaN(dayStart.getTime())) {
     return { success: false, error: "Nieprawidłowa data (użyj YYYY-MM-DD)" };
   }
   try {
-    const [transactions, config] = await Promise.all([
-      prisma.transaction.findMany({
-        where: { createdAt: { gte: dayStart, lt: dayEnd } },
-        orderBy: { createdAt: "asc" },
-      }),
-      prisma.cennikConfig.findUnique({
+    const transactions = await prisma.transaction.findMany({
+      where: { createdAt: { gte: dayStart, lt: dayEnd } },
+      orderBy: { createdAt: "asc" },
+    });
+    let config: { currency: string | null; vatPercent: unknown } | null = null;
+    try {
+      config = await prisma.cennikConfig.findUnique({
         where: { id: "default" },
         select: { currency: true, vatPercent: true },
-      }).catch(() => null),
-    ]);
+      });
+    } catch (error) {
+      console.error("[getManagementReportData] Config fetch error:", error instanceof Error ? error.message : String(error));
+    }
     const currency = config?.currency ?? "PLN";
     const vatPercent = config?.vatPercent != null ? Number(config.vatPercent) : 0;
     const byType: Record<string, number> = {};
@@ -1080,13 +1117,21 @@ export interface CommissionReportData {
   totalCommission: number;
 }
 
-/** Raport prowizji dla agentów (biur podróży, OTA) – wg daty wymeldowania w okresie. */
+/**
+ * Raport prowizji dla agentów (biur podróży, OTA) – wg daty wymeldowania w okresie.
+ * @param dateFrom - data początkowa YYYY-MM-DD
+ * @param dateTo - data końcowa YYYY-MM-DD
+ * @returns ActionResult z CommissionReportData (dateFrom, dateTo, currency, rows, totalRevenue, totalCommission)
+ */
 export async function getCommissionReport(
   dateFrom: string,
   dateTo: string
 ): Promise<ActionResult<CommissionReportData>> {
-  const from = new Date(dateFrom + "T00:00:00.000Z");
-  const to = new Date(dateTo + "T23:59:59.999Z");
+  if (!dateFrom || !dateTo || typeof dateFrom !== "string" || typeof dateTo !== "string") {
+    return { success: false, error: "Wymagane daty dateFrom i dateTo (YYYY-MM-DD)" };
+  }
+  const from = new Date(dateFrom.trim() + "T00:00:00.000Z");
+  const to = new Date(dateTo.trim() + "T23:59:59.999Z");
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
     return { success: false, error: "Nieprawidłowy zakres dat (użyj YYYY-MM-DD)" };
   }
@@ -1094,10 +1139,15 @@ export async function getCommissionReport(
     return { success: false, error: "Data od nie może być późniejsza niż data do" };
   }
   try {
-    const config = await prisma.cennikConfig.findUnique({
-      where: { id: "default" },
-      select: { currency: true },
-    }).catch(() => null);
+    let config: { currency: string | null } | null = null;
+    try {
+      config = await prisma.cennikConfig.findUnique({
+        where: { id: "default" },
+        select: { currency: true },
+      });
+    } catch (error) {
+      console.error("[getCommissionReport] Config fetch error:", error instanceof Error ? error.message : String(error));
+    }
     const currency = config?.currency ?? "PLN";
 
     const reservations = await prisma.reservation.findMany({
@@ -1176,7 +1226,7 @@ export async function getCommissionReport(
   }
 }
 
-/** Transakcje z dziś – do listy wyboru przy Void (GAP 3.2) */
+/** Transakcje z dziś – do listy wyboru przy Void (GAP 3.2). */
 export interface TransactionForList {
   id: string;
   type: string;
@@ -1185,6 +1235,10 @@ export interface TransactionForList {
   isReadOnly: boolean;
 }
 
+/**
+ * Pobiera listę transakcji z bieżącego dnia (do wyboru przy Void).
+ * @returns ActionResult z tablicą TransactionForList (id, type, amount, createdAt, isReadOnly)
+ */
 export async function getTransactionsForToday(): Promise<
   ActionResult<TransactionForList[]>
 > {
@@ -1215,7 +1269,10 @@ export async function getTransactionsForToday(): Promise<
   }
 }
 
-/** Suma gotówki (transakcje CASH) na dziś – do Blind Drop */
+/**
+ * Suma gotówki (transakcje CASH) z bieżącego dnia – do Blind Drop.
+ * @returns ActionResult z expectedCash (suma transakcji CASH na dziś)
+ */
 export async function getCashSumForToday(): Promise<
   ActionResult<{ expectedCash: number }>
 > {
@@ -1241,7 +1298,11 @@ export async function getCashSumForToday(): Promise<
   }
 }
 
-/** Blind Drop: porównanie policzonej gotówki z systemem; po zatwierdzeniu zwraca różnicę */
+/**
+ * Blind Drop: porównanie policzonej gotówki z systemem; zapisuje wynik i zwraca różnicę.
+ * @param countedCash - kwota policzonej gotówki (liczba)
+ * @returns ActionResult z expectedCash, countedCash, difference, isShortage
+ */
 export async function submitBlindDrop(countedCash: number): Promise<
   ActionResult<{
     expectedCash: number;
@@ -1271,16 +1332,30 @@ export async function submitBlindDrop(countedCash: number): Promise<
   const isShortage = difference < 0;
   const absDifference = Math.abs(difference);
 
-  const session = await getSession().catch(() => null);
-  await prisma.blindDropRecord.create({
-    data: {
-      countedCash: parsed.data.countedCash,
-      expectedCash,
-      difference: absDifference,
-      isShortage,
-      performedByUserId: session?.userId ?? undefined,
-    },
-  });
+  let session: Awaited<ReturnType<typeof getSession>> = null;
+  try {
+    session = await getSession();
+  } catch (error) {
+    console.error("[submitBlindDrop] getSession error:", error instanceof Error ? error.message : String(error));
+  }
+
+  try {
+    await prisma.blindDropRecord.create({
+      data: {
+        countedCash: parsed.data.countedCash,
+        expectedCash,
+        difference: absDifference,
+        isShortage,
+        performedByUserId: session?.userId ?? undefined,
+      },
+    });
+  } catch (e) {
+    console.error("[submitBlindDrop]", e);
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd zapisu Blind Drop",
+    };
+  }
 
   return {
     success: true,
@@ -1304,13 +1379,19 @@ export interface BlindDropHistoryItem {
   performedByName: string | null;
 }
 
+/**
+ * Historia Blind Dropów (kto, kiedy, kwota, manko/superata).
+ * @param limit - maksymalna liczba wpisów (domyślnie 50, max 200)
+ * @returns ActionResult z tablicą BlindDropHistoryItem
+ */
 export async function getBlindDropHistory(
   limit: number = 50
 ): Promise<ActionResult<BlindDropHistoryItem[]>> {
+  const safeLimit = typeof limit !== "number" || limit < 1 ? 50 : Math.min(Math.floor(limit), 200);
   try {
     const records = await prisma.blindDropRecord.findMany({
       orderBy: { performedAt: "desc" },
-      take: Math.min(limit, 200),
+      take: safeLimit,
       include: {
         performedBy: { select: { name: true } },
       },
@@ -1364,13 +1445,21 @@ export interface VatRegisterData {
   totalGross: number;
 }
 
-/** Rejestr sprzedaży VAT – faktury wystawione w okresie. */
+/**
+ * Rejestr sprzedaży VAT – faktury wystawione w okresie.
+ * @param dateFrom - data początkowa YYYY-MM-DD
+ * @param dateTo - data końcowa YYYY-MM-DD
+ * @returns ActionResult z VatRegisterData (dateFrom, dateTo, rows, totalNet, totalVat, totalGross)
+ */
 export async function getVatSalesRegister(
   dateFrom: string,
   dateTo: string
 ): Promise<ActionResult<VatRegisterData>> {
-  const from = new Date(dateFrom + "T00:00:00.000Z");
-  const to = new Date(dateTo + "T23:59:59.999Z");
+  if (!dateFrom || !dateTo || typeof dateFrom !== "string" || typeof dateTo !== "string") {
+    return { success: false, error: "Wymagane daty dateFrom i dateTo (YYYY-MM-DD)" };
+  }
+  const from = new Date(dateFrom.trim() + "T00:00:00.000Z");
+  const to = new Date(dateTo.trim() + "T23:59:59.999Z");
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
     return { success: false, error: "Nieprawidłowy zakres dat (użyj YYYY-MM-DD)" };
   }
@@ -1425,13 +1514,21 @@ export async function getVatSalesRegister(
   }
 }
 
-/** Rejestr zakupów VAT – na razie bez modelu zakupów zwraca pusty rejestr. */
+/**
+ * Rejestr zakupów VAT – na razie bez modelu zakupów zwraca pusty rejestr.
+ * @param dateFrom - data początkowa YYYY-MM-DD
+ * @param dateTo - data końcowa YYYY-MM-DD
+ * @returns ActionResult z VatRegisterData (puste rows gdy brak modelu zakupów)
+ */
 export async function getVatPurchasesRegister(
   dateFrom: string,
   dateTo: string
 ): Promise<ActionResult<VatRegisterData>> {
-  const from = new Date(dateFrom + "T00:00:00.000Z");
-  const to = new Date(dateTo + "T23:59:59.999Z");
+  if (!dateFrom || !dateTo || typeof dateFrom !== "string" || typeof dateTo !== "string") {
+    return { success: false, error: "Wymagane daty dateFrom i dateTo (YYYY-MM-DD)" };
+  }
+  const from = new Date(dateFrom.trim() + "T00:00:00.000Z");
+  const to = new Date(dateTo.trim() + "T23:59:59.999Z");
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
     return { success: false, error: "Nieprawidłowy zakres dat (użyj YYYY-MM-DD)" };
   }
@@ -1478,13 +1575,21 @@ export interface KpirData {
   totalExpense: number;
 }
 
-/** KPiR – księga przychodów i rozchodów na podstawie transakcji (przychody = wpływy, rozchody = zwroty/wydatki). */
+/**
+ * KPiR – księga przychodów i rozchodów na podstawie transakcji (przychody = wpływy, rozchody = zwroty/wydatki).
+ * @param dateFrom - data początkowa YYYY-MM-DD
+ * @param dateTo - data końcowa YYYY-MM-DD
+ * @returns ActionResult z KpirData (dateFrom, dateTo, rows, totalIncome, totalExpense)
+ */
 export async function getKpirReport(
   dateFrom: string,
   dateTo: string
 ): Promise<ActionResult<KpirData>> {
-  const from = new Date(dateFrom + "T00:00:00.000Z");
-  const to = new Date(dateTo + "T23:59:59.999Z");
+  if (!dateFrom || !dateTo || typeof dateFrom !== "string" || typeof dateTo !== "string") {
+    return { success: false, error: "Wymagane daty dateFrom i dateTo (YYYY-MM-DD)" };
+  }
+  const from = new Date(dateFrom.trim() + "T00:00:00.000Z");
+  const to = new Date(dateTo.trim() + "T23:59:59.999Z");
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
     return { success: false, error: "Nieprawidłowy zakres dat (użyj YYYY-MM-DD)" };
   }
@@ -1544,8 +1649,15 @@ export async function getKpirReport(
   }
 }
 
-/** Void Security: weryfikacja PIN managera (symulacja) */
+/**
+ * Weryfikacja PIN managera (Void, operacje chronione).
+ * @param pin - PIN managera (string)
+ * @returns ActionResult z true przy poprawnym PIN, false + error przy błędnym
+ */
 export async function verifyManagerPin(pin: string): Promise<ActionResult<boolean>> {
+  if (pin == null || typeof pin !== "string") {
+    return { success: false, error: "PIN jest wymagany" };
+  }
   if (pin === MANAGER_PIN) {
     return { success: true, data: true };
   }
@@ -1569,7 +1681,10 @@ export interface CashShiftData {
   notes: string | null;
 }
 
-/** Pobiera aktualnie otwartą zmianę (bez closedAt). */
+/**
+ * Pobiera aktualnie otwartą zmianę kasową (bez closedAt).
+ * @returns ActionResult z CashShiftData lub null gdy brak otwartej zmiany
+ */
 export async function getCurrentCashShift(): Promise<ActionResult<CashShiftData | null>> {
   try {
     const shift = await prisma.cashShift.findFirst({
@@ -1620,7 +1735,11 @@ async function getExpectedCashForShift(shift: { openedAt: Date; openingBalance: 
   return opening + netCash;
 }
 
-/** Otwiera nową zmianę (stan gotówki na początek). Tylko jedna zmiana może być otwarta. */
+/**
+ * Otwiera nową zmianę kasową (stan gotówki na początek). Tylko jedna zmiana może być otwarta.
+ * @param openingBalance - kwota gotówki na otwarcie (>= 0)
+ * @returns ActionResult z shiftId przy sukcesie
+ */
 export async function openCashShift(openingBalance: number): Promise<ActionResult<{ shiftId: string }>> {
   if (typeof openingBalance !== "number" || openingBalance < 0 || !Number.isFinite(openingBalance)) {
     return { success: false, error: "Nieprawidłowa kwota otwarcia" };
@@ -1632,7 +1751,12 @@ export async function openCashShift(openingBalance: number): Promise<ActionResul
     if (existing) {
       return { success: false, error: "Istnieje już otwarta zmiana. Zamknij ją przed otwarciem nowej." };
     }
-    const session = await getSession().catch(() => null);
+    let session: Awaited<ReturnType<typeof getSession>> = null;
+    try {
+      session = await getSession();
+    } catch (error) {
+      console.error("[openCashShift] getSession error:", error instanceof Error ? error.message : String(error));
+    }
     const shift = await prisma.cashShift.create({
       data: {
         openingBalance,
@@ -1648,7 +1772,12 @@ export async function openCashShift(openingBalance: number): Promise<ActionResul
   }
 }
 
-/** Zamyka bieżącą zmianę (policzona gotówka). Zapisuje closingBalance, expectedCashAtClose, difference, closedAt, notes. */
+/**
+ * Zamyka bieżącą zmianę kasową (policzona gotówka). Zapisuje closingBalance, expectedCashAtClose, difference, closedAt, notes.
+ * @param countedCash - policzona kwota gotówki w kasie
+ * @param notes - opcjonalna notatka przy zamknięciu
+ * @returns ActionResult z shiftId, expectedCash, countedCash, difference, isShortage
+ */
 export async function closeCashShift(
   countedCash: number,
   notes?: string | null
@@ -1678,7 +1807,12 @@ export async function closeCashShift(
     }
     const expectedCash = await getExpectedCashForShift(shift);
     const difference = parsed.data.countedCash - expectedCash;
-    const session = await getSession().catch(() => null);
+    let session: Awaited<ReturnType<typeof getSession>> = null;
+    try {
+      session = await getSession();
+    } catch (error) {
+      console.error("[closeCashShift] getSession error:", error instanceof Error ? error.message : String(error));
+    }
 
     await prisma.cashShift.update({
       where: { id: shift.id },
@@ -1725,13 +1859,18 @@ export interface CashShiftHistoryItem {
   notes: string | null;
 }
 
-/** Lista zamkniętych zmian (ostatnie N) – do raportu kasowego. */
+/**
+ * Lista zamkniętych zmian kasowych (ostatnie N) – do raportu kasowego.
+ * @param limit - maksymalna liczba wpisów (domyślnie 30, max 100)
+ * @returns ActionResult z tablicą CashShiftHistoryItem
+ */
 export async function getCashShiftHistory(limit = 30): Promise<ActionResult<CashShiftHistoryItem[]>> {
+  const safeLimit = typeof limit !== "number" || limit < 1 ? 30 : Math.min(Math.floor(limit), 100);
   try {
     const shifts = await prisma.cashShift.findMany({
       where: { closedAt: { not: null } },
       orderBy: { closedAt: "desc" },
-      take: Math.min(limit, 100),
+      take: safeLimit,
     });
     return {
       success: true,
@@ -1767,11 +1906,18 @@ export interface CashShiftReportDetail {
   }>;
 }
 
-/** Raport kasowy dla jednej zmiany: szczegóły + lista transakcji gotówkowych. */
+/**
+ * Raport kasowy dla jednej zmiany: szczegóły + lista transakcji gotówkowych.
+ * @param shiftId - ID zmiany kasowej
+ * @returns ActionResult z CashShiftReportDetail lub null gdy zmiana nie istnieje / nie jest zamknięta
+ */
 export async function getCashShiftReport(shiftId: string): Promise<ActionResult<CashShiftReportDetail | null>> {
+  if (!shiftId || typeof shiftId !== "string" || !shiftId.trim()) {
+    return { success: false, error: "ID zmiany jest wymagane" };
+  }
   try {
     const shift = await prisma.cashShift.findUnique({
-      where: { id: shiftId },
+      where: { id: shiftId.trim() },
     });
     if (!shift || !shift.closedAt) {
       return { success: true, data: null };
@@ -1853,6 +1999,7 @@ export interface PaymentDetails {
   cardLastFour?: string;           // ostatnie 4 cyfry karty
   cardType?: string;               // VISA, MASTERCARD, AMEX, etc.
   authorizationCode?: string;      // kod autoryzacji
+  terminalTransactionId?: string;  // ID transakcji z terminala
   transferReference?: string;      // numer przelewu
   voucherCode?: string;            // kod vouchera
   blikCode?: string;               // kod BLIK (maskowany)
@@ -1907,13 +2054,9 @@ function validateSplitPayment(
 
 /**
  * Rejestracja transakcji finansowej (uniwersalna funkcja).
- * 
- * Waliduje:
- * - reservationId: musi istnieć w bazie
- * - amount: musi być liczbą dodatnią (> 0)
- * - type: musi być jednym z dozwolonych typów
- * 
- * @returns ActionResult z ID transakcji lub błędem
+ * Waliduje: reservationId (wymagane), amount (> 0, limit 1 mln), type (z listy), paymentMethod, paymentDetails (dla SPLIT).
+ * @param params - reservationId, amount, type, paymentMethod (opcjonalnie), paymentDetails (opcjonalnie), description (opcjonalnie)
+ * @returns ActionResult z transactionId, amount, paymentMethod
  */
 export async function registerTransaction(
   params: {
@@ -2038,7 +2181,7 @@ export async function registerTransaction(
 
     revalidatePath("/finance");
     revalidatePath("/reports");
-    await updateReservationPaymentStatus(reservationId).catch((err) =>
+    await updateReservationPaymentStatus(params.reservationId).catch((err) =>
       console.error("[updateReservationPaymentStatus]", err)
     );
 
@@ -2060,8 +2203,8 @@ export async function registerTransaction(
 }
 
 /**
- * Pobiera listę dostępnych metod płatności.
- * Używane do wypełniania dropdown'ów w UI.
+ * Pobiera listę dostępnych metod płatności (do dropdown'ów w UI).
+ * @returns ActionResult z tablicą { code, name, description } dla każdej metody
  */
 export async function getAvailablePaymentMethods(): Promise<
   ActionResult<Array<{ code: PaymentMethod; name: string; description?: string }>>
@@ -2081,8 +2224,9 @@ export async function getAvailablePaymentMethods(): Promise<
 }
 
 /**
- * Pobiera statystyki płatności dla danego zakresu dat.
- * Używane w raportach kasowych.
+ * Pobiera statystyki płatności dla danego zakresu dat (raporty kasowe).
+ * @param params - dateFrom, dateTo (opcjonalne; domyślnie dziś)
+ * @returns ActionResult z byMethod, totalCount, totalAmount
  */
 export async function getPaymentStatistics(
   params: { dateFrom?: Date | string; dateTo?: Date | string }
@@ -2183,6 +2327,8 @@ export async function getPaymentStatistics(
  *   ],
  *   description: "Nocleg + śniadanie"
  * });
+ * @param params - reservationId, type, methods (min. 2, max 10), description (opcjonalnie)
+ * @returns ActionResult z transactionId, amount, paymentMethod "SPLIT", methodsBreakdown
  */
 export async function createSplitPaymentTransaction(
   params: {
@@ -2350,6 +2496,8 @@ export async function createSplitPaymentTransaction(
 
 /**
  * Pobiera szczegóły płatności podzielonej dla transakcji.
+ * @param transactionId - ID transakcji
+ * @returns ActionResult z transactionId, totalAmount, paymentMethod, methods (dla SPLIT)
  */
 export async function getSplitPaymentDetails(
   transactionId: string
@@ -2359,9 +2507,12 @@ export async function getSplitPaymentDetails(
   paymentMethod: string;
   methods?: Array<{ method: string; amount: number; reference?: string }>;
 }>> {
+  if (!transactionId || typeof transactionId !== "string" || !transactionId.trim()) {
+    return { success: false, error: "ID transakcji jest wymagane" };
+  }
   try {
     const tx = await prisma.transaction.findUnique({
-      where: { id: transactionId },
+      where: { id: transactionId.trim() },
       select: {
         id: true,
         amount: true,
@@ -2405,10 +2556,22 @@ export async function getSplitPaymentDetails(
   }
 }
 
+/**
+ * Rejestruje płatność zaliczkową (DEPOSIT) dla rezerwacji; opcjonalnie drukuje paragon fiskalny.
+ * @param reservationId - ID rezerwacji
+ * @param amount - kwota zaliczki (> 0)
+ * @returns ActionResult z transactionId, invoiceUrl
+ */
 export async function createDepositPayment(
   reservationId: string,
   amount: number
 ): Promise<ActionResult<{ transactionId: string; invoiceUrl: string }>> {
+  if (!reservationId || typeof reservationId !== "string" || reservationId.trim() === "") {
+    return { success: false, error: "ID rezerwacji jest wymagane" };
+  }
+  if (amount == null || typeof amount !== "number" || !Number.isFinite(amount)) {
+    return { success: false, error: "Kwota musi być prawidłową liczbą" };
+  }
   if (amount <= 0) {
     return { success: false, error: "Kwota musi być dodatnia" };
   }
@@ -2431,7 +2594,6 @@ export async function createDepositPayment(
       },
     });
 
-    let fiscalError: string | undefined;
     if (await isFiscalEnabled()) {
       const receiptRequest = await buildReceiptRequest({
         transactionId: tx.id,
@@ -2443,7 +2605,6 @@ export async function createDepositPayment(
       });
       const fiscalResult = await printFiscalReceipt(receiptRequest);
       if (!fiscalResult.success && fiscalResult.error) {
-        fiscalError = fiscalResult.error;
         console.error("[FISCAL] Błąd druku paragonu zaliczki:", fiscalResult.error);
       }
     }
@@ -2470,7 +2631,6 @@ export async function createDepositPayment(
       data: {
         transactionId: tx.id,
         invoiceUrl: `/api/finance/deposit-invoice/${tx.id}`,
-        fiscalError,
       },
     };
   } catch (e) {
@@ -2486,16 +2646,6 @@ export async function chargeLocalTax(
   reservationId: string
 ): Promise<ActionResult<{ transactionId: string; amount: number; skipped?: boolean }>> {
   try {
-    const existing = await prisma.transaction.findFirst({
-      where: { reservationId, type: "LOCAL_TAX", status: "ACTIVE" },
-    });
-    if (existing) {
-      return {
-        success: true,
-        data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
-      };
-    }
-
     const reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
       include: { room: { include: { property: true } } },
@@ -2522,23 +2672,36 @@ export async function chargeLocalTax(
     const pax = reservation.pax ?? 1;
     const amount = nights * pax * Number(rate);
 
-    const tx = await prisma.transaction.create({
-      data: {
-        reservationId,
-        amount,
-        type: "LOCAL_TAX",
-        isReadOnly: false,
-      },
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.transaction.findFirst({
+        where: { reservationId, type: "LOCAL_TAX", status: "ACTIVE" },
+      });
+      if (existing) {
+        return {
+          success: true as const,
+          data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
+        };
+      }
+      const newTx = await tx.transaction.create({
+        data: {
+          reservationId,
+          amount,
+          type: "LOCAL_TAX",
+          isReadOnly: false,
+        },
+      });
+      return {
+        success: true as const,
+        data: { transactionId: newTx.id, amount: Number(newTx.amount) },
+      };
     });
+
     revalidatePath("/finance");
     revalidatePath("/reports");
     await updateReservationPaymentStatus(reservationId).catch((err) =>
       console.error("[updateReservationPaymentStatus]", err)
     );
-    return {
-      success: true,
-      data: { transactionId: tx.id, amount: Number(tx.amount) },
-    };
+    return result;
   } catch (e) {
     return {
       success: false,
@@ -2564,21 +2727,6 @@ export async function chargeSpaBookingToReservation(
       return { success: false, error: "Podaj rezerwację – SpaBooking nie jest powiązany z rezerwacją" };
     }
 
-    const existing = await prisma.transaction.findFirst({
-      where: {
-        reservationId: targetReservationId,
-        type: "SPA",
-        status: "ACTIVE",
-        externalRef: `spa:${spaBookingId}`,
-      },
-    });
-    if (existing) {
-      return {
-        success: true,
-        data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
-      };
-    }
-
     const reservation = await prisma.reservation.findUnique({
       where: { id: targetReservationId },
     });
@@ -2587,27 +2735,46 @@ export async function chargeSpaBookingToReservation(
     const amount = Number(booking.resource.price);
     const description = `SPA: ${booking.resource.name}`;
 
-    const tx = await prisma.transaction.create({
-      data: {
-        reservationId: targetReservationId,
-        amount,
-        type: "SPA",
-        description,
-        quantity: 1,
-        unitPrice: amount,
-        category: "SPA",
-        folioNumber: 1,
-        status: "ACTIVE",
-        externalRef: `spa:${spaBookingId}`,
-      },
-    });
-
-    if (!booking.reservationId) {
-      await prisma.spaBooking.update({
-        where: { id: spaBookingId },
-        data: { reservationId: targetReservationId },
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.transaction.findFirst({
+        where: {
+          reservationId: targetReservationId,
+          type: "SPA",
+          status: "ACTIVE",
+          externalRef: `spa:${spaBookingId}`,
+        },
       });
-    }
+      if (existing) {
+        return {
+          success: true as const,
+          data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
+        };
+      }
+      const newTx = await tx.transaction.create({
+        data: {
+          reservationId: targetReservationId,
+          amount,
+          type: "SPA",
+          description,
+          quantity: 1,
+          unitPrice: amount,
+          category: "SPA",
+          folioNumber: 1,
+          status: "ACTIVE",
+          externalRef: `spa:${spaBookingId}`,
+        },
+      });
+      if (!booking.reservationId) {
+        await tx.spaBooking.update({
+          where: { id: spaBookingId },
+          data: { reservationId: targetReservationId },
+        });
+      }
+      return {
+        success: true as const,
+        data: { transactionId: newTx.id, amount: Number(newTx.amount) },
+      };
+    });
 
     revalidatePath("/finance");
     revalidatePath("/reports");
@@ -2616,10 +2783,7 @@ export async function chargeSpaBookingToReservation(
       console.error("[updateReservationPaymentStatus]", err)
     );
 
-    return {
-      success: true,
-      data: { transactionId: tx.id, amount: Number(tx.amount) },
-    };
+    return result;
   } catch (e) {
     return {
       success: false,
@@ -2652,21 +2816,6 @@ export async function chargeOrderToReservation(
       };
     }
 
-    const existing = await prisma.transaction.findFirst({
-      where: {
-        reservationId: order.reservationId,
-        type: "GASTRONOMY",
-        status: "ACTIVE",
-        externalRef: `order:${orderId}`,
-      },
-    });
-    if (existing) {
-      return {
-        success: true,
-        data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
-      };
-    }
-
     const totalAmount = order.orderItems.reduce(
       (sum, i) => sum + Number(i.unitPrice ?? i.menuItem.price) * i.quantity,
       0
@@ -2678,31 +2827,52 @@ export async function chargeOrderToReservation(
       .map((i) => `${i.menuItem.name} × ${i.quantity}`)
       .join(", ");
     const description = `Zamówienie restauracyjne: ${itemNames}`;
+    const orderReservationId = order.reservationId;
 
-    const tx = await prisma.transaction.create({
-      data: {
-        reservationId: order.reservationId,
-        amount: rounded,
-        type: "GASTRONOMY",
-        description,
-        quantity: 1,
-        unitPrice: rounded,
-        category: "F_B",
-        subcategory: "RESTAURANT",
-        folioNumber: 1,
-        status: "ACTIVE",
-        externalRef: `order:${orderId}`,
-      },
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.transaction.findFirst({
+        where: {
+          reservationId: orderReservationId,
+          type: "GASTRONOMY",
+          status: "ACTIVE",
+          externalRef: `order:${orderId}`,
+        },
+      });
+      if (existing) {
+        return {
+          success: true as const,
+          data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
+        };
+      }
+      const newTx = await tx.transaction.create({
+        data: {
+          reservationId: orderReservationId,
+          amount: rounded,
+          type: "GASTRONOMY",
+          description,
+          quantity: 1,
+          unitPrice: rounded,
+          category: "F_B",
+          subcategory: "RESTAURANT",
+          folioNumber: 1,
+          status: "ACTIVE",
+          externalRef: `order:${orderId}`,
+        },
+      });
+      return {
+        success: true as const,
+        data: { transactionId: newTx.id, amount: Number(newTx.amount) },
+      };
     });
 
     revalidatePath("/finance");
     revalidatePath("/reports");
     revalidatePath("/gastronomy");
-    await updateReservationPaymentStatus(order.reservationId).catch((err) =>
+    await updateReservationPaymentStatus(orderReservationId).catch((err) =>
       console.error("[updateReservationPaymentStatus]", err)
     );
 
-    return { success: true, data: { transactionId: tx.id, amount: Number(tx.amount) } };
+    return result;
   } catch (e) {
     return {
       success: false,
@@ -2849,21 +3019,6 @@ export async function chargeLaundryOrderToReservation(
     if (!order) return { success: false, error: "Zlecenie pralni nie istnieje" };
     if (!order.reservationId) return { success: false, error: "Zlecenie nie jest powiązane z rezerwacją" };
 
-    const existing = await prisma.transaction.findFirst({
-      where: {
-        reservationId: order.reservationId,
-        type: "LAUNDRY",
-        status: "ACTIVE",
-        externalRef: `laundryOrder:${laundryOrderId}`,
-      },
-    });
-    if (existing) {
-      return {
-        success: true,
-        data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
-      };
-    }
-
     const totalAmount = order.orderItems.reduce((sum, i) => sum + Number(i.amount), 0);
     const rounded = Math.round(totalAmount * 100) / 100;
     if (rounded <= 0) return { success: false, error: "Zlecenie ma zerową wartość" };
@@ -2873,19 +3028,39 @@ export async function chargeLaundryOrderToReservation(
       .join(", ");
     const description = `Pralnia: ${itemNames}`;
 
-    const tx = await prisma.transaction.create({
-      data: {
-        reservationId: order.reservationId,
-        amount: rounded,
-        type: "LAUNDRY",
-        description,
-        quantity: 1,
-        unitPrice: rounded,
-        category: "LAUNDRY",
-        folioNumber: 1,
-        status: "ACTIVE",
-        externalRef: `laundryOrder:${laundryOrderId}`,
-      },
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.transaction.findFirst({
+        where: {
+          reservationId: order.reservationId,
+          type: "LAUNDRY",
+          status: "ACTIVE",
+          externalRef: `laundryOrder:${laundryOrderId}`,
+        },
+      });
+      if (existing) {
+        return {
+          success: true as const,
+          data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
+        };
+      }
+      const newTx = await tx.transaction.create({
+        data: {
+          reservationId: order.reservationId,
+          amount: rounded,
+          type: "LAUNDRY",
+          description,
+          quantity: 1,
+          unitPrice: rounded,
+          category: "LAUNDRY",
+          folioNumber: 1,
+          status: "ACTIVE",
+          externalRef: `laundryOrder:${laundryOrderId}`,
+        },
+      });
+      return {
+        success: true as const,
+        data: { transactionId: newTx.id, amount: Number(newTx.amount) },
+      };
     });
 
     revalidatePath("/housekeeping/laundry");
@@ -2894,10 +3069,7 @@ export async function chargeLaundryOrderToReservation(
       console.error("[updateReservationPaymentStatus]", err)
     );
 
-    return {
-      success: true,
-      data: { transactionId: tx.id, amount: Number(tx.amount) },
-    };
+    return result;
   } catch (e) {
     return {
       success: false,
@@ -2917,21 +3089,6 @@ export async function chargeTransferBookingToReservation(
     if (!booking) return { success: false, error: "Rezerwacja transferu nie istnieje" };
     if (!booking.reservationId) return { success: false, error: "Transfer nie jest powiązany z rezerwacją" };
 
-    const existing = await prisma.transaction.findFirst({
-      where: {
-        reservationId: booking.reservationId,
-        type: "TRANSPORT",
-        status: "ACTIVE",
-        externalRef: `transfer:${transferBookingId}`,
-      },
-    });
-    if (existing) {
-      return {
-        success: true,
-        data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
-      };
-    }
-
     const amount = Number(booking.price);
     if (amount <= 0) return { success: false, error: "Kwota transferu musi być większa od zera" };
 
@@ -2939,24 +3096,43 @@ export async function chargeTransferBookingToReservation(
     const dirLabel = booking.direction === "ARRIVAL" ? "Przyjazd" : "Wyjazd";
     const description = `Transfer ${typeLabel} – ${dirLabel}: ${booking.place}`;
 
-    const tx = await prisma.transaction.create({
-      data: {
-        reservationId: booking.reservationId,
-        amount,
-        type: "TRANSPORT",
-        description,
-        quantity: 1,
-        unitPrice: amount,
-        category: "TRANSPORT",
-        folioNumber: 1,
-        status: "ACTIVE",
-        externalRef: `transfer:${transferBookingId}`,
-      },
-    });
-
-    await prisma.transferBooking.update({
-      where: { id: transferBookingId },
-      data: { chargedAt: new Date() },
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.transaction.findFirst({
+        where: {
+          reservationId: booking.reservationId,
+          type: "TRANSPORT",
+          status: "ACTIVE",
+          externalRef: `transfer:${transferBookingId}`,
+        },
+      });
+      if (existing) {
+        return {
+          success: true as const,
+          data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
+        };
+      }
+      const newTx = await tx.transaction.create({
+        data: {
+          reservationId: booking.reservationId,
+          amount,
+          type: "TRANSPORT",
+          description,
+          quantity: 1,
+          unitPrice: amount,
+          category: "TRANSPORT",
+          folioNumber: 1,
+          status: "ACTIVE",
+          externalRef: `transfer:${transferBookingId}`,
+        },
+      });
+      await tx.transferBooking.update({
+        where: { id: transferBookingId },
+        data: { chargedAt: new Date() },
+      });
+      return {
+        success: true as const,
+        data: { transactionId: newTx.id, amount: Number(newTx.amount) },
+      };
     });
 
     revalidatePath("/transfers");
@@ -2965,10 +3141,7 @@ export async function chargeTransferBookingToReservation(
       console.error("[updateReservationPaymentStatus]", err)
     );
 
-    return {
-      success: true,
-      data: { transactionId: tx.id, amount: Number(tx.amount) },
-    };
+    return result;
   } catch (e) {
     return {
       success: false,
@@ -2989,21 +3162,6 @@ export async function chargeRentalBookingToReservation(
     if (!booking) return { success: false, error: "Rezerwacja wypożyczenia nie istnieje" };
     if (!booking.reservationId) return { success: false, error: "Wypożyczenie nie jest powiązane z rezerwacją" };
 
-    const existing = await prisma.transaction.findFirst({
-      where: {
-        reservationId: booking.reservationId,
-        type: "RENTAL",
-        status: "ACTIVE",
-        externalRef: `rental:${rentalBookingId}`,
-      },
-    });
-    if (existing) {
-      return {
-        success: true,
-        data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
-      };
-    }
-
     const start = new Date(booking.startDate);
     const end = new Date(booking.endDate);
     start.setUTCHours(0, 0, 0, 0);
@@ -3014,32 +3172,50 @@ export async function chargeRentalBookingToReservation(
     if (amount <= 0) return { success: false, error: "Kwota wypożyczenia musi być większa od zera" };
 
     const description = `Wypożyczenie: ${booking.rentalItem.name} × ${booking.quantity} (${days} dni)`;
+    const rentalReservationId = booking.reservationId;
 
-    const tx = await prisma.transaction.create({
-      data: {
-        reservationId: booking.reservationId,
-        amount,
-        type: "RENTAL",
-        description,
-        quantity: booking.quantity,
-        unitPrice: pricePerDay,
-        category: "RENTAL",
-        folioNumber: 1,
-        status: "ACTIVE",
-        externalRef: `rental:${rentalBookingId}`,
-      },
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.transaction.findFirst({
+        where: {
+          reservationId: rentalReservationId,
+          type: "RENTAL",
+          status: "ACTIVE",
+          externalRef: `rental:${rentalBookingId}`,
+        },
+      });
+      if (existing) {
+        return {
+          success: true as const,
+          data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
+        };
+      }
+      const newTx = await tx.transaction.create({
+        data: {
+          reservationId: rentalReservationId,
+          amount,
+          type: "RENTAL",
+          description,
+          quantity: booking.quantity,
+          unitPrice: pricePerDay,
+          category: "RENTAL",
+          folioNumber: 1,
+          status: "ACTIVE",
+          externalRef: `rental:${rentalBookingId}`,
+        },
+      });
+      return {
+        success: true as const,
+        data: { transactionId: newTx.id, amount: Number(newTx.amount) },
+      };
     });
 
     revalidatePath("/rentals");
     revalidatePath("/finance");
-    await updateReservationPaymentStatus(booking.reservationId).catch((err) =>
+    await updateReservationPaymentStatus(rentalReservationId).catch((err) =>
       console.error("[updateReservationPaymentStatus]", err)
     );
 
-    return {
-      success: true,
-      data: { transactionId: tx.id, amount: Number(tx.amount) },
-    };
+    return result;
   } catch (e) {
     return {
       success: false,
@@ -3075,21 +3251,6 @@ export async function chargePhoneCallLogToReservation(
       return { success: false, error: "Nie można przypisać rozmowy do rezerwacji (brak pokoju lub rezerwacji w tym dniu)" };
     }
 
-    const existing = await prisma.transaction.findFirst({
-      where: {
-        reservationId,
-        type: "PHONE",
-        status: "ACTIVE",
-        externalRef: `phone:${phoneCallLogId}`,
-      },
-    });
-    if (existing) {
-      return {
-        success: true,
-        data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
-      };
-    }
-
     const cost = log.cost != null ? Number(log.cost) : 0;
     if (cost <= 0) {
       return { success: false, error: "Brak kosztu rozmowy do doliczenia" };
@@ -3101,19 +3262,39 @@ export async function chargePhoneCallLogToReservation(
     });
     const description = `Telefon: ${startedStr} (${log.durationSec}s)`;
 
-    const tx = await prisma.transaction.create({
-      data: {
-        reservationId,
-        amount: cost,
-        type: "PHONE",
-        description,
-        quantity: 1,
-        unitPrice: cost,
-        category: "PHONE",
-        folioNumber: 1,
-        status: "ACTIVE",
-        externalRef: `phone:${phoneCallLogId}`,
-      },
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.transaction.findFirst({
+        where: {
+          reservationId,
+          type: "PHONE",
+          status: "ACTIVE",
+          externalRef: `phone:${phoneCallLogId}`,
+        },
+      });
+      if (existing) {
+        return {
+          success: true as const,
+          data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
+        };
+      }
+      const newTx = await tx.transaction.create({
+        data: {
+          reservationId,
+          amount: cost,
+          type: "PHONE",
+          description,
+          quantity: 1,
+          unitPrice: cost,
+          category: "PHONE",
+          folioNumber: 1,
+          status: "ACTIVE",
+          externalRef: `phone:${phoneCallLogId}`,
+        },
+      });
+      return {
+        success: true as const,
+        data: { transactionId: newTx.id, amount: Number(newTx.amount) },
+      };
     });
 
     revalidatePath("/finance");
@@ -3121,10 +3302,7 @@ export async function chargePhoneCallLogToReservation(
       console.error("[updateReservationPaymentStatus]", err)
     );
 
-    return {
-      success: true,
-      data: { transactionId: tx.id, amount: Number(tx.amount) },
-    };
+    return result;
   } catch (e) {
     return {
       success: false,
@@ -3155,66 +3333,70 @@ export async function chargeReservationSurchargesToReservation(
     checkOut.setUTCHours(0, 0, 0, 0);
     const nights = Math.max(1, Math.round((checkOut.getTime() - checkIn.getTime()) / 86400000));
 
-    const transactionIds: string[] = [];
-    let totalAmount = 0;
+    const result = await prisma.$transaction(async (tx) => {
+      const transactionIds: string[] = [];
+      let totalAmount = 0;
 
-    for (const rs of reservation.reservationSurcharges) {
-      const existing = await prisma.transaction.findFirst({
-        where: {
-          reservationId,
-          type: "OTHER",
-          status: "ACTIVE",
-          externalRef: `surcharge:${rs.id}`,
-        },
-      });
-      if (existing) continue;
+      for (const rs of reservation.reservationSurcharges) {
+        const existing = await tx.transaction.findFirst({
+          where: {
+            reservationId,
+            type: "OTHER",
+            status: "ACTIVE",
+            externalRef: `surcharge:${rs.id}`,
+          },
+        });
+        if (existing) continue;
 
-      const price = Number(rs.surchargeType.price);
-      const qty = rs.quantity;
-      let amount: number;
-      if (rs.amountOverride != null) {
-        amount = Math.round(Number(rs.amountOverride) * 100) / 100;
-      } else if (rs.surchargeType.chargeType === "PER_NIGHT") {
-        amount = Math.round(price * nights * qty * 100) / 100;
-      } else {
-        amount = Math.round(price * qty * 100) / 100;
+        const price = Number(rs.surchargeType.price);
+        const qty = rs.quantity;
+        let amount: number;
+        if (rs.amountOverride != null) {
+          amount = Math.round(Number(rs.amountOverride) * 100) / 100;
+        } else if (rs.surchargeType.chargeType === "PER_NIGHT") {
+          amount = Math.round(price * nights * qty * 100) / 100;
+        } else {
+          amount = Math.round(price * qty * 100) / 100;
+        }
+        if (amount <= 0) continue;
+
+        const description =
+          qty > 1
+            ? `Dopłata: ${rs.surchargeType.name} × ${qty}${rs.surchargeType.chargeType === "PER_NIGHT" ? ` (${nights} nocy)` : ""}`
+            : `Dopłata: ${rs.surchargeType.name}${rs.surchargeType.chargeType === "PER_NIGHT" ? ` (${nights} nocy)` : ""}`;
+
+        const newTx = await tx.transaction.create({
+          data: {
+            reservationId,
+            amount,
+            type: "OTHER",
+            description,
+            quantity: qty,
+            unitPrice: price,
+            category: "SURCHARGE",
+            folioNumber: 1,
+            status: "ACTIVE",
+            externalRef: `surcharge:${rs.id}`,
+          },
+        });
+        transactionIds.push(newTx.id);
+        totalAmount += amount;
       }
-      if (amount <= 0) continue;
 
-      const description =
-        qty > 1
-          ? `Dopłata: ${rs.surchargeType.name} × ${qty}${rs.surchargeType.chargeType === "PER_NIGHT" ? ` (${nights} nocy)` : ""}`
-          : `Dopłata: ${rs.surchargeType.name}${rs.surchargeType.chargeType === "PER_NIGHT" ? ` (${nights} nocy)` : ""}`;
+      return {
+        success: true as const,
+        data: { transactionIds, totalAmount },
+      };
+    });
 
-      const tx = await prisma.transaction.create({
-        data: {
-          reservationId,
-          amount,
-          type: "OTHER",
-          description,
-          quantity: qty,
-          unitPrice: price,
-          category: "SURCHARGE",
-          folioNumber: 1,
-          status: "ACTIVE",
-          externalRef: `surcharge:${rs.id}`,
-        },
-      });
-      transactionIds.push(tx.id);
-      totalAmount += amount;
-    }
-
-    if (transactionIds.length > 0) {
+    if (result.data.transactionIds.length > 0) {
       revalidatePath("/finance");
       await updateReservationPaymentStatus(reservationId).catch((err) =>
         console.error("[updateReservationPaymentStatus]", err)
       );
     }
 
-    return {
-      success: true,
-      data: { transactionIds, totalAmount },
-    };
+    return result;
   } catch (e) {
     return {
       success: false,
@@ -3235,21 +3417,6 @@ export async function chargeAttractionBookingToReservation(
     if (!booking) return { success: false, error: "Rezerwacja atrakcji nie istnieje" };
     if (!booking.reservationId) return { success: false, error: "Rezerwacja nie jest powiązana z pobytem" };
 
-    const existing = await prisma.transaction.findFirst({
-      where: {
-        reservationId: booking.reservationId,
-        type: "ATTRACTION",
-        status: "ACTIVE",
-        externalRef: `attraction:${attractionBookingId}`,
-      },
-    });
-    if (existing) {
-      return {
-        success: true,
-        data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
-      };
-    }
-
     const amount = Number(booking.amount);
     if (amount <= 0) return { success: false, error: "Kwota musi być większa od zera" };
 
@@ -3258,24 +3425,43 @@ export async function chargeAttractionBookingToReservation(
         ? `Wycieczka: ${booking.attraction.name} × ${booking.quantity}`
         : `Wycieczka: ${booking.attraction.name}`;
 
-    const tx = await prisma.transaction.create({
-      data: {
-        reservationId: booking.reservationId,
-        amount,
-        type: "ATTRACTION",
-        description,
-        quantity: booking.quantity,
-        unitPrice: booking.unitPrice,
-        category: "OTHER",
-        folioNumber: 1,
-        status: "ACTIVE",
-        externalRef: `attraction:${attractionBookingId}`,
-      },
-    });
-
-    await prisma.attractionBooking.update({
-      where: { id: attractionBookingId },
-      data: { chargedAt: new Date() },
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.transaction.findFirst({
+        where: {
+          reservationId: booking.reservationId,
+          type: "ATTRACTION",
+          status: "ACTIVE",
+          externalRef: `attraction:${attractionBookingId}`,
+        },
+      });
+      if (existing) {
+        return {
+          success: true as const,
+          data: { transactionId: existing.id, amount: Number(existing.amount), skipped: true },
+        };
+      }
+      const newTx = await tx.transaction.create({
+        data: {
+          reservationId: booking.reservationId,
+          amount,
+          type: "ATTRACTION",
+          description,
+          quantity: booking.quantity,
+          unitPrice: booking.unitPrice,
+          category: "OTHER",
+          folioNumber: 1,
+          status: "ACTIVE",
+          externalRef: `attraction:${attractionBookingId}`,
+        },
+      });
+      await tx.attractionBooking.update({
+        where: { id: attractionBookingId },
+        data: { chargedAt: new Date() },
+      });
+      return {
+        success: true as const,
+        data: { transactionId: newTx.id, amount: Number(newTx.amount) },
+      };
     });
 
     revalidatePath("/attractions");
@@ -3284,10 +3470,7 @@ export async function chargeAttractionBookingToReservation(
       console.error("[updateReservationPaymentStatus]", err)
     );
 
-    return {
-      success: true,
-      data: { transactionId: tx.id, amount: Number(tx.amount) },
-    };
+    return result;
   } catch (e) {
     return {
       success: false,
@@ -3380,7 +3563,7 @@ export async function voidTransaction(
   managerPin: string
 ): Promise<ActionResult> {
   const headersList = await headers();
-  const ip = getClientIp(headersList);
+  const ip = getClientIp(headersList) ?? "unknown";
 
   const lockout = isVoidPinLocked(ip);
   if (lockout.locked) {
@@ -3513,7 +3696,9 @@ export async function createProforma(
     if (finalAmount <= 0) return { success: false, error: "Kwota proformy musi być większa od zera" };
 
     // Generuj numer proformy z konfigurowalną numeracją
-    const number = await generateNextDocumentNumber("PROFORMA");
+    const numberResult = await generateNextDocumentNumber("PROFORMA");
+    if (!numberResult.success) return { success: false, error: numberResult.error };
+    const number = numberResult.data;
 
     const proforma = await prisma.proforma.create({
       data: {
@@ -3646,7 +3831,10 @@ export async function createVatInvoice(
 
     const configResult = await getCennikConfig();
     if (!configResult.success || !configResult.data) {
-      return { success: false, error: configResult.error ?? "Błąd odczytu VAT" };
+      return {
+        success: false,
+        error: !configResult.success && "error" in configResult ? configResult.error : "Błąd odczytu VAT",
+      };
     }
     const { vatPercent, pricesAreNetto } = configResult.data;
     let amountNet: number;
@@ -3663,7 +3851,9 @@ export async function createVatInvoice(
     }
 
     // Generuj numer faktury z konfigurowalną numeracją
-    const number = await generateNextDocumentNumber("INVOICE");
+    const numberResult = await generateNextDocumentNumber("INVOICE");
+    if (!numberResult.success) return { success: false, error: numberResult.error };
+    const number = numberResult.data;
 
     const invoice = await prisma.invoice.create({
       data: {
@@ -3750,7 +3940,9 @@ export async function createInvoiceCorrection(
     if (!invoice) return { success: false, error: "Faktura nie istnieje" };
 
     // Generuj numer korekty z konfigurowalną numeracją
-    const number = await generateNextDocumentNumber("CORRECTION");
+    const numberResult = await generateNextDocumentNumber("CORRECTION");
+    if (!numberResult.success) return { success: false, error: numberResult.error };
+    const number = numberResult.data;
 
     const correction = await prisma.invoiceCorrection.create({
       data: {
@@ -3855,7 +4047,7 @@ export async function updateInvoice(
   const editable = await ensureInvoiceEditable(invoiceId);
   if (!editable.success) return editable;
   try {
-    const updatePayload: Parameters<typeof prisma.invoice.update>[0]["data"] = {};
+    const updatePayload: Record<string, unknown> = {};
     if (data.number != null) updatePayload.number = data.number;
     if (data.amountNet != null) updatePayload.amountNet = data.amountNet;
     if (data.amountVat != null) updatePayload.amountVat = data.amountVat;
@@ -4343,7 +4535,9 @@ export async function createReceipt(
     const vatExemptionBasis = input.vatExemptionBasis || "Zwolniony podmiotowo z VAT na podstawie art. 113 ust. 1 ustawy o VAT";
 
     // Generuj numer rachunku z konfigurowalną numeracją
-    const number = await generateNextDocumentNumber("RECEIPT");
+    const numberResult = await generateNextDocumentNumber("RECEIPT");
+    if (!numberResult.success) return { success: false, error: numberResult.error };
+    const number = numberResult.data;
 
     // Oblicz termin płatności
     let paymentDueDate: Date | null = null;
@@ -4796,7 +4990,9 @@ export async function createAccountingNote(
     }
 
     // Generuj numer noty z konfigurowalną numeracją
-    const number = await generateNextDocumentNumber("ACCOUNTING_NOTE");
+    const numberResult = await generateNextDocumentNumber("ACCOUNTING_NOTE");
+    if (!numberResult.success) return { success: false, error: numberResult.error };
+    const number = numberResult.data;
 
     // Parsuj datę referencyjną
     let referenceDate: Date | null = null;
@@ -5873,7 +6069,7 @@ export async function getUnsettledCardTransactions(
     const settledTransactionIds = new Set<string>();
     for (const batch of existingBatches) {
       if (batch.transactionDetails && Array.isArray(batch.transactionDetails)) {
-        for (const detail of batch.transactionDetails as BatchTransactionDetail[]) {
+        for (const detail of batch.transactionDetails as unknown as BatchTransactionDetail[]) {
           settledTransactionIds.add(detail.transactionId);
         }
       }
@@ -5893,8 +6089,7 @@ export async function getUnsettledCardTransactions(
         reservation: {
           select: {
             id: true,
-            guestFirstName: true,
-            guestLastName: true,
+            guest: { select: { name: true } },
           },
         },
       },
@@ -5932,9 +6127,7 @@ export async function getUnsettledCardTransactions(
         createdAt: tx.createdAt,
         cardLastFour,
         reservationNumber: tx.reservation?.id,
-        guestName: tx.reservation
-          ? `${tx.reservation.guestFirstName || ""} ${tx.reservation.guestLastName || ""}`.trim()
-          : undefined,
+        guestName: tx.reservation?.guest?.name ?? undefined,
       };
     });
 
@@ -6009,7 +6202,10 @@ export async function createCardSettlementBatch(
     });
 
     if (!unsettledResult.success || !unsettledResult.data) {
-      return { success: false, error: unsettledResult.error || "Błąd pobierania transakcji" };
+      return {
+        success: false,
+        error: !unsettledResult.success && "error" in unsettledResult ? unsettledResult.error : "Błąd pobierania transakcji",
+      };
     }
 
     const { transactions, totalAmount, count } = unsettledResult.data;
@@ -6053,16 +6249,23 @@ export async function createCardSettlementBatch(
         terminalId: params.terminalId,
         notes: params.notes,
         submittedBy: params.createdBy,
-        transactionDetails,
+        transactionDetails: transactionDetails as unknown as Prisma.InputJsonValue,
       },
     });
 
     // Audit log
-    await createAuditLog(
-      "CARD_SETTLEMENT_BATCH_CREATED",
-      undefined,
-      `Utworzono batch settlement ${batchNumber}: ${count} transakcji na kwotę ${totalAmount.toFixed(2)} PLN`
-    );
+    await createAuditLog({
+      actionType: "CREATE",
+      entityType: "CardSettlementBatch",
+      entityId: batchNumber,
+      newValue: {
+        batchNumber,
+        transactionCount: count,
+        totalAmount: totalAmount.toFixed(2),
+        periodFrom: params.periodFrom.toISOString(),
+        periodTo: params.periodTo.toISOString(),
+      },
+    });
 
     revalidatePath("/finance");
 
@@ -6127,11 +6330,12 @@ export async function submitCardSettlementBatch(
       },
     });
 
-    await createAuditLog(
-      "CARD_SETTLEMENT_BATCH_SUBMITTED",
-      undefined,
-      `Wysłano batch ${batch.batchNumber} do rozliczenia${params.externalReference ? ` (ref: ${params.externalReference})` : ""}`
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "CardSettlementBatch",
+      entityId: batch.batchNumber ?? undefined,
+      newValue: { message: `Wysłano batch ${batch.batchNumber} do rozliczenia${params.externalReference ? ` (ref: ${params.externalReference})` : ""}` },
+    });
 
     revalidatePath("/finance");
 
@@ -6225,7 +6429,12 @@ export async function settleCardSettlementBatch(
       ? `Rozliczono batch ${batch.batchNumber}: oczekiwano ${expectedAmount.toFixed(2)} PLN, otrzymano ${params.settlementAmount.toFixed(2)} PLN (${discrepancyReason})`
       : `Rozliczono batch ${batch.batchNumber}: ${params.settlementAmount.toFixed(2)} PLN`;
 
-    await createAuditLog("CARD_SETTLEMENT_BATCH_SETTLED", undefined, logMessage);
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "CardSettlementBatch",
+      entityId: batch.batchNumber ?? undefined,
+      newValue: { message: logMessage },
+    });
 
     revalidatePath("/finance");
 
@@ -6289,11 +6498,12 @@ export async function reconcileCardSettlementBatch(
       },
     });
 
-    await createAuditLog(
-      "CARD_SETTLEMENT_BATCH_RECONCILED",
-      undefined,
-      `Zrekoncyliowano batch ${batch.batchNumber}${params.reconciledBy ? ` przez ${params.reconciledBy}` : ""}`
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "CardSettlementBatch",
+      entityId: batch.batchNumber ?? undefined,
+      newValue: { message: `Zrekoncyliowano batch ${batch.batchNumber}${params.reconciledBy ? ` przez ${params.reconciledBy}` : ""}` },
+    });
 
     revalidatePath("/finance");
 
@@ -6359,11 +6569,12 @@ export async function failCardSettlementBatch(
       },
     });
 
-    await createAuditLog(
-      "CARD_SETTLEMENT_BATCH_FAILED",
-      undefined,
-      `Batch ${batch.batchNumber} oznaczony jako nieudany: ${params.reason}`
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "CardSettlementBatch",
+      entityId: batch.batchNumber ?? undefined,
+      newValue: { message: `Batch ${batch.batchNumber} oznaczony jako nieudany: ${params.reason}` },
+    });
 
     revalidatePath("/finance");
 
@@ -6516,7 +6727,7 @@ export async function getCardSettlementBatchDetails(
     }
 
     const transactions: BatchTransactionDetail[] = batch.transactionDetails
-      ? (batch.transactionDetails as BatchTransactionDetail[])
+      ? (batch.transactionDetails as unknown as BatchTransactionDetail[])
       : [];
 
     return {
@@ -6649,11 +6860,6 @@ import {
   disconnectTerminal,
   getTerminalStatus,
   processTerminalPayment,
-  processSale,
-  processPreAuth,
-  capturePreAuth,
-  voidTransaction as voidTerminalTransaction,
-  processRefund as processTerminalRefund,
   closeTerminalBatch,
   printOnTerminal,
   cancelTerminalOperation,
@@ -6668,7 +6874,6 @@ import type {
   PaymentTerminalType,
   TerminalConfig,
   PaymentRequest,
-  PaymentResult,
   TerminalStatusResult,
   BatchCloseResult,
   CardType,
@@ -6697,11 +6902,12 @@ export async function initializePaymentTerminalAction(
     
     const activeConfig = getActiveConfig();
     
-    await createAuditLog(
-      "PAYMENT_TERMINAL_INITIALIZED",
-      undefined,
-      `Terminal ${activeConfig?.type || "MOCK"} (${activeConfig?.terminalId || "unknown"}) zainicjalizowany`
-    );
+    await createAuditLog({
+      actionType: "CREATE",
+      entityType: "PaymentTerminal",
+      entityId: activeConfig?.terminalId ?? "unknown",
+      newValue: { message: `Terminal ${activeConfig?.type || "MOCK"} (${activeConfig?.terminalId || "unknown"}) zainicjalizowany` },
+    });
     
     return {
       success: true,
@@ -6736,11 +6942,12 @@ export async function getPaymentTerminalStatusAction(): Promise<ActionResult<Ter
     }
     
     const status = await getTerminalStatus();
-    
+    if (status.success) {
+      return { success: true, data: status };
+    }
     return {
-      success: status.success,
-      data: status,
-      error: status.errorMessage,
+      success: false,
+      error: status.errorMessage ?? "Błąd pobierania statusu terminala",
     };
   } catch (e) {
     return {
@@ -6830,11 +7037,12 @@ export async function processPaymentTerminalTransactionAction(
       (params.reservationId ? `, rezerwacja: ${params.reservationId}` : "") +
       (result.success ? `, auth: ${result.authCode || "N/A"}` : `, błąd: ${result.errorMessage || result.errorCode}`);
     
-    await createAuditLog(
-      result.success ? "PAYMENT_TERMINAL_SUCCESS" : "PAYMENT_TERMINAL_FAILED",
-      params.reservationId,
-      logDetails
-    );
+    await createAuditLog({
+      actionType: "CREATE",
+      entityType: "PaymentTerminal",
+      entityId: params.reservationId,
+      newValue: { message: logDetails },
+    });
     
     if (!result.success) {
       const cancelled =
@@ -6860,7 +7068,7 @@ export async function processPaymentTerminalTransactionAction(
           cardLastFour: result.cardNumber?.slice(-4),
           cardType: result.cardType,
           terminalTransactionId: result.transactionId,
-          authCode: result.authCode,
+          authorizationCode: result.authCode,
         },
         description: params.description || `Płatność kartą ${result.cardType || ""}`,
       });
@@ -7031,13 +7239,16 @@ export async function closeTerminalBatchAction(
     
     const result = await closeTerminalBatch(params);
     
-    await createAuditLog(
-      result.success ? "TERMINAL_BATCH_CLOSED" : "TERMINAL_BATCH_CLOSE_FAILED",
-      undefined,
-      result.success
-        ? `Batch ${result.batchNumber || "N/A"} zamknięty: ${result.transactionCount || 0} transakcji, ${formatTerminalAmount(result.totalAmount || 0)}`
-        : `Błąd zamknięcia batch: ${result.errorMessage || "unknown"}`
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "PaymentTerminal",
+      entityId: result.batchNumber ?? "N/A",
+      newValue: {
+        message: result.success
+          ? `Batch ${result.batchNumber || "N/A"} zamknięty: ${result.transactionCount || 0} transakcji, ${formatTerminalAmount(result.totalAmount || 0)}`
+          : `Błąd zamknięcia batch: ${result.errorMessage || "unknown"}`,
+      },
+    });
     
     if (!result.success) {
       return {
@@ -7107,11 +7318,12 @@ export async function cancelTerminalOperationAction(): Promise<ActionResult<{ ca
   try {
     const result = await cancelTerminalOperation();
     
-    await createAuditLog(
-      "TERMINAL_OPERATION_CANCELLED",
-      undefined,
-      "Operacja na terminalu anulowana przez użytkownika"
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "PaymentTerminal",
+      entityId: "cancelled",
+      newValue: { message: "Operacja na terminalu anulowana przez użytkownika" },
+    });
     
     return {
       success: true,
@@ -7132,11 +7344,12 @@ export async function disconnectPaymentTerminalAction(): Promise<ActionResult<{ 
   try {
     await disconnectTerminal();
     
-    await createAuditLog(
-      "PAYMENT_TERMINAL_DISCONNECTED",
-      undefined,
-      "Terminal płatniczy rozłączony"
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "PaymentTerminal",
+      entityId: "disconnected",
+      newValue: { message: "Terminal płatniczy rozłączony" },
+    });
     
     return {
       success: true,
@@ -7250,7 +7463,7 @@ async function fetchNbpRates(table: "A" | "C" = "A"): Promise<NbpRateResponse | 
 /**
  * Pobiera kurs konkretnej waluty z NBP
  */
-async function fetchNbpRateForCurrency(
+async function _fetchNbpRateForCurrency(
   currencyCode: string,
   table: "A" | "C" = "A"
 ): Promise<{ mid?: number; bid?: number; ask?: number; tableNo: string; effectiveDate: string } | null> {
@@ -7494,11 +7707,12 @@ export async function syncNbpExchangeRates(
       }
     }
     
-    await createAuditLog(
-      "NBP_RATES_SYNCED",
-      undefined,
-      `Zsynchronizowano ${synced} kursów NBP (tabela ${tableNo})`
-    );
+    await createAuditLog({
+      actionType: "CREATE",
+      entityType: "ExchangeRate",
+      entityId: `NBP-${tableNo}`,
+      newValue: { message: `Zsynchronizowano ${synced} kursów NBP (tabela ${tableNo})` },
+    });
     
     revalidatePath("/finance");
     
@@ -7595,11 +7809,12 @@ export async function addExchangeRate(
       },
     });
     
-    await createAuditLog(
-      "EXCHANGE_RATE_ADDED",
-      undefined,
-      `Dodano kurs ${fromCurrency}/${toCurrency}: kupno=${params.buyRate}, sprzedaż=${params.sellRate}`
-    );
+    await createAuditLog({
+      actionType: "CREATE",
+      entityType: "ExchangeRate",
+      entityId: `${fromCurrency}/${toCurrency}`,
+      newValue: { message: `Dodano kurs ${fromCurrency}/${toCurrency}: kupno=${params.buyRate}, sprzedaż=${params.sellRate}` },
+    });
     
     revalidatePath("/finance");
     
@@ -7672,7 +7887,10 @@ export async function convertCurrency(
     // Pobierz kurs
     const rateResult = await getExchangeRate(fromCurrency, toCurrency);
     if (!rateResult.success || !rateResult.data) {
-      return { success: false, error: rateResult.error || "Nie znaleziono kursu" };
+      return {
+        success: false,
+        error: !rateResult.success && "error" in rateResult ? rateResult.error : "Nie znaleziono kursu",
+      };
     }
     
     const rateData = rateResult.data;
@@ -7718,11 +7936,12 @@ export async function convertCurrency(
       },
     });
     
-    await createAuditLog(
-      "CURRENCY_CONVERTED",
-      params.reservationId,
-      `Przewalutowano ${params.amount.toFixed(2)} ${fromCurrency} → ${convertedAmount.toFixed(2)} ${toCurrency} (kurs: ${appliedRate.toFixed(4)})`
-    );
+    await createAuditLog({
+      actionType: "CREATE",
+      entityType: "Transaction",
+      entityId: params.reservationId,
+      newValue: { message: `Przewalutowano ${params.amount.toFixed(2)} ${fromCurrency} → ${convertedAmount.toFixed(2)} ${toCurrency} (kurs: ${appliedRate.toFixed(4)})` },
+    });
     
     return {
       success: true,
@@ -7977,11 +8196,12 @@ export async function deactivateExchangeRate(
       },
     });
     
-    await createAuditLog(
-      "EXCHANGE_RATE_DEACTIVATED",
-      undefined,
-      `Dezaktywowano kurs ${rate.fromCurrency}/${rate.toCurrency}`
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "ExchangeRate",
+      entityId: `${rate.fromCurrency}/${rate.toCurrency}`,
+      newValue: { message: `Dezaktywowano kurs ${rate.fromCurrency}/${rate.toCurrency}` },
+    });
     
     revalidatePath("/finance");
     
@@ -8033,7 +8253,10 @@ export async function previewCurrencyConversion(
     // Pobierz kurs
     const rateResult = await getExchangeRate(fromCurrency, toCurrency);
     if (!rateResult.success || !rateResult.data) {
-      return { success: false, error: rateResult.error || "Nie znaleziono kursu" };
+      return {
+        success: false,
+        error: !rateResult.success && "error" in rateResult ? rateResult.error : "Nie znaleziono kursu",
+      };
     }
     
     const rateData = rateResult.data;
@@ -8224,11 +8447,12 @@ export async function createVoucher(
       },
     });
     
-    await createAuditLog(
-      "VOUCHER_CREATED",
-      undefined,
-      `Utworzono voucher ${code}: ${params.value} ${params.currency || "PLN"} (${type})`
-    );
+    await createAuditLog({
+      actionType: "CREATE",
+      entityType: "Voucher",
+      entityId: code,
+      newValue: { message: `Utworzono voucher ${code}: ${params.value} ${params.currency || "PLN"} (${type})` },
+    });
     
     revalidatePath("/finance");
     
@@ -8575,7 +8799,10 @@ export async function redeemVoucher(
     // Waliduj voucher
     const validationResult = await validateVoucher({ code, amount });
     if (!validationResult.success || !validationResult.data) {
-      return { success: false, error: validationResult.error || "Błąd walidacji vouchera" };
+      return {
+        success: false,
+        error: !validationResult.success && "error" in validationResult ? validationResult.error : "Błąd walidacji vouchera",
+      };
     }
     
     const validation = validationResult.data;
@@ -8642,11 +8869,12 @@ export async function redeemVoucher(
       }),
     ]);
     
-    await createAuditLog(
-      "VOUCHER_REDEEMED",
-      params.reservationId,
-      `Voucher ${code} wykorzystany: ${discountAmount.toFixed(2)} ${voucher.currency}, saldo: ${newBalance.toFixed(2)}`
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "Voucher",
+      entityId: code,
+      newValue: { message: `Voucher ${code} wykorzystany: ${discountAmount.toFixed(2)} ${voucher.currency}, saldo: ${newBalance.toFixed(2)}`, reservationId: params.reservationId },
+    });
     
     revalidatePath("/finance");
     
@@ -8704,11 +8932,12 @@ export async function cancelVoucher(
       data: { status: "CANCELLED" },
     });
     
-    await createAuditLog(
-      "VOUCHER_CANCELLED",
-      undefined,
-      `Anulowano voucher ${params.code}${params.reason ? `: ${params.reason}` : ""}`
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "Voucher",
+      entityId: params.code,
+      newValue: { message: `Anulowano voucher ${params.code}${params.reason ? `: ${params.reason}` : ""}` },
+    });
     
     revalidatePath("/finance");
     
@@ -8778,11 +9007,12 @@ export async function extendVoucherValidity(
       },
     });
     
-    await createAuditLog(
-      "VOUCHER_EXTENDED",
-      undefined,
-      `Przedłużono ważność vouchera ${params.code} do ${newValidUntil.toISOString().split("T")[0]}`
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "Voucher",
+      entityId: params.code,
+      newValue: { message: `Przedłużono ważność vouchera ${params.code} do ${newValidUntil.toISOString().split("T")[0]}` },
+    });
     
     revalidatePath("/finance");
     
@@ -8851,11 +9081,12 @@ export async function rechargeVoucher(
       },
     });
     
-    await createAuditLog(
-      "VOUCHER_RECHARGED",
-      undefined,
-      `Doładowano voucher ${params.code}: +${params.amount.toFixed(2)} ${voucher.currency}, nowe saldo: ${newBalance.toFixed(2)}`
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "Voucher",
+      entityId: params.code,
+      newValue: { message: `Doładowano voucher ${params.code}: +${params.amount.toFixed(2)} ${voucher.currency}, nowe saldo: ${newBalance.toFixed(2)}` },
+    });
     
     revalidatePath("/finance");
     
@@ -9087,11 +9318,12 @@ export async function expireOldVouchers(): Promise<ActionResult<{ expired: numbe
     });
     
     if (result.count > 0) {
-      await createAuditLog(
-        "VOUCHERS_EXPIRED",
-        undefined,
-        `Automatycznie wygaszono ${result.count} voucherów`
-      );
+      await createAuditLog({
+        actionType: "UPDATE",
+        entityType: "Voucher",
+        entityId: "expired",
+        newValue: { message: `Automatycznie wygaszono ${result.count} voucherów` },
+      });
     }
     
     return {
@@ -9403,11 +9635,12 @@ export async function addFolioCharge(
       },
     });
     
-    await createAuditLog(
-      "FOLIO_CHARGE_ADDED",
-      params.reservationId,
-      `Dodano obciążenie ${params.type}: ${params.amount.toFixed(2)} PLN${params.description ? ` (${params.description})` : ""}`
-    );
+    await createAuditLog({
+      actionType: "CREATE",
+      entityType: "Transaction",
+      entityId: params.reservationId,
+      newValue: { message: `Dodano obciążenie ${params.type}: ${params.amount.toFixed(2)} PLN${params.description ? ` (${params.description})` : ""}` },
+    });
     
     revalidatePath("/finance");
     revalidatePath("/front-office");
@@ -9490,7 +9723,9 @@ export async function addFolioPayment(
         amount: -params.amount, // Ujemna kwota dla płatności (zmniejsza saldo)
         description: params.description || `Płatność ${params.paymentMethod}`,
         paymentMethod: params.paymentMethod,
-        paymentDetails: params.paymentDetails ? JSON.stringify(params.paymentDetails) : null,
+        paymentDetails: params.paymentDetails
+          ? (JSON.stringify(params.paymentDetails) as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
         category: "PAYMENT",
         folioNumber: params.folioNumber ?? 1,
         externalRef: params.externalRef,
@@ -9501,11 +9736,12 @@ export async function addFolioPayment(
       },
     });
     
-    await createAuditLog(
-      "FOLIO_PAYMENT_ADDED",
-      params.reservationId,
-      `Dodano płatność ${params.paymentMethod}: ${params.amount.toFixed(2)} PLN`
-    );
+    await createAuditLog({
+      actionType: "CREATE",
+      entityType: "Transaction",
+      entityId: params.reservationId,
+      newValue: { message: `Dodano płatność ${params.paymentMethod}: ${params.amount.toFixed(2)} PLN` },
+    });
     
     revalidatePath("/finance");
     revalidatePath("/front-office");
@@ -9631,14 +9867,15 @@ export async function collectSecurityDeposit(
 
     await prisma.reservation.update({
       where: { id: params.reservationId },
-      data: { securityDeposit: securityDepositUpdate },
+      data: { securityDeposit: securityDepositUpdate as Prisma.InputJsonValue },
     });
 
-    await createAuditLog(
-      "SECURITY_DEPOSIT_COLLECTED",
-      params.reservationId,
-      `Pobrano kaucję: ${amountRounded.toFixed(2)} PLN (${params.paymentMethod})`
-    );
+    await createAuditLog({
+      actionType: "CREATE",
+      entityType: "Transaction",
+      entityId: params.reservationId,
+      newValue: { message: `Pobrano kaucję: ${amountRounded.toFixed(2)} PLN (${params.paymentMethod})` },
+    });
 
     revalidatePath("/finance");
     revalidatePath("/front-office");
@@ -9736,11 +9973,12 @@ export async function refundSecurityDeposit(
         },
       });
 
-      await createAuditLog(
-        "SECURITY_DEPOSIT_REFUNDED",
-        params.reservationId,
-        `Zwrot kaucji: ${refundAmount.toFixed(2)} PLN (${refundMethod})${params.deductionReason ? `; potrącenie: ${params.deductionReason}` : ""}`
-      );
+      await createAuditLog({
+        actionType: "UPDATE",
+        entityType: "Transaction",
+        entityId: params.reservationId,
+        newValue: { message: `Zwrot kaucji: ${refundAmount.toFixed(2)} PLN (${refundMethod})${params.deductionReason ? `; potrącenie: ${params.deductionReason}` : ""}` },
+      });
 
       const existingDeposit = (reservation.securityDeposit as Record<string, unknown> | null) ?? {};
       const existingDeductions = (existingDeposit.deductions as number) ?? 0;
@@ -9756,7 +9994,7 @@ export async function refundSecurityDeposit(
 
       await prisma.reservation.update({
         where: { id: params.reservationId },
-        data: { securityDeposit: securityDepositUpdate },
+        data: { securityDeposit: securityDepositUpdate as Prisma.InputJsonValue },
       });
 
       revalidatePath("/finance");
@@ -9783,13 +10021,14 @@ export async function refundSecurityDeposit(
       };
       await prisma.reservation.update({
         where: { id: params.reservationId },
-        data: { securityDeposit: securityDepositUpdate },
+        data: { securityDeposit: securityDepositUpdate as Prisma.InputJsonValue },
       });
-      await createAuditLog(
-        "SECURITY_DEPOSIT_DEDUCTION",
-        params.reservationId,
-        `Potrącenie z kaucji: ${deductionAmount.toFixed(2)} PLN${params.deductionReason ? ` (${params.deductionReason})` : ""}`
-      );
+      await createAuditLog({
+        actionType: "UPDATE",
+        entityType: "Transaction",
+        entityId: params.reservationId,
+        newValue: { message: `Potrącenie z kaucji: ${deductionAmount.toFixed(2)} PLN${params.deductionReason ? ` (${params.deductionReason})` : ""}` },
+      });
       revalidatePath("/finance");
       revalidatePath("/front-office");
       return { success: true, data: { transactionId: "", refundAmount: 0 } };
@@ -10011,9 +10250,11 @@ export async function refundPayment(params: {
     revalidatePath("/finance");
     revalidatePath("/reports");
     revalidatePath("/front-office");
-    await updateReservationPaymentStatus(params.reservationId).catch((err) =>
-      console.error("[updateReservationPaymentStatus]", err)
-    );
+    if (reservationId) {
+      await updateReservationPaymentStatus(reservationId).catch((err) =>
+        console.error("[updateReservationPaymentStatus]", err)
+      );
+    }
 
     return {
       success: true,
@@ -10037,7 +10278,10 @@ export async function updateReservationPaymentStatus(
   try {
     const summary = await getFolioSummary(reservationId);
     if (!summary.success || !summary.data) {
-      return { success: false, error: summary.error ?? "Błąd podsumowania folio" };
+      return {
+        success: false,
+        error: !summary.success && "error" in summary ? summary.error : "Błąd podsumowania folio",
+      };
     }
     const balance = summary.data.balance;
     const totalPayments = summary.data.totalPayments ?? 0;
@@ -10128,7 +10372,15 @@ export async function getFolioSummary(
         guest: { select: { id: true, name: true } },
       },
     });
-    const assignmentByFolio = new Map(
+    type FolioAssignment = {
+      billTo: FolioBillTo;
+      guestId: string | null;
+      guestName: string | null;
+      companyId: string | null;
+      companyName: string | null;
+      label: string | null;
+    };
+    const assignmentByFolio = new Map<number, FolioAssignment>(
       assignments.map((a) => [
         a.folioNumber,
         {
@@ -10169,14 +10421,16 @@ export async function getFolioSummary(
         balance: Math.round(balance * 100) / 100,
         itemCount: data.count,
         lastActivity: data.lastActivity,
-        ...(assignment && {
-          billTo: assignment.billTo,
-          guestId: assignment.guestId,
-          guestName: assignment.guestName,
-          companyId: assignment.companyId,
-          companyName: assignment.companyName,
-          label: assignment.label,
-        }),
+        ...(assignment
+          ? {
+              billTo: assignment.billTo,
+              guestId: assignment.guestId,
+              guestName: assignment.guestName,
+              companyId: assignment.companyId,
+              companyName: assignment.companyName,
+              label: assignment.label,
+            }
+          : {}),
       };
     }).sort((a, b) => a.folioNumber - b.folioNumber);
     
@@ -10662,7 +10916,7 @@ export async function voidFolioItem(
   }
 ): Promise<ActionResult<{ voided: boolean }>> {
   const headersList = await headers();
-  const ip = getClientIp(headersList);
+  const _ip = getClientIp(headersList);
 
   try {
     if (!params.transactionId || typeof params.transactionId !== "string") {
@@ -10737,11 +10991,12 @@ export async function voidFolioItem(
             voidReason: `Anulowano wraz z pozycją ${params.transactionId}: ${params.reason}`,
           },
         });
-        await createAuditLog(
-          "FOLIO_ITEM_VOIDED",
-          transaction.reservationId,
-          `Anulowano rabat na pozycję (powiązany z pozycją): ${Number(disc.amount).toFixed(2)} PLN`
-        );
+        await createAuditLog({
+          actionType: "UPDATE",
+          entityType: "Transaction",
+          entityId: transaction.reservationId ?? undefined,
+          newValue: { message: `Anulowano rabat na pozycję (powiązany z pozycją): ${Number(disc.amount).toFixed(2)} PLN` },
+        });
       }
     }
     
@@ -10755,11 +11010,12 @@ export async function voidFolioItem(
       },
     });
     
-    await createAuditLog(
-      "FOLIO_ITEM_VOIDED",
-      transaction.reservationId,
-      `Anulowano pozycję ${transaction.type}: ${Number(transaction.amount).toFixed(2)} PLN - ${params.reason}`
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "Transaction",
+      entityId: transaction.reservationId ?? undefined,
+      newValue: { message: `Anulowano pozycję ${transaction.type}: ${Number(transaction.amount).toFixed(2)} PLN - ${params.reason}` },
+    });
     
     revalidatePath("/finance");
     revalidatePath("/front-office");
@@ -10845,7 +11101,7 @@ export async function transferFolioItem(
           departmentCode: transaction.departmentCode,
           folioNumber: params.targetFolioNumber,
           paymentMethod: transaction.paymentMethod,
-          paymentDetails: transaction.paymentDetails,
+          paymentDetails: (transaction.paymentDetails ?? Prisma.JsonNull) as Prisma.InputJsonValue,
           externalRef: transaction.externalRef,
           notes: `Przeniesione z folio ${transaction.folioNumber}`,
           postedBy: params.transferredBy,
@@ -10861,11 +11117,12 @@ export async function transferFolioItem(
       data: { transferredTo: newTransaction.id },
     });
     
-    await createAuditLog(
-      "FOLIO_ITEM_TRANSFERRED",
-      transaction.reservationId,
-      `Przeniesiono pozycję ${transaction.type} z folio ${transaction.folioNumber} do ${params.targetFolioNumber}`
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "Transaction",
+      entityId: transaction.reservationId ?? undefined,
+      newValue: { message: `Przeniesiono pozycję ${transaction.type} z folio ${transaction.folioNumber} do ${params.targetFolioNumber}` },
+    });
     
     revalidatePath("/finance");
     revalidatePath("/front-office");
@@ -10965,7 +11222,7 @@ export async function transferToAnotherReservation(
           departmentCode: transaction.departmentCode,
           folioNumber: params.targetFolioNumber ?? 1,
           paymentMethod: transaction.paymentMethod,
-          paymentDetails: transaction.paymentDetails,
+          paymentDetails: (transaction.paymentDetails ?? Prisma.JsonNull) as Prisma.InputJsonValue,
           externalRef: transaction.externalRef,
           notes: `Przeniesione z rezerwacji ${transaction.reservationId}`,
           postedBy: params.transferredBy,
@@ -10980,11 +11237,12 @@ export async function transferToAnotherReservation(
       data: { transferredTo: newTransaction.id },
     });
     
-    await createAuditLog(
-      "FOLIO_ITEM_TRANSFERRED_CROSS",
-      transaction.reservationId,
-      `Przeniesiono pozycję ${transaction.type}: ${Number(transaction.amount).toFixed(2)} PLN do rezerwacji ${params.targetReservationId}`
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "Transaction",
+      entityId: transaction.reservationId ?? undefined,
+      newValue: { message: `Przeniesiono pozycję ${transaction.type}: ${Number(transaction.amount).toFixed(2)} PLN do rezerwacji ${params.targetReservationId}` },
+    });
     
     revalidatePath("/finance");
     revalidatePath("/front-office");
@@ -11023,8 +11281,11 @@ export async function createNewFolio(params: {
 
     const reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
-      select: { id: true, guestId: true },
-      include: { reservationOccupants: { select: { guestId: true } } },
+      select: {
+        id: true,
+        guestId: true,
+        reservationOccupants: { select: { guestId: true } },
+      },
     });
     if (!reservation) {
       return { success: false, error: "Nie znaleziono rezerwacji" };
@@ -11091,11 +11352,12 @@ export async function createNewFolio(params: {
       });
     }
 
-    await createAuditLog(
-      "FOLIO_CREATED",
-      reservationId,
-      `Utworzono nowy folio #${newFolioNumber}${billTo ? ` (płatnik: ${billTo === "COMPANY" ? "Firma" : "Gość"})` : ""}`
-    );
+    await createAuditLog({
+      actionType: "CREATE",
+      entityType: "ReservationFolio",
+      entityId: reservationId,
+      newValue: { message: `Utworzono nowy folio #${newFolioNumber}${billTo ? ` (płatnik: ${billTo === "COMPANY" ? "Firma" : "Gość"})` : ""}` },
+    });
 
     return {
       success: true,
@@ -11195,8 +11457,11 @@ export async function setFolioAssignment(params: {
 
     const reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
-      select: { id: true, guestId: true },
-      include: { reservationOccupants: { select: { guestId: true } } },
+      select: {
+        id: true,
+        guestId: true,
+        reservationOccupants: { select: { guestId: true } },
+      },
     });
     if (!reservation) {
       return { success: false, error: "Nie znaleziono rezerwacji" };
@@ -11241,11 +11506,12 @@ export async function setFolioAssignment(params: {
       },
     });
 
-    await createAuditLog(
-      "FOLIO_ASSIGNMENT_UPDATED",
-      reservationId,
-      `Ustawiono płatnika folio #${folioNumber}: ${billTo === "COMPANY" ? assignment.company?.name ?? companyId : "Gość"}`
-    );
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "ReservationFolio",
+      entityId: reservationId,
+      newValue: { message: `Ustawiono płatnika folio #${folioNumber}: ${billTo === "COMPANY" ? assignment.company?.name ?? companyId : "Gość"}` },
+    });
 
     revalidatePath("/finance");
     revalidatePath("/front-office");
@@ -11354,11 +11620,12 @@ export async function addReservationOccupant(
     const occupant = await prisma.reservationOccupant.create({
       data: { reservationId, guestId },
     });
-    await createAuditLog(
-      "RESERVATION_OCCUPANT_ADDED",
-      reservationId,
-      `Dodano gościa do pokoju (separate checks)`
-    );
+    await createAuditLog({
+      actionType: "CREATE",
+      entityType: "ReservationOccupant",
+      entityId: reservationId,
+      newValue: { message: "Dodano gościa do pokoju (separate checks)" },
+    });
     revalidatePath("/finance");
     revalidatePath("/front-office");
     return { success: true, data: { id: occupant.id } };
@@ -11387,11 +11654,12 @@ export async function removeReservationOccupant(
     if (deleted.count === 0) {
       return { success: false, error: "Nie znaleziono takiego gościa w pokoju" };
     }
-    await createAuditLog(
-      "RESERVATION_OCCUPANT_REMOVED",
-      reservationId,
-      `Usunięto gościa z listy osób w pokoju`
-    );
+    await createAuditLog({
+      actionType: "DELETE",
+      entityType: "ReservationOccupant",
+      entityId: reservationId,
+      newValue: { message: "Usunięto gościa z listy osób w pokoju" },
+    });
     revalidatePath("/finance");
     revalidatePath("/front-office");
     return { success: true, data: undefined };
@@ -11443,8 +11711,11 @@ export async function generateFolioStatement(
     // Pobierz rezerwację
     const reservation = await prisma.reservation.findUnique({
       where: { id: params.reservationId },
-      include: {
+      select: {
+        checkIn: true,
+        checkOut: true,
         room: { select: { number: true } },
+        guest: { select: { name: true } },
       },
     });
     
@@ -11515,7 +11786,7 @@ export async function generateFolioStatement(
       success: true,
       data: {
         reservationId: params.reservationId,
-        guestName: `${reservation.guestFirstName || ""} ${reservation.guestLastName || ""}`.trim(),
+        guestName: reservation.guest?.name ?? "",
         roomNumber: reservation.room?.number || null,
         checkIn: reservation.checkIn,
         checkOut: reservation.checkOut,

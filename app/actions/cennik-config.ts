@@ -18,16 +18,47 @@ const DEFAULT_ID = "default";
 /** Pobiera ustawienia cennika (waluta, VAT, netto/brutto) */
 export async function getCennikConfig(): Promise<ActionResult<CennikConfigForUi>> {
   try {
-    let row = await prisma.cennikConfig.findUnique({ where: { id: DEFAULT_ID } }).catch(() => null);
+    let row: Awaited<ReturnType<typeof prisma.cennikConfig.findUnique>> = null;
+    try {
+      row = await prisma.cennikConfig.findUnique({ where: { id: DEFAULT_ID } });
+    } catch (error) {
+      console.error("[getCennikConfig] Error fetching config:", error instanceof Error ? error.message : String(error));
+      // Continue to create default config
+    }
+
     if (!row) {
-      row = await prisma.cennikConfig.create({
+      try {
+        row = await prisma.cennikConfig.create({
+          data: {
+            id: DEFAULT_ID,
+            currency: "PLN",
+            vatPercent: 0,
+            pricesAreNetto: true,
+          },
+        });
+      } catch (error) {
+        console.error("[getCennikConfig] Error creating default config:", error instanceof Error ? error.message : String(error));
+        // Return default values if creation fails
+        return {
+          success: true,
+          data: {
+            currency: "PLN",
+            vatPercent: 0,
+            pricesAreNetto: true,
+          },
+        };
+      }
+    }
+
+    if (!row) {
+      return {
+        success: true,
         data: {
-          id: DEFAULT_ID,
           currency: "PLN",
           vatPercent: 0,
           pricesAreNetto: true,
         },
-      });
+      };
     }
     return {
       success: true,

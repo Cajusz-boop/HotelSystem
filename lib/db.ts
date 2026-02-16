@@ -1,7 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+  keepAliveTimer: ReturnType<typeof setInterval> | undefined;
+};
 
 /**
  * Normalizuje URL bazy pod driver MariaDB:
@@ -30,7 +33,27 @@ function createPrisma(): PrismaClient {
   });
 }
 
-export const prisma =
-  globalForPrisma.prisma ?? createPrisma();
+export const prisma = globalForPrisma.prisma ?? createPrisma();
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// Singleton w KAŻDYM środowisku (dev + production) – zapobiega tworzeniu nowych klientów i połączeń przy każdym renderze
+globalForPrisma.prisma = prisma;
+
+/**
+ * Keep-alive: co 4 minuty lekkie zapytanie `SELECT 1`, żeby MariaDB nie zamykała
+ * połączenia po wait_timeout. Timer jest jeden na proces (globalThis).
+ */
+if (!globalForPrisma.keepAliveTimer) {
+  const KEEP_ALIVE_INTERVAL_MS = 4 * 60 * 1000; // 4 minuty
+  globalForPrisma.keepAliveTimer = setInterval(async () => {
+    try {
+      await prisma.$queryRawUnsafe("SELECT 1");
+    } catch {
+      // Ignoruj – następne zapytanie biznesowe odtworzy połączenie
+    }
+  }, KEEP_ALIVE_INTERVAL_MS);
+
+  // Nie blokuj zamknięcia procesu Node
+  if (globalForPrisma.keepAliveTimer?.unref) {
+    globalForPrisma.keepAliveTimer.unref();
+  }
+}

@@ -1,7 +1,9 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { chargeOrderToReservation } from "@/app/actions/finance";
+import { revalidatePath } from "next/cache"; // eslint-disable-line @typescript-eslint/no-unused-vars
 
 /** Zwraca preferencje dietetyczne i alergeny gościa dla rezerwacji (do ostrzeżeń w gastronomii). */
 export async function getGuestDietAndAllergiesForReservation(
@@ -85,8 +87,8 @@ export async function createMenuItem(
         name: trimmedName,
         price,
         category: trimmedCategory,
-        dietTags: dietTags?.length ? dietTags : null,
-        allergens: allergens?.length ? allergens : null,
+        dietTags: (dietTags?.length ? dietTags : Prisma.JsonNull) as Prisma.InputJsonValue,
+        allergens: (allergens?.length ? allergens : Prisma.JsonNull) as Prisma.InputJsonValue,
       },
     });
     return { success: true, data: { id: created.id } };
@@ -106,12 +108,12 @@ export async function updateMenuItem(
   try {
     const existing = await prisma.menuItem.findUnique({ where: { id } });
     if (!existing) return { success: false, error: "Pozycja nie istnieje" };
-    const data: { name?: string; price?: number; category?: string; dietTags?: string[] | null; allergens?: string[] | null } = {};
+    const data: Parameters<typeof prisma.menuItem.update>[0]["data"] = {};
     if (payload.name !== undefined) data.name = payload.name.trim();
     if (payload.price !== undefined) data.price = payload.price;
     if (payload.category !== undefined) data.category = payload.category.trim();
-    if (payload.dietTags !== undefined) data.dietTags = payload.dietTags?.length ? payload.dietTags : null;
-    if (payload.allergens !== undefined) data.allergens = payload.allergens?.length ? payload.allergens : null;
+    if (payload.dietTags !== undefined) data.dietTags = (payload.dietTags?.length ? payload.dietTags : Prisma.JsonNull) as Prisma.InputJsonValue;
+    if (payload.allergens !== undefined) data.allergens = (payload.allergens?.length ? payload.allergens : Prisma.JsonNull) as Prisma.InputJsonValue;
     await prisma.menuItem.update({ where: { id }, data });
     return { success: true, data: undefined };
   } catch (e) {
@@ -184,7 +186,8 @@ export async function createOrder(
     const menuItems = await prisma.menuItem.findMany({
       where: { id: { in: items.map((x) => x.menuItemId) } },
     });
-    const menuMap = new Map(menuItems.map((m) => [m.id, m]));
+    type MenuItemRow = { id: string; price: number | null };
+    const menuMap = new Map<string, MenuItemRow>(menuItems.map((m) => [m.id, m as unknown as MenuItemRow]));
     const orderItemsToCreate = items
       .filter((x) => x.quantity > 0 && menuMap.has(x.menuItemId))
       .map((x) => {
@@ -300,6 +303,241 @@ export async function getOrders(
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd odczytu zamówień",
+    };
+  }
+}
+
+/**
+ * Pobiera obciążenia gastronomiczne (dania na pokój) dla rezerwacji.
+ * Zwraca transakcje z kategorii F_B oraz z type RESTAURANT/GASTRONOMY/POSTING.
+ * Jeśli transakcja ma externalRef z items (z Bistro), zwraca też pozycje.
+ */
+export async function getRestaurantChargesForReservation(
+  reservationId: string
+): Promise<
+  ActionResult<
+    Array<{
+      id: string;
+      amount: number;
+      description: string | null;
+      type: string;
+      createdAt: string;
+      receiptNumber?: string;
+      cashierName?: string;
+      posSystem?: string;
+      items: Array<{ name: string; quantity: number; unitPrice: number }>;
+    }>
+  >
+> {
+  try {
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        reservationId,
+        status: "ACTIVE",
+        OR: [
+          { category: "F_B" },
+          { type: { in: ["RESTAURANT", "GASTRONOMY", "POSTING"] } },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const data = transactions.map((tx) => {
+      let receiptNumber: string | undefined;
+      let cashierName: string | undefined;
+      let posSystem: string | undefined;
+      let items: Array<{ name: string; quantity: number; unitPrice: number }> = [];
+
+      if (tx.externalRef) {
+        try {
+          const ref = JSON.parse(tx.externalRef);
+          receiptNumber = ref.receiptNumber;
+          cashierName = ref.cashierName;
+          posSystem = ref.posSystem;
+          if (Array.isArray(ref.items)) {
+            items = ref.items.map((it: Record<string, unknown>) => ({
+              name: String(it.name ?? "Pozycja"),
+              quantity: Number(it.quantity ?? 1),
+              unitPrice: Number(it.unitPrice ?? 0),
+            }));
+          }
+        } catch {
+          // externalRef is not JSON – may be legacy "order:xxx" format
+        }
+      }
+
+      return {
+        id: tx.id,
+        amount: Number(tx.amount),
+        description: tx.description,
+        type: tx.type,
+        createdAt: tx.createdAt.toISOString(),
+        receiptNumber,
+        cashierName,
+        posSystem,
+        items,
+      };
+    });
+
+    return { success: true, data };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd odczytu obciążeń gastronomicznych",
+    };
+  }
+}
+
+/**
+ * Podsumowanie dzisiejszej aktywności restauracyjnej (dla dashboardu).
+ */
+export async function getTodayRestaurantSummary(): Promise<
+  ActionResult<{
+    count: number;
+    totalAmount: number;
+    recentCharges: Array<{
+      roomNumber: string;
+      guestName: string;
+      amount: number;
+      description: string | null;
+      createdAt: string;
+    }>;
+  }>
+> {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        status: "ACTIVE",
+        createdAt: { gte: today, lt: tomorrow },
+        OR: [
+          { category: "F_B" },
+          { type: { in: ["RESTAURANT", "GASTRONOMY", "POSTING"] } },
+        ],
+      },
+      include: {
+        reservation: {
+          include: {
+            guest: { select: { name: true } },
+            room: { select: { number: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const count = transactions.length;
+    const totalAmount = transactions.reduce((s, t) => s + Number(t.amount), 0);
+    const recentCharges = transactions.slice(0, 10).map((t) => ({
+      roomNumber: t.reservation.room.number,
+      guestName: t.reservation.guest.name,
+      amount: Number(t.amount),
+      description: t.description,
+      createdAt: t.createdAt.toISOString(),
+    }));
+
+    return {
+      success: true,
+      data: {
+        count,
+        totalAmount: Math.round(totalAmount * 100) / 100,
+        recentCharges,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd odczytu podsumowania restauracji",
+    };
+  }
+}
+
+/**
+ * Historia restauracyjna gościa (wszystkie pobyty).
+ */
+export async function getGuestRestaurantHistory(
+  guestId: string
+): Promise<
+  ActionResult<{
+    totalAmount: number;
+    totalCharges: number;
+    charges: Array<{
+      id: string;
+      amount: number;
+      description: string | null;
+      createdAt: string;
+      roomNumber: string;
+      checkIn: string;
+      checkOut: string;
+      items: Array<{ name: string; quantity: number; unitPrice: number }>;
+    }>;
+  }>
+> {
+  try {
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        status: "ACTIVE",
+        reservation: { guestId },
+        OR: [
+          { category: "F_B" },
+          { type: { in: ["RESTAURANT", "GASTRONOMY", "POSTING"] } },
+        ],
+      },
+      include: {
+        reservation: {
+          include: {
+            room: { select: { number: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+
+    const charges = transactions.map((tx) => {
+      let items: Array<{ name: string; quantity: number; unitPrice: number }> = [];
+      if (tx.externalRef) {
+        try {
+          const ref = JSON.parse(tx.externalRef);
+          if (Array.isArray(ref.items)) {
+            items = ref.items.map((it: Record<string, unknown>) => ({
+              name: String(it.name ?? "Pozycja"),
+              quantity: Number(it.quantity ?? 1),
+              unitPrice: Number(it.unitPrice ?? 0),
+            }));
+          }
+        } catch { /* ignore */ }
+      }
+      return {
+        id: tx.id,
+        amount: Number(tx.amount),
+        description: tx.description,
+        createdAt: tx.createdAt.toISOString(),
+        roomNumber: tx.reservation.room.number,
+        checkIn: tx.reservation.checkIn.toISOString().slice(0, 10),
+        checkOut: tx.reservation.checkOut.toISOString().slice(0, 10),
+        items,
+      };
+    });
+
+    const totalAmount = charges.reduce((s, c) => s + c.amount, 0);
+
+    return {
+      success: true,
+      data: {
+        totalAmount: Math.round(totalAmount * 100) / 100,
+        totalCharges: charges.length,
+        charges,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd odczytu historii restauracyjnej gościa",
     };
   }
 }

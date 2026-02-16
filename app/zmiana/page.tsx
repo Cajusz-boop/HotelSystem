@@ -36,7 +36,7 @@ export default function ZmianaPage() {
       if (result.success && result.data) {
         setList(result.data);
       } else {
-        toast.error(result.error || "Błąd ładowania");
+        toast.error("error" in result ? (result.error ?? "Błąd ładowania") : "Błąd ładowania");
       }
     } finally {
       setLoading(false);
@@ -65,7 +65,7 @@ export default function ZmianaPage() {
         setShiftDate("");
         setList((prev) => [result.data!, ...prev]);
       } else {
-        toast.error(result.error || "Błąd zapisu");
+        toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
       }
     } finally {
       setSubmitting(false);

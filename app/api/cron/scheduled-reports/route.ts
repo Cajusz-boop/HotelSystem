@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
           continue;
         }
         const d = result.data;
-        subject = `Raport obłożenia ${d.dateFrom} – ${d.dateTo}`;
+        subject = `Raport obłożenia ${d.from} – ${d.to}`;
         html = `
           <h2>Raport obłożenia</h2>
           <p>Średnie obłożenie: <strong>${d.avgOccupancyPercent}%</strong></p>

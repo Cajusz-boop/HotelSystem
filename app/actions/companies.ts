@@ -387,7 +387,7 @@ export async function getCompanyById(
         checkIn: r.checkIn,
         checkOut: r.checkOut,
         status: r.status,
-        totalAmount: r.totalAmount?.toNumber() ?? 0,
+        totalAmount: 0, // TODO: Reservation nie ma totalAmount – obliczyć z Transaction/ReservationFolio gdy potrzebne
       })),
       contracts: company.corporateContracts.map((c) => ({
         id: c.id,
@@ -1084,8 +1084,12 @@ export async function getCompanyBalance(
     const recentReservations: CompanyBalance["recentReservations"] = [];
 
     for (const res of company.reservations) {
-      const resAmount = res.totalAmount?.toNumber() ?? 0;
-      
+      // Reservation nie ma totalAmount – suma obciążeń z transakcji (CHARGE) lub 0
+      const resAmount =
+        res.transactions
+          ?.filter((t) => t.type === "CHARGE" || t.type === "CHARGE_ADJUSTMENT")
+          .reduce((s, t) => s + (t.amount?.toNumber() ?? 0), 0) ?? 0;
+
       // Oblicz sumę płatności dla tej rezerwacji
       const paidForRes = res.transactions
         .filter((t) => t.type === "PAYMENT" || t.type === "DEPOSIT")
@@ -1097,7 +1101,6 @@ export async function getCompanyBalance(
       // Kategoryzuj wg statusu
       switch (res.status) {
         case "CONFIRMED":
-        case "GUARANTEED":
           confirmedAmount += resAmount;
           break;
         case "CHECKED_IN":
@@ -1294,7 +1297,7 @@ export async function getReservationsForConsolidatedInvoice(
     const reservations = await prisma.reservation.findMany({
       where: {
         companyId,
-        status: { in: ["CHECKED_OUT", "CHECKED_IN", "CONFIRMED", "GUARANTEED"] },
+        status: { in: ["CHECKED_OUT", "CHECKED_IN", "CONFIRMED"] },
         ...(periodFrom && periodTo
           ? {
               checkOut: {
@@ -1334,7 +1337,7 @@ export async function getReservationsForConsolidatedInvoice(
         checkIn: r.checkIn,
         checkOut: r.checkOut,
         nights,
-        totalAmount: r.totalAmount?.toNumber() ?? 0,
+        totalAmount: 0, // TODO: Reservation nie ma totalAmount – obliczyć z Transaction/Folio gdy potrzebne
         status: r.status,
         hasInvoice: invoicedReservationIds.has(r.id) || r.invoices.length > 0,
       };
@@ -1351,9 +1354,12 @@ export async function getReservationsForConsolidatedInvoice(
 
 /**
  * Generuje numer faktury zbiorczej z konfigurowalną numeracją.
+ * @returns numer faktury zbiorczej lub rzuca błąd przy niepowodzeniu
  */
 async function generateConsolidatedInvoiceNumber(): Promise<string> {
-  return generateNextDocumentNumber("CONSOLIDATED_INVOICE");
+  const result = await generateNextDocumentNumber("CONSOLIDATED_INVOICE");
+  if (!result.success) throw new Error(result.error);
+  return result.data;
 }
 
 /**
@@ -1427,7 +1433,7 @@ export async function createConsolidatedInvoice(data: {
       const nights = Math.ceil(
         (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)
       );
-      const amountGross = r.totalAmount?.toNumber() ?? 0;
+      const amountGross = 0; // TODO: Reservation nie ma totalAmount – obliczyć z Transaction/Folio gdy potrzebne
       const amountNet = amountGross / (1 + vatRate / 100);
       const amountVat = amountGross - amountNet;
 
@@ -1633,7 +1639,7 @@ export async function updateConsolidatedInvoiceStatus(
       },
     });
 
-    return { success: true };
+    return { success: true, data: undefined };
   } catch (e) {
     return {
       success: false,

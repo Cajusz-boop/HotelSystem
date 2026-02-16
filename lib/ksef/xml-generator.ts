@@ -151,7 +151,7 @@ export function buildFa2Xml(
   }
   lines.push("    <Podsumowanie>");
   let idx = 1;
-  for (const [rate, tot] of Array.from(byRate.entries()).sort((a, b) => a[0] - b[0])) {
+  for (const [_rate, tot] of Array.from(byRate.entries()).sort((a, b) => a[0] - b[0])) {
     const p13 = idx === 1 ? "P_13_1" : `P_13_${idx}`;
     const p14 = idx === 1 ? "P_14_1" : `P_14_${idx}`;
     lines.push(`      <${p13}>${tot.net.toFixed(2)}</${p13}>`);

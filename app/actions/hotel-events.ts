@@ -3,30 +3,7 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-
-export type HotelEventType = "CONFERENCE" | "WEDDING" | "MAINTENANCE" | "HOLIDAY" | "OTHER";
-
-export type HotelEventEntry = {
-  id: string;
-  title: string;
-  startDate: string;
-  endDate: string | null;
-  eventType: HotelEventType;
-  description: string | null;
-  propertyId: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-const EVENT_TYPE_LABELS: Record<HotelEventType, string> = {
-  CONFERENCE: "Konferencja",
-  WEDDING: "Wesele",
-  MAINTENANCE: "Konserwacja",
-  HOLIDAY: "Święto",
-  OTHER: "Inne",
-};
-
-export { EVENT_TYPE_LABELS };
+import type { HotelEventType, HotelEventEntry } from "@/lib/hotel-events-types";
 
 export async function getHotelEvents(options?: {
   fromDate?: string;

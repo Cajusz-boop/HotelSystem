@@ -72,7 +72,7 @@ export default async function RootLayout({
           <main
             id="main-content"
             role="main"
-            className="min-h-screen bg-gray-50 pl-0 pt-14 md:pl-52 md:pt-0 pms-main-content"
+            className="min-h-screen bg-gray-50 pt-11 md:pt-0 md:pl-12 pms-main-content"
             style={{ position: "relative", zIndex: 20, pointerEvents: "auto" }}
           >
             <StatusBar session={session} />

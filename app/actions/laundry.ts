@@ -120,7 +120,8 @@ export async function createLaundryOrder(
     const services = await prisma.laundryService.findMany({
       where: { id: { in: items.map((x) => x.laundryServiceId) } },
     });
-    const serviceMap = new Map(services.map((s) => [s.id, s]));
+    type LaundryServiceRow = { id: string; price: number | null };
+    const serviceMap = new Map<string, LaundryServiceRow>(services.map((s) => [s.id, s as unknown as LaundryServiceRow]));
 
     const orderItems = items
       .filter((x) => x.quantity > 0 && serviceMap.has(x.laundryServiceId))
@@ -141,7 +142,14 @@ export async function createLaundryOrder(
       data: {
         reservationId,
         status: "PENDING",
-        orderItems: { create: orderItems },
+        orderItems: {
+          create: orderItems.map((item) => ({
+            laundryService: { connect: { id: item.laundryServiceId } },
+            quantity: item.quantity,
+            unitPrice: item.unitPrice ?? 0,
+            amount: item.amount,
+          })),
+        },
       },
     });
 

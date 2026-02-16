@@ -65,7 +65,7 @@ export async function getSpaResources(): Promise<
       orderBy: { name: "asc" },
       select: { id: true, name: true, price: true },
     });
-    return { success: true, data: resources };
+    return { success: true, data: resources.map((r) => ({ id: r.id, name: r.name, price: Number(r.price) })) };
   } catch (e) {
     return {
       success: false,
@@ -96,7 +96,7 @@ export async function getSpaBookingsCountByDay(
     for (const b of bookings) {
       const bStart = new Date(b.start);
       const bEnd = new Date(b.end);
-      let d = new Date(Math.max(bStart.getTime(), start.getTime()));
+      const d = new Date(Math.max(bStart.getTime(), start.getTime()));
       d.setUTCHours(0, 0, 0, 0);
       const lastDay = new Date(Math.min(bEnd.getTime(), end.getTime()));
       lastDay.setUTCHours(0, 0, 0, 0);

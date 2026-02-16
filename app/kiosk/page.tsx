@@ -66,12 +66,12 @@ export default function KioskPage() {
       window.removeEventListener("click", resetTimeout);
       window.removeEventListener("touchstart", resetTimeout);
     };
-  }, [step]);
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps -- resetKiosk stable, step triggers reset
   
   // Load stats on mount
   useEffect(() => {
     loadStats();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- run once on mount
   
   const loadStats = async () => {
     const result = await getKioskStats();

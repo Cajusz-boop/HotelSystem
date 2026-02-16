@@ -1,0 +1,2 @@
+# Zależności do testów (manager.py, supervisor.py)
+pytest>=8.0.0

@@ -33,7 +33,7 @@ async function runPoll(request: NextRequest) {
     where: {
       ksefStatus: "PENDING",
       ksefReferenceNumber: { not: null },
-      updatedAt: { gte: deadline },
+      createdAt: { gte: deadline },
     },
     select: { id: true },
     take: 50,

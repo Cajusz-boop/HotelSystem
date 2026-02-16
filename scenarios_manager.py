@@ -56,9 +56,9 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-# Wiersz tabeli: | A2 | Nazwa | Kroki | Ryzyko | [ ] |
+# Wiersz tabeli: | A2 | Nazwa | Kroki | Ryzyko | [ ] | (końcowy | opcjonalny)
 TABLE_ROW_RE = re.compile(
-    r'^\|\s*(?P<id>[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)\s*\|\s*(?P<name>.*?)\|\s*(?P<steps>.*?)\|\s*(?P<risk>.*?)\|\s*\[\s*(?P<done>[xX ]?)\s*\]\s*\|\s*$'
+    r'^\|\s*(?P<id>[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)\s*\|\s*(?P<name>.*?)\|\s*(?P<steps>.*?)\|\s*(?P<risk>.*?)\|\s*\[\s*(?P<done>[xX ]?)\s*\]\s*(?:\|\s*)?$'
 )
 # Lista: - [ ] A2 ...
 LIST_ROW_RE = re.compile(
@@ -163,8 +163,8 @@ def mark_done_by_id(md_path: Path, scenario_id: str) -> bool:
         if m and m.group("id").strip() == scenario_id:
             if (m.group("done") or "").strip().lower() == "x":
                 return True
-            # ustaw ostatni checkbox na [x]
-            lines[i] = re.sub(r'\[\s*\]\s*\|\s*$', r'[x] |', line)
+            # ustaw ostatni checkbox na [x] (końcowy | opcjonalny)
+            lines[i] = re.sub(r'\[\s*\]\s*(?:\|\s*)?$', r'[x] |', line)
             md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
             return True
 

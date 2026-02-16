@@ -34,18 +34,19 @@ def check_batch_limit():
     count = 0
     if BATCH_COUNT_FILE.exists():
         try:
-            with open(BATCH_COUNT_FILE, "r") as f:
+            with open(BATCH_COUNT_FILE, "r", encoding="utf-8") as f:
                 count = int(f.read().strip())
-        except:
+        except (ValueError, OSError):
             count = 0
-    
+
     if count >= BATCH_LIMIT:
         print(f"BATCH LIMIT ({BATCH_LIMIT}) REACHED. REQUESTING RESTART...")
         # Tworzymy plik-sygnał dla supervisor.py
-        with open(SIGNAL_FILE, "w") as f:
+        SIGNAL_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(SIGNAL_FILE, "w", encoding="utf-8") as f:
             f.write("ready_for_restart")
         # Zerujemy licznik (supervisor i tak zrestartuje proces, ale dla porządku)
-        with open(BATCH_COUNT_FILE, "w") as f:
+        with open(BATCH_COUNT_FILE, "w", encoding="utf-8") as f:
             f.write("0")
         # Kończymy z kodem 0, ale bez wypisywania zadania -> Agent się zatrzyma
         sys.exit(0)
@@ -55,12 +56,13 @@ def increment_batch_count():
     count = 0
     if BATCH_COUNT_FILE.exists():
         try:
-            with open(BATCH_COUNT_FILE, "r") as f:
+            with open(BATCH_COUNT_FILE, "r", encoding="utf-8") as f:
                 count = int(f.read().strip())
-        except:
+        except (ValueError, OSError):
             count = 0
-    
-    with open(BATCH_COUNT_FILE, "w") as f:
+
+    BATCH_COUNT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(BATCH_COUNT_FILE, "w", encoding="utf-8") as f:
         f.write(str(count + 1))
 
 def read_state() -> tuple[str | None, int]:

@@ -3,22 +3,13 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-
-export type HotelConfigData = {
-  name: string;
-  address: string | null;
-  postalCode: string | null;
-  city: string | null;
-  nip: string | null;
-  krs: string | null;
-  logoUrl: string | null;
-  phone: string | null;
-  email: string | null;
-  website: string | null;
-  defaultCheckInTime: string | null;
-  defaultCheckOutTime: string | null;
-  floors: string[];
-};
+import type {
+  HotelConfigData,
+  FormType,
+  FormFieldsConfig,
+  CustomFormField,
+  CustomFormFieldType,
+} from "@/lib/hotel-config-types";
 
 export async function getHotelConfig(): Promise<
   { success: true; data: HotelConfigData } | { success: false; error: string }
@@ -100,30 +91,6 @@ export async function updateHotelConfig(data: Partial<HotelConfigData>): Promise
 }
 
 // --- Konfiguracja dodatkowych pól formularzy ---
-export type CustomFormFieldType = "text" | "number" | "date" | "select" | "checkbox";
-
-export type CustomFormField = {
-  id: string;
-  key: string;
-  label: string;
-  type: CustomFormFieldType;
-  required: boolean;
-  order: number;
-  options?: string[]; // dla select: lista wartości
-};
-
-export type FormType = "CHECK_IN" | "RESERVATION" | "GUEST";
-
-export type FormFieldsConfig = Partial<Record<FormType, CustomFormField[]>>;
-
-const FORM_TYPE_LABELS: Record<FormType, string> = {
-  CHECK_IN: "Meldunek (check-in)",
-  RESERVATION: "Rezerwacja",
-  GUEST: "Karta gościa",
-};
-
-export { FORM_TYPE_LABELS };
-
 export async function getFormFieldsConfig(): Promise<
   { success: true; data: FormFieldsConfig } | { success: false; error: string }
 > {

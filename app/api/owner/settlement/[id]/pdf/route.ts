@@ -25,7 +25,7 @@ function amountToWords(amount: number): string {
     if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 > 0 ? " " + units[n % 10] : "");
     return hundreds[Math.floor(n / 100)] + (n % 100 > 0 ? " " + convert(n % 100) : "");
   };
-  let result = intPart >= 1000
+  const result = intPart >= 1000
     ? (Math.floor(intPart / 1000) === 1 ? "jeden tysiąc" : convert(Math.floor(intPart / 1000)) + " tysięcy")
       + (intPart % 1000 > 0 ? " " + convert(intPart % 1000) : "")
     : convert(intPart);

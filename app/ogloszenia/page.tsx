@@ -40,7 +40,7 @@ export default function OgloszeniaPage() {
         getCanManageAnnouncements(),
       ]);
       if (listRes.success && listRes.data) setList(listRes.data);
-      else toast.error(listRes.error || "Błąd ładowania");
+      else toast.error("error" in listRes ? (listRes.error ?? "Błąd ładowania") : "Błąd ładowania");
       if (permRes.success) setCanManage(permRes.canManage);
     } finally {
       setLoading(false);
@@ -74,7 +74,7 @@ export default function OgloszeniaPage() {
         setFormOpen(false);
         setList((prev) => [result.data!, ...prev]);
       } else {
-        toast.error(result.error || "Błąd zapisu");
+        toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
       }
     } finally {
       setSubmitting(false);
@@ -88,7 +88,7 @@ export default function OgloszeniaPage() {
       toast.success("Ogłoszenie usunięte");
       setList((prev) => prev.filter((a) => a.id !== id));
     } else {
-      toast.error(result.error || "Błąd usunięcia");
+      toast.error("error" in result ? (result.error ?? "Błąd usunięcia") : "Błąd usunięcia");
     }
   };
 

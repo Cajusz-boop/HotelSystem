@@ -36,7 +36,7 @@ let currentConfig: TerminalConfig | null = null;
 let isConnected = false;
 
 // Symulowane karty testowe
-const TEST_CARDS: Array<{
+const _TEST_CARDS: Array<{
   pattern: string;
   type: CardType;
   approved: boolean;
@@ -407,7 +407,7 @@ export const mockDriver: PaymentTerminalDriver = {
     return simulatePaymentResult({ ...request, transactionType: "REFUND" });
   },
 
-  async closeBatch(request: BatchCloseRequest): Promise<BatchCloseResult> {
+  async closeBatch(_request: BatchCloseRequest): Promise<BatchCloseResult> {
     await simulateDelay();
     
     if (!isConnected) {

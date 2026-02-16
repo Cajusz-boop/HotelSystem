@@ -59,7 +59,7 @@ export default function ImportPage() {
       return;
     }
     if (importFormat === "json") {
-      const parsed = parseImportPmsFile(content);
+      const parsed = await parseImportPmsFile(content);
       if (parsed.success) {
         setPreview(parsed.data);
         if (
@@ -104,7 +104,7 @@ export default function ImportPage() {
         setPreview(null);
         setJsonInput("");
       } else {
-        toast.error(res.error);
+        toast.error("error" in res ? res.error : "Błąd");
       }
     } finally {
       setImporting(false);
@@ -133,7 +133,7 @@ export default function ImportPage() {
         URL.revokeObjectURL(url);
         toast.success("Eksport pobrany");
       } else {
-        toast.error(res.error || "Błąd eksportu");
+        toast.error("error" in res ? (res.error ?? "Błąd eksportu") : "Błąd eksportu");
       }
     } finally {
       setExporting(false);

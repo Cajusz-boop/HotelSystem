@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -73,6 +74,7 @@ export default function FinancePage() {
   const [voidPin, setVoidPin] = useState("");
   const [voidLoading, setVoidLoading] = useState(false);
   const [todayTransactions, setTodayTransactions] = useState<TransactionForList[]>([]);
+  const [txTypeFilter, setTxTypeFilter] = useState<string>("all");
   const [fiscalConfig, setFiscalConfig] = useState<FiscalConfig | null>(null);
   const [currency, setCurrency] = useState("PLN");
   const [jpkFrom, setJpkFrom] = useState(() => {
@@ -144,52 +146,57 @@ export default function FinancePage() {
   const [ksefCheckStatusId, setKsefCheckStatusId] = useState<string | null>(null);
   const [ksefErrorDialog, setKsefErrorDialog] = useState<{ documentNumber: string; message: string } | null>(null);
 
-  const load = () => {
+  const queryClient = useQueryClient();
+
+  const { data: _financeData } = useQuery({
+    queryKey: ["finance-initial"],
+    queryFn: async () => {
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Przekroczono limit czasu (15 s). Sprawdź połączenie z bazą.")),
+          FINANCE_LOAD_TIMEOUT_MS
+        )
+      );
+      const result = await Promise.race([
+        Promise.all([
+          getCashSumForToday(),
+          getTransactionsForToday(),
+          getFiscalConfigAction(),
+          getCennikConfig(),
+          getRecentReceipts(20),
+          getRecentAccountingNotes(20),
+          getCurrentCashShift(),
+          getBlindDropHistory(30),
+          getCashShiftHistory(30),
+        ]),
+        timeoutPromise,
+      ]);
+      return result;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (!_financeData) return;
+    const [cashRes, txRes, fiscalRes, cennikRes, receiptsRes, notesRes, shiftRes, blindRes, histRes] = _financeData;
+    if (cashRes.success && cashRes.data) setExpectedCash(cashRes.data.expectedCash);
+    if (txRes.success && txRes.data) setTodayTransactions(txRes.data);
+    setFiscalConfig(fiscalRes);
+    if (cennikRes.success && cennikRes.data) setCurrency(cennikRes.data.currency);
+    if (receiptsRes.success && receiptsRes.data) setReceipts(receiptsRes.data);
+    if (notesRes.success && notesRes.data) setAccountingNotes(notesRes.data as AccountingNoteData[]);
+    if (shiftRes.success && shiftRes.data !== undefined) setCurrentShift(shiftRes.data);
+    if (blindRes.success && blindRes.data) setBlindDropHistory(blindRes.data);
+    if (histRes.success && histRes.data) setCashShiftHistory(histRes.data);
+    setLoadError(null);
+    setLoading(false);
+  }, [_financeData]);
+
+  const load = useCallback(() => {
     setLoading(true);
     setLoadError(null);
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error("Przekroczono limit czasu (15 s). Sprawdź połączenie z bazą.")),
-        FINANCE_LOAD_TIMEOUT_MS
-      )
-    );
-    Promise.race([
-      Promise.all([
-        getCashSumForToday().then((r) => {
-          if (r.success && r.data) setExpectedCash(r.data.expectedCash);
-        }),
-        getTransactionsForToday().then((r) => {
-          if (r.success && r.data) setTodayTransactions(r.data);
-        }),
-        getFiscalConfigAction().then(setFiscalConfig),
-        getCennikConfig().then((r) => {
-          if (r.success && r.data) setCurrency(r.data.currency);
-        }),
-        getRecentReceipts(20).then((r) => {
-          if (r.success && r.data) setReceipts(r.data);
-        }),
-        getRecentAccountingNotes(20).then((r) => {
-          if (r.success && r.data) setAccountingNotes(r.data);
-        }),
-        getCurrentCashShift().then((r) => {
-          if (r.success && r.data !== undefined) setCurrentShift(r.data);
-        }),
-        getBlindDropHistory(30).then((r) => {
-          if (r.success && r.data) setBlindDropHistory(r.data);
-        }),
-        getCashShiftHistory(30).then((r) => {
-          if (r.success && r.data) setCashShiftHistory(r.data);
-        }),
-      ]),
-      timeoutPromise,
-    ])
-      .catch((e) => {
-        const msg = e instanceof Error ? e.message : "Błąd ładowania Finansów.";
-        setLoadError(msg);
-        toast.error(msg);
-      })
-      .finally(() => setLoading(false));
-  };
+    queryClient.invalidateQueries({ queryKey: ["finance-initial"] });
+  }, [queryClient]);
 
   const handleToggleReceiptPaid = async (receiptId: string, currentlyPaid: boolean) => {
     setReceiptActionLoading(receiptId);
@@ -202,7 +209,7 @@ export default function FinancePage() {
             prev.map((r) => (r.id === receiptId ? { ...r, isPaid: false } : r))
           );
         } else {
-          toast.error(result.error || "Błąd");
+          toast.error("error" in result ? (result.error ?? "Błąd") : "Błąd");
         }
       } else {
         const result = await markReceiptAsPaid(receiptId);
@@ -212,7 +219,7 @@ export default function FinancePage() {
             prev.map((r) => (r.id === receiptId ? { ...r, isPaid: true } : r))
           );
         } else {
-          toast.error(result.error || "Błąd");
+          toast.error("error" in result ? (result.error ?? "Błąd") : "Błąd");
         }
       }
     } finally {
@@ -235,7 +242,7 @@ export default function FinancePage() {
         setDeleteReceiptId(null);
         setDeleteReceiptPin("");
       } else {
-        toast.error(result.error || "Błąd");
+        toast.error("error" in result ? (result.error ?? "Błąd") : "Błąd");
       }
     } finally {
       setReceiptActionLoading(null);
@@ -252,7 +259,7 @@ export default function FinancePage() {
           prev.map((n) => (n.id === noteId ? { ...n, status: "PAID" as const, paidAt: new Date().toISOString() } : n))
         );
       } else {
-        toast.error(result.error || "Błąd");
+        toast.error("error" in result ? (result.error ?? "Błąd") : "Błąd");
       }
     } finally {
       setNoteActionLoading(null);
@@ -277,7 +284,7 @@ export default function FinancePage() {
         setCancelNoteId(null);
         setCancelNoteReason("");
       } else {
-        toast.error(result.error || "Błąd");
+        toast.error("error" in result ? (result.error ?? "Błąd") : "Błąd");
       }
     } finally {
       setNoteActionLoading(null);
@@ -297,7 +304,7 @@ export default function FinancePage() {
         setCommissionReport(result.data);
         toast.success("Raport prowizji wygenerowany");
       } else {
-        toast.error(result.error || "Błąd raportu");
+        toast.error("error" in result ? (result.error ?? "Błąd raportu") : "Błąd raportu");
       }
     } finally {
       setCommissionReportLoading(false);
@@ -320,7 +327,7 @@ export default function FinancePage() {
         const r = await getCurrentCashShift();
         if (r.success && r.data !== undefined) setCurrentShift(r.data);
       } else {
-        toast.error(result.error || "Błąd");
+        toast.error("error" in result ? (result.error ?? "Błąd") : "Błąd");
       }
     } finally {
       setShiftOpenLoading(false);
@@ -353,16 +360,13 @@ export default function FinancePage() {
         });
         toast.success(result.data.isShortage ? `Zmiana zamknięta. Manko: ${result.data.difference.toFixed(2)} ${currency}` : `Zmiana zamknięta. Superata: ${result.data.difference.toFixed(2)} ${currency}`);
       } else {
-        toast.error(result.error || "Błąd");
+        toast.error("error" in result ? (result.error ?? "Błąd") : "Błąd");
       }
     } finally {
       setShiftCloseLoading(false);
     }
   };
 
-  useEffect(() => {
-    load();
-  }, []);
 
   const handleNightAudit = async () => {
     setNightAuditLoading(true);
@@ -766,7 +770,33 @@ export default function FinancePage() {
             Usunięcie pozycji z rachunku wymaga PIN managera (symulacja: domyślnie 1234).
             Wybierz transakcję z listy lub wpisz ID.
           </p>
-          <p className="mb-2 text-sm font-medium">Lista transakcji (dziś) – wybierz transakcję do anulowania</p>
+          <div className="mb-3 flex items-center gap-2">
+            <p className="text-sm font-medium">Lista transakcji (dziś)</p>
+            <select
+              value={txTypeFilter}
+              onChange={(e) => setTxTypeFilter(e.target.value)}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+            >
+              <option value="all">Wszystkie typy</option>
+              <option value="ROOM">Nocleg</option>
+              <option value="RESTAURANT">Restauracja</option>
+              <option value="DEPOSIT">Zaliczka</option>
+              <option value="LOCAL_TAX">Opłata miejscowa</option>
+              <option value="MINIBAR">Minibar</option>
+              <option value="SPA">SPA</option>
+              <option value="PARKING">Parking</option>
+              <option value="PAYMENT">Płatność</option>
+            </select>
+            {txTypeFilter !== "all" && (
+              <span className="text-xs text-muted-foreground">
+                ({todayTransactions.filter((t) =>
+                  txTypeFilter === "RESTAURANT"
+                    ? t.type === "GASTRONOMY" || t.type === "RESTAURANT" || t.type === "POSTING"
+                    : t.type === txTypeFilter
+                ).length} wyników)
+              </span>
+            )}
+          </div>
           {todayTransactions.length > 0 ? (
             <div className="mb-4 overflow-x-auto">
               <table className="w-full text-sm" role="table">
@@ -780,7 +810,13 @@ export default function FinancePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {todayTransactions.map((t) => (
+                  {todayTransactions
+                    .filter((t) => {
+                      if (txTypeFilter === "all") return true;
+                      if (txTypeFilter === "RESTAURANT") return t.type === "GASTRONOMY" || t.type === "RESTAURANT" || t.type === "POSTING";
+                      return t.type === txTypeFilter;
+                    })
+                    .map((t) => (
                     <tr
                       key={t.id}
                       className="border-b border-border/50 hover:bg-muted/50 cursor-pointer"
@@ -796,7 +832,13 @@ export default function FinancePage() {
                               ? "Opłata miejscowa"
                               : t.type === "MINIBAR"
                                 ? "Minibar"
-                                : t.type}
+                                : t.type === "GASTRONOMY" || t.type === "RESTAURANT" || t.type === "POSTING"
+                                  ? "Restauracja"
+                                  : t.type === "SPA"
+                                    ? "SPA"
+                                    : t.type === "PARKING"
+                                      ? "Parking"
+                                      : t.type}
                       </td>
                       <td className="py-1.5 text-right">{t.amount.toFixed(2)}</td>
                       <td className="py-1.5">{new Date(t.createdAt).toLocaleString("pl-PL")}</td>
@@ -992,9 +1034,9 @@ export default function FinancePage() {
                     getVatPurchasesRegister(vatRegisterFrom, vatRegisterTo),
                   ]);
                   if (salesRes.success && salesRes.data) setVatSalesData(salesRes.data);
-                  else { toast.error(salesRes.error ?? "Błąd rejestru sprzedaży"); setVatSalesData(null); }
+                  else { toast.error("error" in salesRes ? (salesRes.error ?? "Błąd rejestru sprzedaży") : "Błąd rejestru sprzedaży"); setVatSalesData(null); }
                   if (purchasesRes.success && purchasesRes.data) setVatPurchasesData(purchasesRes.data);
-                  else { toast.error(purchasesRes.error ?? "Błąd rejestru zakupów"); setVatPurchasesData(null); }
+                  else { toast.error("error" in purchasesRes ? (purchasesRes.error ?? "Błąd rejestru zakupów") : "Błąd rejestru zakupów"); setVatPurchasesData(null); }
                   if (salesRes.success && purchasesRes.success) toast.success("Rejestry VAT załadowane");
                 } finally {
                   setVatRegisterLoading(false);
@@ -1042,7 +1084,7 @@ export default function FinancePage() {
                         if (res.error?.includes("dodana do kolejki")) {
                           toast.warning(res.error);
                         } else {
-                          toast.error(res.error ?? "Błąd wysyłki wsadowej do KSeF");
+                          toast.error("error" in res ? (res.error ?? "Błąd wysyłki wsadowej do KSeF") : "Błąd wysyłki wsadowej do KSeF");
                         }
                       }
                     }}
@@ -1165,7 +1207,7 @@ export default function FinancePage() {
                                       if (res.error?.includes("dodana do kolejki")) {
                                         toast.warning(res.error);
                                       } else {
-                                        toast.error(res.error ?? "Błąd wysyłki do KSeF");
+                                        toast.error("error" in res ? (res.error ?? "Błąd wysyłki do KSeF") : "Błąd wysyłki do KSeF");
                                       }
                                     }
                                   }}
@@ -1193,7 +1235,7 @@ export default function FinancePage() {
                                       ]);
                                       if (salesRes.success && salesRes.data) setVatSalesData(salesRes.data);
                                     } else {
-                                      toast.error(res.error ?? "Błąd sprawdzania statusu");
+                                      toast.error("error" in res ? (res.error ?? "Błąd sprawdzania statusu") : "Błąd sprawdzania statusu");
                                     }
                                   }}
                                 >
@@ -1217,7 +1259,7 @@ export default function FinancePage() {
                                       }
                                       toast.success("UPO pobrane");
                                     } else {
-                                      toast.error(res.error ?? "Błąd pobierania UPO");
+                                      toast.error("error" in res ? (res.error ?? "Błąd pobierania UPO") : "Błąd pobierania UPO");
                                     }
                                   }}
                                 >
@@ -1347,7 +1389,7 @@ export default function FinancePage() {
                     setKpirData(res.data);
                     toast.success("KPiR załadowany");
                   } else {
-                    toast.error(res.error ?? "Błąd KPiR");
+                    toast.error("error" in res ? (res.error ?? "Błąd KPiR") : "Błąd KPiR");
                     setKpirData(null);
                   }
                 } finally {

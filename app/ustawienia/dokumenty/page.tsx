@@ -24,6 +24,7 @@ import {
   getAllDocumentTemplates,
   updateDocumentTemplate,
   type DocumentTemplateData,
+  type DocumentTemplateType,
 } from "@/app/actions/finance";
 import { toast } from "sonner";
 import { FileText, ArrowLeft, Save, Upload, Trash2, Eye, RefreshCw } from "lucide-react";
@@ -49,7 +50,7 @@ export default function DokumentyPage() {
         setTemplates(result.data);
         setEdited({});
       } else {
-        toast.error(result.error || "Błąd ładowania szablonów");
+        toast.error("error" in result ? (result.error ?? "Błąd ładowania szablonów") : "Błąd ładowania szablonów");
       }
     } finally {
       setLoading(false);
@@ -95,7 +96,7 @@ export default function DokumentyPage() {
 
     setSaving(true);
     try {
-      const result = await updateDocumentTemplate(activeTab, editedForTab);
+      const result = await updateDocumentTemplate(activeTab as DocumentTemplateType, editedForTab);
       if (result.success && result.data) {
         toast.success("Szablon zapisany");
         setTemplates((prev) =>
@@ -107,7 +108,7 @@ export default function DokumentyPage() {
           return newEdited;
         });
       } else {
-        toast.error(result.error || "Błąd zapisu");
+        toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
       }
     } finally {
       setSaving(false);
@@ -278,6 +279,7 @@ export default function DokumentyPage() {
                       {logoPreviewSrc && (
                         <div className="border rounded-lg p-4 bg-white">
                           <p className="text-sm text-muted-foreground mb-2">Podgląd:</p>
+                          {/* eslint-disable-next-line @next/next/no-img-element -- preview data URL */}
                           <img
                             src={logoPreviewSrc}
                             alt="Logo podgląd"
@@ -500,7 +502,7 @@ export default function DokumentyPage() {
                         onCheckedChange={(checked) => handleFieldChange("showIdField", checked)}
                       />
                       <Label htmlFor="showIdField">
-                        Pokaż pole „Nr dowodu / paszportu"
+                        Pokaż pole &quot;Nr dowodu / paszportu&quot;
                       </Label>
                     </div>
                     
@@ -511,7 +513,7 @@ export default function DokumentyPage() {
                         onCheckedChange={(checked) => handleFieldChange("showVehicleField", checked)}
                       />
                       <Label htmlFor="showVehicleField">
-                        Pokaż pole „Nr rejestracyjny pojazdu"
+                        Pokaż pole &quot;Nr rejestracyjny pojazdu&quot;
                       </Label>
                     </div>
                     

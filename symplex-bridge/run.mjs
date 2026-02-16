@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 /**
- * Bridge: przetwarza pliki z folderu (eksport Bistro / EDI) i wysyła
+ * Bridge: przetwarza pliki z folderu (eksport Symplex Bistro / EDI) i wysyła
  * obciążenia na pokój do API postingu systemu hotelowego.
  *
- * ENV: POSTING_URL, EXTERNAL_API_KEY, SYMPLEX_WATCH_DIR, SYMPLEX_PROCESSED_DIR (opcjonalnie)
+ * Obsługuje dwa formaty:
+ *   1. Prosty CSV:  roomNumber;amount;description
+ *   2. Rozszerzony (z pozycjami):  roomNumber;amount;receiptNumber;cashier;item1Name:qty:price|item2Name:qty:price|...
+ *
+ * ENV: POSTING_URL, EXTERNAL_API_KEY, SYMPLEX_WATCH_DIR, SYMPLEX_PROCESSED_DIR
  */
 
 import fs from "fs";
@@ -27,23 +31,55 @@ if (!EXTERNAL_API_KEY) {
 }
 
 /**
- * Parsuje linię w formacie: roomNumber;amount;description
- * Zwraca { roomNumber, amount, description } lub null.
+ * Parsuje pozycje w formacie: "Zupa dnia:1:15.00|Kotlet:2:35.00|Kawa:1:8.00"
+ * Zwraca tablicę { name, quantity, unitPrice }.
+ */
+function parseItems(itemsStr) {
+  if (!itemsStr || !itemsStr.trim()) return [];
+  return itemsStr.split("|").map((part) => {
+    const segments = part.split(":");
+    const name = segments[0]?.trim() || "Pozycja";
+    const quantity = parseInt(segments[1], 10) || 1;
+    const unitPrice = parseFloat((segments[2] || "0").replace(",", ".")) || 0;
+    return { name, quantity, unitPrice };
+  }).filter((it) => it.name && it.unitPrice > 0);
+}
+
+/**
+ * Parsuje linię – obsługuje dwa formaty:
+ *   Prosty:     roomNumber;amount;description
+ *   Rozszerzony: roomNumber;amount;receiptNumber;cashier;items
+ *
+ * Rozpoznanie: jeśli 5+ pól i pole[4] zawiera ":" → format rozszerzony.
  */
 function parseLine(line) {
   const t = line.trim();
   if (!t) return null;
   const parts = t.split(";").map((p) => p.trim());
   if (parts.length < 2) return null;
+
   const roomNumber = parts[0];
   const amount = parseFloat(parts[1].replace(",", "."));
   if (!roomNumber || Number.isNaN(amount) || amount <= 0) return null;
+
+  // Format rozszerzony: roomNumber;amount;receiptNumber;cashier;items
+  if (parts.length >= 5 && parts[4]?.includes(":")) {
+    const receiptNumber = parts[2] || undefined;
+    const cashierName = parts[3] || undefined;
+    const items = parseItems(parts[4]);
+    const description = items.length > 0
+      ? `Restauracja (${items.length} poz.)`
+      : parts[2] || "Restauracja";
+    return { roomNumber, amount, description, receiptNumber, cashierName, items };
+  }
+
+  // Format prosty: roomNumber;amount;description
   const description = parts[2] || "Restauracja";
-  return { roomNumber, amount, description };
+  return { roomNumber, amount, description, items: [] };
 }
 
 /**
- * Parsuje plik tekstowy – linie roomNumber;amount;description (nagłówek pomijany).
+ * Parsuje plik tekstowy – obsługuje oba formaty.
  */
 function parseFile(content) {
   const lines = content.split(/\r?\n/);
@@ -56,18 +92,24 @@ function parseFile(content) {
 }
 
 async function postToApi(row) {
+  const payload = {
+    roomNumber: row.roomNumber,
+    amount: row.amount,
+    type: "RESTAURANT",
+    description: row.description,
+    posSystem: "Symplex Bistro",
+  };
+  if (row.items?.length > 0) payload.items = row.items;
+  if (row.receiptNumber) payload.receiptNumber = row.receiptNumber;
+  if (row.cashierName) payload.cashierName = row.cashierName;
+
   const res = await fetch(POSTING_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-API-Key": EXTERNAL_API_KEY,
     },
-    body: JSON.stringify({
-      roomNumber: row.roomNumber,
-      amount: row.amount,
-      type: "RESTAURANT",
-      description: row.description,
-    }),
+    body: JSON.stringify(payload),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -96,9 +138,10 @@ async function processFile(filePath) {
   let err = 0;
   for (const row of rows) {
     try {
-      await postToApi(row);
+      const result = await postToApi(row);
       ok++;
-      console.log(`[symplex-bridge] ${name}: pokój ${row.roomNumber} ${row.amount} PLN – OK`);
+      const itemsInfo = row.items?.length ? ` (${row.items.length} pozycji)` : "";
+      console.log(`[symplex-bridge] ${name}: pokój ${row.roomNumber} ${row.amount} PLN${itemsInfo} – OK [txId: ${result.transactionId}]`);
     } catch (e) {
       err++;
       console.error(`[symplex-bridge] ${name}: pokój ${row.roomNumber} – błąd:`, e.message);

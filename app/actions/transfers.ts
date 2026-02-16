@@ -2,14 +2,11 @@
 
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { TRANSFER_TYPES, DIRECTIONS, STATUSES } from "@/lib/transfers-constants";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
   | { success: false; error: string };
-
-const TRANSFER_TYPES = ["AIRPORT", "STATION"] as const;
-const DIRECTIONS = ["ARRIVAL", "DEPARTURE"] as const;
-const STATUSES = ["BOOKED", "CONFIRMED", "DONE", "CANCELLED"] as const;
 
 /** Lista rezerwacji transferów (ostatnie). */
 export async function getTransferBookings(limit = 80): Promise<
@@ -144,5 +141,3 @@ export async function updateTransferBookingStatus(
     };
   }
 }
-
-export { TRANSFER_TYPES, DIRECTIONS, STATUSES };

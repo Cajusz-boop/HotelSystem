@@ -5,6 +5,7 @@
  * Obsługiwane modele: VX520, VX820, P400, M400
  */
 
+import type { Socket } from "net";
 import type {
   PaymentTerminalDriver,
   TerminalConfig,
@@ -41,7 +42,7 @@ const RETRY_COUNT = 3;
 const RETRY_DELAY = 1000;
 
 // Stan drivera
-let socket: ReturnType<typeof import("net").Socket.prototype.constructor> | null = null;
+let socket: Socket | null = null;
 let config: TerminalConfig | null = null;
 let isInitialized = false;
 let messageId = 1;

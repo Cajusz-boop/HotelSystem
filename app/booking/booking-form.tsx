@@ -39,7 +39,7 @@ export function BookingForm() {
   const [error, setError] = useState<string | null>(null);
   const [doneMessage, setDoneMessage] = useState("");
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
-  const [reservationId, setReservationId] = useState<string | null>(null);
+  const [_reservationId, setReservationId] = useState<string | null>(null);
 
   const loadRoomTypes = async () => {
     setLoadingRoomTypes(true);

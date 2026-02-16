@@ -6,7 +6,6 @@ import {
   LayoutDashboard,
   BedDouble,
   Receipt,
-  DollarSign,
   BarChart3,
   Car,
   LogIn,
@@ -14,20 +13,15 @@ import {
   Calendar,
   FileCheck,
   Moon,
-  ClipboardList,
   ClipboardCheck,
   UtensilsCrossed,
   Tent,
   Bike,
-  BookOpen,
   CreditCard,
-  FileText,
   Phone,
   CalendarDays,
   Building2,
   KeyRound,
-  Smartphone,
-  Contact,
   Globe,
   SlidersHorizontal,
   Printer,
@@ -37,21 +31,20 @@ import {
   Sofa,
   Wine,
   Droplets,
-  Users,
   Presentation,
   Calculator,
   Crown,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 
-// --- Kategorie wyłonione z głębokiego skanu (KROK 2) ---
 export type CategoryKey =
-  | "Panel"
   | "Recepcja"
   | "Finanse"
   | "Raporty"
-  | "Gospodarka"
+  | "Housekeeping"
   | "Wellness & SPA"
   | "Gastronomia"
   | "MICE"
@@ -73,83 +66,85 @@ export type DashboardFeature = {
 
 const CATEGORY_STYLES: Record<
   CategoryKey,
-  { bg: string; bgIcon: string; text: string; border: string }
+  { bg: string; bgIcon: string; text: string; border: string; headerBg: string }
 > = {
-  Panel: {
-    bg: "bg-slate-50",
-    bgIcon: "bg-slate-100",
-    text: "text-slate-700",
-    border: "border-slate-200",
-  },
   Recepcja: {
-    bg: "bg-blue-50",
-    bgIcon: "bg-blue-100",
-    text: "text-blue-600",
-    border: "border-blue-200",
+    bg: "bg-blue-50/60 dark:bg-blue-950/20",
+    bgIcon: "bg-blue-100 dark:bg-blue-900/40",
+    text: "text-blue-700 dark:text-blue-300",
+    border: "border-blue-200 dark:border-blue-800",
+    headerBg: "bg-blue-100/80 dark:bg-blue-900/30",
   },
   Finanse: {
-    bg: "bg-emerald-50",
-    bgIcon: "bg-emerald-100",
-    text: "text-emerald-600",
-    border: "border-emerald-200",
+    bg: "bg-emerald-50/60 dark:bg-emerald-950/20",
+    bgIcon: "bg-emerald-100 dark:bg-emerald-900/40",
+    text: "text-emerald-700 dark:text-emerald-300",
+    border: "border-emerald-200 dark:border-emerald-800",
+    headerBg: "bg-emerald-100/80 dark:bg-emerald-900/30",
   },
   Raporty: {
-    bg: "bg-amber-50",
-    bgIcon: "bg-amber-100",
-    text: "text-amber-700",
-    border: "border-amber-200",
+    bg: "bg-amber-50/60 dark:bg-amber-950/20",
+    bgIcon: "bg-amber-100 dark:bg-amber-900/40",
+    text: "text-amber-700 dark:text-amber-300",
+    border: "border-amber-200 dark:border-amber-800",
+    headerBg: "bg-amber-100/80 dark:bg-amber-900/30",
   },
-  Gospodarka: {
-    bg: "bg-orange-50",
-    bgIcon: "bg-orange-100",
-    text: "text-orange-600",
-    border: "border-orange-200",
+  Housekeeping: {
+    bg: "bg-orange-50/60 dark:bg-orange-950/20",
+    bgIcon: "bg-orange-100 dark:bg-orange-900/40",
+    text: "text-orange-700 dark:text-orange-300",
+    border: "border-orange-200 dark:border-orange-800",
+    headerBg: "bg-orange-100/80 dark:bg-orange-900/30",
   },
   "Wellness & SPA": {
-    bg: "bg-rose-50",
-    bgIcon: "bg-rose-100",
-    text: "text-rose-600",
-    border: "border-rose-200",
+    bg: "bg-rose-50/60 dark:bg-rose-950/20",
+    bgIcon: "bg-rose-100 dark:bg-rose-900/40",
+    text: "text-rose-700 dark:text-rose-300",
+    border: "border-rose-200 dark:border-rose-800",
+    headerBg: "bg-rose-100/80 dark:bg-rose-900/30",
   },
   Gastronomia: {
-    bg: "bg-lime-50",
-    bgIcon: "bg-lime-100",
-    text: "text-lime-700",
-    border: "border-lime-200",
+    bg: "bg-lime-50/60 dark:bg-lime-950/20",
+    bgIcon: "bg-lime-100 dark:bg-lime-900/40",
+    text: "text-lime-700 dark:text-lime-300",
+    border: "border-lime-200 dark:border-lime-800",
+    headerBg: "bg-lime-100/80 dark:bg-lime-900/30",
   },
   MICE: {
-    bg: "bg-indigo-50",
-    bgIcon: "bg-indigo-100",
-    text: "text-indigo-600",
-    border: "border-indigo-200",
+    bg: "bg-indigo-50/60 dark:bg-indigo-950/20",
+    bgIcon: "bg-indigo-100 dark:bg-indigo-900/40",
+    text: "text-indigo-700 dark:text-indigo-300",
+    border: "border-indigo-200 dark:border-indigo-800",
+    headerBg: "bg-indigo-100/80 dark:bg-indigo-900/30",
   },
   Infrastruktura: {
-    bg: "bg-cyan-50",
-    bgIcon: "bg-cyan-100",
-    text: "text-cyan-700",
-    border: "border-cyan-200",
+    bg: "bg-cyan-50/60 dark:bg-cyan-950/20",
+    bgIcon: "bg-cyan-100 dark:bg-cyan-900/40",
+    text: "text-cyan-700 dark:text-cyan-300",
+    border: "border-cyan-200 dark:border-cyan-800",
+    headerBg: "bg-cyan-100/80 dark:bg-cyan-900/30",
   },
   "Dla Właściciela": {
-    bg: "bg-violet-50",
-    bgIcon: "bg-violet-100",
-    text: "text-violet-600",
-    border: "border-violet-200",
+    bg: "bg-violet-50/60 dark:bg-violet-950/20",
+    bgIcon: "bg-violet-100 dark:bg-violet-900/40",
+    text: "text-violet-700 dark:text-violet-300",
+    border: "border-violet-200 dark:border-violet-800",
+    headerBg: "bg-violet-100/80 dark:bg-violet-900/30",
   },
   Narzędzia: {
-    bg: "bg-gray-50",
-    bgIcon: "bg-gray-100",
-    text: "text-gray-600",
-    border: "border-gray-200",
+    bg: "bg-gray-50/60 dark:bg-gray-950/20",
+    bgIcon: "bg-gray-100 dark:bg-gray-900/40",
+    text: "text-gray-700 dark:text-gray-300",
+    border: "border-gray-200 dark:border-gray-800",
+    headerBg: "bg-gray-100/80 dark:bg-gray-900/30",
   },
 };
 
-// Kolejność wyświetlania grup
 const CATEGORY_ORDER: CategoryKey[] = [
-  "Panel",
   "Recepcja",
   "Finanse",
   "Raporty",
-  "Gospodarka",
+  "Housekeeping",
   "Wellness & SPA",
   "Gastronomia",
   "MICE",
@@ -158,17 +153,20 @@ const CATEGORY_ORDER: CategoryKey[] = [
   "Narzędzia",
 ];
 
-// --- PEŁNA MAPA NAWIGACJI: wszystkie widoki znalezione w kodzie (KROK 1 + 2) ---
+const CATEGORY_DESCRIPTIONS: Record<CategoryKey, string> = {
+  Recepcja: "Grafik, rezerwacje, pokoje, cennik, channel manager",
+  Finanse: "Kasa, faktury, night audit, integracje księgowe",
+  Raporty: "Raport dobowy, KPI, GUS, raport policyjny",
+  Housekeeping: "Sprzątanie, minibar, statusy pokoi",
+  "Wellness & SPA": "Zabiegi, sauna, basen",
+  Gastronomia: "Stoliki, menu, zamówienia restauracyjne",
+  MICE: "Konferencje, eventy, kosztorysy, zlecenia",
+  Infrastruktura: "Parking, wypożyczalnia, camping",
+  "Dla Właściciela": "Obłożenie, przychody, rozliczenia",
+  Narzędzia: "Centrala telefoniczna, logowanie",
+};
+
 export const features: DashboardFeature[] = [
-  {
-    id: "panel",
-    href: "/",
-    label: "Centrum Dowodzenia",
-    description: "Przegląd dnia, KPI, nawigacja po systemie",
-    category: "Panel",
-    icon: LayoutDashboard,
-    guestStage: null,
-  },
   {
     id: "front-office",
     href: "/front-office",
@@ -182,7 +180,7 @@ export const features: DashboardFeature[] = [
     id: "front-office-kwhotel",
     href: "/front-office/kwhotel",
     label: "Recepcja Kwhotel",
-    description: "Widok recepcji dla Kwhotel",
+    description: "Alternatywny widok recepcji w stylu KWHotel",
     category: "Recepcja",
     icon: Building2,
     guestStage: "pobyt",
@@ -191,34 +189,16 @@ export const features: DashboardFeature[] = [
     id: "check-in",
     href: "/check-in",
     label: "Meldunek",
-    description: "Formularz meldunkowy (MRZ, Parse & Forget)",
+    description: "Formularz meldunkowy z MRZ — dostępny też jako link online dla gościa",
     category: "Recepcja",
     icon: KeyRound,
-    guestStage: "pobyt",
-  },
-  {
-    id: "meldunek-online",
-    href: "/check-in",
-    label: "Meldunek online (gość)",
-    description: "Link do formularza meldunku online wysyłany gościom",
-    category: "Recepcja",
-    icon: Smartphone,
-    guestStage: "pobyt",
-  },
-  {
-    id: "karta-goscia",
-    href: "/front-office",
-    label: "Karta gościa",
-    description: "Otwórz rezerwację na grafiku recepcji, aby wejść w kartę gościa",
-    category: "Recepcja",
-    icon: Contact,
     guestStage: "pobyt",
   },
   {
     id: "pokoje",
     href: "/pokoje",
     label: "Pokoje",
-    description: "Lista pokoi, statusy, zarządzanie",
+    description: "Lista pokoi, statusy, przypisania, zarządzanie",
     category: "Recepcja",
     icon: BedDouble,
     guestStage: "pobyt",
@@ -227,7 +207,7 @@ export const features: DashboardFeature[] = [
     id: "booking",
     href: "/booking",
     label: "Silnik rezerwacji",
-    description: "Rezerwacja online, sprawdzenie dostępności",
+    description: "Rezerwacja online, sprawdzenie dostępności terminów",
     category: "Recepcja",
     icon: Globe,
     guestStage: "rezerwacja",
@@ -236,7 +216,7 @@ export const features: DashboardFeature[] = [
     id: "cennik",
     href: "/cennik",
     label: "Cennik",
-    description: "Ceny pokoi, plany cenowe, kody cenowe",
+    description: "Ceny pokoi, plany cenowe, kody rabatowe",
     category: "Recepcja",
     icon: Receipt,
     guestStage: "rezerwacja",
@@ -245,7 +225,7 @@ export const features: DashboardFeature[] = [
     id: "cennik-reguly",
     href: "/cennik/reguly-pochodne",
     label: "Reguły pochodne",
-    description: "Reguły cen pochodnych",
+    description: "Automatyczne reguły cen zależnych od cennika bazowego",
     category: "Recepcja",
     icon: SlidersHorizontal,
     guestStage: "rezerwacja",
@@ -254,7 +234,7 @@ export const features: DashboardFeature[] = [
     id: "cennik-wydruk",
     href: "/cennik/wydruk",
     label: "Wydruk cennika",
-    description: "Wydruk cennika (z datą lub ceny bazowe)",
+    description: "Generowanie PDF cennika z datą lub cenami bazowymi",
     category: "Recepcja",
     icon: Printer,
     guestStage: "rezerwacja",
@@ -263,7 +243,7 @@ export const features: DashboardFeature[] = [
     id: "channel-manager",
     href: "/channel-manager",
     label: "Channel Manager",
-    description: "Synchronizacja z kanałami sprzedaży",
+    description: "Synchronizacja dostępności z Booking.com, Expedia i innymi kanałami",
     category: "Recepcja",
     icon: Share2,
     guestStage: "rezerwacja",
@@ -272,7 +252,7 @@ export const features: DashboardFeature[] = [
     id: "finance",
     href: "/finance",
     label: "Finanse",
-    description: "Kasa, night audit, transakcje, JPK, faktury",
+    description: "Kasa, night audit, transakcje, JPK, faktury, płatności online",
     category: "Finanse",
     icon: Wallet,
     guestStage: "wyjazd",
@@ -281,25 +261,16 @@ export const features: DashboardFeature[] = [
     id: "finance-integracje",
     href: "/finance/integracje",
     label: "Integracje księgowe",
-    description: "Integracje z systemami księgowymi",
+    description: "Eksport danych do systemów księgowych (Optima, Symfonia i inne)",
     category: "Finanse",
     icon: Plug,
-    guestStage: "wyjazd",
-  },
-  {
-    id: "platnosc-online",
-    href: "/finance",
-    label: "Płatność online (gość)",
-    description: "Link do płatności dla gościa generowany w module Finanse",
-    category: "Finanse",
-    icon: CreditCard,
     guestStage: "wyjazd",
   },
   {
     id: "reports",
     href: "/reports",
     label: "Raporty",
-    description: "Raport dobowy, KPI, raport GUS, raport policyjny",
+    description: "Raport dobowy, KPI, raport GUS, raport policyjny, statystyki",
     category: "Raporty",
     icon: BarChart3,
     guestStage: "wyjazd",
@@ -307,9 +278,9 @@ export const features: DashboardFeature[] = [
   {
     id: "housekeeping",
     href: "/housekeeping",
-    label: "Gospodarka pokoi",
-    description: "Statusy sprzątania, OOO, minibar",
-    category: "Gospodarka",
+    label: "Housekeeping",
+    description: "Statusy sprzątania, lista zadań dla pokojowych, pokoje OOO",
+    category: "Housekeeping",
     icon: Sofa,
     guestStage: "pobyt",
   },
@@ -317,8 +288,8 @@ export const features: DashboardFeature[] = [
     id: "housekeeping-minibar",
     href: "/housekeeping/minibar",
     label: "Minibar",
-    description: "Zarządzanie minibarem",
-    category: "Gospodarka",
+    description: "Zarządzanie minibarami w pokojach, rozliczenia",
+    category: "Housekeeping",
     icon: Wine,
     guestStage: "pobyt",
   },
@@ -326,7 +297,7 @@ export const features: DashboardFeature[] = [
     id: "spa",
     href: "/spa",
     label: "SPA",
-    description: "Zabiegi, sauna, basen – moduł SPA",
+    description: "Zabiegi, sauna, basen — rezerwacja i grafik zabiegów",
     category: "Wellness & SPA",
     icon: Droplets,
     guestStage: "pobyt",
@@ -335,7 +306,7 @@ export const features: DashboardFeature[] = [
     id: "gastronomy",
     href: "/gastronomy",
     label: "Gastronomia",
-    description: "Stoliki, menu, zamówienia – moduł gastronomiczny",
+    description: "Stoliki, menu, zamówienia — obciążenia na pokój z restauracji",
     category: "Gastronomia",
     icon: UtensilsCrossed,
     guestStage: "pobyt",
@@ -344,7 +315,7 @@ export const features: DashboardFeature[] = [
     id: "mice",
     href: "/mice",
     label: "MICE",
-    description: "Konferencje, eventy, sale",
+    description: "Konferencje, eventy, rezerwacja sal konferencyjnych",
     category: "MICE",
     icon: Presentation,
     guestStage: "pobyt",
@@ -353,7 +324,7 @@ export const features: DashboardFeature[] = [
     id: "mice-kosztorysy",
     href: "/mice/kosztorysy",
     label: "Kosztorysy",
-    description: "Lista kosztorysów MICE",
+    description: "Wyceny i kosztorysy eventów MICE",
     category: "MICE",
     icon: Calculator,
     guestStage: "rezerwacja",
@@ -362,7 +333,7 @@ export const features: DashboardFeature[] = [
     id: "mice-zlecenia",
     href: "/mice/zlecenia",
     label: "Zlecenia realizacji",
-    description: "Zlecenia realizacji MICE",
+    description: "Zlecenia realizacji eventów — zadania dla obsługi",
     category: "MICE",
     icon: ClipboardCheck,
     guestStage: "pobyt",
@@ -371,7 +342,7 @@ export const features: DashboardFeature[] = [
     id: "parking",
     href: "/parking",
     label: "Parking",
-    description: "Parking, szlaban, miejsca postojowe",
+    description: "Miejsca postojowe, szlaban, przypisanie do rezerwacji",
     category: "Infrastruktura",
     icon: Car,
     guestStage: "pobyt",
@@ -380,7 +351,7 @@ export const features: DashboardFeature[] = [
     id: "rentals",
     href: "/rentals",
     label: "Wypożyczalnia",
-    description: "Wypożyczalnia sprzętu",
+    description: "Wypożyczalnia sprzętu (rowery, kajaki, narty i inne)",
     category: "Infrastruktura",
     icon: Bike,
     guestStage: "pobyt",
@@ -389,7 +360,7 @@ export const features: DashboardFeature[] = [
     id: "camping",
     href: "/camping",
     label: "Camping",
-    description: "Obsługa pola namiotowego / kempingu",
+    description: "Obsługa pola namiotowego, kempingu i domków",
     category: "Infrastruktura",
     icon: Tent,
     guestStage: "pobyt",
@@ -398,7 +369,7 @@ export const features: DashboardFeature[] = [
     id: "owner",
     href: "/owner",
     label: "Portal Właściciela",
-    description: "Obłożenie, przychody, rozliczenia dla właściciela",
+    description: "Obłożenie, przychody, rozliczenia — widok dla właściciela obiektu",
     category: "Dla Właściciela",
     icon: Crown,
     guestStage: null,
@@ -407,7 +378,7 @@ export const features: DashboardFeature[] = [
     id: "ustawienia-centrala",
     href: "/ustawienia/centrala",
     label: "Centrala telefoniczna",
-    description: "Integracja z centralą (Asterisk, 3CX)",
+    description: "Integracja z centralą telefoniczną (Asterisk, 3CX)",
     category: "Narzędzia",
     icon: Phone,
     guestStage: null,
@@ -416,7 +387,7 @@ export const features: DashboardFeature[] = [
     id: "login",
     href: "/login",
     label: "Logowanie",
-    description: "Zaloguj się do systemu",
+    description: "Zmień użytkownika lub zaloguj się ponownie",
     category: "Narzędzia",
     icon: LogIn,
     guestStage: null,
@@ -434,12 +405,25 @@ function normalize(s: string): string {
   return s
     .toLowerCase()
     .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "");
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
 export function Dashboard() {
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState<GuestStage | "all">("all");
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<CategoryKey>>(new Set());
+
+  const toggleCategory = (cat: CategoryKey) => {
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) {
+        next.delete(cat);
+      } else {
+        next.add(cat);
+      }
+      return next;
+    });
+  };
 
   const filtered = useMemo(() => {
     const q = normalize(search).trim();
@@ -447,7 +431,8 @@ export function Dashboard() {
       const matchSearch =
         !q ||
         normalize(item.label).includes(q) ||
-        normalize(item.description).includes(q);
+        normalize(item.description).includes(q) ||
+        normalize(item.category).includes(q);
       const matchStage =
         stageFilter === "all" ||
         item.guestStage === null ||
@@ -471,109 +456,129 @@ export function Dashboard() {
     );
   }, [filtered]);
 
+  const isSearching = search.trim().length > 0;
+
   return (
-    <div className="flex h-[calc(100vh-8rem)] max-h-[720px] flex-col gap-2">
-      {/* Pasek: wyszukiwarka + mapa gościa w jednej linii */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 py-1">
-        <div className="relative w-64 min-w-0">
-          <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+    <div className="flex flex-col gap-4">
+      {/* Search bar + guest stage filter */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-72 min-w-0">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Szukaj..."
+            placeholder="Szukaj funkcji..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-8 pl-7 text-sm"
-            aria-label="Szukaj"
+            className="h-9 pl-9 text-sm"
+            aria-label="Szukaj funkcji systemu"
           />
         </div>
-        <div className="flex items-center gap-1 rounded-md border border-border bg-card px-1 py-0.5">
+        <div className="flex items-center gap-1 rounded-lg border border-border bg-card px-1 py-0.5">
           {GUEST_MAP_STAGES.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               type="button"
               onClick={() => setStageFilter(key)}
               className={cn(
-                "flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors",
+                "flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
                 stageFilter === key
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-primary text-primary-foreground shadow-sm"
                   : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               )}
             >
-              <Icon className="h-3 w-3 shrink-0" />
+              <Icon className="h-3.5 w-3.5 shrink-0" />
               {label}
             </button>
           ))}
         </div>
+        <span className="text-xs text-muted-foreground">
+          {filtered.length} {filtered.length === 1 ? "funkcja" : "funkcji"}
+        </span>
       </div>
 
-      {/* Działy w 2 lub 3 kolumnach – jedna kolumna = jeden dział (kategoria) */}
-      <div
-        className="min-h-0 flex-1 overflow-auto"
-        style={{
-          columnCount: byCategory.length <= 4 ? 2 : 3,
-          columnGap: "1rem",
-        }}
-      >
-        {filtered.length === 0 ? (
-          <p className="py-4 text-center text-xs text-muted-foreground">
-            Brak wyników. Zmień wyszukiwanie lub etap.
-          </p>
-        ) : (
-          byCategory.map(({ category, items }) => {
+      {/* Feature sections */}
+      {filtered.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          Brak wyników. Zmień wyszukiwanie lub filtr etapu.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {byCategory.map(({ category, items }) => {
             const style = CATEGORY_STYLES[category];
+            const isCollapsed = collapsedCategories.has(category) && !isSearching;
             return (
-              <section
-                key={category}
-                className="break-inside-avoid mb-4 flex flex-col gap-1.5"
-              >
-                <h2 className={cn("text-xs font-semibold uppercase tracking-wider px-0.5", style.text)}>
-                  — {category} —
-                </h2>
-                <div
-                  className="grid gap-1.5"
-                  style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
+              <section key={category} className={cn("overflow-hidden rounded-xl border", style.border)}>
+                {/* Category header */}
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(category)}
+                  className={cn(
+                    "flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:opacity-80",
+                    style.headerBg
+                  )}
                 >
-                  {items.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <Link
-                        key={item.id}
-                        href={item.href}
-                        title={`${item.label} – ${item.description}`}
-                        className={cn(
-                          "group flex flex-col rounded-lg border-2 p-1.5 transition-all duration-150",
-                          "hover:shadow hover:-translate-y-0.5 focus-visible:outline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                          "min-w-0 aspect-square w-full",
-                          style.bg,
-                          style.border
-                        )}
-                      >
-                        <div
+                  {isCollapsed ? (
+                    <ChevronRight className={cn("h-4 w-4 shrink-0", style.text)} />
+                  ) : (
+                    <ChevronDown className={cn("h-4 w-4 shrink-0", style.text)} />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <h2 className={cn("text-sm font-bold uppercase tracking-wide", style.text)}>
+                      {category}
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      {CATEGORY_DESCRIPTIONS[category]}
+                    </p>
+                  </div>
+                  <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", style.bgIcon, style.text)}>
+                    {items.length}
+                  </span>
+                </button>
+
+                {/* Feature cards grid */}
+                {!isCollapsed && (
+                  <div className="grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {items.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <Link
+                          key={item.id}
+                          href={item.href}
                           className={cn(
-                            "flex flex-1 min-h-0 w-full items-center justify-center rounded-md",
-                            style.bgIcon,
-                            style.text
+                            "group relative flex items-start gap-3 rounded-lg border p-3 transition-shadow duration-150",
+                            "hover:shadow-md",
+                            "focus-visible:outline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                            style.bg,
+                            style.border
                           )}
                         >
-                          <Icon className="h-6 w-6 shrink-0" />
-                        </div>
-                        <span
-                          className={cn(
-                            "mt-0.5 truncate text-center text-xs font-semibold leading-tight",
-                            style.text
-                          )}
-                        >
-                          {item.label}
-                        </span>
-                      </Link>
-                    );
-                  })}
-                </div>
+                          <div
+                            className={cn(
+                              "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                              style.bgIcon,
+                              style.text
+                            )}
+                          >
+                            <Icon className="h-5 w-5" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className={cn("text-sm font-semibold leading-tight", style.text)}>
+                              {item.label}
+                            </p>
+                            <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
+                              {item.description}
+                            </p>
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
     </div>
   );
 }

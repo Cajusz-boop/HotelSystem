@@ -9,8 +9,7 @@ import {
   updateGuestBlacklist, 
   withdrawAllGdprConsents, 
   anonymizeGuestData, 
-  exportGuestData, 
-  type GuestExportData,
+  exportGuestData,
   getGuestRelations,
   addGuestRelation,
   removeGuestRelation,
@@ -30,12 +29,12 @@ import {
   getGuestLoyaltyStatus,
   getLoyaltyTransactions,
   enrollGuestInLoyalty,
-  addLoyaltyPoints,
   redeemLoyaltyPoints,
   adjustLoyaltyPoints,
   type GuestLoyaltyStatus,
   type LoyaltyTransactionData,
 } from "@/app/actions/loyalty";
+import { getGuestRestaurantHistory } from "@/app/actions/gastronomy";
 import Link from "next/link";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -162,6 +161,22 @@ export function GuestCardClient({ guest: initialGuest, history }: GuestCardClien
         ).join("\n")
       : ""
   );
+  // Historia restauracyjna
+  const [restaurantHistory, setRestaurantHistory] = useState<{
+    totalAmount: number;
+    totalCharges: number;
+    charges: Array<{
+      id: string;
+      amount: number;
+      description: string | null;
+      createdAt: string;
+      roomNumber: string;
+      checkIn: string;
+      checkOut: string;
+      items: Array<{ name: string; quantity: number; unitPrice: number }>;
+    }>;
+  } | null>(null);
+  const [restaurantLoading, setRestaurantLoading] = useState(false);
   // Uwagi dla personelu
   const [staffNotes, setStaffNotes] = useState(initialGuest.staffNotes ?? "");
   // RODO
@@ -311,8 +326,15 @@ export function GuestCardClient({ guest: initialGuest, history }: GuestCardClien
   useEffect(() => {
     if (tab === "dane") {
       loadAutoFillData();
+      if (!restaurantHistory && !restaurantLoading) {
+        setRestaurantLoading(true);
+        getGuestRestaurantHistory(initialGuest.id).then((res) => {
+          if (res.success && res.data) setRestaurantHistory(res.data);
+          setRestaurantLoading(false);
+        });
+      }
     }
-  }, [tab, loadAutoFillData]);
+  }, [tab, loadAutoFillData, initialGuest.id, restaurantHistory, restaurantLoading]);
 
   // Scalanie gości
   const handleMergeGuests = async (sourceGuestId: string) => {
@@ -1837,15 +1859,18 @@ export function GuestCardClient({ guest: initialGuest, history }: GuestCardClien
           <div className="flex flex-col items-center gap-2">
             <div className="w-28 h-28 rounded-full bg-muted flex items-center justify-center overflow-hidden border-2 border-border">
               {photoUrl ? (
-                <img 
-                  src={photoUrl} 
-                  alt={`Zdjęcie ${name}`}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img 
+                    src={photoUrl} 
+                    alt={`Zdjęcie ${name}`}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
                     e.currentTarget.style.display = "none";
                     e.currentTarget.nextElementSibling?.classList.remove("hidden");
                   }}
                 />
+                </>
               ) : null}
               <span className={`text-3xl text-muted-foreground ${photoUrl ? "hidden" : ""}`}>
                 {name.charAt(0).toUpperCase()}
@@ -2416,6 +2441,47 @@ export function GuestCardClient({ guest: initialGuest, history }: GuestCardClien
                 Jeden produkt na linię. Możesz dodać ilość: &quot;Woda x2&quot;. Lista zostanie wyświetlona housekeeping przed przyjazdem gościa.
               </p>
             </div>
+          </div>
+
+          {/* Historia restauracyjna */}
+          <div className="pt-4 border-t">
+            <h3 className="text-sm font-medium mb-3">Historia restauracyjna</h3>
+            {restaurantLoading && (
+              <p className="text-xs text-muted-foreground">Wczytywanie...</p>
+            )}
+            {!restaurantLoading && (!restaurantHistory || restaurantHistory.totalCharges === 0) && (
+              <p className="text-xs text-muted-foreground">Brak rachunków restauracyjnych nabitych na pokój.</p>
+            )}
+            {!restaurantLoading && restaurantHistory && restaurantHistory.totalCharges > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>Łącznie: <strong className="text-foreground">{restaurantHistory.totalAmount.toFixed(2)} PLN</strong></span>
+                  <span>·</span>
+                  <span>{restaurantHistory.totalCharges} {restaurantHistory.totalCharges === 1 ? "rachunek" : restaurantHistory.totalCharges < 5 ? "rachunki" : "rachunków"}</span>
+                </div>
+                <div className="rounded-md border divide-y max-h-48 overflow-y-auto">
+                  {restaurantHistory.charges.map((charge) => (
+                    <div key={charge.id} className="flex items-center justify-between px-3 py-2 text-xs">
+                      <div className="min-w-0">
+                        <span className="font-medium">Pok. {charge.roomNumber}</span>
+                        <span className="ml-2 text-muted-foreground">
+                          {new Date(charge.createdAt).toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                        </span>
+                        {charge.items.length > 0 && (
+                          <span className="ml-2 text-muted-foreground truncate">
+                            ({charge.items.map((it) => it.name).join(", ")})
+                          </span>
+                        )}
+                        {!charge.items.length && charge.description && (
+                          <span className="ml-2 text-muted-foreground truncate">{charge.description}</span>
+                        )}
+                      </div>
+                      <span className="shrink-0 font-semibold ml-2">{charge.amount.toFixed(2)} PLN</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Uwagi/ostrzeżenia dla personelu */}

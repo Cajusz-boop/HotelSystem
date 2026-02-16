@@ -1,0 +1,7 @@
+# Zależności dla skryptów Pythona (supervisor, manager, scenarios_manager)
+# supervisor.py (opcjonalnie, tylko gdy używasz nadzorcy z pyautogui):
+# pyautogui>=1.0.0
+# pyperclip>=1.8.0
+
+# Testy
+pytest>=7.0.0

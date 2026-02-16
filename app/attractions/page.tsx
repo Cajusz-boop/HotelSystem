@@ -7,8 +7,8 @@ import {
   getAttractionBookings,
   createAttractionBooking,
   updateAttractionBookingStatus,
-  STATUSES,
 } from "@/app/actions/attractions";
+import { STATUSES } from "@/lib/attractions-constants";
 import { getActiveReservationsForCharge } from "@/app/actions/spa";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

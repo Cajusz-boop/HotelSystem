@@ -20,6 +20,14 @@ export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
   if (path.startsWith("/api/")) {
+    // /api/health zawsze dostępny (keep-alive, monitoring, warm-up z localhost)
+    if (path === "/api/health") return NextResponse.next();
+
+    // OAuth callback routes – muszą być dostępne z zewnątrz (redirect z Google)
+    if (path.startsWith("/api/auth/staff/google") || path.startsWith("/api/auth/guest/google")) {
+      return NextResponse.next();
+    }
+
     if (API_IP_WHITELIST.length > 0) {
       const ip = getClientIp(request);
       if (!API_IP_WHITELIST.includes(ip)) {
@@ -54,7 +62,10 @@ export function middleware(request: NextRequest) {
     if (parts.length !== 3) return NextResponse.next();
     const payload = JSON.parse(atob(parts[1]));
     if (payload.passwordExpired === true) {
-      return NextResponse.redirect(new URL("/change-password", request.url));
+      // Nie przekierowuj na /change-password, gdy użytkownik już na niej jest (unikanie pętli)
+      if (path !== "/change-password" && !path.startsWith("/change-password/")) {
+        return NextResponse.redirect(new URL("/change-password", request.url));
+      }
     }
 
     const lastActivity = request.cookies.get(LAST_ACTIVITY_COOKIE)?.value;
@@ -82,6 +93,6 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Uruchamiaj dla wszystkich ścieżek oprócz _next i favicon (w tym /api/* – IP whitelist)
-  matcher: ["/((?!_next|favicon\\.ico).*)"],
+  // Uruchamiaj dla stron i API – pomijaj statyczne zasoby (_next, favicon, obrazy, fonty, CSS/JS)
+  matcher: ["/((?!_next|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|css|js|woff2?|ttf|eot|ico)).*)"],
 };

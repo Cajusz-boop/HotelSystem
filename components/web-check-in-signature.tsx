@@ -122,7 +122,7 @@ export function WebCheckInSignature({
       if (result.success) {
         setDone(true);
       } else {
-        setError(result.error ?? "Błąd meldunku");
+        setError("error" in result ? (result.error ?? "Błąd meldunku") : "Błąd meldunku");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Błąd");

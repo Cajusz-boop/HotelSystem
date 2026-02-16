@@ -603,7 +603,7 @@ export async function resetEmailTemplate(
     });
 
     revalidatePath("/ustawienia/szablony-email");
-    return { success: true };
+    return { success: true, data: undefined };
   } catch (e) {
     return {
       success: false,
@@ -621,7 +621,7 @@ export async function sendReservationConfirmationWithTemplate(
   try {
     const reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
-      include: { guest: true, room: true },
+      include: { guest: true, room: true, transactions: { where: { status: "ACTIVE" }, select: { amount: true } } },
     });
     if (!reservation) return { success: false, error: "Rezerwacja nie istnieje" };
     
@@ -643,6 +643,9 @@ export async function sendReservationConfirmationWithTemplate(
     const checkIn = new Date(reservation.checkIn);
     const checkOut = new Date(reservation.checkOut);
     const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+    const totalAmount = reservation.transactions
+      .filter((t) => Number(t.amount) > 0)
+      .reduce((sum, t) => sum + Number(t.amount), 0);
 
     const variables = {
       guestName: reservation.guest.name,
@@ -651,7 +654,7 @@ export async function sendReservationConfirmationWithTemplate(
       checkOut: checkOut.toLocaleDateString("pl-PL"),
       nights: nights,
       confirmationNumber: reservation.confirmationNumber,
-      totalAmount: reservation.totalAmount?.toNumber() ?? 0,
+      totalAmount,
     };
 
     const subject = replaceTemplateVariablesPlain(template.subject, variables);

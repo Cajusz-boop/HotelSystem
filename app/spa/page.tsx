@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   getSpaGrafikData,
@@ -155,29 +156,40 @@ export default function SpaPage() {
   const [calendarMonth, setCalendarMonth] = useState(() => new Date().getMonth() + 1);
   const [calendarCounts, setCalendarCounts] = useState<Record<string, number>>({});
 
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    getSpaGrafikData(dateStr).then((res) => {
-      setLoading(false);
-      if (res.success && res.data) setData(res.data);
-      else setError(res.success ? null : res.error ?? "Błąd");
-    });
-  }, [dateStr]);
+  const { data: _spaData, isLoading: spaQueryLoading } = useQuery({
+    queryKey: ["spa-grafik", dateStr],
+    queryFn: () => getSpaGrafikData(dateStr),
+    staleTime: 5 * 60 * 1000,
+  });
 
   useEffect(() => {
-    if (viewMode !== "kalendarz") return;
-    getSpaBookingsCountByDay(calendarYear, calendarMonth).then((res) => {
-      if (res.success && res.data) setCalendarCounts(res.data);
-    });
-  }, [viewMode, calendarYear, calendarMonth]);
+    if (spaQueryLoading) { setLoading(true); setError(null); return; }
+    setLoading(false);
+    if (_spaData?.success && _spaData.data) setData(_spaData.data);
+    else if (_spaData && !_spaData.success) setError(_spaData.error ?? "Błąd");
+  }, [_spaData, spaQueryLoading]);
+
+  const { data: _calendarData } = useQuery({
+    queryKey: ["spa-calendar", calendarYear, calendarMonth],
+    queryFn: () => getSpaBookingsCountByDay(calendarYear, calendarMonth),
+    enabled: viewMode === "kalendarz",
+    staleTime: 5 * 60 * 1000,
+  });
 
   useEffect(() => {
-    if (!addBookingOpen) return;
-    getActiveReservationsForCharge().then((res) => {
-      if (res.success && res.data) setReservations(res.data);
-    });
-  }, [addBookingOpen]);
+    if (_calendarData?.success && _calendarData.data) setCalendarCounts(_calendarData.data);
+  }, [_calendarData]);
+
+  const { data: _reservationsData } = useQuery({
+    queryKey: ["spa-reservations-for-charge"],
+    queryFn: () => getActiveReservationsForCharge(),
+    enabled: addBookingOpen,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (_reservationsData?.success && _reservationsData.data) setReservations(_reservationsData.data);
+  }, [_reservationsData]);
 
   const handleAddResource = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -203,7 +215,7 @@ export default function SpaPage() {
         if (res.success && res.data) setData(res.data);
       });
     } else {
-      toast.error(r.error);
+      toast.error("error" in r ? r.error : "Błąd");
     }
   };
 
@@ -227,7 +239,7 @@ export default function SpaPage() {
         } else if (chargeRes.success && chargeRes.data.skipped) {
           toast.success("Rezerwacja utworzona");
         } else {
-          toast.warning(`Rezerwacja utworzona, ale błąd doliczenia: ${chargeRes.error}`);
+          toast.warning(`Rezerwacja utworzona, ale błąd doliczenia: ${"error" in chargeRes ? chargeRes.error : ""}`);
         }
       } else {
         toast.success("Rezerwacja utworzona");
@@ -241,7 +253,7 @@ export default function SpaPage() {
         if (res.success && res.data) setData(res.data);
       });
     } else {
-      toast.error(r.error);
+      toast.error("error" in r ? r.error : "Błąd");
     }
   };
 

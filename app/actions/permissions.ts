@@ -2,6 +2,13 @@
 
 import { getSession } from "@/lib/auth";
 import { getPermissionsForRole } from "@/lib/permissions";
+import { unstable_cache } from "next/cache";
+
+const getCachedPermissionsForRole = unstable_cache(
+  async (role: string) => getPermissionsForRole(role),
+  ["permissions-by-role"],
+  { revalidate: 120 }
+);
 
 /**
  * Zwraca listę kodów uprawnień dla zalogowanego użytkownika (jego roli).
@@ -10,5 +17,5 @@ import { getPermissionsForRole } from "@/lib/permissions";
 export async function getMyPermissions(): Promise<string[]> {
   const session = await getSession();
   if (!session?.role) return [];
-  return getPermissionsForRole(session.role);
+  return getCachedPermissionsForRole(session.role);
 }

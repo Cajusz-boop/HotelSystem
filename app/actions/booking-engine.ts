@@ -46,8 +46,8 @@ export async function getBookingAvailability(
     },
     select: { roomId: true },
   });
-  const occupiedIds = new Set(reservations.map((r) => r.roomId));
-  const available = rooms.filter((r) => !occupiedIds.has(r.id));
+  const occupiedIds = new Set(reservations.map((r: (typeof reservations)[number]) => r.roomId));
+  const available = rooms.filter((r: (typeof rooms)[number]) => !occupiedIds.has(r.id));
   const nights = Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000));
   const result: Array<{
     roomNumber: string;
@@ -86,7 +86,7 @@ export async function getRoomTypesForBooking(): Promise<ActionResult<Array<{ typ
     distinct: ["type"],
     orderBy: { type: "asc" },
   });
-  return { success: true, data: rooms.map((r) => ({ type: r.type })) };
+  return { success: true, data: rooms.map((r: (typeof rooms)[number]) => ({ type: r.type })) };
 }
 
 const MAX_BOOKING_DAYS = 365;
@@ -131,13 +131,18 @@ export async function submitBookingFromEngine(
   const data = res.data as { id: string; guestId?: string };
   const guestId = data.guestId;
   if (guestId && (email?.trim() || phone?.trim())) {
-    await prisma.guest.update({
-      where: { id: guestId },
-      data: {
-        ...(email?.trim() && { email: email.trim() }),
-        ...(phone?.trim() && { phone: phone.trim() }),
-      },
-    }).catch(() => {});
+    try {
+      await prisma.guest.update({
+        where: { id: guestId },
+        data: {
+          ...(email?.trim() && { email: email.trim() }),
+          ...(phone?.trim() && { phone: phone.trim() }),
+        },
+      });
+    } catch (error) {
+      console.error("[submitBookingFromEngine] Error updating guest contact info:", error instanceof Error ? error.message : String(error));
+      // Continue - guest update is non-critical
+    }
   }
 
   const headersList = await headers();

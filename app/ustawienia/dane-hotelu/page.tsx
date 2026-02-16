@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getHotelConfig, updateHotelConfig, type HotelConfigData } from "@/app/actions/hotel-config";
+import { getHotelConfig, updateHotelConfig } from "@/app/actions/hotel-config";
+import type { HotelConfigData } from "@/lib/hotel-config-types";
 import { toast } from "sonner";
 import { ArrowLeft, Building2 } from "lucide-react";
 

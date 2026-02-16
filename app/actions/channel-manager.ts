@@ -322,7 +322,8 @@ async function buildInventoryForBooking(
     if (m.internalType === "room") mappingByRoom.set(m.internalId, m.externalId);
     if (m.internalType === "room_type") mappingByRoomType.set(m.internalId, m.externalId);
   }
-  const typeByName = new Map(roomTypes.map((t) => [t.name, t]));
+  type RoomTypeRow = { id: string; name: string; basePrice: number | null };
+  const typeByName = new Map<string, RoomTypeRow>(roomTypes.map((t) => [t.name, t as RoomTypeRow]));
   const defaultRoomId = Number(process.env.BOOKING_COM_DEFAULT_ROOM_ID ?? "0");
   const defaultRateId = Number(process.env.BOOKING_COM_DEFAULT_RATE_ID ?? "0");
 
@@ -504,7 +505,8 @@ export async function fetchReservationsFromBooking(
   });
   const roomsByTypeId = new Map<string, typeof rooms>();
   const roomTypes = await prisma.roomType.findMany({ select: { id: true, name: true } });
-  const typeByName = new Map(roomTypes.map((t) => [t.name, t]));
+  type RoomTypeBasic = { id: string; name: string };
+  const typeByName = new Map<string, RoomTypeBasic>(roomTypes.map((t) => [t.name, t as RoomTypeBasic]));
   for (const r of rooms) {
     const rt = typeByName.get(r.type);
     if (rt) {

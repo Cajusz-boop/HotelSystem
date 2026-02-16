@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ReservationBar } from "./reservation-bar";
 import type { ReservationEditSheetTab } from "./reservation-edit-sheet";
-import { updateReservationStatus } from "@/app/actions/reservations";
+import { updateReservationStatus, getCheckoutBalanceWarning } from "@/app/actions/reservations";
 import { printInvoiceForReservation, createProforma, chargeLocalTax, createVatInvoice, createPaymentLink, createReceipt, collectSecurityDeposit } from "@/app/actions/finance";
 import { sendReservationConfirmation, sendThankYouAfterStay } from "@/app/actions/mailing";
 import { sendDoorCodeSms, sendRoomReadySms } from "@/app/actions/sms";
@@ -94,6 +94,15 @@ export function ReservationBarWithMenu({
   const [checkInDialogOpen, setCheckInDialogOpen] = useState(false);
   const [checkInCashDeposit, setCheckInCashDeposit] = useState("");
   const [checkInSubmitting, setCheckInSubmitting] = useState(false);
+  const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
+  const [checkoutBalance, setCheckoutBalance] = useState<{
+    balance: number;
+    restaurantCharges: number;
+    restaurantCount: number;
+    totalOwed: number;
+    totalPaid: number;
+  } | null>(null);
+  const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
   const lastValidDateRef = useRef<string | null>(null);
   const canResize =
     onResize &&
@@ -228,7 +237,7 @@ export function ReservationBarWithMenu({
           toast.success(`Meldunek zarejestrowany. Kaucja gotówkowa ${amount.toFixed(2)} PLN pobrana.`);
         } else {
           toast.success("Meldunek zarejestrowany.");
-          toast.error(dep.error ?? "Nie udało się pobrać kaucji – możesz to zrobić w Płatnościach.");
+          toast.error("error" in dep ? (dep.error ?? "Nie udało się pobrać kaucji – możesz to zrobić w Płatnościach.") : "Nie udało się pobrać kaucji – możesz to zrobić w Płatnościach.");
         }
       } else {
         toast.success("Meldunek zarejestrowany");
@@ -254,6 +263,42 @@ export function ReservationBarWithMenu({
       toast.success("Rezerwacja anulowana");
       onStatusChange?.(result.data as Reservation);
     } else if (!result.success) toast.error("error" in result ? result.error : "Błąd");
+  }, [reservation.id, onStatusChange]);
+
+  const handleCheckoutClick = useCallback(async () => {
+    const balanceResult = await getCheckoutBalanceWarning(reservation.id);
+    if (balanceResult.success && balanceResult.data) {
+      const d = balanceResult.data;
+      if (d.hasUnpaidBalance || d.restaurantCount > 0) {
+        setCheckoutBalance(d);
+        setCheckoutDialogOpen(true);
+        return;
+      }
+    }
+    // No unpaid balance — proceed directly
+    const result = await updateReservationStatus(reservation.id, "CHECKED_OUT");
+    if (result.success && result.data) {
+      toast.success("Gość wymeldowany");
+      onStatusChange?.(result.data as Reservation);
+    } else if (!result.success) {
+      toast.error("error" in result ? result.error : "Błąd wymeldowania");
+    }
+  }, [reservation.id, onStatusChange]);
+
+  const handleCheckoutConfirm = useCallback(async () => {
+    setCheckoutSubmitting(true);
+    try {
+      const result = await updateReservationStatus(reservation.id, "CHECKED_OUT");
+      if (result.success && result.data) {
+        toast.success("Gość wymeldowany");
+        onStatusChange?.(result.data as Reservation);
+        setCheckoutDialogOpen(false);
+      } else if (!result.success) {
+        toast.error("error" in result ? result.error : "Błąd wymeldowania");
+      }
+    } finally {
+      setCheckoutSubmitting(false);
+    }
   }, [reservation.id, onStatusChange]);
 
   const handlePrintInvoice = useCallback(async () => {
@@ -368,7 +413,7 @@ export function ReservationBarWithMenu({
     }
   }, [reservation.id]);
 
-  const handleCreateReceipt = useCallback(async (buyerName: string, buyerAddress?: string, buyerCity?: string, buyerPostalCode?: string) => {
+  const _handleCreateReceipt = useCallback(async (buyerName: string, buyerAddress?: string, buyerCity?: string, buyerPostalCode?: string) => {
     const result = await createReceipt({
       reservationId: reservation.id,
       buyerName,
@@ -483,6 +528,12 @@ export function ReservationBarWithMenu({
           disabled={reservation.status !== "CONFIRMED" && reservation.status !== "CHECKED_IN"}
         >
           Meldunek
+        </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={handleCheckoutClick}
+          disabled={reservation.status !== "CHECKED_IN"}
+        >
+          Wymelduj
         </ContextMenuItem>
         <ContextMenuItem onSelect={handlePrintInvoice}>
           <FileText className="mr-2 h-4 w-4" />
@@ -604,6 +655,63 @@ export function ReservationBarWithMenu({
               disabled={checkInSubmitting}
             >
               {checkInSubmitting ? "Zapisywanie…" : "Zamelduj"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={checkoutDialogOpen} onOpenChange={setCheckoutDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Wymeldowanie – uwaga na saldo</DialogTitle>
+          </DialogHeader>
+          {checkoutBalance && (
+            <div className="space-y-3 text-sm">
+              {checkoutBalance.restaurantCount > 0 && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
+                  <p className="font-semibold text-amber-800">
+                    Rachunki z restauracji: {checkoutBalance.restaurantCount} szt.
+                  </p>
+                  <p className="text-amber-700">
+                    Kwota: {checkoutBalance.restaurantCharges.toFixed(2)} PLN
+                  </p>
+                </div>
+              )}
+              {checkoutBalance.balance > 0 && (
+                <div className="rounded-md border border-red-300 bg-red-50 p-3">
+                  <p className="font-semibold text-red-800">
+                    Nieopłacone saldo: {checkoutBalance.balance.toFixed(2)} PLN
+                  </p>
+                  <p className="text-xs text-red-600">
+                    Obciążenia: {checkoutBalance.totalOwed.toFixed(2)} PLN | Wpłaty: {checkoutBalance.totalPaid.toFixed(2)} PLN
+                  </p>
+                </div>
+              )}
+              {checkoutBalance.balance <= 0 && checkoutBalance.restaurantCount > 0 && (
+                <div className="rounded-md border border-green-300 bg-green-50 p-3">
+                  <p className="text-green-800">
+                    Saldo uregulowane. Rachunki restauracyjne uwzględnione.
+                  </p>
+                </div>
+              )}
+              <p className="text-muted-foreground">
+                Czy na pewno chcesz wymeldować gościa?
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCheckoutDialogOpen(false)}
+              disabled={checkoutSubmitting}
+            >
+              Anuluj
+            </Button>
+            <Button
+              variant={checkoutBalance?.balance && checkoutBalance.balance > 0 ? "destructive" : "default"}
+              onClick={handleCheckoutConfirm}
+              disabled={checkoutSubmitting}
+            >
+              {checkoutSubmitting ? "Wymeldowywanie…" : checkoutBalance?.balance && checkoutBalance.balance > 0 ? "Wymelduj mimo salda" : "Wymelduj"}
             </Button>
           </DialogFooter>
         </DialogContent>

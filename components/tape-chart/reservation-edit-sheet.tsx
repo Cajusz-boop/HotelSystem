@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updateReservation, getReservationsByGuestId, updateGuestBlacklist, searchGuests } from "@/app/actions/reservations";
+import { getRestaurantChargesForReservation } from "@/app/actions/gastronomy";
 import { getRateCodes, type RateCodeForUi } from "@/app/actions/rate-codes";
 import { getRatePlanInfoForRoomDate } from "@/app/actions/rooms";
 import { getParkingSpotsForSelect } from "@/app/actions/parking";
@@ -32,7 +33,7 @@ import {
   removeReservationOccupant,
   type ReservationGuestForFolio,
 } from "@/app/actions/finance";
-import { FOLIO_BILL_TO, type FolioBillTo } from "@/lib/finance-constants";
+import { type FolioBillTo } from "@/lib/finance-constants";
 import { searchCompanies } from "@/app/actions/companies";
 import type { Reservation } from "@/lib/tape-chart-types";
 import { toast } from "sonner";
@@ -59,6 +60,163 @@ interface ReservationEditSheetProps {
   rooms?: Array<{ number: string; price?: number; beds?: number }>;
   /** Cena efektywna na datę zameldowania (ze stawek sezonowych) – nadpisuje rooms[].price */
   effectivePricePerNight?: number;
+}
+
+function RestaurantChargesTab({ reservationId }: { reservationId: string }) {
+  const [charges, setCharges] = useState<
+    Array<{
+      id: string;
+      amount: number;
+      description: string | null;
+      type: string;
+      createdAt: string;
+      receiptNumber?: string;
+      cashierName?: string;
+      posSystem?: string;
+      items: Array<{ name: string; quantity: number; unitPrice: number }>;
+    }>
+  >([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    getRestaurantChargesForReservation(reservationId).then((res) => {
+      if (res.success && res.data) setCharges(res.data);
+      setLoading(false);
+    });
+  }, [reservationId]);
+
+  const totalAmount = charges.reduce((s, c) => s + c.amount, 0);
+
+  if (loading) {
+    return (
+      <div className="mt-4 flex items-center justify-center py-8 text-sm text-muted-foreground">
+        Wczytywanie obciążeń z restauracji...
+      </div>
+    );
+  }
+
+  if (charges.length === 0) {
+    return (
+      <div className="mt-4 space-y-3">
+        <div className="rounded-lg border border-dashed bg-muted/10 p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            Brak obciążeń gastronomicznych dla tej rezerwacji.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground/70">
+            Dania nabite na pokój z systemu Symplex Bistro pojawią się tutaj automatycznie.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">
+          Dania nabite na pokój
+          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+            ({charges.length} {charges.length === 1 ? "rachunek" : charges.length < 5 ? "rachunki" : "rachunków"})
+          </span>
+        </h3>
+        <span className="text-sm font-bold">{totalAmount.toFixed(2)} PLN</span>
+      </div>
+
+      <div className="divide-y rounded-md border">
+        {charges.map((charge) => {
+          const dateStr = new Date(charge.createdAt).toLocaleString("pl-PL", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          const hasItems = charge.items.length > 0;
+          const isExpanded = expandedId === charge.id;
+
+          return (
+            <div key={charge.id} className="text-sm">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-3 py-2.5 text-left hover:bg-muted/30 transition-colors"
+                onClick={() => setExpandedId(isExpanded ? null : charge.id)}
+              >
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium truncate">
+                      {charge.description || "Restauracja"}
+                    </span>
+                    {charge.posSystem && (
+                      <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700">
+                        {charge.posSystem}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{dateStr}</span>
+                    {charge.cashierName && (
+                      <>
+                        <span className="text-muted-foreground/50">·</span>
+                        <span>Kelner: {charge.cashierName}</span>
+                      </>
+                    )}
+                    {charge.receiptNumber && (
+                      <>
+                        <span className="text-muted-foreground/50">·</span>
+                        <span>Rach. {charge.receiptNumber}</span>
+                      </>
+                    )}
+                    {hasItems && (
+                      <>
+                        <span className="text-muted-foreground/50">·</span>
+                        <span>{charge.items.length} poz.</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <span className="shrink-0 font-semibold ml-3">
+                  {charge.amount.toFixed(2)} PLN
+                </span>
+              </button>
+
+              {isExpanded && hasItems && (
+                <div className="border-t bg-muted/5 px-3 py-2">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-muted-foreground">
+                        <th className="text-left py-1 font-medium">Pozycja</th>
+                        <th className="text-center py-1 font-medium w-12">Ilość</th>
+                        <th className="text-right py-1 font-medium w-20">Cena</th>
+                        <th className="text-right py-1 font-medium w-20">Razem</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50">
+                      {charge.items.map((item, idx) => (
+                        <tr key={idx}>
+                          <td className="py-1">{item.name}</td>
+                          <td className="py-1 text-center text-muted-foreground">{item.quantity}</td>
+                          <td className="py-1 text-right text-muted-foreground">{item.unitPrice.toFixed(2)}</td>
+                          <td className="py-1 text-right font-medium">{(item.quantity * item.unitPrice).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {isExpanded && !hasItems && (
+                <div className="border-t bg-muted/5 px-3 py-2 text-xs text-muted-foreground">
+                  Brak szczegółowych pozycji – obciążenie kwotowe bez listy dań.
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export function ReservationEditSheet({
@@ -288,7 +446,7 @@ export function ReservationEditSheet({
         }
       });
     } else {
-      toast.error(result.error ?? "Błąd zapisu");
+      toast.error("error" in result ? (result.error ?? "Błąd zapisu") : "Błąd zapisu");
     }
   };
 
@@ -322,7 +480,7 @@ export function ReservationEditSheet({
         }
       });
     } else {
-      toast.error(result.error ?? "Błąd tworzenia folio");
+      toast.error("error" in result ? (result.error ?? "Błąd tworzenia folio") : "Błąd tworzenia folio");
     }
   };
 
@@ -402,7 +560,7 @@ export function ReservationEditSheet({
       });
       loadFolioItems(folioNum);
     } else {
-      toast.error(result.error ?? "Błąd dodawania rabatu");
+      toast.error("error" in result ? (result.error ?? "Błąd dodawania rabatu") : "Błąd dodawania rabatu");
     }
   };
 
@@ -436,7 +594,7 @@ export function ReservationEditSheet({
       loadFolioItems(fromFolioNumber);
       loadFolioItems(targetFolioNumber);
     } else {
-      toast.error(result.error ?? "Błąd przenoszenia");
+      toast.error("error" in result ? (result.error ?? "Błąd przenoszenia") : "Błąd przenoszenia");
     }
   };
 
@@ -466,7 +624,7 @@ export function ReservationEditSheet({
       onSaved?.(result.data as Reservation);
       onOpenChange(false);
     } else {
-      setError(result.success ? null : result.error ?? null);
+      setError("error" in result ? (result.error ?? null) : null);
     }
   };
 
@@ -565,9 +723,7 @@ export function ReservationEditSheet({
           </div>
         )}
         {activeTab === "posilki" && (
-          <div className="mt-4 rounded border bg-muted/20 p-4 text-sm text-muted-foreground">
-            Moduł posiłków (śniadania, obiady, room service) – do rozbudowy. Tutaj pojawią się powiązane zamówienia i rozliczenia.
-          </div>
+          <RestaurantChargesTab reservationId={reservation.id} />
         )}
         {activeTab === "rozliczenie" && (
         <form onSubmit={handleSubmit} className="space-y-4 mt-6">
@@ -978,7 +1134,7 @@ export function ReservationEditSheet({
                                   }
                                 });
                               } else {
-                                toast.error(r.error ?? "Błąd pobierania kaucji");
+                                toast.error("error" in r ? (r.error ?? "Błąd pobierania kaucji") : "Błąd pobierania kaucji");
                               }
                             } finally {
                               collectDepositInFlightRef.current = false;
@@ -1074,7 +1230,7 @@ export function ReservationEditSheet({
                                 }
                               });
                             } else {
-                              toast.error(r.error ?? "Błąd zwrotu kaucji");
+                              toast.error("error" in r ? (r.error ?? "Błąd zwrotu kaucji") : "Błąd zwrotu kaucji");
                             }
                           }}
                         >

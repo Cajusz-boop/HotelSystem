@@ -23,7 +23,7 @@ export function OwnerSettlementsSection({ ownerId }: { ownerId: string }) {
 
   useEffect(() => {
     load();
-  }, [ownerId]);
+  }, [ownerId]); // eslint-disable-line react-hooks/exhaustive-deps -- load uses ownerId
 
   const handleGenerate = async (
     propertyId: string,
@@ -41,7 +41,7 @@ export function OwnerSettlementsSection({ ownerId }: { ownerId: string }) {
       window.open(r.data.documentUrl, "_blank");
       load();
     } else {
-      toast.error(r.error ?? "Błąd");
+      toast.error("error" in r ? (r.error ?? "Błąd") : "Błąd");
     }
   };
 
@@ -52,7 +52,7 @@ export function OwnerSettlementsSection({ ownerId }: { ownerId: string }) {
       toast.success("Oznaczono jako zapłacone");
       load();
     } else {
-      toast.error(r.error ?? "Błąd");
+      toast.error("error" in r ? (r.error ?? "Błąd") : "Błąd");
     }
   };
 

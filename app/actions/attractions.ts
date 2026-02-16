@@ -2,12 +2,11 @@
 
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { STATUSES } from "@/lib/attractions-constants";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
   | { success: false; error: string };
-
-const STATUSES = ["BOOKED", "CONFIRMED", "DONE", "CANCELLED"] as const;
 
 /** Lista atrakcji/wycieczek (cennik). */
 export async function getAttractions(): Promise<
@@ -20,7 +19,12 @@ export async function getAttractions(): Promise<
     });
     return {
       success: true,
-      data: list.map((a) => ({ id: a.id, name: a.name, price: Number(a.price), description: a.description })),
+      data: list.map((a: { id: string; name: string; price: unknown; description: string | null }) => ({
+        id: a.id,
+        name: a.name,
+        price: Number(a.price),
+        description: a.description,
+      })),
     };
   } catch (e) {
     return {
@@ -80,9 +84,10 @@ export async function getAttractionBookings(limit = 80): Promise<
         attraction: true,
       },
     });
+    type BookingRow = (typeof list)[number];
     return {
       success: true,
-      data: list.map((b) => ({
+      data: list.map((b: BookingRow) => ({
         id: b.id,
         reservationId: b.reservationId,
         roomNumber: b.reservation.room?.number ?? "—",
@@ -178,5 +183,3 @@ export async function updateAttractionBookingStatus(
     };
   }
 }
-
-export { STATUSES };

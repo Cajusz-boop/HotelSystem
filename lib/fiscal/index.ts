@@ -362,7 +362,7 @@ export async function printFiscalStorno(
     return {
       success: false,
       errorCode: "FISCAL_DISABLED",
-      errorMessage: "Integracja z kasą fiskalną jest wyłączona (FISCAL_ENABLED=false)",
+      error: "Integracja z kasą fiskalną jest wyłączona (FISCAL_ENABLED=false)",
     };
   }
 
@@ -371,7 +371,7 @@ export async function printFiscalStorno(
     return {
       success: false,
       errorCode: "DRIVER_NO_STORNO_SUPPORT",
-      errorMessage: "Sterownik nie obsługuje operacji storna",
+      error: "Sterownik nie obsługuje operacji storna",
     };
   }
 
@@ -381,7 +381,7 @@ export async function printFiscalStorno(
     return {
       success: false,
       errorCode: "STORNO_ERROR",
-      errorMessage: e instanceof Error ? e.message : "Błąd operacji storna",
+      error: e instanceof Error ? e.message : "Błąd operacji storna",
     };
   }
 }
