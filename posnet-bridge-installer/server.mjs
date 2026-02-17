@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 
 const PORT = Number(process.env.POSNET_BRIDGE_PORT ?? "9977");
 const API_KEY = process.env.FISCAL_POSNET_API_KEY || "";
-const SPOOL_DIR = process.env.FISCAL_POSNET_SPOOL_DIR || join(process.cwd(), "posnet-bridge", "spool");
+const SPOOL_DIR = process.env.FISCAL_POSNET_SPOOL_DIR || join(process.cwd(), "spool");
 
 const MAX_BODY_BYTES = 1_000_000;
 let startedAt = new Date().toISOString();
@@ -66,7 +66,7 @@ async function parseJson(req, res) {
   try {
     return JSON.parse(raw);
   } catch {
-    badRequest(res, "Nieprawidłowy JSON");
+    badRequest(res, "Nieprawidlowy JSON");
     return null;
   }
 }
@@ -81,37 +81,36 @@ async function spoolWrite(prefix, payload) {
 }
 
 function validateReceipt(payload) {
-  if (!payload || typeof payload !== "object") return "Nieprawidłowy JSON";
+  if (!payload || typeof payload !== "object") return "Nieprawidlowy JSON";
   if (typeof payload.transactionId !== "string" || !payload.transactionId) return "Brak transactionId";
   if (typeof payload.reservationId !== "string" || !payload.reservationId) return "Brak reservationId";
   if (!Array.isArray(payload.items) || payload.items.length < 1) return "Brak items";
-  if (typeof payload.totalAmount !== "number" || !(payload.totalAmount > 0)) return "Brak/nieprawidłowe totalAmount";
+  if (typeof payload.totalAmount !== "number" || !(payload.totalAmount > 0)) return "Brak/nieprawidlowe totalAmount";
   if (typeof payload.paymentType !== "string" || !payload.paymentType) return "Brak paymentType";
   return null;
 }
 
 function validateInvoice(payload) {
-  if (!payload || typeof payload !== "object") return "Nieprawidłowy JSON";
+  if (!payload || typeof payload !== "object") return "Nieprawidlowy JSON";
   if (typeof payload.reservationId !== "string" || !payload.reservationId) return "Brak reservationId";
   const company = payload.company;
   if (!company || typeof company !== "object") return "Brak company";
   if (typeof company.nip !== "string" || !company.nip) return "Brak company.nip";
   if (typeof company.name !== "string" || !company.name) return "Brak company.name";
   if (!Array.isArray(payload.items) || payload.items.length < 1) return "Brak items";
-  if (typeof payload.totalAmount !== "number" || payload.totalAmount < 0) return "Brak/nieprawidłowe totalAmount";
+  if (typeof payload.totalAmount !== "number" || payload.totalAmount < 0) return "Brak/nieprawidlowe totalAmount";
   return null;
 }
 
 function validateStorno(payload) {
-  if (!payload || typeof payload !== "object") return "Nieprawidłowy JSON";
+  if (!payload || typeof payload !== "object") return "Nieprawidlowy JSON";
   if (!payload.originalReceiptNumber) return "Brak originalReceiptNumber";
   if (!payload.reason) return "Brak reason";
-  if (typeof payload.amount !== "number" || payload.amount <= 0) return "Brak/nieprawidłowe amount";
+  if (typeof payload.amount !== "number" || payload.amount <= 0) return "Brak/nieprawidlowe amount";
   return null;
 }
 
 const server = http.createServer(async (req, res) => {
-  // CORS preflight
   if (req.method === "OPTIONS") {
     res.writeHead(204, {
       "access-control-allow-origin": "*",
@@ -122,7 +121,6 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
-    // ── Health / diagnostyka ──
     if (req.method === "GET" && req.url === "/health") {
       let spoolFiles = 0;
       try {
@@ -140,132 +138,70 @@ const server = http.createServer(async (req, res) => {
         spoolFiles,
         lastError,
         mode: "spool",
-        note: "Bridge zapisuje zlecenia do spool/. Podłącz sterownik POSNET/OPOS/SDK aby drukować na urządzeniu.",
       });
     }
 
-    // ── Paragon ──
     if (req.method === "POST" && req.url === "/fiscal/print") {
       if (!checkAuth(req, res)) return;
       const payload = await parseJson(req, res);
       if (!payload) return;
-
       const err = validateReceipt(payload);
       if (err) return badRequest(res, err);
-
       const { id, filePath } = await spoolWrite("receipt", payload);
       receiptCount++;
-      console.log(`[POSNET BRIDGE] paragon #${receiptCount} -> ${filePath}`);
-
+      console.log(`[PARAGON #${receiptCount}] ${filePath}`);
       return sendJson(res, 200, { success: true, receiptNumber: `PAR-${id.slice(0, 8).toUpperCase()}` });
     }
 
-    // ── Faktura ──
     if (req.method === "POST" && req.url === "/fiscal/invoice") {
       if (!checkAuth(req, res)) return;
       const payload = await parseJson(req, res);
       if (!payload) return;
-
       const err = validateInvoice(payload);
       if (err) return badRequest(res, err);
-
       const { id, filePath } = await spoolWrite("invoice", { ...payload, _type: "invoice" });
       invoiceCount++;
-      console.log(`[POSNET BRIDGE] faktura #${invoiceCount} -> ${filePath}`);
-
+      console.log(`[FAKTURA #${invoiceCount}] ${filePath}`);
       return sendJson(res, 200, { success: true, invoiceNumber: `FV-${id.slice(0, 8).toUpperCase()}` });
     }
 
-    // ── Raport X ──
     if (req.method === "POST" && req.url === "/fiscal/report/x") {
       if (!checkAuth(req, res)) return;
       const payload = await parseJson(req, res);
-
       const { id, filePath } = await spoolWrite("report-x", { ...payload, _type: "X_REPORT", timestamp: new Date().toISOString() });
       reportCount++;
-      console.log(`[POSNET BRIDGE] raport X #${reportCount} -> ${filePath}`);
-
-      return sendJson(res, 200, {
-        success: true,
-        reportNumber: `X-${id.slice(0, 8).toUpperCase()}`,
-        reportData: payload?.fetchData ? {
-          reportType: "X",
-          reportNumber: `X-${id.slice(0, 8).toUpperCase()}`,
-          generatedAt: new Date().toISOString(),
-          totalGross: 0,
-          totalVat: 0,
-          totalNet: 0,
-          receiptCount: receiptCount,
-          voidCount: stornoCount,
-          voidAmount: 0,
-          vatSummary: [],
-          paymentSummary: [],
-        } : undefined,
-      });
+      console.log(`[RAPORT X #${reportCount}] ${filePath}`);
+      return sendJson(res, 200, { success: true, reportNumber: `X-${id.slice(0, 8).toUpperCase()}` });
     }
 
-    // ── Raport Z ──
     if (req.method === "POST" && req.url === "/fiscal/report/z") {
       if (!checkAuth(req, res)) return;
       const payload = await parseJson(req, res);
-
       const { id, filePath } = await spoolWrite("report-z", { ...payload, _type: "Z_REPORT", timestamp: new Date().toISOString() });
       reportCount++;
-      console.log(`[POSNET BRIDGE] raport Z #${reportCount} -> ${filePath}`);
-
-      return sendJson(res, 200, {
-        success: true,
-        reportNumber: `Z-${id.slice(0, 8).toUpperCase()}`,
-        reportData: payload?.fetchData ? {
-          reportType: "Z",
-          reportNumber: `Z-${id.slice(0, 8).toUpperCase()}`,
-          generatedAt: new Date().toISOString(),
-          totalGross: 0,
-          totalVat: 0,
-          totalNet: 0,
-          receiptCount: receiptCount,
-          voidCount: stornoCount,
-          voidAmount: 0,
-          vatSummary: [],
-          paymentSummary: [],
-        } : undefined,
-      });
+      console.log(`[RAPORT Z #${reportCount}] ${filePath}`);
+      return sendJson(res, 200, { success: true, reportNumber: `Z-${id.slice(0, 8).toUpperCase()}` });
     }
 
-    // ── Raport okresowy ──
     if (req.method === "POST" && req.url === "/fiscal/report/periodic") {
       if (!checkAuth(req, res)) return;
       const payload = await parseJson(req, res);
-
       const { id, filePath } = await spoolWrite("report-periodic", { ...payload, _type: "PERIODIC_REPORT", timestamp: new Date().toISOString() });
       reportCount++;
-      console.log(`[POSNET BRIDGE] raport okresowy #${reportCount} -> ${filePath}`);
-
-      return sendJson(res, 200, {
-        success: true,
-        reportNumber: `PER-${id.slice(0, 8).toUpperCase()}`,
-      });
+      console.log(`[RAPORT OKRESOWY #${reportCount}] ${filePath}`);
+      return sendJson(res, 200, { success: true, reportNumber: `PER-${id.slice(0, 8).toUpperCase()}` });
     }
 
-    // ── Storno ──
     if (req.method === "POST" && req.url === "/fiscal/storno") {
       if (!checkAuth(req, res)) return;
       const payload = await parseJson(req, res);
       if (!payload) return;
-
       const err = validateStorno(payload);
       if (err) return badRequest(res, err);
-
       const { id, filePath } = await spoolWrite("storno", { ...payload, _type: "storno", timestamp: new Date().toISOString() });
       stornoCount++;
-      console.log(`[POSNET BRIDGE] storno #${stornoCount} -> ${filePath}`);
-
-      return sendJson(res, 200, {
-        success: true,
-        stornoNumber: `ST-${id.slice(0, 8).toUpperCase()}`,
-        originalReceiptNumber: payload.originalReceiptNumber,
-        stornoAmount: payload.amount,
-      });
+      console.log(`[STORNO #${stornoCount}] ${filePath}`);
+      return sendJson(res, 200, { success: true, stornoNumber: `ST-${id.slice(0, 8).toUpperCase()}`, originalReceiptNumber: payload.originalReceiptNumber, stornoAmount: payload.amount });
     }
 
     sendJson(res, 404, { success: false, error: "Not found" });
@@ -277,21 +213,24 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`\n  ╔══════════════════════════════════════════════════════╗`);
-  console.log(`  ║  POSNET Trio Bridge v1.1.0                          ║`);
-  console.log(`  ║  http://127.0.0.1:${PORT}                            ║`);
-  console.log(`  ╠══════════════════════════════════════════════════════╣`);
-  console.log(`  ║  Endpointy:                                        ║`);
-  console.log(`  ║    GET  /health              - status bridge        ║`);
-  console.log(`  ║    POST /fiscal/print        - paragon              ║`);
-  console.log(`  ║    POST /fiscal/invoice      - faktura              ║`);
-  console.log(`  ║    POST /fiscal/report/x     - raport X             ║`);
-  console.log(`  ║    POST /fiscal/report/z     - raport Z             ║`);
-  console.log(`  ║    POST /fiscal/report/periodic - raport okresowy   ║`);
-  console.log(`  ║    POST /fiscal/storno       - storno paragonu      ║`);
-  console.log(`  ╠══════════════════════════════════════════════════════╣`);
-  console.log(`  ║  Spool: ${SPOOL_DIR.length > 42 ? "..." + SPOOL_DIR.slice(-39) : SPOOL_DIR.padEnd(42)}  ║`);
-  console.log(`  ║  Tryb: SPOOL (zapis do pliku)                      ║`);
-  console.log(`  ║  Podłącz sterownik POSNET/OPOS/SDK aby drukować.   ║`);
-  console.log(`  ╚══════════════════════════════════════════════════════╝\n`);
+  console.log("");
+  console.log("  ====================================================");
+  console.log("  POSNET Trio Bridge v1.1.0");
+  console.log(`  Nasluchuje na: http://127.0.0.1:${PORT}`);
+  console.log("  ====================================================");
+  console.log("  Endpointy:");
+  console.log("    GET  /health              - status");
+  console.log("    POST /fiscal/print        - paragon");
+  console.log("    POST /fiscal/invoice      - faktura");
+  console.log("    POST /fiscal/report/x     - raport X");
+  console.log("    POST /fiscal/report/z     - raport Z");
+  console.log("    POST /fiscal/report/periodic - raport okresowy");
+  console.log("    POST /fiscal/storno       - storno");
+  console.log("  ====================================================");
+  console.log(`  Zlecenia zapisywane do: ${SPOOL_DIR}`);
+  console.log("  ====================================================");
+  console.log("");
+  console.log("  Bridge dziala. Nie zamykaj tego okna!");
+  console.log("  Otworz przegladarke: https://hotel.karczma-labedz.pl");
+  console.log("");
 });

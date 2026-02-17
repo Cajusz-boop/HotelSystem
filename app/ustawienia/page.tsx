@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Mail, Settings, MessageSquare, FileText, Palette, Receipt, ClipboardList, FileCheck, Users, Shield, Key, Database, Building2, FormInput, BookOpen, CalendarRange, FileX, Upload } from "lucide-react";
+import { Mail, Settings, MessageSquare, FileText, Palette, Receipt, ClipboardList, FileCheck, Users, Shield, Key, Database, Building2, FormInput, BookOpen, CalendarRange, FileX, Upload, Printer } from "lucide-react";
 
 const settingsItems = [
   {
@@ -52,6 +52,12 @@ const settingsItems = [
     icon: Receipt,
     title: "Szablon paragonu",
     description: "Nagłówek, stopka i nazwy pozycji na paragonach fiskalnych",
+  },
+  {
+    href: "/ustawienia/kasa-fiskalna",
+    icon: Printer,
+    title: "Kasa fiskalna (POSNET)",
+    description: "Podłączenie kasy fiskalnej POSNET Trio – konfiguracja, test połączenia, instrukcja",
   },
   {
     href: "/ustawienia/dokumenty",

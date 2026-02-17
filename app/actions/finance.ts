@@ -519,6 +519,59 @@ export async function getFiscalConfigAction(): Promise<FiscalConfig> {
 }
 
 /**
+ * Testuje połączenie z bridge'em POSNET (lub innym endpointem kasy fiskalnej).
+ * Wywołuje GET /health na skonfigurowanym endpoincie.
+ * @returns Obiekt z wynikiem testu: ok, czas odpowiedzi, szczegóły bridge'a
+ */
+export async function testFiscalConnectionAction(): Promise<{
+  success: boolean;
+  responseTimeMs?: number;
+  bridgeInfo?: Record<string, unknown>;
+  error?: string;
+}> {
+  const config = await getFiscalConfig();
+  if (!config.enabled) {
+    return { success: false, error: "Kasa fiskalna jest wyłączona (FISCAL_ENABLED=false). Ustaw FISCAL_ENABLED=true w pliku .env i zrestartuj serwer." };
+  }
+
+  if (config.driver === "mock") {
+    return { success: true, responseTimeMs: 0, bridgeInfo: { mode: "mock", note: "Sterownik mock – symulacja bez fizycznej kasy. Paragony logowane w konsoli." } };
+  }
+
+  const endpoint = process.env.FISCAL_POSNET_ENDPOINT ?? "http://127.0.0.1:9977/fiscal/print";
+  const baseUrl = endpoint.replace(/\/fiscal\/print\/?$/i, "") || "http://127.0.0.1:9977";
+  const healthUrl = `${baseUrl}/health`;
+
+  const start = Date.now();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(healthUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+    const elapsed = Date.now() - start;
+
+    if (!res.ok) {
+      return { success: false, responseTimeMs: elapsed, error: `Bridge odpowiedział HTTP ${res.status}. Sprawdź czy bridge działa (npm run posnet:bridge).` };
+    }
+
+    const data = await res.json().catch(() => null);
+    return {
+      success: true,
+      responseTimeMs: elapsed,
+      bridgeInfo: data && typeof data === "object" ? data : undefined,
+    };
+  } catch (e) {
+    const elapsed = Date.now() - start;
+    const msg = e instanceof Error
+      ? e.name === "AbortError"
+        ? `Timeout (5s) – bridge nie odpowiada na ${healthUrl}`
+        : e.message
+      : "Błąd połączenia";
+    return { success: false, responseTimeMs: elapsed, error: `${msg}. Uruchom bridge: npm run posnet:bridge` };
+  }
+}
+
+/**
  * Sprawdza, czy sterownik obsługuje raporty fiskalne X, Z, okresowe i storno.
  * @returns Obiekt z flagami supportsXReport, supportsZReport, supportsPeriodicReport, supportsStorno
  */

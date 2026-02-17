@@ -83,6 +83,10 @@ export async function middleware(request: NextRequest) {
 
   // Gdy logowanie wyłączone — przepuść wszystkie strony bez sprawdzania sesji
   if (authDisabled) {
+    // Jeśli użytkownik wchodzi na /login — przekieruj na dashboard (nie ma sensu logować się w trybie demo)
+    if (path === "/login") {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
     return NextResponse.next();
   }
 
