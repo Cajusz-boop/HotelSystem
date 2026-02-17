@@ -1432,6 +1432,7 @@ model HotelConfig {
   reservationDictionaries Json?   // słowniki: { sources: [{ code, label }], channels: [], segments: [], cancellationReasons: [] }
   seasons                 Json?   // okresy sezonowe: [{ id, name, type: "PEAK"|"OFF_PEAK", dateFrom: "MM-DD", dateTo: "MM-DD" }]
   cancellationPolicyTemplates Json?   // szablony polityki anulacji: [{ id, name, freeUntilDaysBefore, penaltyPercent, description? }]
+  authDisabled   Boolean  @default(false)  // wyłączenie wymogu logowania (tryb demo/szkoleniowy)
   updatedAt      DateTime @updatedAt
 }
 

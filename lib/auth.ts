@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { getAuthDisabledCache } from "@/lib/auth-disabled-cache";
 
 const COOKIE_NAME = "pms_session";
 const SESSION_DURATION_DAYS = 7;
@@ -19,8 +20,29 @@ export interface SessionPayload {
   passwordExpired?: boolean;
 }
 
+/** Domyślna sesja gdy logowanie jest wyłączone */
+const ANONYMOUS_SESSION: SessionPayload = {
+  userId: "anonymous",
+  email: "admin@hotel.local",
+  name: "Demo",
+  role: "ADMIN",
+  exp: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
+};
+
+/** Sprawdza czy auth jest wyłączone (cache + env fallback) */
+function isAuthDisabled(): boolean {
+  const cached = getAuthDisabledCache();
+  if (cached !== undefined) return cached;
+  return process.env.AUTH_DISABLED === "true";
+}
+
 /** Zwraca sesję z cookie (userId, email, name, role) lub null */
 export async function getSession(): Promise<SessionPayload | null> {
+  // Tryb bez logowania — zwróć sesję admina
+  if (isAuthDisabled()) {
+    return ANONYMOUS_SESSION;
+  }
+
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return null;

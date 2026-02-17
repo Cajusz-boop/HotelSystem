@@ -152,8 +152,9 @@ $cmd += "devil www restart " + $DOMAIN + "`n"
 $cmd += "echo DEPLOY_SSH_OK"
 
 $cmdFile = Join-Path $ProjectRoot "_deploy_ssh_cmd.sh"
-[System.IO.File]::WriteAllText($cmdFile, $cmd, [System.Text.Encoding]::UTF8)
-$sshOutput = Get-Content $cmdFile | ssh $SSH_TARGET "bash -s" 2>&1
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($cmdFile, $cmd.Replace("`r`n", "`n").Replace("`r", "`n"), $utf8NoBom)
+$sshOutput = Get-Content $cmdFile -Raw | ssh $SSH_TARGET "bash -s" 2>&1
 $sshExitCode = $LASTEXITCODE
 Remove-Item $cmdFile -Force
 

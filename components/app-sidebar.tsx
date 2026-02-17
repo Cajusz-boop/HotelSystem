@@ -94,7 +94,6 @@ const navSections: NavSection[] = [
         labelKey: "sidebar.reception",
         icon: Briefcase,
         permission: "module.front_office",
-        children: [{ href: "/front-office/kwhotel", labelKey: "sidebar.receptionKwhotel" }],
       },
       { href: "/check-in", labelKey: "sidebar.checkIn", icon: UserPlus, permission: "module.check_in" },
       { href: "/zmiana", labelKey: "sidebar.shiftHandover", icon: ClipboardList },

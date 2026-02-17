@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { setAuthDisabledCache } from "@/lib/auth-disabled-cache";
 import type {
   HotelConfigData,
   FormType,
@@ -41,6 +42,7 @@ export async function getHotelConfig(): Promise<
       defaultCheckInTime: row.defaultCheckInTime,
       defaultCheckOutTime: row.defaultCheckOutTime,
       floors: Array.isArray(row.floors) ? (row.floors as string[]) : [],
+      authDisabled: row.authDisabled ?? false,
     },
   };
 }
@@ -70,6 +72,7 @@ export async function updateHotelConfig(data: Partial<HotelConfigData>): Promise
       defaultCheckInTime: data.defaultCheckInTime ?? null,
       defaultCheckOutTime: data.defaultCheckOutTime ?? null,
       floors: data.floors ?? [],
+      authDisabled: data.authDisabled ?? false,
     },
     update: {
       ...(data.name !== undefined && { name: data.name }),
@@ -85,6 +88,7 @@ export async function updateHotelConfig(data: Partial<HotelConfigData>): Promise
       ...(data.defaultCheckInTime !== undefined && { defaultCheckInTime: data.defaultCheckInTime }),
       ...(data.defaultCheckOutTime !== undefined && { defaultCheckOutTime: data.defaultCheckOutTime }),
       ...(data.floors !== undefined && { floors: data.floors }),
+      ...(data.authDisabled !== undefined && { authDisabled: data.authDisabled }),
     },
   });
   return { success: true };
@@ -188,4 +192,37 @@ export async function updateFormFieldsConfig(data: FormFieldsConfig): Promise<
     },
   });
   return { success: true };
+}
+
+// --- Przełączanie wymogu logowania (AUTH_DISABLED) ---
+
+export async function toggleAuthDisabled(disabled: boolean): Promise<
+  { success: true } | { success: false; error: string }
+> {
+  const session = await getSession();
+  if (!session) return { success: false, error: "Zaloguj się" };
+  const allowed = await can(session.role, "admin.settings");
+  if (!allowed) return { success: false, error: "Brak uprawnień" };
+
+  // Zapisz do bazy
+  await prisma.hotelConfig.upsert({
+    where: { id: "default" },
+    create: { id: "default", name: "", authDisabled: disabled },
+    update: { authDisabled: disabled },
+  });
+
+  // Natychmiast zaktualizuj cache w pamięci procesu — middleware od razu zobaczy zmianę
+  setAuthDisabledCache(disabled);
+
+  return { success: true };
+}
+
+/** Odczyt statusu auth (bez wymagania sesji — potrzebne gdy auth jest wyłączone) */
+export async function getAuthDisabledStatus(): Promise<boolean> {
+  try {
+    const row = await prisma.hotelConfig.findUnique({ where: { id: "default" } });
+    return row?.authDisabled ?? false;
+  } catch {
+    return false;
+  }
 }

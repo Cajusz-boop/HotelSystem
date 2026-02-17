@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getAuthDisabledCache, setAuthDisabledCache, isAuthCacheLoaded } from "@/lib/auth-disabled-cache";
 
 const COOKIE_NAME = "pms_session";
 const LAST_ACTIVITY_COOKIE = "pms_last_activity";
@@ -16,24 +17,72 @@ function getClientIp(request: NextRequest): string {
   return request.headers.get("x-real-ip") ?? "unknown";
 }
 
-export function middleware(request: NextRequest) {
+/**
+ * Sprawdza czy logowanie jest wyłączone.
+ * 1. Czyta z globalThis cache (zero latencji) — ustawianego przez server action.
+ * 2. Jeśli cache nie załadowany (pierwszy request po starcie) — fetch do /api/auth/is-disabled.
+ * 3. Fallback: process.env.AUTH_DISABLED (dla .env / .env.local).
+ */
+async function isAuthDisabled(request: NextRequest): Promise<boolean> {
+  // Szybka ścieżka: cache w pamięci
+  const cached = getAuthDisabledCache();
+  if (cached !== undefined) return cached;
+
+  // Fallback: process.env (ustawione w .env / .env.local)
+  if (process.env.AUTH_DISABLED === "true") {
+    setAuthDisabledCache(true);
+    return true;
+  }
+
+  // Pierwszy request po starcie — załaduj z bazy przez API
+  if (!isAuthCacheLoaded()) {
+    try {
+      const origin = request.nextUrl.origin;
+      const res = await fetch(`${origin}/api/auth/is-disabled`, {
+        cache: "no-store",
+        headers: { "x-internal": "1" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const disabled = data?.disabled === true;
+        setAuthDisabledCache(disabled);
+        return disabled;
+      }
+    } catch {
+      // Fetch nie zadziałał — ustaw false i idź dalej
+    }
+    setAuthDisabledCache(false);
+  }
+
+  return false;
+}
+
+export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
+  // Nie sprawdzaj auth-disabled dla samego endpointu is-disabled (unikanie pętli)
+  const isAuthCheckRoute = path === "/api/auth/is-disabled";
+  const authDisabled = isAuthCheckRoute ? false : await isAuthDisabled(request);
+
   if (path.startsWith("/api/")) {
-    // /api/health zawsze dostępny (keep-alive, monitoring, warm-up z localhost)
-    if (path === "/api/health") return NextResponse.next();
+    if (path === "/api/health" || isAuthCheckRoute) return NextResponse.next();
 
     // OAuth callback routes – muszą być dostępne z zewnątrz (redirect z Google)
     if (path.startsWith("/api/auth/staff/google") || path.startsWith("/api/auth/guest/google")) {
       return NextResponse.next();
     }
 
-    if (API_IP_WHITELIST.length > 0) {
+    if (!authDisabled && API_IP_WHITELIST.length > 0) {
       const ip = getClientIp(request);
       if (!API_IP_WHITELIST.includes(ip)) {
         return new NextResponse("Forbidden: IP not allowed", { status: 403 });
       }
     }
+    return NextResponse.next();
+  }
+
+  // Gdy logowanie wyłączone — przepuść wszystkie strony bez sprawdzania sesji
+  if (authDisabled) {
     return NextResponse.next();
   }
 

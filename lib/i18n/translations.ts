@@ -5,7 +5,6 @@ export const messages: Record<Locale, Record<string, string | Record<string, str
     sidebar: {
       panel: "Panel",
       reception: "Recepcja",
-      receptionKwhotel: "Recepcja Kwhotel",
       checkIn: "Meldunek",
       shiftHandover: "Zmiana zmiany",
       contractors: "Kontrahenci",
@@ -76,7 +75,6 @@ export const messages: Record<Locale, Record<string, string | Record<string, str
     sidebar: {
       panel: "Dashboard",
       reception: "Reception",
-      receptionKwhotel: "Reception Kwhotel",
       checkIn: "Check-in",
       shiftHandover: "Shift handover",
       contractors: "Contractors",
@@ -147,7 +145,6 @@ export const messages: Record<Locale, Record<string, string | Record<string, str
     sidebar: {
       panel: "Dashboard",
       reception: "Rezeption",
-      receptionKwhotel: "Rezeption Kwhotel",
       checkIn: "Check-in",
       shiftHandover: "Schichtübergabe",
       contractors: "Kontrahenten",
