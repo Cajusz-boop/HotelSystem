@@ -227,6 +227,7 @@ const navSections: NavSection[] = [
           { href: "/ustawienia/dane-hotelu", labelKey: "sidebar.hotelData" },
           { href: "/ustawienia/pietra", labelKey: "sidebar.floors" },
           { href: "/ustawienia/uzytkownicy", labelKey: "sidebar.users" },
+          { href: "/ustawienia/kasa-fiskalna", labelKey: "sidebar.fiscalPrinter" },
           { href: "/ustawienia/2fa", labelKey: "sidebar.twoFa" },
         ],
       },

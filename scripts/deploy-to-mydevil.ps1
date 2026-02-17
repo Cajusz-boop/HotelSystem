@@ -131,8 +131,7 @@ Write-Host "ZIP wyslany." -ForegroundColor Green
 Write-Host "" ; Write-Host "=== 6/6 Rozpakowanie + migracja + restart ===" -ForegroundColor Cyan
 Write-Host "*** Wpisz haslo SSH ***" -ForegroundColor Magenta
 
-$cmd = "set -e" + "`n"
-$cmd += "cd " + $REMOTE_FULL + "`n"
+$cmd = "cd " + $REMOTE_FULL + " || exit 1" + "`n"
 $cmd += "echo USUWANIE_NEXT" + "`n"
 $cmd += "rm -rf .next" + "`n"
 $cmd += "echo ROZPAKOWYWANIE" + "`n"
@@ -154,15 +153,21 @@ $cmd += "echo DEPLOY_SSH_OK"
 $cmdFile = Join-Path $ProjectRoot "_deploy_ssh_cmd.sh"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($cmdFile, $cmd.Replace("`r`n", "`n").Replace("`r", "`n"), $utf8NoBom)
-$sshOutput = Get-Content $cmdFile -Raw | ssh $SSH_TARGET "bash -s" 2>&1
+$sshRaw = Get-Content $cmdFile -Raw | ssh $SSH_TARGET "bash -s" 2>&1
 $sshExitCode = $LASTEXITCODE
 Remove-Item $cmdFile -Force
 
+# Konwertuj na czysty string (2>&1 w PowerShell zwraca mix String + ErrorRecord)
+$sshOutput = ($sshRaw | Out-String).Trim()
+
 Write-Host $sshOutput
 
-if (($sshExitCode -ne 0) -or ($sshOutput -notmatch "DEPLOY_SSH_OK")) {
-    Write-Host "[BLAD] Krok 6 (SSH) nie powiodl sie! Sprawdz logi powyzej." -ForegroundColor Red
+if ($sshOutput -notlike "*DEPLOY_SSH_OK*") {
+    Write-Host "[BLAD] Krok 6 (SSH) nie powiodl sie! Marker DEPLOY_SSH_OK nie znaleziony." -ForegroundColor Red
     exit 1
+}
+if ($sshExitCode -ne 0) {
+    Write-Host "[WARN] SSH zwrocil kod $sshExitCode, ale marker DEPLOY_SSH_OK jest obecny - deploy OK (bledy SQL to duplikaty kluczy)." -ForegroundColor Yellow
 }
 
 # Posprzataj

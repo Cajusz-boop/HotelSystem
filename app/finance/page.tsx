@@ -1454,10 +1454,22 @@ export default function FinancePage() {
                   <> · Sterownik: <span className="font-medium">{fiscalConfig.driver}</span></>
                 )}
               </p>
+              {fiscalConfig.enabled && fiscalConfig.posnetModelConfig && (
+                <p className="mb-1 text-sm text-muted-foreground">
+                  Model: <span className="font-medium">{fiscalConfig.posnetModelConfig.displayName}</span>
+                  {fiscalConfig.posnetModelConfig.supportsInvoice && " \u00b7 Faktury: tak"}
+                  {fiscalConfig.posnetModelConfig.supportsEReceipt && " \u00b7 e-Paragony: tak"}
+                </p>
+              )}
               <p className="text-xs text-muted-foreground">
-                Przy włączeniu (FISCAL_ENABLED=true) każda transakcja (posting, zaliczka) wysyła paragon do kasy.
-                Sterownik „mock” tylko loguje w konsoli. Zobacz docs/KASA-FISKALNA.md.
-              </p>
+                Przy włączeniu każda transakcja (posting, zaliczka) wysyła paragon do kasy.
+                Sterownik „mock” tylko loguje w konsoli.               </p>
+              <a
+                href="/ustawienia/kasa-fiskalna"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline mt-2"
+              >
+                Konfiguracja kasy fiskalnej
+              </a>
             </>
           ) : (
             <p className="text-sm text-muted-foreground">Ładowanie konfiguracji kasy…</p>
