@@ -3501,8 +3501,12 @@ export async function postRoomChargeOnCheckout(
       return { success: true, data: { skipped: true } };
     }
 
-    const checkIn = new Date(reservation.checkIn + "T12:00:00Z");
-    const checkOut = new Date(reservation.checkOut + "T12:00:00Z");
+    const checkInDate = reservation.checkIn instanceof Date ? reservation.checkIn : new Date(reservation.checkIn);
+    const checkOutDate = reservation.checkOut instanceof Date ? reservation.checkOut : new Date(reservation.checkOut);
+    const checkInStr = checkInDate.toISOString().slice(0, 10);
+    const checkOutStr = checkOutDate.toISOString().slice(0, 10);
+    const checkIn = new Date(checkInStr + "T12:00:00Z");
+    const checkOut = new Date(checkOutStr + "T12:00:00Z");
     const nights = Math.max(1, Math.round((checkOut.getTime() - checkIn.getTime()) / (24 * 60 * 60 * 1000)));
     const roomNumber = reservation.room?.number;
     if (!roomNumber) return { success: false, error: "Brak pokoju przy rezerwacji" };
@@ -3522,10 +3526,10 @@ export async function postRoomChargeOnCheckout(
       totalAmount += p ?? Number(reservation.room?.price ?? 0) ?? 0;
     }
     if (totalAmount <= 0) {
-      return { success: true, data: { skipped: true } };
+      return { success: false, error: "Nie udało się naliczyć noclegu – pokój nie ma przypisanej ceny. Ustaw cenę pokoju w konfiguracji." };
     }
 
-    const description = `Nocleg ${reservation.checkIn} - ${reservation.checkOut}`;
+    const description = `Nocleg ${checkInStr} - ${checkOutStr}`;
     const tx = await prisma.transaction.create({
       data: {
         reservationId,
@@ -3617,7 +3621,7 @@ export async function printInvoiceForReservation(
   reservationId: string
 ): Promise<ActionResult<{ invoiceNumber?: string }>> {
   try {
-    const reservation = await prisma.reservation.findUnique({
+    let reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
       include: { company: true, transactions: true },
     });
@@ -3638,6 +3642,23 @@ export async function printInvoiceForReservation(
       };
     }
 
+    // Auto-naliczanie noclegu: jeśli brak transakcji ROOM, nalicz automatycznie
+    const hasRoomCharge = reservation.transactions.some(
+      (t) => t.type === "ROOM" && Number(t.amount) > 0 && (t.status === "ACTIVE" || t.status == null)
+    );
+    if (!hasRoomCharge) {
+      const roomChargeResult = await postRoomChargeOnCheckout(reservationId);
+      if (roomChargeResult.success && roomChargeResult.data && !roomChargeResult.data.skipped) {
+        const updatedRes = await prisma.reservation.findUnique({
+          where: { id: reservationId },
+          include: { company: true, transactions: true },
+        });
+        if (updatedRes) {
+          reservation = updatedRes;
+        }
+      }
+    }
+
     const totalAmount = reservation.transactions.reduce(
       (sum, t) => sum + Number(t.amount),
       0
@@ -3650,14 +3671,15 @@ export async function printInvoiceForReservation(
         }))
       : [{ name: "Usługa hotelowa", quantity: 1, unitPrice: totalAmount || 0 }];
 
+    const company = reservation.company!;
     const invoiceRequest = {
       reservationId: reservation.id,
       company: {
         nip,
-        name: reservation.company.name,
-        address: reservation.company.address,
-        postalCode: reservation.company.postalCode,
-        city: reservation.company.city,
+        name: company.name,
+        address: company.address,
+        postalCode: company.postalCode,
+        city: company.city,
       },
       items,
       totalAmount: totalAmount || 0,
@@ -3797,7 +3819,7 @@ export async function createVatInvoice(
   }>
 > {
   try {
-    const reservation = await prisma.reservation.findUnique({
+    let reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
       include: { company: true, transactions: true },
     });
@@ -3815,6 +3837,23 @@ export async function createVatInvoice(
         error: "Do wystawienia faktury VAT wymagany jest NIP nabywcy. Uzupełnij NIP w danych firmy przy rezerwacji.",
       };
     }
+    // Auto-naliczanie noclegu: jeśli brak transakcji ROOM, nalicz automatycznie
+    const hasRoomCharge = reservation.transactions.some(
+      (t) => t.type === "ROOM" && Number(t.amount) > 0 && (t.status === "ACTIVE" || t.status == null)
+    );
+    if (!hasRoomCharge) {
+      const roomChargeResult = await postRoomChargeOnCheckout(reservationId);
+      if (roomChargeResult.success && roomChargeResult.data && !roomChargeResult.data.skipped) {
+        const updatedRes = await prisma.reservation.findUnique({
+          where: { id: reservationId },
+          include: { company: true, transactions: true },
+        });
+        if (updatedRes) {
+          reservation = updatedRes;
+        }
+      }
+    }
+
     // Rozliczenie końcowe: obciążenia minus rabaty minus zaliczki (faktura za przedpłatę z późniejszym rozliczeniem)
     const chargeTypes = ["ROOM", "LOCAL_TAX", "MINIBAR", "GASTRONOMY", "SPA", "PARKING", "RENTAL", "PHONE", "LAUNDRY", "TRANSPORT", "ATTRACTION", "OTHER"];
     const totalCharges = reservation.transactions
@@ -3827,7 +3866,7 @@ export async function createVatInvoice(
       .filter((t) => t.type === "DEPOSIT" && Number(t.amount) > 0)
       .reduce((s, t) => s + Number(t.amount), 0);
     const totalGross = Math.round((totalCharges - totalDiscounts - totalDeposits) * 100) / 100;
-    if (totalGross <= 0) return { success: false, error: "Suma do faktury (obciążenia minus zaliczki) musi być większa od zera" };
+    if (totalGross <= 0) return { success: false, error: "Suma do faktury (obciążenia minus zaliczki) musi być większa od zera. Sprawdź, czy pokój ma przypisaną cenę." };
 
     const configResult = await getCennikConfig();
     if (!configResult.success || !configResult.data) {
@@ -3855,6 +3894,7 @@ export async function createVatInvoice(
     if (!numberResult.success) return { success: false, error: numberResult.error };
     const number = numberResult.data;
 
+    const buyerCompany = reservation.company!;
     const invoice = await prisma.invoice.create({
       data: {
         reservationId,
@@ -3865,10 +3905,10 @@ export async function createVatInvoice(
         vatRate: vatPercent,
         marginMode: marginMode ?? false,
         buyerNip,
-        buyerName: reservation.company.name,
-        buyerAddress: reservation.company.address ?? null,
-        buyerPostalCode: reservation.company.postalCode ?? null,
-        buyerCity: reservation.company.city ?? null,
+        buyerName: buyerCompany.name,
+        buyerAddress: buyerCompany.address ?? null,
+        buyerPostalCode: buyerCompany.postalCode ?? null,
+        buyerCity: buyerCompany.city ?? null,
       },
     });
     revalidatePath("/finance");

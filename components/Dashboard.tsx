@@ -20,7 +20,6 @@ import {
   CreditCard,
   Phone,
   CalendarDays,
-  Building2,
   KeyRound,
   Globe,
   SlidersHorizontal,
@@ -174,15 +173,6 @@ export const features: DashboardFeature[] = [
     description: "Grafik rezerwacji, meldunki, zarządzanie pobytem",
     category: "Recepcja",
     icon: CalendarDays,
-    guestStage: "pobyt",
-  },
-  {
-    id: "front-office-kwhotel",
-    href: "/front-office/kwhotel",
-    label: "Recepcja Kwhotel",
-    description: "Alternatywny widok recepcji w stylu KWHotel",
-    category: "Recepcja",
-    icon: Building2,
     guestStage: "pobyt",
   },
   {

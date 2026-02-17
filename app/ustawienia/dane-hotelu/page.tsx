@@ -5,10 +5,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getHotelConfig, updateHotelConfig } from "@/app/actions/hotel-config";
+import { Switch } from "@/components/ui/switch";
+import { getHotelConfig, updateHotelConfig, toggleAuthDisabled } from "@/app/actions/hotel-config";
 import type { HotelConfigData } from "@/lib/hotel-config-types";
 import { toast } from "sonner";
-import { ArrowLeft, Building2 } from "lucide-react";
+import { ArrowLeft, Building2, ShieldOff, AlertTriangle, Loader2 } from "lucide-react";
 
 const empty: HotelConfigData = {
   name: "",
@@ -24,12 +25,14 @@ const empty: HotelConfigData = {
   defaultCheckInTime: null,
   defaultCheckOutTime: null,
   floors: [],
+  authDisabled: false,
 };
 
 export default function DaneHoteluPage() {
   const [data, setData] = useState<HotelConfigData>(empty);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [togglingAuth, setTogglingAuth] = useState(false);
 
   useEffect(() => {
     getHotelConfig().then((r) => {
@@ -191,6 +194,54 @@ export default function DaneHoteluPage() {
           {saving ? "Zapisywanie…" : "Zapisz"}
         </Button>
       </form>
+
+      {/* Sekcja: Wyłączenie logowania */}
+      <div className="mt-10 pt-6 border-t">
+        <div className="flex items-center gap-3 mb-3">
+          <ShieldOff className="w-5 h-5 text-orange-500" />
+          <h2 className="text-lg font-semibold">Tryb bez logowania</h2>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Wyłącza wymóg logowania — system będzie dostępny bez hasła. Przydatne do demo, szkolenia lub podglądu przez NotebookLM.
+        </p>
+
+        {data.authDisabled && (
+          <div className="flex items-start gap-2 p-3 mb-4 rounded-md bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800">
+            <AlertTriangle className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
+            <p className="text-sm text-orange-700 dark:text-orange-300">
+              Logowanie jest wyłączone. Każdy z dostępem do adresu systemu może przeglądać dane bez hasła.
+              Nie używaj tego trybu na produkcji z prawdziwymi danymi gości.
+            </p>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <Switch
+            id="authDisabled"
+            checked={data.authDisabled}
+            disabled={togglingAuth}
+            onCheckedChange={async (checked) => {
+              setTogglingAuth(true);
+              const result = await toggleAuthDisabled(checked);
+              setTogglingAuth(false);
+              if (!result.success) {
+                toast.error(result.error);
+                return;
+              }
+              setData((d) => ({ ...d, authDisabled: checked }));
+              toast.success(
+                checked
+                  ? "Logowanie wyłączone — system dostępny bez hasła"
+                  : "Logowanie włączone — wymagane hasło"
+              );
+            }}
+          />
+          <Label htmlFor="authDisabled" className="cursor-pointer flex items-center gap-2">
+            Wyłącz wymóg logowania (tryb demo)
+            {togglingAuth && <Loader2 className="w-3 h-3 animate-spin" />}
+          </Label>
+        </div>
+      </div>
     </div>
   );
 }

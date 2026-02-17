@@ -14,6 +14,7 @@ export type HotelConfigData = {
   defaultCheckInTime: string | null;
   defaultCheckOutTime: string | null;
   floors: string[];
+  authDisabled: boolean;
 };
 
 export type CustomFormFieldType = "text" | "number" | "date" | "select" | "checkbox";

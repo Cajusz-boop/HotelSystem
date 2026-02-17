@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetFooter,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +31,7 @@ import {
   getReservationGuestsForFolio,
   addReservationOccupant,
   removeReservationOccupant,
+  postRoomChargeOnCheckout,
   type ReservationGuestForFolio,
 } from "@/app/actions/finance";
 import { type FolioBillTo } from "@/lib/finance-constants";
@@ -267,6 +268,7 @@ export function ReservationEditSheet({
   const [occupantSearchQuery, setOccupantSearchQuery] = useState("");
   const [occupantSearchResults, setOccupantSearchResults] = useState<Array<{ id: string; name: string }>>([]);
   const [addOccupantLoading, setAddOccupantLoading] = useState(false);
+  const [roomChargeLoading, setRoomChargeLoading] = useState(false);
   // Pozycje folio i przenoszenie między folio
   const [folioItemsByNumber, setFolioItemsByNumber] = useState<Record<number, Array<{ id: string; type: string; description: string | null; amount: number; status: string }>>>({});
   const [loadingItemsFolio, setLoadingItemsFolio] = useState<number | null>(null);
@@ -645,11 +647,11 @@ export function ReservationEditSheet({
       : undefined;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>Edycja rezerwacji</SheetTitle>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-scroll-area>
+        <DialogHeader>
+          <DialogTitle>Edycja rezerwacji</DialogTitle>
+        </DialogHeader>
         <div className="mt-4 flex gap-1 border-b border-border">
           <button
             type="button"
@@ -712,8 +714,13 @@ export function ReservationEditSheet({
                   <li className="text-muted-foreground">Brak faktur.</li>
                 ) : (
                   invoices.map((i) => (
-                    <li key={i.id} className="flex justify-between rounded border px-2 py-1">
-                      <span>{i.number}</span>
+                    <li
+                      key={i.id}
+                      className="flex justify-between rounded border px-2 py-1 cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => window.open(`/api/finance/invoice/${i.id}/pdf`, "_blank", "noopener,noreferrer")}
+                      title="Kliknij, aby otworzyć PDF faktury"
+                    >
+                      <span className="text-primary underline underline-offset-2">{i.number}</span>
                       <span>{i.amountGross.toFixed(2)} PLN</span>
                     </li>
                   ))
@@ -943,6 +950,38 @@ export function ReservationEditSheet({
                     <> · <strong>Saldo (szac.):</strong> {(totalAmount - transactions.filter((t) => t.type === "DEPOSIT" || t.type === "ROOM").reduce((s, t) => s + t.amount, 0)).toFixed(0)} PLN</>
                   )}
                 </p>
+              )}
+              {transactions.some((t) => t.type === "ROOM") ? (
+                <p className="mt-1 text-xs text-green-600 dark:text-green-400">✓ Nocleg naliczony</p>
+              ) : (
+                reservation?.id && nights > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-full"
+                    disabled={roomChargeLoading}
+                    onClick={async () => {
+                      if (!reservation?.id) return;
+                      setRoomChargeLoading(true);
+                      const result = await postRoomChargeOnCheckout(reservation.id);
+                      setRoomChargeLoading(false);
+                      if (result.success && result.data) {
+                        if (result.data.skipped) {
+                          toast.info("Nocleg już był naliczony.");
+                        } else {
+                          toast.success(`Naliczono nocleg: ${result.data.amount?.toFixed(2)} PLN`);
+                        }
+                        getTransactionsForReservation(reservation.id).then((r) => r.success && r.data && setTransactions(r.data));
+                      } else {
+                        toast.error("error" in result ? result.error : "Błąd naliczania noclegu");
+                      }
+                    }}
+                  >
+                    <Banknote className="mr-2 h-4 w-4" />
+                    {roomChargeLoading ? "Naliczanie..." : "Nalicz nocleg"}
+                  </Button>
+                )
               )}
             </div>
           )}
@@ -1598,17 +1637,17 @@ export function ReservationEditSheet({
           {error && (
             <p className="text-sm text-destructive" data-testid="reservation-edit-error">{error}</p>
           )}
-          <SheetFooter>
+          <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Anuluj
             </Button>
             <Button type="submit" disabled={saving}>
               {saving ? "Zapisywanie…" : "Zapisz"}
             </Button>
-          </SheetFooter>
+          </DialogFooter>
         </form>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

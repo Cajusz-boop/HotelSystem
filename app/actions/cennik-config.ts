@@ -32,19 +32,18 @@ export async function getCennikConfig(): Promise<ActionResult<CennikConfigForUi>
           data: {
             id: DEFAULT_ID,
             currency: "PLN",
-            vatPercent: 0,
-            pricesAreNetto: true,
+            vatPercent: 8,
+            pricesAreNetto: false,
           },
         });
       } catch (error) {
         console.error("[getCennikConfig] Error creating default config:", error instanceof Error ? error.message : String(error));
-        // Return default values if creation fails
         return {
           success: true,
           data: {
             currency: "PLN",
-            vatPercent: 0,
-            pricesAreNetto: true,
+            vatPercent: 8,
+            pricesAreNetto: false,
           },
         };
       }
@@ -55,11 +54,24 @@ export async function getCennikConfig(): Promise<ActionResult<CennikConfigForUi>
         success: true,
         data: {
           currency: "PLN",
-          vatPercent: 0,
-          pricesAreNetto: true,
+          vatPercent: 8,
+          pricesAreNetto: false,
         },
       };
     }
+
+    // Auto-migracja: jeśli VAT = 0 (stary domyślny), zaktualizuj na 8% brutto (usługi hotelowe)
+    if (Number(row.vatPercent) === 0 && row.pricesAreNetto === true) {
+      try {
+        row = await prisma.cennikConfig.update({
+          where: { id: DEFAULT_ID },
+          data: { vatPercent: 8, pricesAreNetto: false },
+        });
+      } catch {
+        // Ignoruj błąd migracji — użytkownik może zmienić ręcznie w /cennik
+      }
+    }
+
     return {
       success: true,
       data: {
