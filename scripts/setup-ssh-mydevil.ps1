@@ -65,5 +65,5 @@ Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "Gotowe. Od teraz deploy NIE bedzie pytal o haslo." -ForegroundColor Green
 Write-Host "Sprawdz: ssh mydevil (powinno wejsc bez hasla)." -ForegroundColor Green
-Write-Host "Potem: .\scripts\zapisz-i-wdroż.ps1 `"zapisz dane`"" -ForegroundColor Green
+Write-Host "Potem: .\scripts\zapisz-i-wdroz.ps1 `"zapisz dane`"" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green

@@ -7,8 +7,8 @@ Aplikacja laczy sie z baza MySQL na mydevil (`m14753_hotel_system_rezerwacji`).
 Żeby **zapisać zmiany na GitHubie i od razu wdrożyć** na hotel.karczma-labedz.pl:
 
 ```powershell
-.\scripts\zapisz-i-wdroż.ps1 "zapisz dane"
-.\scripts\zapisz-i-wdroż.ps1 "poprawka formularza rezerwacji"
+.\scripts\zapisz-i-wdroz.ps1 "zapisz dane"
+.\scripts\zapisz-i-wdroz.ps1 "poprawka formularza rezerwacji"
 ```
 
 Możesz wpisać dowolny komunikat w cudzysłowie. Jeśli go pominiesz, użyte będzie „zapisz dane”. Skrypt: robi commit + push, potem uruchamia deploy (build + upload + restart).
