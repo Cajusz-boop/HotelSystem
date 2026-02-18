@@ -535,6 +535,18 @@ export function ReservationBarWithMenu({
         >
           Wymelduj
         </ContextMenuItem>
+        <ContextMenuItem
+          onSelect={() =>
+            window.open(
+              `/api/reservations/${reservation.id}/registration-card/pdf`,
+              "_blank",
+              "noopener,noreferrer"
+            )
+          }
+        >
+          <FileText className="mr-2 h-4 w-4" />
+          Drukuj kartę meldunkową
+        </ContextMenuItem>
         <ContextMenuItem onSelect={handlePrintInvoice}>
           <FileText className="mr-2 h-4 w-4" />
           Drukuj fakturę (POSNET)

@@ -678,6 +678,22 @@ export function ReservationEditSheet({
         {activeTab === "dokumenty" && (
           <div className="mt-4 space-y-4">
             <div>
+              <p className="mb-2 text-sm font-medium">Druki</p>
+              <button
+                type="button"
+                onClick={() =>
+                  window.open(
+                    `/api/reservations/${reservation.id}/registration-card/pdf`,
+                    "_blank",
+                    "noopener,noreferrer"
+                  )
+                }
+                className="text-sm text-primary hover:underline underline-offset-2"
+              >
+                Drukuj kartę meldunkową
+              </button>
+            </div>
+            <div>
               <p className="mb-2 text-sm font-medium">Transakcje (KP/KW)</p>
               <ul className="list-none space-y-1 text-sm">
                 {transactions.length === 0 ? (
