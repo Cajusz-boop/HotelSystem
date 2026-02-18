@@ -284,6 +284,24 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
     }
   }
 
+  if (rooms.length === 0 && propertyId && !filterByRoomIds) {
+    const fallbackRooms = await prisma.room.findMany({
+      where: { activeForSale: true },
+      orderBy: { number: "asc" },
+      select: {
+        id: true,
+        number: true,
+        type: true,
+        status: true,
+        price: true,
+        reason: true,
+        roomFeatures: true,
+        beds: true,
+      },
+    });
+    if (fallbackRooms.length > 0) rooms = fallbackRooms;
+  }
+
   const blocksByRoomId = new Map<
     string,
     Array<{ id: string; startDate: string; endDate: string; reason?: string }>
