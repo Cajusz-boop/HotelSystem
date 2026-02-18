@@ -75,11 +75,13 @@ export default async function RootLayout({
           <main
             id="main-content"
             role="main"
-            className="min-h-screen bg-background pt-11 md:pt-0 md:pl-12 pms-main-content"
+            className="flex flex-col min-h-screen max-h-screen bg-background pt-11 md:pt-0 md:pl-12 pms-main-content overflow-hidden"
             style={{ position: "relative", zIndex: 20, pointerEvents: "auto" }}
           >
             <StatusBar session={session} />
-            <MainClickGuard>{children}</MainClickGuard>
+            <div className="flex flex-col flex-1 min-h-0 overflow-auto">
+              <MainClickGuard>{children}</MainClickGuard>
+            </div>
           </main>
           <div className="no-print">
             <CommandPalette />

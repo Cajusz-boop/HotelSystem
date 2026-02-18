@@ -107,8 +107,8 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
         ref={setNodeRef}
         data-testid={`room-row-${room.number}`}
         className={cn(
-          "sticky left-0 z-[60] flex items-center gap-1.5 border-b border-r border-[hsl(var(--kw-grid-border))] px-2 py-1",
-          isOver ? "bg-primary/10 ring-1 ring-primary" : "bg-card",
+          "sticky left-0 z-[60] flex items-center gap-1 border-b border-r border-[hsl(var(--kw-grid-border))] px-1.5 py-0.5",
+          isOver ? "bg-primary/10 ring-1 ring-primary" : rowIdx % 2 === 1 ? "bg-muted/30" : "bg-card",
           isDirty && "bg-amber-50/80 dark:bg-amber-950/30"
         )}
         style={{
@@ -133,7 +133,8 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
           data-date={dateStr}
           data-room={room.number}
           className={cn(
-            "cursor-grab active:cursor-grabbing border-b border-r border-[hsl(var(--kw-grid-border))] bg-card select-none",
+            "cursor-grab active:cursor-grabbing border-b border-r border-[hsl(var(--kw-grid-border))] select-none",
+            rowIdx % 2 === 1 ? "bg-muted/30" : "bg-card",
             saturday && "kw-cell-saturday",
             sunday && "kw-cell-sunday",
             isBlocked && "bg-destructive/20 cursor-not-allowed opacity-70",
@@ -163,8 +164,8 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   );
 });
 
-/** Wysokość rzędu – 42px: czytelniejsze paski z drugą linią (PAX, źródło) */
-const ROW_HEIGHT_PX = 42;
+/** Wysokość rzędu – 21px (zmniejszona o połowę) */
+const ROW_HEIGHT_PX = 24; // ~25 − 2%
 const ROOM_LABEL_WIDTH_PX = 140;
 const HEADER_ROW_PX = 40;
 const BAR_PADDING_PX = 2;
@@ -550,23 +551,31 @@ export function TapeChart({
   const didPanRef = useRef(false);
   const didScrollToTodayRef = useRef(false);
 
-  /** Szerokość kolumny dat (może być większa przy minmax gdy siatka się rozciąga) */
+  /** Szerokość kolumny dat i wysokość wierszy – dostosowane do widocznego obszaru (filtry/legenda zmieniają dostępną przestrzeń) */
   const [effectiveColumnWidthPx, setEffectiveColumnWidthPx] = useState(COLUMN_WIDTH_PX);
+  const [effectiveRowHeightPx, setEffectiveRowHeightPx] = useState(ROW_HEIGHT_PX);
   useEffect(() => {
-    const el = gridWrapperRef.current;
-    if (!el || dates.length === 0) return;
+    const container = scrollContainerRef.current;
+    if (!container || dates.length === 0) return;
     const measure = () => {
-      const rect = el.getBoundingClientRect();
-      const dateAreaWidth = rect.width - ROOM_LABEL_WIDTH_PX;
-      if (dateAreaWidth > 0) {
-        setEffectiveColumnWidthPx(Math.max(COLUMN_WIDTH_PX, dateAreaWidth / dates.length));
-      }
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+      const padH = 32;
+      const padV = 40; // padding (24px) + horizontal scrollbar (~15px)
+      const dateAreaWidth = Math.max(0, cw - ROOM_LABEL_WIDTH_PX - padH);
+      const roomAreaHeight = Math.max(0, ch - HEADER_ROW_PX - padV);
+      const colW = Math.max(COLUMN_WIDTH_PX, dateAreaWidth / dates.length);
+      const rowH = displayRooms.length > 0
+        ? Math.max(16, roomAreaHeight / displayRooms.length)
+        : ROW_HEIGHT_PX;
+      setEffectiveColumnWidthPx(Math.round(colW));
+      setEffectiveRowHeightPx(Math.round(rowH));
     };
     measure();
     const ro = new ResizeObserver(measure);
-    ro.observe(el);
+    ro.observe(container);
     return () => ro.disconnect();
-  }, [dates.length, COLUMN_WIDTH_PX]);
+  }, [dates.length, displayRooms.length, COLUMN_WIDTH_PX]);
 
   const getDateFromClientX = useCallback(
     (clientX: number): string | null => {
@@ -1160,13 +1169,12 @@ export function TapeChart({
     }
   }, [clientSearchTerm, reservations]);
 
-  /* Stała szerokość pierwszej kolumny (160px). Kolumny dat rozciągają się do końca okna (minmax). */
-  /* Stała wysokość wiersza nagłówka (40px), żeby paski nie nachodziły na daty. */
-  const gridColumns = `${ROOM_LABEL_WIDTH_PX}px repeat(${dates.length}, minmax(${COLUMN_WIDTH_PX}px, 1fr))`;
-  const gridRows = `${HEADER_ROW_PX}px repeat(${displayRooms.length}, ${ROW_HEIGHT_PX}px)`;
+  /* Kolumny i wiersze dostosowane do widocznego obszaru – gdy filtry/legenda zajmą miejsce, kratki się zawężą */
+  const gridColumns = `${ROOM_LABEL_WIDTH_PX}px repeat(${dates.length}, minmax(${effectiveColumnWidthPx}px, 1fr))`;
+  const gridRows = `${HEADER_ROW_PX}px repeat(${displayRooms.length}, ${effectiveRowHeightPx}px)`;
 
   return (
-    <div className="relative z-0 flex h-full flex-col">
+    <div className="relative z-0 flex flex-1 min-h-0 flex-col">
       {previewMode && (
         <div className="bg-blue-500 text-white text-center py-2 text-sm font-medium no-print">
           Tryb podglądu – edycja wyłączona. Kliknij &quot;Zakończ podgląd&quot; aby wrócić do edycji.
@@ -1224,13 +1232,14 @@ export function TapeChart({
               {(Object.keys(VIEW_SCALE_CONFIG) as ViewScale[]).map((scale) => (
                 <Button
                   key={scale}
+                  type="button"
                   variant={viewScale === scale ? "default" : "ghost"}
                   size="sm"
                   className={cn(
-                    "rounded-none first:rounded-l-md last:rounded-r-md border-0 h-8 px-2.5 text-xs",
+                    "rounded-none first:rounded-l-md last:rounded-r-md border-0 h-8 px-2.5 text-xs touch-manipulation",
                     viewScale === scale && "bg-primary text-primary-foreground"
                   )}
-                  onClick={() => setViewScale(scale)}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setViewScale(scale); }}
                   title={`Widok: ${VIEW_SCALE_CONFIG[scale].label} (${VIEW_SCALE_CONFIG[scale].days} dni)`}
                 >
                   {VIEW_SCALE_CONFIG[scale].label}
@@ -1240,29 +1249,43 @@ export function TapeChart({
 
             <div className="flex items-center gap-0.5 rounded-md border bg-muted/30 px-0.5" role="group" aria-label="Zoom">
               <Button
+                type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 p-0"
-                onClick={handleZoomOut}
+                className="h-8 w-8 min-w-8 min-h-8 p-0 touch-manipulation"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleZoomOut(); }}
                 disabled={zoomIndex === 0}
-                title="Zoom out"
+                title="Zmniejsz gęstość widoku (zoom out)"
                 aria-label="Zmniejsz gęstość widoku"
               >
-                <ZoomOut className="h-3.5 w-3.5" />
+                <ZoomOut className="h-4 w-4" />
               </Button>
-              <span className="min-w-[2.5rem] text-center text-xs font-medium text-muted-foreground" aria-hidden="true">
+              <button
+                type="button"
+                className={cn(
+                  "min-w-[2.5rem] h-8 px-1.5 flex items-center justify-center text-xs font-medium rounded transition-colors touch-manipulation select-none",
+                  zoomIndex === ZOOM_LEVELS.length - 1
+                    ? "text-muted-foreground cursor-default"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer"
+                )}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (zoomIndex < ZOOM_LEVELS.length - 1) handleZoomIn(); }}
+                disabled={zoomIndex === ZOOM_LEVELS.length - 1}
+                title={zoomIndex === ZOOM_LEVELS.length - 1 ? `Maksymalne powiększenie – ${Math.round(zoomMultiplier * 100)}%` : `Kliknij aby powiększyć – obecnie ${Math.round(zoomMultiplier * 100)}%`}
+                aria-label={`Skala widoku ${Math.round(zoomMultiplier * 100)}%`}
+              >
                 {Math.round(zoomMultiplier * 100)}%
-              </span>
+              </button>
               <Button
+                type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 p-0"
-                onClick={handleZoomIn}
+                className="h-8 w-8 min-w-8 min-h-8 p-0 touch-manipulation"
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleZoomIn(); }}
                 disabled={zoomIndex === ZOOM_LEVELS.length - 1}
-                title="Zoom in"
+                title="Zwiększ gęstość widoku (zoom in)"
                 aria-label="Zwiększ gęstość widoku"
               >
-                <ZoomIn className="h-3.5 w-3.5" />
+                <ZoomIn className="h-4 w-4" />
               </Button>
             </div>
 
@@ -1562,11 +1585,11 @@ export function TapeChart({
         )}
       </header>
 
-      {/* Grid wrapper + overview bar – scrollable; przeciąganie komórki = przewijanie w lewo/prawo */}
-      <div className="flex flex-1 min-h-0 min-h-[360px]">
+      {/* Grid wrapper + overview bar – scrollable; mini mapa absolute, żeby zawsze do końca ekranu */}
+      <div className="relative flex flex-1 min-h-0">
         <div
           ref={scrollContainerRef}
-          className="flex-1 overflow-auto p-1.5 sm:p-2 md:p-3 min-w-0"
+          className="flex-1 overflow-auto p-1.5 sm:p-2 md:p-3 min-w-0 tape-chart-scroll-area mr-[30px]"
           style={{ willChange: "scroll-position" }}
         >
         {displayRooms.length === 0 ? (
@@ -1627,7 +1650,7 @@ export function TapeChart({
                   style={{
                     gridColumn: i + 2,
                     gridRow: 1,
-                    minWidth: COLUMN_WIDTH_PX,
+                    minWidth: effectiveColumnWidthPx,
                     minHeight: HEADER_ROW_PX,
                     maxHeight: HEADER_ROW_PX,
                   }}
@@ -1666,8 +1689,8 @@ export function TapeChart({
                 room={room}
                 rowIdx={rowIdx}
                 dates={dates}
-                columnWidthPx={COLUMN_WIDTH_PX}
-                rowHeightPx={ROW_HEIGHT_PX}
+                columnWidthPx={effectiveColumnWidthPx}
+                rowHeightPx={effectiveRowHeightPx}
                 blockedRanges={room.blocks?.map((block) => ({
                   startDate: block.startDate,
                   endDate: block.endDate,
@@ -1683,22 +1706,17 @@ export function TapeChart({
                   setCreateSheetOpen(true);
                 }}
               >
-                <div className="flex flex-col min-w-0 gap-0.5 flex-1">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="font-bold text-xs leading-none">{room.number}</span>
-                    {/widok|jezioro/i.test(room.type) || (room.roomFeatures ?? []).some((f) => /widok|jezioro/i.test(f)) ? (
-                      <Waves className="h-3 w-3 text-blue-500 shrink-0" aria-label="Z widokiem na jezioro" />
-                    ) : null}
-                    {hostelMode && (
-                      <span className="text-[10px] text-muted-foreground leading-none">
-                        ({occupancyToday.get(room.number) ?? 0})
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground leading-none">
-                    {room.floor && <span>{room.floor}</span>}
-                    <span className="truncate" title={room.type}>{room.type}</span>
-                  </div>
+                <div className="flex items-center gap-1 min-w-0 flex-1">
+                  <span className="font-semibold text-[13px] leading-tight shrink-0">{room.number}</span>
+                  {/widok|jezioro/i.test(room.type) || (room.roomFeatures ?? []).some((f) => /widok|jezioro/i.test(f)) ? (
+                    <Waves className="h-2.5 w-2.5 text-blue-500 shrink-0" aria-label="Z widokiem na jezioro" />
+                  ) : null}
+                  <span className="truncate text-[9px] text-muted-foreground leading-tight" title={room.type}>{room.type}</span>
+                  {hostelMode && (
+                    <span className="text-[8px] text-muted-foreground shrink-0">
+                      ({occupancyToday.get(room.number) ?? 0})
+                    </span>
+                  )}
                 </div>
                 <RoomStatusIcon status={room.status} showLabel={false} compact />
               </RoomRowDroppable>
@@ -1707,7 +1725,7 @@ export function TapeChart({
             </div>
             {/* Reservation bars – overlay w siatce, paski równo z kwadracikami */}
             <div
-              className="absolute inset-0 pointer-events-none overflow-hidden"
+              className="absolute inset-0 pointer-events-none overflow-visible"
               style={{ zIndex: 50, gridTemplateColumns: gridColumns, gridTemplateRows: gridRows, display: "grid" }}
             >
               {reservationPlacements.map(({ reservation, gridRow, gridColumnStart, gridColumnEnd, barLeftPercent, barWidthPercent }) => {
@@ -1726,7 +1744,7 @@ export function TapeChart({
                     pricePerNight != null && pricePerNight > 0
                       ? nights * pricePerNight
                       : undefined;
-                  const barHeightPx = Math.round(ROW_HEIGHT_PX * 0.9);
+                  const barHeightPx = effectiveRowHeightPx;
                   const barWidthPx = Math.round(barWidthPercent * (gridColumnEnd - gridColumnStart) * effectiveColumnWidthPx);
                   // Source-based coloring
                   const reservationSource = reservation.rateCodeName ?? reservation.rateCode ?? "Recepcja";
@@ -1753,9 +1771,9 @@ export function TapeChart({
                     style={{
                       gridColumn: `${gridColumnStart} / ${gridColumnEnd}`,
                       gridRow,
-                      alignSelf: "center",
-                      height: barHeightPx, /* 90% wysokości wiersza */
+                      alignSelf: "stretch",
                       minHeight: barHeightPx,
+                      marginBottom: -1,
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1855,12 +1873,12 @@ export function TapeChart({
                       gridColumn: `${ghostPlacement.gridColumnStart} / ${ghostPlacement.gridColumnEnd}`,
                       gridRow: ghostPlacement.gridRow,
                       alignSelf: "center",
-                      height: Math.round(ROW_HEIGHT_PX * 0.9),
-                      minHeight: Math.round(ROW_HEIGHT_PX * 0.9),
+                      height: Math.round(effectiveRowHeightPx * 0.9),
+                      minHeight: Math.round(effectiveRowHeightPx * 0.9),
                     }}
                   >
                     <div
-                      className="absolute inset-y-0 min-h-[12px] border-2 border-dashed border-primary bg-primary/20 flex items-center justify-center"
+                      className="absolute inset-y-0 min-h-[10px] border-2 border-dashed border-primary bg-primary/20 flex items-center justify-center"
                       style={{
                         left: `${(ghostPlacement.barLeftPercent ?? 0) * 100}%`,
                         width: `${(ghostPlacement.barWidthPercent ?? 1) * 100}%`,
@@ -1868,7 +1886,7 @@ export function TapeChart({
                         WebkitClipPath: "polygon(6% 0%, 94% 0%, 100% 50%, 94% 100%, 6% 100%, 0% 50%)",
                       }}
                     >
-                      <span className="text-xs text-primary font-medium truncate px-2">
+                      <span className="text-[9px] text-primary font-medium truncate px-1.5">
                         {ghostPlacement.reservation.guestName}
                       </span>
                     </div>
@@ -1880,17 +1898,19 @@ export function TapeChart({
         )}
         </div>
         {displayRooms.length > 0 && (
-          <TapeChartOverviewBar
-            dates={dates}
-            reservations={filteredReservations}
-            roomsCount={displayRooms.length}
-            todayStr={todayStr}
-            columnWidthPx={COLUMN_WIDTH_PX}
-            scrollContainerRef={scrollContainerRef}
-          />
+          <div className="absolute right-0 top-0 bottom-0 w-[30px] shrink-0 pointer-events-auto">
+            <TapeChartOverviewBar
+              dates={dates}
+              reservations={filteredReservations}
+              roomsCount={displayRooms.length}
+              todayStr={todayStr}
+              columnWidthPx={effectiveColumnWidthPx}
+              scrollContainerRef={scrollContainerRef}
+            />
+          </div>
         )}
       </div>
-      <section className="border-t border-[hsl(var(--kw-grid-border))] bg-[hsl(var(--kw-room-label-bg))] no-print" data-hide-print="true">
+      <section className="shrink-0 border-t border-[hsl(var(--kw-grid-border))] bg-[hsl(var(--kw-room-label-bg))] no-print" data-hide-print="true">
         <button
           type="button"
           className="flex w-full items-center justify-between px-4 py-1.5 text-xs text-muted-foreground hover:bg-muted/30 transition-colors"

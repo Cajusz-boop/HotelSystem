@@ -12,6 +12,8 @@ import { RoomBlockSheet } from "./room-block-sheet";
 import { MonthlyOverviewDialog } from "./monthly-overview-dialog";
 import type { Room, Reservation, ReservationGroupSummary, ReservationStatus } from "@/lib/tape-chart-types";
 import { cn } from "@/lib/utils";
+import { shortGuestLabel } from "./reservation-bar";
+import { createPortal } from "react-dom";
 
 const MIN_COLUMN_WIDTH_PX = 64;
 const BAR_POINT_DEPTH_PX = 10;
@@ -21,10 +23,10 @@ function barClipPath(widthPx: number): string {
   const l = pct.toFixed(1);
   return `polygon(${l}% 0%, ${r}% 0%, 100% 50%, ${r}% 100%, ${l}% 100%, 0% 50%)`;
 }
-const ROW_HEIGHT_PX = 56;
+const ROW_HEIGHT_PX = 28;
 const ROOM_LABEL_WIDTH_PX = 180;
 const HEADER_ROW_PX = 48;
-const BAR_PADDING_PX = 6;
+const BAR_PADDING_PX = 0;
 /** Jak w Recepcji: stała liczba dni na osi czasu – siatka jest szeroka, da się przewijać w lewo/prawo */
 const DAYS_VIEW = 60;
 
@@ -45,11 +47,11 @@ const MONTHS_PL = [
 
 /** Kolory pasków w stylu KWHotel Pro – Status rezerwacji / Źródła */
 const KWHOTEL_STATUS_BG: Record<ReservationStatus, string> = {
-  NO_SHOW: "rgb(220 38 38)",           // Klient nie przyjechał
-  CHECKED_OUT: "rgb(100 116 139)",    // Pobyt zakończony
-  CANCELLED: "rgb(30 30 30)",         // Zakończony
-  CONFIRMED: "rgb(34 197 94)",        // Rezerwacja potwierdzona (light green)
-  CHECKED_IN: "rgb(236 72 153)",      // Pobyt nierozliczony (pink)
+  NO_SHOW: "rgb(185 28 28)",          // Klient nie przyjechał
+  CHECKED_OUT: "rgb(71 85 105)",      // Pobyt zakończony
+  CANCELLED: "rgb(55 65 81)",         // Zakończony
+  CONFIRMED: "rgb(29 78 216)",        // Rezerwacja potwierdzona (dark blue)
+  CHECKED_IN: "rgb(124 58 237)",      // Pobyt nierozliczony (violet)
 };
 
 function formatDateHeaderKwhotel(dateStr: string, todayStr: string): { weekday: string; day: number; isToday: boolean; isSunday: boolean } {
@@ -110,11 +112,15 @@ export function KwhotelGrafik({
   const [reservationSearchTerm, setReservationSearchTerm] = useState("");
   const [clientSearchTerm, setClientSearchTerm] = useState("");
   const [highlightedReservationId, setHighlightedReservationId] = useState<string | null>(null);
+  const [hoveredBarRes, setHoveredBarRes] = useState<Reservation | null>(null);
+  const [hoveredBarRect, setHoveredBarRect] = useState<DOMRect | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [allRooms, setAllRooms] = useState<Room[]>(rooms);
   const [groups, setGroups] = useState<ReservationGroupSummary[]>(reservationGroups);
 
   useEffect(() => setAllRooms(rooms), [rooms]);
   useEffect(() => setGroups(reservationGroups), [reservationGroups]);
+  useEffect(() => () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current); }, []);
 
   const gridWrapperRef = useRef<HTMLDivElement>(null);
   const roomFilterInputRef = useRef<HTMLInputElement>(null);
@@ -223,6 +229,93 @@ export function KwhotelGrafik({
   /** Stała szerokość kolumny dnia – timeline ma stałą szerokość, żeby zawsze dało się przewijać w lewo/prawo */
   const columnWidthPxForBars = MIN_COLUMN_WIDTH_PX;
   const totalGridWidthPx = ROOM_LABEL_WIDTH_PX + dates.length * MIN_COLUMN_WIDTH_PX;
+
+  const STATUS_PL: Record<string, string> = {
+    CONFIRMED: "Potwierdzona",
+    CHECKED_IN: "Zameldowany",
+    CHECKED_OUT: "Wymeldowany",
+    CANCELLED: "Anulowana",
+    NO_SHOW: "Nie przyjechał",
+  };
+  const PAYMENT_PL: Record<string, string> = {
+    UNPAID: "Nieopłacona",
+    PARTIAL: "Częściowo opłacona",
+    PAID: "Opłacona",
+  };
+
+  function buildBarLabel(guestName: string, barWidthPx: number, res: Reservation): string {
+    const short = shortGuestLabel(guestName, false).replace(",", "");
+    const surname = short.split(" ")[0] ?? short;
+    const initials = guestName
+      .split(/[\s,]+/)
+      .map((w) => w[0]?.toUpperCase())
+      .filter(Boolean)
+      .join("");
+    const nights = Math.max(1, Math.ceil(
+      (new Date(res.checkOut).getTime() - new Date(res.checkIn).getTime()) / (24 * 60 * 60 * 1000)
+    ));
+    const nightsStr = `${nights}n`;
+    const price = effectivePricesMap[`${res.room}:${res.checkIn}`];
+    const priceStr = price && price > 0 ? `${(price * nights).toFixed(0)}` : "";
+    // Ultra-czytelny tryb: na wąskich paskach tylko kluczowe info, cena wyłącznie w tooltipie.
+    if (barWidthPx < 52) return `${(initials || surname).slice(0, 2)} ${nightsStr}`;
+    if (barWidthPx < 80) return `${surname.length > 8 ? `${surname.slice(0, 7)}…` : surname} ${nightsStr}`;
+    if (barWidthPx < 120) return `${short} · ${nightsStr}`;
+    if (barWidthPx < 170) return `${short} · ${nightsStr}`;
+    return [short, nightsStr, priceStr ? `${priceStr} PLN` : ""].filter(Boolean).join(" · ");
+  }
+
+  function getContrastStyles(bg: string): { textColor: string; textShadow: string; chipBg: string } {
+    const match = bg.match(/(\d+)\s+(\d+)\s+(\d+)/);
+    if (!match) {
+      return {
+        textColor: "rgb(255 255 255)",
+        textShadow: "0 1px 2px rgba(0,0,0,0.5), 0 0 1px rgba(0,0,0,0.3)",
+        chipBg: "rgba(0,0,0,0.22)",
+      };
+    }
+    const r = Number(match[1]) / 255;
+    const g = Number(match[2]) / 255;
+    const b = Number(match[3]) / 255;
+    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const darkText = luminance > 0.62;
+    return darkText
+      ? {
+          textColor: "rgb(15 23 42)",
+          textShadow: "0 1px 1px rgba(255,255,255,0.35)",
+          chipBg: "rgba(255,255,255,0.55)",
+        }
+      : {
+          textColor: "rgb(255 255 255)",
+          textShadow: "0 1px 2px rgba(0,0,0,0.5), 0 0 1px rgba(0,0,0,0.3)",
+          chipBg: "rgba(0,0,0,0.22)",
+        };
+  }
+
+  function buildTooltipLines(res: Reservation): string[] {
+    const lines: string[] = [
+      `Gość: ${res.guestName}`,
+      `Pokój: ${res.room}`,
+      `Przyjazd: ${res.checkIn}${res.checkInTime ? ` ${res.checkInTime}` : ""}`,
+      `Wyjazd: ${res.checkOut}${res.checkOutTime ? ` ${res.checkOutTime}` : ""}`,
+      `Status: ${STATUS_PL[res.status] ?? res.status}`,
+    ];
+    if (res.pax) lines.push(`Osoby: ${res.pax}`);
+    const src = res.rateCodeName ?? res.rateCode;
+    if (src) lines.push(`Źródło: ${src}`);
+    if (res.groupName) lines.push(`Grupa: ${res.groupName}`);
+    if (res.vip) lines.push(`VIP`);
+    if (res.paymentStatus) lines.push(`Płatność: ${PAYMENT_PL[res.paymentStatus] ?? res.paymentStatus}`);
+    const price = effectivePricesMap[`${res.room}:${res.checkIn}`];
+    if (price && price > 0) {
+      const nights = Math.max(1, Math.ceil(
+        (new Date(res.checkOut).getTime() - new Date(res.checkIn).getTime()) / (24 * 60 * 60 * 1000)
+      ));
+      lines.push(`Cena: ${price} PLN/noc × ${nights}n = ${(price * nights).toFixed(0)} PLN`);
+    }
+    if (res.notes) lines.push(`Uwagi: ${res.notes}`);
+    return lines;
+  }
 
   const reservationPlacements = useMemo(() => {
     return filteredReservations
@@ -426,7 +519,7 @@ export function KwhotelGrafik({
                 key={room.number}
                 className="flex items-baseline justify-between gap-2 py-0.5 text-sm"
               >
-                <span className="font-medium text-gray-800">{room.number}</span>
+                <span className="font-semibold text-[13px] text-gray-800">{room.number}</span>
                 <span className="text-gray-500 text-xs">{roomCapacity(room)}</span>
               </div>
             ))}
@@ -506,15 +599,18 @@ export function KwhotelGrafik({
                 {filteredRooms.map((room, rowIdx) => (
                   <Fragment key={room.number}>
                     <div
-                      className="sticky left-0 z-[50] flex items-center gap-2 border-b border-r border-[#93c5fd] bg-white px-2 py-2 text-sm"
+                      className={cn(
+                        "sticky left-0 z-[50] flex items-center gap-1.5 border-b border-r border-[#93c5fd] px-1.5 py-1 text-xs",
+                        rowIdx % 2 === 1 ? "bg-slate-50" : "bg-white"
+                      )}
                       style={{
                         gridColumn: 1,
                         gridRow: rowIdx + 2,
                         minHeight: rowHeightPx,
                       }}
                     >
-                      <span className="font-medium text-gray-800">{room.number}</span>
-                      <span className="text-gray-500 text-xs">{roomCapacity(room)}</span>
+                      <span className="font-semibold text-[13px] text-gray-800">{room.number}</span>
+                      <span className="text-gray-500 text-[9px]">{roomCapacity(room)}</span>
                     </div>
                     {dates.map((dateStr, colIdx) => (
                       <div
@@ -523,7 +619,8 @@ export function KwhotelGrafik({
                         tabIndex={0}
                         data-cell
                         className={cn(
-                          "cursor-pointer border-b border-r border-[#93c5fd] bg-white hover:bg-blue-50/50 min-w-0",
+                          "cursor-pointer border-b border-r border-[#93c5fd] hover:bg-blue-50/50 min-w-0",
+                          rowIdx % 2 === 1 ? "bg-slate-50" : "bg-white",
                           room.blocks?.some(
                             (block) => dateStr >= block.startDate && dateStr <= block.endDate
                           ) && "cursor-not-allowed bg-red-50 hover:bg-red-100"
@@ -572,16 +669,15 @@ export function KwhotelGrafik({
                 <div className="absolute inset-0 pointer-events-none">
                   {reservationPlacements.map(({ reservation, left, width, top }) => {
                     const bg = KWHOTEL_STATUS_BG[reservation.status] ?? KWHOTEL_STATUS_BG.CONFIRMED;
-                    const padding = dayDivisionStyle ? BAR_PADDING_PX : 2;
-                    const barLeft = Math.round(left + padding);
-                    const barTop = Math.round(top + padding);
-                    const barWidth = Math.max(0, Math.round(width - padding * 2));
-                    const barHeight = Math.max(Math.round((rowHeightPx - padding * 2) * 0.9), 14);
-                    const paxSuffix = reservation.pax != null ? ` -${reservation.pax}os-` : "";
-                    const displayName =
-                      reservation.guestName.length > 28
-                        ? `${reservation.guestName.slice(0, 26)}…`
-                        : reservation.guestName;
+                    const contrast = getContrastStyles(bg);
+                    const padH = dayDivisionStyle ? BAR_PADDING_PX : 0;
+                    const barLeft = Math.round(left + padH);
+                    const barTop = Math.round(top) - (top > HEADER_ROW_PX ? 1 : 0);
+                    const barWidth = Math.max(0, Math.round(width - padH * 2));
+                    const barHeight = rowHeightPx + 2;
+                    const label = buildBarLabel(reservation.guestName, barWidth, reservation);
+                    const labelSizeClass =
+                      barWidth < 56 ? "text-[10px]" : barWidth < 92 ? "text-[11px]" : "text-[12px]";
                     return (
                       <div
                         key={reservation.id}
@@ -589,7 +685,8 @@ export function KwhotelGrafik({
                         tabIndex={0}
                         data-reservation-id={reservation.id}
                         className={cn(
-                          "absolute pointer-events-auto cursor-pointer overflow-hidden flex items-center px-2 text-white text-[11px] font-medium shadow-sm hover:opacity-95 hover:ring-2 hover:ring-primary/50",
+                          "absolute pointer-events-auto cursor-pointer overflow-hidden flex items-center justify-center leading-[1.05] font-bold shadow-sm border border-white/25 transition-transform duration-100 hover:z-50 hover:scale-y-[1.35] hover:scale-x-[1.02]",
+                          labelSizeClass,
                           highlightedReservationId === reservation.id && "ring-2 ring-yellow-300"
                         )}
                         style={{
@@ -600,8 +697,23 @@ export function KwhotelGrafik({
                           backgroundColor: bg,
                           clipPath: barClipPath(barWidth),
                           WebkitClipPath: barClipPath(barWidth),
+                          color: contrast.textColor,
+                          textShadow: contrast.textShadow,
+                          transformOrigin: "center center",
                         }}
-                        title={`${reservation.guestName} – kliknij aby edytować / meldować`}
+                        onMouseEnter={(e) => {
+                          if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+                          const el = e.currentTarget;
+                          hoverTimerRef.current = window.setTimeout(() => {
+                            setHoveredBarRes(reservation);
+                            setHoveredBarRect(el.getBoundingClientRect());
+                          }, 250);
+                        }}
+                        onMouseLeave={() => {
+                          if (hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null; }
+                          setHoveredBarRes(null);
+                          setHoveredBarRect(null);
+                        }}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleBarOrCellClick(reservation, e);
@@ -613,9 +725,12 @@ export function KwhotelGrafik({
                           }
                         }}
                       >
-                        <span className="truncate">
-                          {displayName}
-                          {paxSuffix}
+                        <span
+                          className="truncate px-1.5 tabular-nums rounded-sm max-w-full"
+                          style={{ backgroundColor: barWidth >= 72 ? contrast.chipBg : "transparent" }}
+                        >
+                          {reservation.vip && <span className="text-yellow-300 mr-0.5">★</span>}
+                          {label}
                         </span>
                       </div>
                     );
@@ -624,6 +739,34 @@ export function KwhotelGrafik({
               </div>
             </div>
           </div>
+
+          {/* Tooltip rezerwacji – portal */}
+          {hoveredBarRes && hoveredBarRect && typeof document !== "undefined" && createPortal(
+            <div
+              className="fixed z-[200] max-w-[340px] rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left shadow-xl pointer-events-none"
+              style={{
+                left: Math.max(8, Math.min(hoveredBarRect.left, window.innerWidth - 350)),
+                top: hoveredBarRect.top > 200 ? hoveredBarRect.top - 8 : hoveredBarRect.bottom + 8,
+                transform: hoveredBarRect.top > 200 ? "translateY(-100%)" : "none",
+              }}
+              role="tooltip"
+            >
+              <div className="space-y-0.5">
+                {buildTooltipLines(hoveredBarRes).map((line, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "text-xs whitespace-nowrap",
+                      i === 0 ? "font-bold text-gray-900" : "text-gray-700"
+                    )}
+                  >
+                    {line}
+                  </div>
+                ))}
+              </div>
+            </div>,
+            document.body
+          )}
 
           {/* Stopka – nawigacja, akcje, filtry, legenda */}
           <footer className="shrink-0 border-t border-[#d4d4d4] bg-white px-4 py-3">
