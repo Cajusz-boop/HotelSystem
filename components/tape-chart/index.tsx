@@ -1517,12 +1517,21 @@ export function TapeChart({
         )}
       </header>
 
-      {/* Grid wrapper – scrollable; przeciąganie komórki = przewijanie w lewo/prawo; wypełnia do końca okna */}
+      {/* Grid wrapper – scrollable; przeciąganie komórki = przewijanie w lewo/prawo; min-height żeby kratka/paski były widoczne */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-auto p-1.5 sm:p-2 md:p-3 min-h-0"
+        className="flex-1 overflow-auto p-1.5 sm:p-2 md:p-3 min-h-0 min-h-[360px]"
         style={{ willChange: "scroll-position" }}
       >
+        {displayRooms.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center text-muted-foreground">
+            <BedDouble className="h-12 w-12 opacity-50" />
+            <p className="font-medium">Brak pokoi do wyświetlenia</p>
+            <p className="text-sm max-w-md">
+              Dodaj pokoje w module <strong>Pokoje</strong> lub wyłącz filtry (np. „Wolne”), aby zobaczyć grafik rezerwacji (wykres Gantta, kratki i paski).
+            </p>
+          </div>
+        ) : (
         <DndContext
           sensors={sensors}
           onDragStart={({ active }) => setActiveId(active.id as string)}
@@ -1804,6 +1813,7 @@ export function TapeChart({
               </div>
             </div>
         </DndContext>
+        )}
       </div>
       <section className="border-t border-[hsl(var(--kw-grid-border))] bg-[hsl(var(--kw-room-label-bg))] no-print" data-hide-print="true">
         <button
