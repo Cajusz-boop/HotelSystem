@@ -1,6 +1,19 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
+import { existsSync } from "fs";
+import { join } from "path";
 import { prisma } from "../lib/db";
+
+async function importConfigSnapshot() {
+  const snapshotPath = join(__dirname, "config-snapshot.json");
+  if (!existsSync(snapshotPath)) {
+    console.log("Brak config-snapshot.json — pomijam import konfiguracji.");
+    return;
+  }
+  console.log("Importuję konfigurację z config-snapshot.json...");
+  const { execSync } = await import("child_process");
+  execSync("npx tsx prisma/config-import.ts", { stdio: "inherit", cwd: join(__dirname, "..") });
+}
 
 async function main() {
   const defaultEmail = "admin@hotel.local";
@@ -217,6 +230,8 @@ async function main() {
       },
     });
   }
+
+  await importConfigSnapshot();
 
   console.log("Seed completed.");
 }

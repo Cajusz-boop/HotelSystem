@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
+import { autoExportConfigSnapshot } from "@/lib/config-snapshot";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
@@ -96,6 +97,7 @@ export async function updateRateCode(
         ...(data.price !== undefined && { price: data.price }),
       },
     });
+    autoExportConfigSnapshot();
     revalidatePath("/cennik");
     revalidatePath("/front-office");
     return {

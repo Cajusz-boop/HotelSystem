@@ -6,9 +6,10 @@
   },
   "private": true,
   "scripts": {
+    "predev": "npx tsx scripts/sync-config-on-start.ts",
     "dev": "next dev -p 3011",
     "dev:3011": "npx next dev -p 3011",
-    "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && npm run dev",
+    "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && npx tsx scripts/sync-config-on-start.ts && next dev -p 3011",
     "build": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next build",
     "postbuild": "node scripts/copy-standalone-assets.cjs",
     "start": "next start",
@@ -40,6 +41,8 @@
     "db:seed:kwhotel": "npx tsx prisma/seed-kwhotel.ts",
     "db:migrate:kwhotel": "npx tsx prisma/migrate-kwhotel.ts",
     "db:migrate:kwhotel:dry": "cross-env DRY_RUN=1 npx tsx prisma/migrate-kwhotel.ts",
+    "db:config:export": "npx tsx prisma/config-export.ts",
+    "db:config:import": "npx tsx prisma/config-import.ts",
     "db:push:staging": "dotenv -e .env.staging -- prisma db push",
     "db:migrate:staging": "dotenv -e .env.staging -- prisma migrate deploy"
   },

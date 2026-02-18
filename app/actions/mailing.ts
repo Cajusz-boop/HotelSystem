@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { autoExportConfigSnapshot } from "@/lib/config-snapshot";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
@@ -579,6 +580,8 @@ export async function saveEmailTemplate(data: {
         isActive,
       },
     });
+
+    autoExportConfigSnapshot();
 
     revalidatePath("/ustawienia/szablony-email");
     return { success: true, data: { templateId: template.id } };

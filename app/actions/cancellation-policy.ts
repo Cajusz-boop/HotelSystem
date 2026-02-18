@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { autoExportConfigSnapshot } from "@/lib/config-snapshot";
 
 export type CancellationPolicyTemplate = {
   id: string;
@@ -68,5 +69,6 @@ export async function updateCancellationPolicyTemplates(
       cancellationPolicyTemplates: normalized as object,
     },
   });
+  autoExportConfigSnapshot();
   return { success: true };
 }

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { setAuthDisabledCache } from "@/lib/auth-disabled-cache";
+import { autoExportConfigSnapshot } from "@/lib/config-snapshot";
 import type {
   HotelConfigData,
   FormType,
@@ -91,6 +92,7 @@ export async function updateHotelConfig(data: Partial<HotelConfigData>): Promise
       ...(data.authDisabled !== undefined && { authDisabled: data.authDisabled }),
     },
   });
+  autoExportConfigSnapshot();
   return { success: true };
 }
 
@@ -191,6 +193,7 @@ export async function updateFormFieldsConfig(data: FormFieldsConfig): Promise<
       customFormFields: normalized as object,
     },
   });
+  autoExportConfigSnapshot();
   return { success: true };
 }
 
@@ -211,8 +214,8 @@ export async function toggleAuthDisabled(disabled: boolean): Promise<
     update: { authDisabled: disabled },
   });
 
-  // Natychmiast zaktualizuj cache w pamięci procesu — middleware od razu zobaczy zmianę
   setAuthDisabledCache(disabled);
+  autoExportConfigSnapshot();
 
   return { success: true };
 }
