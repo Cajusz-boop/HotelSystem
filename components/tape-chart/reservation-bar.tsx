@@ -109,13 +109,16 @@ export function ReservationBar({
           ? "rgb(239 68 68)"
           : undefined;
 
+  /** Kształt jak w KWHotel: ukośne końce (check-in / check-out w ciągu dnia) */
+  const clipPath = "polygon(0% 100%, 5% 0%, 95% 0%, 100% 100%)";
+
   return (
     <div
       ref={setNodeRef}
       data-testid="reservation-bar"
       data-reservation-id={reservation.id}
       className={cn(
-        "relative z-10 flex h-full min-h-[28px] flex-col justify-center gap-0 rounded-md text-[11px] leading-tight text-white shadow-sm overflow-hidden",
+        "relative z-10 flex h-full min-h-[28px] flex-col justify-center gap-0 text-[11px] leading-tight text-white shadow-sm overflow-hidden",
         colorClass,
         isPlaceholder && "border-2 border-dashed opacity-80",
         isDragging && "z-50 cursor-grabbing opacity-90",
@@ -126,6 +129,8 @@ export function ReservationBar({
         gridRow,
         gridColumn: `${gridColumnStart} / ${gridColumnEnd}`,
         backgroundColor: bgColor,
+        clipPath,
+        WebkitClipPath: clipPath,
       }}
       title={tooltipText}
       {...listeners}
