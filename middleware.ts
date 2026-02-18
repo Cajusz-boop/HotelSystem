@@ -18,23 +18,37 @@ function getClientIp(request: NextRequest): string {
 }
 
 /**
+ * Czyta authDisabled bezpośrednio z config-snapshot.json (fallback gdy baza niedostępna).
+ */
+function readSnapshotAuthDisabled(): boolean {
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const snapshotPath = path.join(process.cwd(), "prisma", "config-snapshot.json");
+    if (!fs.existsSync(snapshotPath)) return false;
+    const data = JSON.parse(fs.readFileSync(snapshotPath, "utf-8"));
+    return data?.hotelConfig?.authDisabled === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Sprawdza czy logowanie jest wyłączone.
  * 1. Czyta z globalThis cache (zero latencji) — ustawianego przez server action.
  * 2. Jeśli cache nie załadowany (pierwszy request po starcie) — fetch do /api/auth/is-disabled.
  * 3. Fallback: process.env.AUTH_DISABLED (dla .env / .env.local).
+ * 4. Fallback: config-snapshot.json (plik z repo).
  */
 async function isAuthDisabled(request: NextRequest): Promise<boolean> {
-  // Szybka ścieżka: cache w pamięci
   const cached = getAuthDisabledCache();
   if (cached !== undefined) return cached;
 
-  // Fallback: process.env (ustawione w .env / .env.local)
   if (process.env.AUTH_DISABLED === "true") {
     setAuthDisabledCache(true);
     return true;
   }
 
-  // Pierwszy request po starcie — załaduj z bazy przez API
   if (!isAuthCacheLoaded()) {
     try {
       const origin = request.nextUrl.origin;
@@ -49,9 +63,12 @@ async function isAuthDisabled(request: NextRequest): Promise<boolean> {
         return disabled;
       }
     } catch {
-      // Fetch nie zadziałał — ustaw false i idź dalej
+      // Fetch nie zadziałał — sprawdź snapshot
     }
-    setAuthDisabledCache(false);
+
+    const fromSnapshot = readSnapshotAuthDisabled();
+    setAuthDisabledCache(fromSnapshot);
+    return fromSnapshot;
   }
 
   return false;
