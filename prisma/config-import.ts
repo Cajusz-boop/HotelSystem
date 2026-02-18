@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/db";
 
 const SNAPSHOT_PATH = join(__dirname, "config-snapshot.json");
@@ -75,7 +76,7 @@ async function main() {
     await prisma.property.upsert({
       where: { code: "default" },
       update: p,
-      create: { ...p, code: "default" } as Record<string, unknown>,
+      create: { ...p, code: "default" } as Prisma.PropertyCreateInput,
     });
     console.log("  Property: OK");
   }
