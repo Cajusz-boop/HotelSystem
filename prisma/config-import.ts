@@ -54,7 +54,7 @@ async function main() {
     await prisma.hotelConfig.upsert({
       where: { id: "default" },
       update: stripAutoFields(hc),
-      create: hc,
+      create: hc as unknown as Prisma.HotelConfigCreateInput,
     });
     console.log("  HotelConfig: OK");
   }
@@ -65,7 +65,7 @@ async function main() {
     await prisma.cennikConfig.upsert({
       where: { id: "default" },
       update: stripAutoFields(cc),
-      create: cc,
+      create: cc as unknown as Prisma.CennikConfigCreateInput,
     });
     console.log("  CennikConfig: OK");
   }
@@ -111,7 +111,7 @@ async function main() {
       await prisma.fiscalReceiptTemplate.upsert({
         where: { id: (row.id as string) ?? "default" },
         update: stripAutoFields(row),
-        create: row,
+        create: row as unknown as Prisma.FiscalReceiptTemplateCreateInput,
       });
     }
     console.log(`  FiscalReceiptTemplate: ${(snapshot.fiscalReceiptTemplate as unknown[]).length} rekordów`);
@@ -181,7 +181,7 @@ async function main() {
       await prisma.derivedRateRule.upsert({
         where: { id: row.id as string },
         update: stripAutoFields(row),
-        create: row,
+        create: row as unknown as Prisma.DerivedRateRuleCreateInput,
       });
     }
     console.log(`  DerivedRateRule: ${(snapshot.derivedRateRules as unknown[]).length} rekordów`);
@@ -193,7 +193,7 @@ async function main() {
       await prisma.minibarItem.upsert({
         where: { id: row.id as string },
         update: stripAutoFields(row),
-        create: row,
+        create: row as unknown as Prisma.MinibarItemCreateInput,
       });
     }
     console.log(`  MinibarItem: ${(snapshot.minibarItems as unknown[]).length} rekordów`);
@@ -213,7 +213,7 @@ async function main() {
       await prisma.rolePermission.upsert({
         where: { id: row.id as string },
         update: stripAutoFields(row),
-        create: row,
+        create: row as unknown as Prisma.RolePermissionCreateInput,
       });
     }
     console.log(`  RolePermission: ${(snapshot.rolePermissions as unknown[]).length} rekordów`);
@@ -233,7 +233,7 @@ async function main() {
       await prisma.roleGroupPermission.upsert({
         where: { id: row.id as string },
         update: stripAutoFields(row),
-        create: row,
+        create: row as unknown as Prisma.RoleGroupPermissionCreateInput,
       });
     }
     console.log(`  RoleGroupPermission: ${(snapshot.roleGroupPermissions as unknown[]).length} rekordów`);
@@ -245,7 +245,7 @@ async function main() {
     await prisma.loyaltyProgram.upsert({
       where: { id: "default" },
       update: stripAutoFields(lp),
-      create: lp,
+      create: lp as unknown as Prisma.LoyaltyProgramCreateInput,
     });
     console.log("  LoyaltyProgram: OK");
   }
@@ -264,7 +264,7 @@ async function main() {
       await prisma.voucherTemplate.upsert({
         where: { id: row.id as string },
         update: stripAutoFields(row),
-        create: row,
+        create: row as unknown as Prisma.VoucherTemplateCreateInput,
       });
     }
     console.log(`  VoucherTemplate: ${(snapshot.voucherTemplates as unknown[]).length} rekordów`);
