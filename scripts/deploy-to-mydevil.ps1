@@ -1,11 +1,34 @@
-# Wdrozenie na MyDevil: build lokalnie -> ZIP -> upload -> migracja bazy -> restart
+# Wdrozenie na MyDevil: build lokalnie -> upload (ZIP lub rsync) -> migracja bazy -> restart
+# Gdy jest rsync (np. Git for Windows): wysylane sa tylko zmienione pliki (lekki deploy).
 # Uruchom: powershell -ExecutionPolicy Bypass -File .\scripts\deploy-to-mydevil.ps1
-# Haslo SSH bedzie pytane 2 razy (scp + ssh).
+# Opcja: -FullZip - wymusza pelny ZIP zamiast rsync (gdy rsync jest dostepny).
+
+param([switch]$FullZip)
 
 $ErrorActionPreference = "Continue"
 Write-Host "=== deploy-to-mydevil.ps1 start ===" -ForegroundColor Green
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
+
+# Wykryj rsync (tylko zmienione pliki = lekki deploy)
+# Szukaj: PATH, Chocolatey, Git for Windows
+$RsyncExe = $null
+foreach ($c in @("rsync", "C:\ProgramData\chocolatey\bin\rsync.exe", "C:\Program Files\Git\usr\bin\rsync.exe", "C:\Program Files (x86)\Git\usr\bin\rsync.exe")) {
+    if ($c -eq "rsync") {
+        $p = Get-Command rsync -ErrorAction SilentlyContinue
+        if ($p) { $RsyncExe = $p.Source; break }
+    } elseif (Test-Path $c) {
+        $RsyncExe = $c
+        break
+    }
+}
+$UseRsync = (-not $FullZip) -and $RsyncExe
+if ($UseRsync) {
+    Write-Host "Tryb: lekki (rsync - tylko zmienione pliki)" -ForegroundColor Green
+} else {
+    if ($FullZip) { Write-Host "Tryb: pelny ZIP (wymuszone -FullZip)" -ForegroundColor Yellow }
+    else { Write-Host "Tryb: pelny ZIP (brak rsync - zainstaluj: choco install rsync lub Git for Windows)" -ForegroundColor Yellow }
+}
 
 # Wczytaj zmienne z .env.deploy
 $envFile = Join-Path $ProjectRoot ".env.deploy"
@@ -77,66 +100,98 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "SQL diff zapisany." -ForegroundColor Green
 }
 
-# === 4/6 Pakowanie ZIP ===
-Write-Host "" ; Write-Host "=== 4/6 Pakowanie ZIP ===" -ForegroundColor Cyan
-$zipFile = Join-Path $ProjectRoot "deploy_mydevil.zip"
-if (Test-Path $zipFile) { Remove-Item $zipFile -Force }
+# === 4/6 Upload (rsync = tylko zmiany, albo ZIP) ===
+$remoteDest = $SSH_TARGET + ":" + $REMOTE_FULL
 
-$tmpDeploy = Join-Path $ProjectRoot "_deploy_tmp"
-if (Test-Path $tmpDeploy) { Remove-Item $tmpDeploy -Recurse -Force }
-New-Item -ItemType Directory -Force -Path $tmpDeploy | Out-Null
+if ($UseRsync) {
+    Write-Host "" ; Write-Host "=== 4/6 Wysylanie tylko zmienionych plikow (rsync) ===" -ForegroundColor Cyan
+    $localBase = $ProjectRoot.Replace("\", "/")
+    $standaloneSrc = $localBase + "/.next/standalone/"
+    $standaloneDst = $remoteDest + "/.next/standalone/"
+    Write-Host "*** Wpisz haslo SSH (moze byc kilka razy) ***" -ForegroundColor Magenta
+    # Zapewnij katalog .next na serwerze
+    $mkCmd = "mkdir -p " + $REMOTE_FULL + "/.next"
+    $mkCmd | ssh $SSH_TARGET "sh -s" 2>&1 | Out-Null
+    # rsync standalone (--delete = usun na serwerze to, czego juz nie ma lokalnie)
+    & $RsyncExe -avz --delete -e "ssh" "$standaloneSrc" "$standaloneDst"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[BLAD] rsync .next/standalone nie powiodl sie!" -ForegroundColor Red
+        exit 1
+    }
+    # app.js
+    & $RsyncExe -avz -e "ssh" (Join-Path $ProjectRoot "app.js") "$remoteDest/"
+    if ($LASTEXITCODE -ne 0) { Write-Host "[BLAD] rsync app.js nie powiodl sie!" -ForegroundColor Red; exit 1 }
+    # prisma
+    & $RsyncExe -avz -e "ssh" ($localBase + "/prisma/") "$remoteDest/prisma/"
+    if ($LASTEXITCODE -ne 0) { Write-Host "[BLAD] rsync prisma nie powiodl sie!" -ForegroundColor Red; exit 1 }
+    # SQL diff (jesli jest)
+    if (Test-Path $sqlDiffFile) {
+        & $RsyncExe -avz -e "ssh" $sqlDiffFile "$remoteDest/_deploy_schema_diff.sql"
+        if ($LASTEXITCODE -ne 0) { Write-Host "[BLAD] rsync SQL nie powiodl sie!" -ForegroundColor Red; exit 1 }
+    }
+    Write-Host "Rsync zakonczony (wyslane tylko zmienione pliki)." -ForegroundColor Green
+} else {
+    # === Pelny ZIP ===
+    Write-Host "" ; Write-Host "=== 4/6 Pakowanie ZIP ===" -ForegroundColor Cyan
+    $zipFile = Join-Path $ProjectRoot "deploy_mydevil.zip"
+    if (Test-Path $zipFile) { Remove-Item $zipFile -Force }
 
-Write-Host "Kopiowanie app.js..." -ForegroundColor Yellow
-Copy-Item "app.js" -Destination $tmpDeploy
+    $tmpDeploy = Join-Path $ProjectRoot "_deploy_tmp"
+    if (Test-Path $tmpDeploy) { Remove-Item $tmpDeploy -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $tmpDeploy | Out-Null
 
-Write-Host "Kopiowanie .next/standalone/..." -ForegroundColor Yellow
-$src = Join-Path (Join-Path $ProjectRoot ".next") "standalone"
-$dst = Join-Path (Join-Path $tmpDeploy ".next") "standalone"
-New-Item -ItemType Directory -Force -Path (Join-Path $tmpDeploy ".next") | Out-Null
-Copy-Item -Path $src -Destination $dst -Recurse -Force
+    Write-Host "Kopiowanie app.js..." -ForegroundColor Yellow
+    Copy-Item "app.js" -Destination $tmpDeploy
 
-Write-Host "Kopiowanie prisma/..." -ForegroundColor Yellow
-Copy-Item -Path "prisma" -Destination (Join-Path $tmpDeploy "prisma") -Recurse -Force
+    Write-Host "Kopiowanie .next/standalone/..." -ForegroundColor Yellow
+    $src = Join-Path (Join-Path $ProjectRoot ".next") "standalone"
+    $dst = Join-Path (Join-Path $tmpDeploy ".next") "standalone"
+    New-Item -ItemType Directory -Force -Path (Join-Path $tmpDeploy ".next") | Out-Null
+    Copy-Item -Path $src -Destination $dst -Recurse -Force
 
-if (Test-Path $sqlDiffFile) {
-    Write-Host "Kopiowanie SQL diff..." -ForegroundColor Yellow
-    Copy-Item $sqlDiffFile -Destination (Join-Path $tmpDeploy "_deploy_schema_diff.sql")
+    Write-Host "Kopiowanie prisma/..." -ForegroundColor Yellow
+    Copy-Item -Path "prisma" -Destination (Join-Path $tmpDeploy "prisma") -Recurse -Force
+
+    if (Test-Path $sqlDiffFile) {
+        Write-Host "Kopiowanie SQL diff..." -ForegroundColor Yellow
+        Copy-Item $sqlDiffFile -Destination (Join-Path $tmpDeploy "_deploy_schema_diff.sql")
+    }
+
+    Write-Host "Pakowanie ZIP..." -ForegroundColor Yellow
+    Compress-Archive -Path (Join-Path $tmpDeploy "*") -DestinationPath $zipFile -Force
+    Remove-Item $tmpDeploy -Recurse -Force
+
+    $zipSizeMB = [math]::Round((Get-Item $zipFile).Length / 1MB, 1)
+    Write-Host ("ZIP gotowy: " + $zipSizeMB + " MB") -ForegroundColor Green
+
+    if ($zipSizeMB -lt 10) {
+        Write-Host ("[BLAD] ZIP za maly (" + $zipSizeMB + " MB) - prawdopodobnie .next/standalone sie nie skopiował!") -ForegroundColor Red
+        exit 1
+    }
+
+    Write-Host "" ; Write-Host "=== 5/6 Wysylanie ZIP na serwer ===" -ForegroundColor Cyan
+    Write-Host "*** Wpisz haslo SSH ***" -ForegroundColor Magenta
+    $scpDest = $SSH_TARGET + ":" + $REMOTE_FULL + "/"
+    scp $zipFile $scpDest
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[BLAD] scp nie powiodlo sie!" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "ZIP wyslany." -ForegroundColor Green
 }
 
-Write-Host "Pakowanie ZIP..." -ForegroundColor Yellow
-Compress-Archive -Path (Join-Path $tmpDeploy "*") -DestinationPath $zipFile -Force
-Remove-Item $tmpDeploy -Recurse -Force
-
-$zipSizeMB = [math]::Round((Get-Item $zipFile).Length / 1MB, 1)
-Write-Host ("ZIP gotowy: " + $zipSizeMB + " MB") -ForegroundColor Green
-
-# Walidacja: ZIP musi miec co najmniej 10 MB (standalone sam waży ~300 MB)
-if ($zipSizeMB -lt 10) {
-    Write-Host ("[BLAD] ZIP za maly (" + $zipSizeMB + " MB) - prawdopodobnie .next/standalone sie nie skopiował!") -ForegroundColor Red
-    exit 1
-}
-
-# === 5/6 Upload ZIP ===
-Write-Host "" ; Write-Host "=== 5/6 Wysylanie ZIP na serwer ===" -ForegroundColor Cyan
-Write-Host "*** Wpisz haslo SSH ***" -ForegroundColor Magenta
-$scpDest = $SSH_TARGET + ":" + $REMOTE_FULL + "/"
-scp $zipFile $scpDest
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "[BLAD] scp nie powiodlo sie!" -ForegroundColor Red
-    exit 1
-}
-Write-Host "ZIP wyslany." -ForegroundColor Green
-
-# === 6/6 Rozpakowanie + migracja + restart ===
-Write-Host "" ; Write-Host "=== 6/6 Rozpakowanie + migracja + restart ===" -ForegroundColor Cyan
+# === 6/6 Na serwerze: (przy ZIP: rozpakuj) migracja + restart ===
+Write-Host "" ; Write-Host "=== 6/6 Migracja bazy + restart ===" -ForegroundColor Cyan
 Write-Host "*** Wpisz haslo SSH ***" -ForegroundColor Magenta
 
 $cmd = "cd " + $REMOTE_FULL + " || exit 1" + "`n"
-$cmd += "echo USUWANIE_NEXT" + "`n"
-$cmd += "rm -rf .next" + "`n"
-$cmd += "echo ROZPAKOWYWANIE" + "`n"
-$cmd += "unzip -o deploy_mydevil.zip" + "`n"
-$cmd += "rm -f deploy_mydevil.zip" + "`n"
+if (-not $UseRsync) {
+    $cmd += "echo USUWANIE_NEXT" + "`n"
+    $cmd += "rm -rf .next" + "`n"
+    $cmd += "echo ROZPAKOWYWANIE" + "`n"
+    $cmd += "unzip -o deploy_mydevil.zip" + "`n"
+    $cmd += "rm -f deploy_mydevil.zip" + "`n"
+}
 
 if (Test-Path $sqlDiffFile) {
     $cmd += "echo MIGRACJA_BAZY" + "`n"
@@ -153,7 +208,7 @@ $cmd += "echo DEPLOY_SSH_OK"
 $cmdFile = Join-Path $ProjectRoot "_deploy_ssh_cmd.sh"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($cmdFile, $cmd.Replace("`r`n", "`n").Replace("`r", "`n"), $utf8NoBom)
-$sshRaw = Get-Content $cmdFile -Raw | ssh $SSH_TARGET "bash -s" 2>&1
+$sshRaw = Get-Content $cmdFile -Raw | ssh $SSH_TARGET "sh -s" 2>&1
 $sshExitCode = $LASTEXITCODE
 Remove-Item $cmdFile -Force
 
