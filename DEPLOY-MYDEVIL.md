@@ -2,7 +2,20 @@
 
 Aplikacja laczy sie z baza MySQL na mydevil (`m14753_hotel_system_rezerwacji`).
 
-## Szybki deploy (jedna komenda)
+## Zapisz na GitHub i wdróż (jedna komenda)
+
+Żeby **zapisać zmiany na GitHubie i od razu wdrożyć** na hotel.karczma-labedz.pl:
+
+```powershell
+.\scripts\zapisz-i-wdroż.ps1 "zapisz dane"
+.\scripts\zapisz-i-wdroż.ps1 "poprawka formularza rezerwacji"
+```
+
+Możesz wpisać dowolny komunikat w cudzysłowie. Jeśli go pominiesz, użyte będzie „zapisz dane”. Skrypt: robi commit + push, potem uruchamia deploy (build + upload + restart).
+
+---
+
+## Sam deploy (bez zapisu do Git)
 
 Z katalogu projektu:
 
@@ -14,11 +27,19 @@ Skrypt automatycznie:
 1. Generuje Prisma client
 2. Buduje Next.js (standalone)
 3. Generuje SQL diff dla schematu bazy (z `IF NOT EXISTS`)
-4. Usuwa stary `.next` na serwerze (zapobiega konfliktom starych plikow)
-5. Pakuje i wysyla ZIP na serwer (app.js + .next/standalone + prisma + SQL)
-6. Wykonuje migracje bazy (`mysql --force`) i restartuje aplikacje
+4. **Upload:** jeśli w systemie jest **rsync** (np. Git for Windows) — wysyła **tylko zmienione pliki** (lekki deploy, szybciej). W przeciwnym razie pakuje całość do ZIP i wysyła.
+5. Na serwerze: rozpakowanie (przy ZIP) lub już zaktualizowane (przy rsync), migracja bazy, restart
 
 Po zakonczeniu strona jest dostepna: https://hotel.karczma-labedz.pl
+
+### Lekki deploy (rsync) — mniej danych przy każdym wdrożeniu
+
+Jeśli nie chcesz za każdym razem wysyłać całego programu (~setki MB), zainstaluj **rsync**. Skrypt go sam wykryje i będzie wysyłał tylko zmienione pliki.
+
+- **Chocolatey** (zalecane): `choco install rsync` (wymaga [Chocolatey](https://chocolatey.org/install)). Skrypt wykrywa `C:\ProgramData\chocolatey\bin\rsync.exe`.
+- **Git for Windows**: starsze wersje mogły zawierać rsync w `C:\Program Files\Git\usr\bin` — skrypt sprawdza tę ścieżkę.
+- Wymuszenie pełnego ZIP (nawet przy rsync):  
+  `.\scripts\deploy-to-mydevil.ps1 -FullZip`
 
 ---
 
@@ -104,6 +125,9 @@ Oraz upewnij sie, ze plik `.env` w `public_nodejs` na serwerze zawiera to samo `
 
 ## Co robi skrypt krok po kroku
 
+- **Gdy jest rsync (lekki deploy):** 4 = rsync tylko zmienionych plików (.next/standalone, app.js, prisma, SQL). Na serwerze nie ma usuwania całego .next — rsync nadpisuje i czyści zbędne pliki (`--delete`).
+- **Gdy brak rsync:** 4–5 = pakowanie ZIP, scp, na serwerze `rm -rf .next` i unzip.
+
 ```
 deploy-to-mydevil.ps1
   |
@@ -112,13 +136,39 @@ deploy-to-mydevil.ps1
   3. npx prisma migrate diff --from-empty --script  ->  _deploy_schema_diff.sql
   |   (CREATE TABLE IF NOT EXISTS — bezpieczne, nie nadpisuje istniejacych tabel)
   |
-  4. ssh: rm -rf .next  (usuwa stary build — kluczowe!)
-  5. ZIP + scp + unzip  (pelny .next/standalone + app.js + prisma + SQL)
-  6. ssh: mysql --force < SQL  (dodaje nowe tabele/kolumny, ignoruje bledy duplikatow)
-  |  ssh: devil www restart
+  4. Upload: rsync (tylko zmiany) LUB ZIP + scp
+  5. Przy ZIP: ssh: rm -rf .next, unzip
+  6. ssh: mysql --force < SQL (jesli jest), devil www restart
   |
   -> Strona dziala
 ```
+
+## Jak to dziala na MyDevil (krok po kroku)
+
+Serwer to **FreeBSD 14**, katalog aplikacji: `~/domains/hotel.karczma-labedz.pl/public_nodejs/`.
+
+### Przy deployu (rsync lub ZIP)
+
+1. **Pliki na serwerze**
+   - **Rsync:** Skrypt z Twojego PC wysyła tylko zmienione pliki do `public_nodejs/.next/standalone/`, `app.js`, `prisma/`. Na MyDevil nic nie odpala rsync — tylko odbiera pliki przez SSH (Twoj rsync łączy się i kopiuje).
+   - **ZIP:** Skrypt wysyła jeden plik `deploy_mydevil.zip`. Później (krok 2) serwer go rozpakowuje.
+
+2. **Komendy wykonywane na MyDevil (przez SSH)**
+   - `cd ~/domains/hotel.karczma-labedz.pl/public_nodejs` — wejście do katalogu aplikacji.
+   - **Tylko przy ZIP:** `rm -rf .next` (usunięcie starego builda), `unzip -o deploy_mydevil.zip`, `rm -f deploy_mydevil.zip`.
+   - **Jeśli jest plik SQL:** `mysql --force -h mysql5.mydevil.net -u ... -p... baza < _deploy_schema_diff.sql` — aktualizacja schematu bazy (CREATE TABLE IF NOT EXISTS, ewentualne nowe tabele/kolumny). `--force` powoduje, że błędy typu „tabela już istnieje” są ignorowane.
+   - `devil www restart hotel.karczma-labedz.pl` — restart aplikacji Node (Passenger).
+   - Na końcu skrypt sprawdza, czy w odpowiedzi jest `DEPLOY_SSH_OK`.
+
+3. **Uruchomienie aplikacji**
+   - Passenger uruchamia `app.js` z katalogu `public_nodejs`.
+   - `app.js` ładuje `.env` (tam jest `DATABASE_URL`), robi `chdir` do `.next/standalone` i uruchamia `server.js` (Next.js).
+   - Baza: MySQL na `mysql5.mydevil.net`; Prisma używa `binaryTargets = ["native", "freebsd14"]`, więc klient jest kompatybilny z FreeBSD.
+
+### Wymagania na MyDevil
+
+- W PATH użytkownika: `mysql` (klient), `unzip` (tylko przy deployu ZIP), `devil` (panel MyDevil).
+- Katalog `public_nodejs` z plikiem `.env` zawierającym `DATABASE_URL` (ustawione raz, np. przy pierwszym deployu).
 
 ### Dlaczego usuwamy stary .next?
 
