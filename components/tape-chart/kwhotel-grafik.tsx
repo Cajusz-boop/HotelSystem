@@ -12,7 +12,7 @@ import { RoomBlockSheet } from "./room-block-sheet";
 import { MonthlyOverviewDialog } from "./monthly-overview-dialog";
 import type { Room, Reservation, ReservationGroupSummary, ReservationStatus } from "@/lib/tape-chart-types";
 import { cn } from "@/lib/utils";
-import { shortGuestLabel } from "./reservation-bar";
+import { shortGuestLabel, ensureOpaque } from "./reservation-bar";
 import { createPortal } from "react-dom";
 
 const MIN_COLUMN_WIDTH_PX = 64;
@@ -265,13 +265,12 @@ export function KwhotelGrafik({
     return [short, nightsStr, priceStr ? `${priceStr} PLN` : ""].filter(Boolean).join(" · ");
   }
 
-  function getContrastStyles(bg: string): { textColor: string; textShadow: string; chipBg: string } {
+  function getContrastStyles(bg: string): { textColor: string; textShadow: string } {
     const match = bg.match(/(\d+)\s+(\d+)\s+(\d+)/);
     if (!match) {
       return {
         textColor: "rgb(255 255 255)",
         textShadow: "0 1px 2px rgba(0,0,0,0.5), 0 0 1px rgba(0,0,0,0.3)",
-        chipBg: "rgba(0,0,0,0.22)",
       };
     }
     const r = Number(match[1]) / 255;
@@ -283,12 +282,10 @@ export function KwhotelGrafik({
       ? {
           textColor: "rgb(15 23 42)",
           textShadow: "0 1px 1px rgba(255,255,255,0.35)",
-          chipBg: "rgba(255,255,255,0.55)",
         }
       : {
           textColor: "rgb(255 255 255)",
           textShadow: "0 1px 2px rgba(0,0,0,0.5), 0 0 1px rgba(0,0,0,0.3)",
-          chipBg: "rgba(0,0,0,0.22)",
         };
   }
 
@@ -668,7 +665,7 @@ export function KwhotelGrafik({
               >
                 <div className="absolute inset-0 pointer-events-none">
                   {reservationPlacements.map(({ reservation, left, width, top }) => {
-                    const bg = KWHOTEL_STATUS_BG[reservation.status] ?? KWHOTEL_STATUS_BG.CONFIRMED;
+                    const bg = ensureOpaque(KWHOTEL_STATUS_BG[reservation.status] ?? KWHOTEL_STATUS_BG.CONFIRMED);
                     const contrast = getContrastStyles(bg);
                     const padH = dayDivisionStyle ? BAR_PADDING_PX : 0;
                     const barLeft = Math.round(left + padH);
@@ -727,7 +724,6 @@ export function KwhotelGrafik({
                       >
                         <span
                           className="truncate px-1.5 tabular-nums rounded-sm max-w-full"
-                          style={{ backgroundColor: barWidth >= 72 ? contrast.chipBg : "transparent" }}
                         >
                           {reservation.vip && <span className="text-yellow-300 mr-0.5">★</span>}
                           {label}

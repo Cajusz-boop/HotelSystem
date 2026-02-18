@@ -8,6 +8,25 @@ import type { Reservation } from "@/lib/tape-chart-types";
 import { RESERVATION_STATUS_COLORS, RESERVATION_STATUS_BG } from "@/lib/tape-chart-types";
 import { cn } from "@/lib/utils";
 
+/** Zamienia rgba/hex z alpha na nieprzezroczysty rgb (composite nad białym) */
+export function ensureOpaque(color: string): string {
+  const rgbaMatch = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*[\d.]+)?\s*\)/);
+  if (rgbaMatch) {
+    const r = Number(rgbaMatch[1]);
+    const g = Number(rgbaMatch[2]);
+    const b = Number(rgbaMatch[3]);
+    const a = color.includes("rgba") ? parseFloat(color.match(/,\s*([\d.]+)\s*\)/)?.[1] ?? "1") : 1;
+    if (a >= 0.999) return `rgb(${r} ${g} ${b})`;
+    const r2 = Math.round(r * a + 255 * (1 - a));
+    const g2 = Math.round(g * a + 255 * (1 - a));
+    const b2 = Math.round(b * a + 255 * (1 - a));
+    return `rgb(${r2} ${g2} ${b2})`;
+  }
+  const hslAlpha = color.match(/hsla?\([^)]+\)/);
+  if (hslAlpha && color.includes("/")) return color.replace(/\/\s*[\d.]+/, "");
+  return color;
+}
+
 /** Zamazuje nazwisko do formy "K*****i, J." (Privacy Mode) */
 export function obscureGuestName(name: string): string {
   const parts = name.split(/,\s*/);
@@ -112,7 +131,7 @@ export function ReservationBar({
       : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ");
   const colorClass = RESERVATION_STATUS_COLORS[reservation.status];
   const defaultBg = RESERVATION_STATUS_BG[reservation.status as keyof typeof RESERVATION_STATUS_BG] ?? RESERVATION_STATUS_BG.CONFIRMED;
-  const bgColor = statusBg?.[reservation.status] ?? defaultBg;
+  const bgColor = ensureOpaque(statusBg?.[reservation.status] ?? defaultBg);
   const isGroupReservation = Boolean(reservation.groupId);
 
   const STATUS_PL: Record<string, string> = {
@@ -226,7 +245,7 @@ export function ReservationBar({
         data-testid="reservation-bar"
         data-reservation-id={reservation.id}
         className={cn(
-          "relative z-10 flex h-full w-full min-h-0 flex-col justify-center gap-0 text-[11px] leading-tight font-bold text-white shadow-sm overflow-hidden",
+          "relative z-10 flex h-full w-full min-h-0 flex-col justify-center gap-0 text-xs leading-snug font-semibold text-white shadow-sm overflow-hidden antialiased",
           colorClass,
           isPlaceholder && "border-2 border-dashed opacity-80",
           isDragging && "z-50 cursor-grabbing opacity-90",
@@ -256,7 +275,7 @@ export function ReservationBar({
           />
         )}
         <div className={cn("flex items-center justify-center min-h-0 min-w-0 overflow-hidden", paymentEdgeColor ? "pl-2 pr-1.5 py-0.5" : "px-1.5 py-0.5")}>
-          <span className="min-w-0 truncate text-[11px] leading-[1.2] font-bold tabular-nums">
+          <span className="min-w-0 truncate text-xs leading-snug font-semibold tabular-nums antialiased">
             {reservation.vip && <Star className="inline h-2.5 w-2.5 mr-0.5 text-yellow-300 fill-yellow-300 align-middle shrink-0" aria-label="VIP" />}
             {barLabel}
           </span>
