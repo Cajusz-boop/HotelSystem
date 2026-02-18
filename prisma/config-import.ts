@@ -76,7 +76,7 @@ async function main() {
     await prisma.property.upsert({
       where: { code: "default" },
       update: p,
-      create: { ...p, code: "default" } as Prisma.PropertyCreateInput,
+      create: { ...p, code: "default" } as unknown as Prisma.PropertyCreateInput,
     });
     console.log("  Property: OK");
   }
@@ -151,7 +151,7 @@ async function main() {
         await prisma.surchargeType.upsert({
           where: { code: row.code as string },
           update: data,
-          create: { ...data, code: row.code as string, propertyId: prop.id } as Prisma.SurchargeTypeCreateInput,
+          create: { ...data, code: row.code as string, propertyId: prop.id } as unknown as Prisma.SurchargeTypeCreateInput,
         });
       }
     }
@@ -168,7 +168,7 @@ async function main() {
         await prisma.package.upsert({
           where: { code: row.code as string },
           update: data,
-          create: { ...data, code: row.code as string, propertyId: prop.id } as Prisma.PackageCreateInput,
+          create: { ...data, code: row.code as string, propertyId: prop.id } as unknown as Prisma.PackageCreateInput,
         });
       }
     }
