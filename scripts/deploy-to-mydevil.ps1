@@ -105,30 +105,30 @@ $remoteDest = $SSH_TARGET + ":" + $REMOTE_FULL
 
 if ($UseRsync) {
     Write-Host "" ; Write-Host "=== 4/6 Wysylanie tylko zmienionych plikow (rsync) ===" -ForegroundColor Cyan
-    # cwRsync na Windows traktuje "c:/path" jako zdalny (host c). Uzywamy sciezki z backslash.
-    $standaloneSrc = (Join-Path $ProjectRoot ".next\standalone") + "\"
+    # cwRsync traktuje "C:" jako host. Uzywamy sciezek wzglednych (Push-Location).
     $standaloneDst = $remoteDest + "/.next/standalone/"
     Write-Host "*** Wpisz haslo SSH (moze byc kilka razy) ***" -ForegroundColor Magenta
     # Zapewnij katalog .next na serwerze
     $mkCmd = "mkdir -p " + $REMOTE_FULL + "/.next"
     $mkCmd | ssh $SSH_TARGET "sh -s" 2>&1 | Out-Null
-    # rsync standalone (--delete = usun na serwerze to, czego juz nie ma lokalnie)
-    & $RsyncExe -avz --delete -e "ssh" "$standaloneSrc" "$standaloneDst"
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[BLAD] rsync .next/standalone nie powiodl sie!" -ForegroundColor Red
-        exit 1
-    }
-    # app.js
-    & $RsyncExe -avz -e "ssh" (Join-Path $ProjectRoot "app.js") "$remoteDest/"
-    if ($LASTEXITCODE -ne 0) { Write-Host "[BLAD] rsync app.js nie powiodl sie!" -ForegroundColor Red; exit 1 }
-    # prisma
-    $prismaSrc = (Join-Path $ProjectRoot "prisma") + "\"
-    & $RsyncExe -avz -e "ssh" "$prismaSrc" "$remoteDest/prisma/"
-    if ($LASTEXITCODE -ne 0) { Write-Host "[BLAD] rsync prisma nie powiodl sie!" -ForegroundColor Red; exit 1 }
-    # SQL diff (jesli jest)
-    if (Test-Path $sqlDiffFile) {
-        & $RsyncExe -avz -e "ssh" $sqlDiffFile "$remoteDest/_deploy_schema_diff.sql"
-        if ($LASTEXITCODE -ne 0) { Write-Host "[BLAD] rsync SQL nie powiodl sie!" -ForegroundColor Red; exit 1 }
+    # rsync standalone – z katalogu projektu, sciezka wzgledna bez C:
+    Push-Location $ProjectRoot
+    try {
+        & $RsyncExe -avz --delete -e "ssh" ".next/standalone/" "$standaloneDst"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[BLAD] rsync .next/standalone nie powiodl sie!" -ForegroundColor Red
+            exit 1
+        }
+        & $RsyncExe -avz -e "ssh" "app.js" "$remoteDest/"
+        if ($LASTEXITCODE -ne 0) { Write-Host "[BLAD] rsync app.js nie powiodl sie!" -ForegroundColor Red; exit 1 }
+        & $RsyncExe -avz -e "ssh" "prisma/" "$remoteDest/prisma/"
+        if ($LASTEXITCODE -ne 0) { Write-Host "[BLAD] rsync prisma nie powiodl sie!" -ForegroundColor Red; exit 1 }
+        if (Test-Path "_deploy_schema_diff.sql") {
+            & $RsyncExe -avz -e "ssh" "_deploy_schema_diff.sql" "$remoteDest/_deploy_schema_diff.sql"
+            if ($LASTEXITCODE -ne 0) { Write-Host "[BLAD] rsync SQL nie powiodl sie!" -ForegroundColor Red; exit 1 }
+        }
+    } finally {
+        Pop-Location
     }
     Write-Host "Rsync zakonczony (wyslane tylko zmienione pliki)." -ForegroundColor Green
 } else {
