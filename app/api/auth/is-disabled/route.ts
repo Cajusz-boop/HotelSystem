@@ -9,17 +9,14 @@ export const dynamic = "force-dynamic";
 const g = globalThis as unknown as { __configSnapshotImported?: boolean };
 
 /**
- * Jeśli w bazie brak HotelConfig, a config-snapshot.json istnieje — importuj.
- * Jednorazowo na proces (flagą globalThis).
+ * Synchronizuje HotelConfig z config-snapshot.json (jednorazowo na proces).
+ * Tworzy rekord jeśli nie istnieje, lub aktualizuje authDisabled jeśli snapshot ma inną wartość.
  */
 async function ensureConfigFromSnapshot(): Promise<void> {
   if (g.__configSnapshotImported) return;
   g.__configSnapshotImported = true;
 
   try {
-    const row = await prisma.hotelConfig.findUnique({ where: { id: "default" } });
-    if (row) return;
-
     const snapshotPath = join(process.cwd(), "prisma", "config-snapshot.json");
     if (!existsSync(snapshotPath)) return;
 
@@ -27,7 +24,13 @@ async function ensureConfigFromSnapshot(): Promise<void> {
     if (!snapshot.hotelConfig) return;
 
     const hc = snapshot.hotelConfig;
-    await prisma.hotelConfig.create({ data: hc });
+    delete hc.updatedAt;
+
+    await prisma.hotelConfig.upsert({
+      where: { id: "default" },
+      create: hc,
+      update: { authDisabled: hc.authDisabled ?? false },
+    });
   } catch {
     // nie blokuj startu
   }
