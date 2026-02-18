@@ -108,7 +108,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
         data-testid={`room-row-${room.number}`}
         className={cn(
           "sticky left-0 z-[60] flex items-center gap-1 border-b border-r border-[hsl(var(--kw-grid-border))] px-1.5 py-0.5",
-          isOver ? "bg-primary/10 ring-1 ring-primary" : rowIdx % 2 === 1 ? "bg-muted/30" : "bg-card",
+          isOver ? "bg-primary/10 ring-1 ring-primary" : rowIdx % 2 === 1 ? "bg-slate-100 dark:bg-slate-800" : "bg-card",
           isDirty && "bg-amber-50/80 dark:bg-amber-950/30"
         )}
         style={{
@@ -134,7 +134,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
           data-room={room.number}
           className={cn(
             "cursor-grab active:cursor-grabbing border-b border-r border-[hsl(var(--kw-grid-border))] select-none",
-            rowIdx % 2 === 1 ? "bg-muted/30" : "bg-card",
+            rowIdx % 2 === 1 ? "bg-slate-100 dark:bg-slate-800" : "bg-card",
             saturday && "kw-cell-saturday",
             sunday && "kw-cell-sunday",
             isBlocked && "bg-destructive/20 cursor-not-allowed opacity-70",
