@@ -1,5 +1,5 @@
 {
-  "_exportedAt": "2026-02-18T07:57:12.810Z",
+  "_exportedAt": "2026-02-18T17:28:15.379Z",
   "_description": "Snapshot konfiguracji bazy. Generowany przez: npm run db:config:export",
   "hotelConfig": {
     "id": "default",
@@ -21,14 +21,14 @@
     "seasons": null,
     "cancellationPolicyTemplates": null,
     "authDisabled": true,
-    "updatedAt": "2026-02-16T12:30:50.492Z"
+    "updatedAt": "2026-02-18T16:32:38.286Z"
   },
   "cennikConfig": {
     "id": "default",
     "currency": "PLN",
     "vatPercent": "0",
     "pricesAreNetto": true,
-    "updatedAt": "2026-02-14T13:34:21.852Z"
+    "updatedAt": "2026-02-18T16:32:38.303Z"
   },
   "property": {
     "name": "Obiekt główny",
@@ -52,7 +52,7 @@
       "description": "Faktura VAT",
       "exampleNumber": "FV/2026/0001",
       "createdAt": "2026-02-17T08:57:20.959Z",
-      "updatedAt": "2026-02-17T08:57:20.959Z"
+      "updatedAt": "2026-02-18T16:32:38.328Z"
     },
     {
       "id": "cmlqdklqu0005jsvzgmqg812m",
@@ -65,7 +65,7 @@
       "description": "Korekta faktury",
       "exampleNumber": "KOR/2026/0001",
       "createdAt": "2026-02-17T09:02:36.046Z",
-      "updatedAt": "2026-02-17T09:02:36.046Z"
+      "updatedAt": "2026-02-18T16:32:38.335Z"
     },
     {
       "id": "cmlqdklvy0006jsvzqcvnb11h",
@@ -78,7 +78,7 @@
       "description": "Faktura zbiorcza",
       "exampleNumber": "FVZ/2026/0001",
       "createdAt": "2026-02-17T09:02:36.236Z",
-      "updatedAt": "2026-02-17T09:02:36.236Z"
+      "updatedAt": "2026-02-18T16:32:38.341Z"
     },
     {
       "id": "cmlqdklwc0007jsvz6wn3bo94",
@@ -91,7 +91,7 @@
       "description": "Rachunek (nie-VAT)",
       "exampleNumber": "R/2026/0001",
       "createdAt": "2026-02-17T09:02:36.250Z",
-      "updatedAt": "2026-02-17T09:02:36.250Z"
+      "updatedAt": "2026-02-18T16:32:38.346Z"
     },
     {
       "id": "cmlqdklx50008jsvzj8hlu16w",
@@ -104,7 +104,7 @@
       "description": "Nota księgowa",
       "exampleNumber": "NK/2026/0001",
       "createdAt": "2026-02-17T09:02:36.279Z",
-      "updatedAt": "2026-02-17T09:02:36.279Z"
+      "updatedAt": "2026-02-18T16:32:38.352Z"
     },
     {
       "id": "cmlqdklxu0009jsvz8xjm2tcp",
@@ -117,7 +117,7 @@
       "description": "Proforma",
       "exampleNumber": "PRO/2026/0001",
       "createdAt": "2026-02-17T09:02:36.303Z",
-      "updatedAt": "2026-02-17T09:02:36.303Z"
+      "updatedAt": "2026-02-18T16:32:38.358Z"
     }
   ],
   "invoiceTemplates": [
@@ -148,10 +148,73 @@
       "paymentTermsText": null,
       "thanksText": "Zapraszamy ponownie!",
       "createdAt": "2026-02-17T08:58:53.952Z",
-      "updatedAt": "2026-02-17T08:58:53.952Z"
+      "updatedAt": "2026-02-18T16:32:38.365Z"
     }
   ],
-  "documentTemplates": [],
+  "documentTemplates": [
+    {
+      "id": "cmls9ibtt000238vz5kmuuqia",
+      "templateType": "CONFIRMATION",
+      "useInvoiceLogo": true,
+      "logoBase64": null,
+      "logoUrl": null,
+      "logoWidth": 150,
+      "logoPosition": "left",
+      "useInvoiceSeller": true,
+      "hotelName": "Hotel",
+      "hotelAddress": null,
+      "hotelPostalCode": null,
+      "hotelCity": null,
+      "hotelPhone": null,
+      "hotelEmail": null,
+      "hotelWebsite": null,
+      "title": "POTWIERDZENIE REZERWACJI",
+      "headerText": null,
+      "footerText": "W razie pytań prosimy o kontakt. Do zobaczenia!",
+      "termsText": null,
+      "welcomeText": "Dziękujemy za dokonanie rezerwacji w naszym hotelu.",
+      "fontSize": 14,
+      "fontFamily": "system-ui, sans-serif",
+      "primaryColor": "#111111",
+      "accentColor": "#2563eb",
+      "showIdField": true,
+      "showSignatureField": true,
+      "showVehicleField": false,
+      "createdAt": "2026-02-18T16:44:23.734Z",
+      "updatedAt": "2026-02-18T16:44:23.734Z"
+    },
+    {
+      "id": "cmls9ic94000338vztihdypdo",
+      "templateType": "REGISTRATION_CARD",
+      "useInvoiceLogo": true,
+      "logoBase64": null,
+      "logoUrl": null,
+      "logoWidth": 150,
+      "logoPosition": "left",
+      "useInvoiceSeller": true,
+      "hotelName": "Hotel",
+      "hotelAddress": null,
+      "hotelPostalCode": null,
+      "hotelCity": null,
+      "hotelPhone": null,
+      "hotelEmail": null,
+      "hotelWebsite": null,
+      "title": "KARTA MELDUNKOWA",
+      "headerText": null,
+      "footerText": "Życzymy miłego pobytu!",
+      "termsText": null,
+      "welcomeText": "Witamy w naszym hotelu!",
+      "fontSize": 14,
+      "fontFamily": "system-ui, sans-serif",
+      "primaryColor": "#111111",
+      "accentColor": "#2563eb",
+      "showIdField": true,
+      "showSignatureField": true,
+      "showVehicleField": false,
+      "createdAt": "2026-02-18T16:44:24.055Z",
+      "updatedAt": "2026-02-18T16:44:24.055Z"
+    }
+  ],
   "fiscalReceiptTemplate": [],
   "emailTemplates": [],
   "roomTypes": [
@@ -161,7 +224,7 @@
       "basePrice": "300",
       "sortOrder": 0,
       "createdAt": "2026-02-14T13:34:12.130Z",
-      "updatedAt": "2026-02-17T08:41:24.744Z"
+      "updatedAt": "2026-02-18T16:32:38.373Z"
     },
     {
       "id": "cmlmcybvt0007bsvzq4pz4vle",
@@ -169,7 +232,7 @@
       "basePrice": "300",
       "sortOrder": 0,
       "createdAt": "2026-02-14T13:34:12.137Z",
-      "updatedAt": "2026-02-17T08:41:34.754Z"
+      "updatedAt": "2026-02-18T16:32:38.379Z"
     },
     {
       "id": "cmlmcybvz0008bsvzryohpg95",
@@ -177,7 +240,7 @@
       "basePrice": "300",
       "sortOrder": 0,
       "createdAt": "2026-02-14T13:34:12.141Z",
-      "updatedAt": "2026-02-17T08:41:31.803Z"
+      "updatedAt": "2026-02-18T16:32:38.384Z"
     },
     {
       "id": "cmlp2od3z0000kgvz80hqopxy",
@@ -185,7 +248,7 @@
       "basePrice": "300",
       "sortOrder": 0,
       "createdAt": "2026-02-16T11:09:49.534Z",
-      "updatedAt": "2026-02-17T08:41:28.896Z"
+      "updatedAt": "2026-02-18T16:32:38.389Z"
     },
     {
       "id": "cmlpd3t420000n4vzeya1jahi",
@@ -193,7 +256,7 @@
       "basePrice": "300",
       "sortOrder": 2,
       "createdAt": "2026-02-16T16:01:46.271Z",
-      "updatedAt": "2026-02-17T08:41:37.742Z"
+      "updatedAt": "2026-02-18T16:32:38.394Z"
     },
     {
       "id": "cmlpd3t4i0001n4vzp0w39g0z",
@@ -201,7 +264,7 @@
       "basePrice": "300",
       "sortOrder": 3,
       "createdAt": "2026-02-16T16:01:46.286Z",
-      "updatedAt": "2026-02-17T08:41:41.238Z"
+      "updatedAt": "2026-02-18T16:32:38.398Z"
     },
     {
       "id": "cmlpd3t4w0002n4vzmcoibyob",
@@ -209,7 +272,7 @@
       "basePrice": null,
       "sortOrder": 4,
       "createdAt": "2026-02-16T16:01:46.302Z",
-      "updatedAt": "2026-02-16T16:01:46.302Z"
+      "updatedAt": "2026-02-18T16:32:38.403Z"
     },
     {
       "id": "cmlpd3t5c0003n4vzohquut8p",
@@ -217,7 +280,7 @@
       "basePrice": null,
       "sortOrder": 7,
       "createdAt": "2026-02-16T16:01:46.317Z",
-      "updatedAt": "2026-02-16T16:01:46.317Z"
+      "updatedAt": "2026-02-18T16:32:38.407Z"
     },
     {
       "id": "cmlpd3t5m0004n4vz5j9pricb",
@@ -225,7 +288,7 @@
       "basePrice": null,
       "sortOrder": 8,
       "createdAt": "2026-02-16T16:01:46.328Z",
-      "updatedAt": "2026-02-16T16:01:46.328Z"
+      "updatedAt": "2026-02-18T16:32:38.411Z"
     },
     {
       "id": "cmlpd3t5t0005n4vzh8d4j154",
@@ -233,7 +296,7 @@
       "basePrice": null,
       "sortOrder": 9,
       "createdAt": "2026-02-16T16:01:46.336Z",
-      "updatedAt": "2026-02-16T16:01:46.336Z"
+      "updatedAt": "2026-02-18T16:32:38.417Z"
     }
   ],
   "rateCode": [],
@@ -248,7 +311,7 @@
       "name": "reservation.create",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.782Z",
-      "updatedAt": "2026-02-16T12:24:09.782Z"
+      "updatedAt": "2026-02-18T16:32:38.423Z"
     },
     {
       "id": "cmlp5byop0002asvze0xx178k",
@@ -256,7 +319,7 @@
       "name": "reservation.edit",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.814Z",
-      "updatedAt": "2026-02-16T12:24:09.814Z"
+      "updatedAt": "2026-02-18T16:32:38.428Z"
     },
     {
       "id": "cmlp5byp50004asvzq892p86u",
@@ -264,7 +327,7 @@
       "name": "reservation.cancel",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.830Z",
-      "updatedAt": "2026-02-16T12:24:09.830Z"
+      "updatedAt": "2026-02-18T16:32:38.433Z"
     },
     {
       "id": "cmlp5bypf0006asvzb1nccekl",
@@ -272,7 +335,7 @@
       "name": "reservation.check_in",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.842Z",
-      "updatedAt": "2026-02-16T12:24:09.842Z"
+      "updatedAt": "2026-02-18T16:32:38.438Z"
     },
     {
       "id": "cmlp5bypr0008asvzvcm74jd8",
@@ -280,7 +343,7 @@
       "name": "reservation.check_out",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.854Z",
-      "updatedAt": "2026-02-16T12:24:09.854Z"
+      "updatedAt": "2026-02-18T16:32:38.443Z"
     },
     {
       "id": "cmlp5byq3000aasvzfzb90sgg",
@@ -288,7 +351,7 @@
       "name": "finance.view",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.867Z",
-      "updatedAt": "2026-02-16T12:24:09.867Z"
+      "updatedAt": "2026-02-18T16:32:38.447Z"
     },
     {
       "id": "cmlp5byqe000casvzgbqw8lzp",
@@ -296,7 +359,7 @@
       "name": "finance.post",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.878Z",
-      "updatedAt": "2026-02-16T12:24:09.878Z"
+      "updatedAt": "2026-02-18T16:32:38.452Z"
     },
     {
       "id": "cmlp5byqp000easvz48pgg57d",
@@ -304,7 +367,7 @@
       "name": "finance.void",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.888Z",
-      "updatedAt": "2026-02-16T12:24:09.888Z"
+      "updatedAt": "2026-02-18T16:32:38.460Z"
     },
     {
       "id": "cmlp5byqy000gasvz4l3xk7j7",
@@ -312,7 +375,7 @@
       "name": "finance.refund",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.897Z",
-      "updatedAt": "2026-02-16T12:24:09.897Z"
+      "updatedAt": "2026-02-18T16:32:38.464Z"
     },
     {
       "id": "cmlp5byr8000iasvzvhek2aik",
@@ -320,7 +383,7 @@
       "name": "rates.view",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.907Z",
-      "updatedAt": "2026-02-16T12:24:09.907Z"
+      "updatedAt": "2026-02-18T16:32:38.469Z"
     },
     {
       "id": "cmlp5byri000kasvztj3l543u",
@@ -328,7 +391,7 @@
       "name": "rates.edit",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.917Z",
-      "updatedAt": "2026-02-16T12:24:09.917Z"
+      "updatedAt": "2026-02-18T16:32:38.474Z"
     },
     {
       "id": "cmlp5byrr000masvzb4fed9cx",
@@ -336,7 +399,7 @@
       "name": "reports.view",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.926Z",
-      "updatedAt": "2026-02-16T12:24:09.926Z"
+      "updatedAt": "2026-02-18T16:32:38.479Z"
     },
     {
       "id": "cmlp5bys4000oasvzgs29s3cl",
@@ -344,7 +407,7 @@
       "name": "reports.export",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.939Z",
-      "updatedAt": "2026-02-16T12:24:09.939Z"
+      "updatedAt": "2026-02-18T16:32:38.484Z"
     },
     {
       "id": "cmlp5bysf000qasvzk0rm3o6r",
@@ -352,7 +415,7 @@
       "name": "reports.management",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.950Z",
-      "updatedAt": "2026-02-16T12:24:09.950Z"
+      "updatedAt": "2026-02-18T16:32:38.488Z"
     },
     {
       "id": "cmlp5bysn000sasvz6z1kxzeq",
@@ -360,7 +423,7 @@
       "name": "reports.kpi",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.959Z",
-      "updatedAt": "2026-02-16T12:24:09.959Z"
+      "updatedAt": "2026-02-18T16:32:38.493Z"
     },
     {
       "id": "cmlp5bysw000uasvzh7yqdxrk",
@@ -368,7 +431,7 @@
       "name": "reports.meals",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.967Z",
-      "updatedAt": "2026-02-16T12:24:09.967Z"
+      "updatedAt": "2026-02-18T16:32:38.498Z"
     },
     {
       "id": "cmlp5byt5000wasvzzwkez3e2",
@@ -376,7 +439,7 @@
       "name": "reports.official",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.976Z",
-      "updatedAt": "2026-02-16T12:24:09.976Z"
+      "updatedAt": "2026-02-18T16:32:38.502Z"
     },
     {
       "id": "cmlp5bytf000yasvz8qj47qid",
@@ -384,7 +447,7 @@
       "name": "housekeeping.view",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.986Z",
-      "updatedAt": "2026-02-16T12:24:09.986Z"
+      "updatedAt": "2026-02-18T16:32:38.508Z"
     },
     {
       "id": "cmlp5byts0010asvzg6nl4cqc",
@@ -392,7 +455,7 @@
       "name": "housekeeping.update_status",
       "description": null,
       "createdAt": "2026-02-16T12:24:09.999Z",
-      "updatedAt": "2026-02-16T12:24:09.999Z"
+      "updatedAt": "2026-02-18T16:32:38.513Z"
     },
     {
       "id": "cmlp5byu40012asvzjauimjvq",
@@ -400,7 +463,7 @@
       "name": "admin.users",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.011Z",
-      "updatedAt": "2026-02-16T12:24:10.011Z"
+      "updatedAt": "2026-02-18T16:32:38.518Z"
     },
     {
       "id": "cmlp5byue0014asvztsiw69ib",
@@ -408,7 +471,7 @@
       "name": "admin.settings",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.021Z",
-      "updatedAt": "2026-02-16T12:24:10.021Z"
+      "updatedAt": "2026-02-18T16:32:38.523Z"
     },
     {
       "id": "cmlp5byup0016asvzk60zmmqk",
@@ -416,7 +479,7 @@
       "name": "owner.portal",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.032Z",
-      "updatedAt": "2026-02-16T12:24:10.032Z"
+      "updatedAt": "2026-02-18T16:32:38.527Z"
     },
     {
       "id": "cmlp5byuz0018asvzvvuu3tay",
@@ -424,7 +487,7 @@
       "name": "module.dashboard",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.043Z",
-      "updatedAt": "2026-02-16T12:24:10.043Z"
+      "updatedAt": "2026-02-18T16:32:38.532Z"
     },
     {
       "id": "cmlp5byvc001aasvzub4e5xz3",
@@ -432,7 +495,7 @@
       "name": "module.front_office",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.055Z",
-      "updatedAt": "2026-02-16T12:24:10.055Z"
+      "updatedAt": "2026-02-18T16:32:38.536Z"
     },
     {
       "id": "cmlp5byvl001casvzodqnja94",
@@ -440,7 +503,7 @@
       "name": "module.check_in",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.064Z",
-      "updatedAt": "2026-02-16T12:24:10.064Z"
+      "updatedAt": "2026-02-18T16:32:38.541Z"
     },
     {
       "id": "cmlp5byvu001easvzwzzei7sh",
@@ -448,7 +511,7 @@
       "name": "module.guests",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.073Z",
-      "updatedAt": "2026-02-16T12:24:10.073Z"
+      "updatedAt": "2026-02-18T16:32:38.545Z"
     },
     {
       "id": "cmlp5byw4001gasvz3rdysvlk",
@@ -456,7 +519,7 @@
       "name": "module.companies",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.083Z",
-      "updatedAt": "2026-02-16T12:24:10.083Z"
+      "updatedAt": "2026-02-18T16:32:38.549Z"
     },
     {
       "id": "cmlp5bywd001iasvzco84h8wy",
@@ -464,7 +527,7 @@
       "name": "module.travel_agents",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.092Z",
-      "updatedAt": "2026-02-16T12:24:10.092Z"
+      "updatedAt": "2026-02-18T16:32:38.553Z"
     },
     {
       "id": "cmlp5bywm001kasvz4fkv197d",
@@ -472,7 +535,7 @@
       "name": "module.rooms",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.101Z",
-      "updatedAt": "2026-02-16T12:24:10.101Z"
+      "updatedAt": "2026-02-18T16:32:38.558Z"
     },
     {
       "id": "cmlp5bywv001masvzyylbocs9",
@@ -480,7 +543,7 @@
       "name": "module.rates",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.110Z",
-      "updatedAt": "2026-02-16T12:24:10.110Z"
+      "updatedAt": "2026-02-18T16:32:38.562Z"
     },
     {
       "id": "cmlp5byx7001oasvzad0ci3kt",
@@ -488,7 +551,7 @@
       "name": "module.housekeeping",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.122Z",
-      "updatedAt": "2026-02-16T12:24:10.122Z"
+      "updatedAt": "2026-02-18T16:32:38.566Z"
     },
     {
       "id": "cmlp5byxf001qasvz97o5q7yt",
@@ -496,7 +559,7 @@
       "name": "module.finance",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.131Z",
-      "updatedAt": "2026-02-16T12:24:10.131Z"
+      "updatedAt": "2026-02-18T16:32:38.570Z"
     },
     {
       "id": "cmlp5byxp001sasvz7meftx4e",
@@ -504,7 +567,7 @@
       "name": "module.reports",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.140Z",
-      "updatedAt": "2026-02-16T12:24:10.140Z"
+      "updatedAt": "2026-02-18T16:32:38.574Z"
     },
     {
       "id": "cmlp5byxy001uasvzsqwuhn0d",
@@ -512,7 +575,7 @@
       "name": "module.channel_manager",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.149Z",
-      "updatedAt": "2026-02-16T12:24:10.149Z"
+      "updatedAt": "2026-02-18T16:32:38.578Z"
     },
     {
       "id": "cmlp5byy8001wasvzdbxhwib9",
@@ -520,7 +583,7 @@
       "name": "module.parking",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.160Z",
-      "updatedAt": "2026-02-16T12:24:10.160Z"
+      "updatedAt": "2026-02-18T16:32:38.581Z"
     },
     {
       "id": "cmlp5byyh001yasvz5hwuwtlz",
@@ -528,7 +591,7 @@
       "name": "module.mice",
       "description": null,
       "createdAt": "2026-02-16T12:24:10.168Z",
-      "updatedAt": "2026-02-16T12:24:10.168Z"
+      "updatedAt": "2026-02-18T16:32:38.588Z"
     }
   ],
   "rolePermissions": [
