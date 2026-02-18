@@ -40,6 +40,7 @@
     "Test",
     "**/*.spec.ts",
     "**/*.spec.tsx",
-    "prisma/migrate-kwhotel.ts"
+    "prisma/migrate-kwhotel.ts",
+    "vitest.config.ts"
   ]
 }
