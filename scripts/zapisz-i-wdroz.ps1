@@ -3,7 +3,10 @@
 #         .\scripts\zapisz-i-wdroz.ps1 "poprawka formularza"
 # Jesli pominiesz komunikat: uzyte bedzie "zapisz dane".
 
-param([Parameter(Position=0)][string]$Komunikat = "zapisz dane")
+param(
+  [Parameter(Position=0)][string]$Komunikat = "zapisz dane",
+  [switch]$FullZip   # wymusza pelny ZIP zamiast rsync (gdy rsync ma problemy)
+)
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
@@ -41,7 +44,7 @@ if ([string]::IsNullOrWhiteSpace($status)) {
 
 # 2. Deploy na MyDevil
 Write-Host "=== 2/2 Deploy na hotel.karczma-labedz.pl ===" -ForegroundColor Cyan
-& (Join-Path $PSScriptRoot "deploy-to-mydevil.ps1")
+if ($FullZip) { & (Join-Path $PSScriptRoot "deploy-to-mydevil.ps1") -FullZip } else { & (Join-Path $PSScriptRoot "deploy-to-mydevil.ps1") }
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[BLAD] Deploy nie powiodl sie." -ForegroundColor Red
     exit 1
