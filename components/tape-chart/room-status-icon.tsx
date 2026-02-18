@@ -77,12 +77,12 @@ export function RoomStatusIcon({ status, className, showLabel = true, compact = 
         className={cn(
           "inline-flex items-center justify-center rounded-full shrink-0",
           badgeClass,
-          "h-5 w-5",
+          "h-4 w-4",
           className
         )}
         title={tooltip}
       >
-        <Icon className={cn("h-3 w-3 shrink-0", iconClass)} aria-hidden />
+        <Icon className={cn("h-2.5 w-2.5 shrink-0", iconClass)} aria-hidden />
       </span>
     );
   }

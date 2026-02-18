@@ -1,7 +1,9 @@
 "use client";
 
 import { useDraggable } from "@dnd-kit/core";
-import { Users, Star } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { Star } from "lucide-react";
 import type { Reservation } from "@/lib/tape-chart-types";
 import { RESERVATION_STATUS_COLORS, RESERVATION_STATUS_BG } from "@/lib/tape-chart-types";
 import { cn } from "@/lib/utils";
@@ -22,6 +24,27 @@ export function obscureGuestName(name: string): string {
     return name[0] + "*".repeat(Math.min(name.length - 2, 5)) + name[name.length - 1];
   }
   return name;
+}
+
+/** Krótka etykieta gościa do paska: "Nazwisko I." – mieści się w wąskich komórkach */
+export function shortGuestLabel(fullName: string, privacyMode: boolean): string {
+  if (privacyMode) {
+    const obscured = obscureGuestName(fullName);
+    return obscured.replace(/\s*\(Privacy\)\s*$/, "");
+  }
+  const parts = fullName.split(/,\s*/);
+  if (parts.length >= 2) {
+    const [last, first] = parts;
+    const initial = (first.trim()[0] ?? "").toUpperCase();
+    return initial ? `${last.trim()} ${initial}.` : last.trim();
+  }
+  const words = fullName.trim().split(/\s+/);
+  if (words.length >= 2) {
+    const last = words[words.length - 1];
+    const initial = words[0][0]?.toUpperCase() ?? "";
+    return `${last} ${initial}.`;
+  }
+  return fullName.length > 12 ? fullName.slice(0, 10) + "…" : fullName;
 }
 
 interface ReservationBarProps {
@@ -61,34 +84,52 @@ export function ReservationBar({
   isCheckInToday = false,
   barWidthPx,
 }: ReservationBarProps) {
-  const displayName = privacyMode
-    ? obscureGuestName(reservation.guestName) + " (Privacy)"
-    : reservation.guestName;
-  const paxText = reservation.pax != null ? `${reservation.pax} os.` : "";
-  const sourceText = reservation.rateCodeName ?? reservation.rateCode ?? "";
-  const bedsText = reservation.bedsBooked != null && reservation.bedsBooked > 1 ? ` · ${reservation.bedsBooked} ł.` : "";
-  const timeText =
-    reservation.checkInTime && reservation.checkOutTime
-      ? ` ${reservation.checkInTime}–${reservation.checkOutTime}`
-      : "";
-  const priceText =
+  const shortName = shortGuestLabel(reservation.guestName, privacyMode);
+  const nights =
+    reservation.checkIn && reservation.checkOut
+      ? Math.max(
+          1,
+          Math.ceil(
+            (new Date(reservation.checkOut).getTime() - new Date(reservation.checkIn).getTime()) /
+              (24 * 60 * 60 * 1000)
+          )
+        )
+      : null;
+  const nightsShort = nights != null ? `${nights}n` : "";
+  const priceShort =
     pricePerNight != null && pricePerNight > 0
       ? totalAmount != null && totalAmount > 0
-        ? `${pricePerNight} PLN/dobę · ${totalAmount.toFixed(0)} PLN`
-        : `${pricePerNight} PLN/dobę`
+        ? `${totalAmount.toFixed(0)} PLN`
+        : `${pricePerNight} PLN`
       : "";
+  const barLabel =
+    barWidthPx != null && barWidthPx > 0
+      ? barWidthPx < 56
+        ? [shortName.split(" ")[0] ?? shortName, nightsShort].filter(Boolean).join(" ")
+        : barWidthPx < 120
+          ? [shortName, nightsShort].filter(Boolean).join(" · ")
+          : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ")
+      : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ");
   const colorClass = RESERVATION_STATUS_COLORS[reservation.status];
   const defaultBg = RESERVATION_STATUS_BG[reservation.status as keyof typeof RESERVATION_STATUS_BG] ?? RESERVATION_STATUS_BG.CONFIRMED;
   const bgColor = statusBg?.[reservation.status] ?? defaultBg;
   const isGroupReservation = Boolean(reservation.groupId);
 
-  // Build comprehensive tooltip
+  const STATUS_PL: Record<string, string> = {
+    CONFIRMED: "Potwierdzona",
+    CHECKED_IN: "Zameldowany",
+    CHECKED_OUT: "Wymeldowany",
+    CANCELLED: "Anulowana",
+    NO_SHOW: "Nie przyjechał",
+  };
+
   const tooltipLines: string[] = [
     `Gość: ${reservation.guestName}`,
     `Pokój: ${reservation.room}`,
     `Przyjazd: ${reservation.checkIn}${reservation.checkInTime ? ` ${reservation.checkInTime}` : ""}`,
     `Wyjazd: ${reservation.checkOut}${reservation.checkOutTime ? ` ${reservation.checkOutTime}` : ""}`,
-    `Status: ${reservation.status}`,
+    `Status: ${STATUS_PL[reservation.status] ?? reservation.status}`,
+    ...(nights != null ? [`Noce: ${nights}`] : []),
   ];
   if (reservation.pax) tooltipLines.push(`Liczba osób: ${reservation.pax}`);
   const source = reservation.rateCodeName ?? reservation.rateCode;
@@ -107,6 +148,32 @@ export function ReservationBar({
     data: { type: "reservation", reservation },
   });
 
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [tooltipRect, setTooltipRect] = useState<DOMRect | null>(null);
+  const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const barRef = useRef<HTMLDivElement | null>(null);
+
+  const showTooltip = () => {
+    tooltipTimerRef.current = window.setTimeout(() => {
+      const el = barRef.current;
+      if (!el || isDragging) return;
+      setTooltipRect(el.getBoundingClientRect());
+      setTooltipVisible(true);
+    }, 200);
+  };
+  const hideTooltip = () => {
+    if (tooltipTimerRef.current) {
+      clearTimeout(tooltipTimerRef.current);
+      tooltipTimerRef.current = null;
+    }
+    setTooltipVisible(false);
+    setTooltipRect(null);
+  };
+
+  useEffect(() => () => {
+    if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
+  }, []);
+
   const paymentEdgeColor =
     reservation.paymentStatus === "PAID"
       ? "rgb(22 163 74)"
@@ -122,60 +189,88 @@ export function ReservationBar({
   const l = pct.toFixed(1);
   const clipPath = `polygon(${l}% 0%, ${r}% 0%, 100% 50%, ${r}% 100%, ${l}% 100%, 0% 50%)`;
 
+  const setRef = (el: HTMLDivElement | null) => {
+    setNodeRef(el);
+    barRef.current = el;
+  };
+
+  const tooltipAbove = tooltipRect && tooltipRect.top > 180;
+  const tooltipEl =
+    tooltipVisible && tooltipRect && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="fixed z-[200] max-w-[320px] rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left shadow-lg"
+            style={{
+              left: Math.min(tooltipRect.left, window.innerWidth - 330),
+              top: tooltipAbove ? tooltipRect.top - 8 : tooltipRect.bottom + 8,
+              transform: tooltipAbove ? "translateY(-100%)" : "none",
+            }}
+            role="tooltip"
+          >
+            <div className="text-xs text-gray-800 space-y-1 font-medium">
+              {tooltipLines.map((line, i) => (
+                <div key={i} className="whitespace-nowrap">
+                  {line}
+                </div>
+              ))}
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
-    <div
-      ref={setNodeRef}
-      data-testid="reservation-bar"
-      data-reservation-id={reservation.id}
-      className={cn(
-        "relative z-10 flex h-full w-full min-h-[30px] flex-col justify-center gap-0.5 text-[11px] leading-tight text-white shadow-sm overflow-hidden",
-        colorClass,
-        isPlaceholder && "border-2 border-dashed opacity-80",
-        isDragging && "z-50 cursor-grabbing opacity-90",
-        hasConflict && "ring-2 ring-red-500 ring-offset-1 animate-pulse",
-        isGroupReservation && "border-l-4 border-l-amber-400",
-        isCheckInToday && "ring-2 ring-white/90 ring-offset-1 animate-pulse"
-      )}
-      style={{
-        gridRow,
-        gridColumn: `${gridColumnStart} / ${gridColumnEnd}`,
-        backgroundColor: bgColor,
-        clipPath,
-        WebkitClipPath: clipPath,
-      }}
-      title={tooltipText}
-      {...listeners}
-      {...attributes}
-    >
-      {/* Payment status edge indicator */}
-      {paymentEdgeColor && (
-        <div
-          className="absolute left-0 top-0 bottom-0 w-[3px]"
-          style={{ backgroundColor: paymentEdgeColor }}
-          aria-hidden
-        />
-      )}
-      <div className={cn("flex flex-col justify-center gap-0.5 min-w-0", paymentEdgeColor ? "pl-2 pr-2 py-0.5" : "px-2 py-0.5")}>
-        <span className="min-w-0 truncate font-medium text-[11px] leading-none">
-          {reservation.vip && <Star className="inline-block h-2.5 w-2.5 mr-0.5 text-yellow-300 fill-yellow-300" aria-label="VIP" />}
-          {displayName}
-          {bedsText && <span className="font-normal opacity-80">{bedsText}</span>}
-          {priceText && <span className="font-normal opacity-70 ml-1 truncate">{priceText}</span>}
-        </span>
-        {(paxText || sourceText) && (
-          <span className="min-w-0 truncate text-[10px] leading-none opacity-85">
-            {paxText}{paxText && sourceText ? " · " : ""}{sourceText}
+    <>
+      <div
+        ref={setRef}
+        data-testid="reservation-bar"
+        data-reservation-id={reservation.id}
+        className={cn(
+          "relative z-10 flex h-full w-full min-h-0 flex-col justify-center gap-0 text-[11px] leading-tight font-bold text-white shadow-sm overflow-hidden",
+          colorClass,
+          isPlaceholder && "border-2 border-dashed opacity-80",
+          isDragging && "z-50 cursor-grabbing opacity-90",
+          hasConflict && "ring-2 ring-red-500 ring-offset-1 animate-pulse",
+          isGroupReservation && "border-l-4 border-l-amber-400",
+          isCheckInToday && "ring-2 ring-white/90 ring-offset-1 animate-pulse"
+        )}
+        style={{
+          gridRow,
+          gridColumn: `${gridColumnStart} / ${gridColumnEnd}`,
+          backgroundColor: bgColor,
+          clipPath,
+          WebkitClipPath: clipPath,
+        }}
+        title={tooltipText}
+        onMouseEnter={showTooltip}
+        onMouseLeave={hideTooltip}
+        {...listeners}
+        {...attributes}
+      >
+        {/* Payment status edge indicator */}
+        {paymentEdgeColor && (
+          <div
+            className="absolute left-0 top-0 bottom-0 w-[2px]"
+            style={{ backgroundColor: paymentEdgeColor }}
+            aria-hidden
+          />
+        )}
+        <div className={cn("flex items-center justify-center min-h-0 min-w-0 overflow-hidden", paymentEdgeColor ? "pl-2 pr-1.5 py-0.5" : "px-1.5 py-0.5")}>
+          <span className="min-w-0 truncate text-[11px] leading-[1.2] font-bold tabular-nums">
+            {reservation.vip && <Star className="inline h-2.5 w-2.5 mr-0.5 text-yellow-300 fill-yellow-300 align-middle shrink-0" aria-label="VIP" />}
+            {barLabel}
           </span>
+        </div>
+        {/* Notes indicator - compact dot */}
+        {reservation.notes && (
+          <span
+            title={`Uwagi: ${reservation.notes}`}
+            className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-white/70"
+            aria-label="Ma uwagi"
+          />
         )}
       </div>
-      {/* Notes indicator - compact dot */}
-      {reservation.notes && (
-        <span
-          title={`Uwagi: ${reservation.notes}`}
-          className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-white/70"
-          aria-label="Ma uwagi"
-        />
-      )}
-    </div>
+      {tooltipEl}
+    </>
   );
 }

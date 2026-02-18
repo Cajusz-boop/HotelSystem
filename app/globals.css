@@ -163,6 +163,23 @@
   }
 }
 
+/* Tape chart: cienki scrollbar, widoczny gdy potrzebny */
+.tape-chart-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+.tape-chart-scroll-area::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.tape-chart-scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tape-chart-scroll-area::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+  border-radius: 4px;
+}
+
 /* Thin scrollbar for sidebar */
 .scrollbar-thin {
   scrollbar-width: thin;
