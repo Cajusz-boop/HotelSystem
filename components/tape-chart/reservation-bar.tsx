@@ -109,8 +109,8 @@ export function ReservationBar({
           ? "rgb(239 68 68)"
           : undefined;
 
-  /** Kształt jak w KWHotel: ukośne końce (check-in / check-out w ciągu dnia) */
-  const clipPath = "polygon(0% 100%, 5% 0%, 95% 0%, 100% 100%)";
+  /** Kształt jak w KWHotel: sześciokąt – ścięte ostrza po lewej i prawej stronie */
+  const clipPath = "polygon(6% 0%, 94% 0%, 100% 50%, 94% 100%, 6% 100%, 0% 50%)";
 
   return (
     <div
