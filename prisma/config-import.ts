@@ -151,7 +151,7 @@ async function main() {
         await prisma.surchargeType.upsert({
           where: { code: row.code as string },
           update: data,
-          create: { ...data, code: row.code as string, propertyId: prop.id },
+          create: { ...data, code: row.code as string, propertyId: prop.id } as Prisma.SurchargeTypeCreateInput,
         });
       }
     }
@@ -168,7 +168,7 @@ async function main() {
         await prisma.package.upsert({
           where: { code: row.code as string },
           update: data,
-          create: { ...data, code: row.code as string, propertyId: prop.id },
+          create: { ...data, code: row.code as string, propertyId: prop.id } as Prisma.PackageCreateInput,
         });
       }
     }
