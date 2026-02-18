@@ -1781,8 +1781,12 @@ export function TapeChart({
                     }}
                   >
                     <div
-                      className="h-full min-h-[12px] rounded-md border-2 border-dashed border-primary bg-primary/20 flex items-center justify-center"
-                      style={{ width: `${(ghostPlacement.barWidthPercent ?? 1) * 100}%` }}
+                      className="h-full min-h-[12px] border-2 border-dashed border-primary bg-primary/20 flex items-center justify-center"
+                      style={{
+                        width: `${(ghostPlacement.barWidthPercent ?? 1) * 100}%`,
+                        clipPath: "polygon(0% 100%, 5% 0%, 95% 0%, 100% 100%)",
+                        WebkitClipPath: "polygon(0% 100%, 5% 0%, 95% 0%, 100% 100%)",
+                      }}
                     >
                       <span className="text-xs text-primary font-medium truncate px-2">
                         {ghostPlacement.reservation.guestName}
