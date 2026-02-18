@@ -17,17 +17,26 @@ async function globalSetup(config: FullConfig) {
 
   try {
     await page.goto(`${baseURL}/login`, { waitUntil: "domcontentloaded", timeout: 25000 });
-    await page.getByLabel(/Email/i).waitFor({ state: "visible", timeout: 10000 });
-    await page.getByLabel(/Email/i).fill("admin@hotel.local");
-    await page.getByLabel(/Hasło|Password/i).fill("admin123");
-    await page.locator('button[type="submit"]').click();
     await page.waitForLoadState("networkidle").catch(() => null);
-    await Promise.race([
-      page.waitForURL((u) => !u.pathname.includes("/login"), { timeout: 30000 }),
-      page.locator('a[href="/front-office"]').first().waitFor({ state: "visible", timeout: 30000 }),
-    ]);
-    await page.goto(`${baseURL}/front-office`, { waitUntil: "domcontentloaded", timeout: 15000 });
-    await page.waitForSelector('[data-testid="room-row-101"]', { timeout: 10000 }).catch(() => null);
+
+    if (!page.url().includes("/login")) {
+      // authDisabled=true — przekierowano na /, nie trzeba się logować
+      await page.goto(`${baseURL}/front-office`, { waitUntil: "domcontentloaded", timeout: 15000 });
+    } else {
+      // Formularz logowania widoczny — zaloguj się
+      await page.getByLabel(/Email/i).waitFor({ state: "visible", timeout: 10000 });
+      await page.getByLabel(/Email/i).fill("admin@hotel.local");
+      await page.getByLabel(/Hasło|Password/i).fill("admin123");
+      await page.locator('button[type="submit"]').click();
+      await page.waitForLoadState("networkidle").catch(() => null);
+      await Promise.race([
+        page.waitForURL((u) => !u.pathname.includes("/login"), { timeout: 30000 }),
+        page.locator('a[href="/front-office"]').first().waitFor({ state: "visible", timeout: 30000 }),
+      ]);
+      await page.goto(`${baseURL}/front-office`, { waitUntil: "domcontentloaded", timeout: 15000 });
+    }
+
+    await page.waitForSelector('[data-testid="room-row-101"]', { timeout: 15000 }).catch(() => null);
     await page.context().storageState({ path: AUTH_FILE });
     console.log("Auth state saved to", AUTH_FILE);
   } catch (e) {

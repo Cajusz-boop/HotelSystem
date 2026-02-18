@@ -57,10 +57,14 @@ interface ReservationBarWithMenuProps {
   statusBg?: Record<string, string>;
   /** Czy rezerwacja ma konflikt (nakłada się z inną) */
   hasConflict?: boolean;
+  /** Czy check-in jest dziś – wizualne wyróżnienie */
+  isCheckInToday?: boolean;
   /** Callback do duplikowania rezerwacji */
   onDuplicate?: (reservation: Reservation) => void;
   /** Callback do przedłużenia pobytu */
   onExtendStay?: (reservation: Reservation, newCheckOut: string) => void;
+  /** Szerokość paska w px – do wyliczenia stałego clipPath */
+  barWidthPx?: number;
 }
 
 export function ReservationBarWithMenu({
@@ -81,8 +85,10 @@ export function ReservationBarWithMenu({
   onSplitClick,
   statusBg,
   hasConflict,
+  isCheckInToday = false,
   onDuplicate,
   onExtendStay,
+  barWidthPx,
 }: ReservationBarWithMenuProps) {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartPos = useRef<{ x: number; y: number } | null>(null);
@@ -432,6 +438,17 @@ export function ReservationBarWithMenu({
     }
   }, [reservation.id]);
 
+  const handleBarClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.ctrlKey || e.metaKey) return;
+      if (reservation.status === "CONFIRMED") {
+        e.stopPropagation();
+        handleCheckIn();
+      }
+    },
+    [reservation.status, handleCheckIn]
+  );
+
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
@@ -441,6 +458,7 @@ export function ReservationBarWithMenu({
           onTouchEnd={handleTouchEnd}
           onTouchMove={handleTouchMove}
           onTouchCancel={handleTouchEnd}
+          onClick={handleBarClick}
         >
           <ReservationBar
             reservation={reservation}
@@ -454,6 +472,8 @@ export function ReservationBarWithMenu({
             totalAmount={totalAmount}
             statusBg={statusBg}
             hasConflict={hasConflict}
+            isCheckInToday={isCheckInToday}
+            barWidthPx={barWidthPx}
           />
           {canResize && (
             <>

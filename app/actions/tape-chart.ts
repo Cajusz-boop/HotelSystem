@@ -30,6 +30,7 @@ export interface TapeChartRoom {
   number: string;
   type: string;
   status: string;
+  floor?: string;
   price?: number;
   reason?: string;
   roomFeatures?: string[];
@@ -165,6 +166,7 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
     number: string;
     type: string;
     status: string;
+    floor?: string | null;
     price: unknown;
     reason: string | null;
     roomFeatures?: unknown;
@@ -220,6 +222,7 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
           number: true,
           type: true,
           status: true,
+          floor: true,
           price: true,
           reason: true,
           roomFeatures: true,
@@ -260,6 +263,7 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
             number: true,
             type: true,
             status: true,
+            floor: true,
             price: true,
             reason: true,
             roomFeatures: true,
@@ -288,17 +292,18 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
     const fallbackRooms = await prisma.room.findMany({
       where: { activeForSale: true },
       orderBy: { number: "asc" },
-      select: {
-        id: true,
-        number: true,
-        type: true,
-        status: true,
-        price: true,
-        reason: true,
-        roomFeatures: true,
-        beds: true,
-      },
-    });
+        select: {
+          id: true,
+          number: true,
+          type: true,
+          status: true,
+          floor: true,
+          price: true,
+          reason: true,
+          roomFeatures: true,
+          beds: true,
+        },
+      });
     if (fallbackRooms.length > 0) rooms = fallbackRooms;
   }
 
@@ -335,6 +340,7 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
       number: r.number,
       type: r.type,
       status: r.status as string,
+      floor: r.floor ?? undefined,
       price: r.price != null ? Number(r.price) : undefined,
       reason: r.reason ?? undefined,
       roomFeatures: Array.isArray(r.roomFeatures)

@@ -38,9 +38,10 @@ test.describe("Housekeeping – widok mobilny / offline-first", () => {
 
   test("HK-04: zmiana statusu pokoju (CLEAN → DIRTY) – zapis, toast sukcesu", async ({ page }) => {
     await expect(page.getByText(/Housekeeping/i).first()).toBeVisible({ timeout: 5000 });
-    const dirtyBtn = page.getByRole("button", { name: "DIRTY" }).first();
+    // UI ma "Do sprzątania" (label), toast zwraca "DIRTY" (wartość enum)
+    const dirtyBtn = page.getByRole("button", { name: /Do sprzątania|DIRTY/i }).first();
     if (!(await dirtyBtn.isVisible())) {
-      test.skip();
+      test.skip(true, "Brak przycisku Do sprzątania");
       return;
     }
     await dirtyBtn.click();
@@ -52,7 +53,7 @@ test.describe("Housekeeping – widok mobilny / offline-first", () => {
   test("HK-05: etykiety priorytetów nie są obcięte (overflow) – wszystkie widoczne", async ({
     page,
   }) => {
-    await expect(page.getByText(/Gospodarka/i).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/Housekeeping|Pokoje|Priorytet/i).first()).toBeVisible({ timeout: 10000 });
 
     const firstRoom = page.locator("text=Priorytet:").first();
     if (!(await firstRoom.isVisible().catch(() => false))) {

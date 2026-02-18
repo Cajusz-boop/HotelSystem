@@ -17,7 +17,7 @@ test.describe("Dropdowny w dialogach", () => {
       ).toBeVisible({ timeout: 10000 });
     });
 
-    test("DLG-01: select „Rola" w dialogu otwiera się i wyświetla opcje nad formularzem", async ({
+    test("DLG-01: select Rola w dialogu otwiera się i wyświetla opcje nad formularzem", async ({
       page,
     }) => {
       await page.getByRole("button", { name: /Dodaj użytkownika/i }).click();
@@ -59,7 +59,7 @@ test.describe("Dropdowny w dialogach", () => {
       }
     });
 
-    test("DLG-03: po wyborze roli przycisk „Utwórz" jest widoczny i dostępny", async ({
+    test("DLG-03: po wyborze roli przycisk Utworz jest widoczny i dostepny", async ({
       page,
     }) => {
       await page.getByRole("button", { name: /Dodaj użytkownika/i }).click();
@@ -74,7 +74,7 @@ test.describe("Dropdowny w dialogach", () => {
       await expect(createBtn).toBeEnabled();
     });
 
-    test("DLG-04: dropdown roli nie zasłania pola „Hasło"", async ({
+    test("DLG-04: dropdown roli nie zaslania pola Haslo", async ({
       page,
     }) => {
       await page.getByRole("button", { name: /Dodaj użytkownika/i }).click();

@@ -9,6 +9,7 @@ export interface Room {
   number: string;
   type: string;
   status: RoomStatus;
+  floor?: string; // piętro (np. "1", "Parter")
   price?: number;
   reason?: string; // np. "Broken AC" dla OOO
   roomFeatures?: string[]; // np. ["balkon", "widok"] – cechy do filtrowania

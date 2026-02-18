@@ -40,6 +40,10 @@ interface ReservationBarProps {
   statusBg?: Record<string, string>;
   /** Czy rezerwacja ma konflikt (nakłada się z inną) */
   hasConflict?: boolean;
+  /** Czy check-in jest dziś – wizualne wyróżnienie */
+  isCheckInToday?: boolean;
+  /** Szerokość paska w px – do wyliczenia stałego clipPath (opcjonalnie) */
+  barWidthPx?: number;
 }
 
 export function ReservationBar({
@@ -54,11 +58,14 @@ export function ReservationBar({
   totalAmount,
   statusBg,
   hasConflict,
+  isCheckInToday = false,
+  barWidthPx,
 }: ReservationBarProps) {
   const displayName = privacyMode
     ? obscureGuestName(reservation.guestName) + " (Privacy)"
     : reservation.guestName;
-  const paxText = reservation.pax != null ? ` (${reservation.pax} os.)` : "";
+  const paxText = reservation.pax != null ? `${reservation.pax} os.` : "";
+  const sourceText = reservation.rateCodeName ?? reservation.rateCode ?? "";
   const bedsText = reservation.bedsBooked != null && reservation.bedsBooked > 1 ? ` · ${reservation.bedsBooked} ł.` : "";
   const timeText =
     reservation.checkInTime && reservation.checkOutTime
@@ -109,8 +116,11 @@ export function ReservationBar({
           ? "rgb(239 68 68)"
           : undefined;
 
-  /** Kształt jak w KWHotel: sześciokąt – ścięte ostrza po lewej i prawej stronie */
-  const clipPath = "polygon(6% 0%, 94% 0%, 100% 50%, 94% 100%, 6% 100%, 0% 50%)";
+  const POINT_DEPTH_PX = 10;
+  const pct = barWidthPx && barWidthPx > 0 ? Math.min(12, (POINT_DEPTH_PX / barWidthPx) * 100) : 6;
+  const r = (100 - pct).toFixed(1);
+  const l = pct.toFixed(1);
+  const clipPath = `polygon(${l}% 0%, ${r}% 0%, 100% 50%, ${r}% 100%, ${l}% 100%, 0% 50%)`;
 
   return (
     <div
@@ -118,12 +128,13 @@ export function ReservationBar({
       data-testid="reservation-bar"
       data-reservation-id={reservation.id}
       className={cn(
-        "relative z-10 flex h-full min-h-[28px] flex-col justify-center gap-0 text-[11px] leading-tight text-white shadow-sm overflow-hidden",
+        "relative z-10 flex h-full w-full min-h-[30px] flex-col justify-center gap-0.5 text-[11px] leading-tight text-white shadow-sm overflow-hidden",
         colorClass,
         isPlaceholder && "border-2 border-dashed opacity-80",
         isDragging && "z-50 cursor-grabbing opacity-90",
         hasConflict && "ring-2 ring-red-500 ring-offset-1 animate-pulse",
-        isGroupReservation && "border-l-4 border-l-amber-400"
+        isGroupReservation && "border-l-4 border-l-amber-400",
+        isCheckInToday && "ring-2 ring-white/90 ring-offset-1 animate-pulse"
       )}
       style={{
         gridRow,
@@ -144,16 +155,18 @@ export function ReservationBar({
           aria-hidden
         />
       )}
-      <div className={cn("flex flex-col justify-center gap-0 min-w-0", paymentEdgeColor ? "pl-2 pr-2 py-0.5" : "px-2 py-0.5")}>
+      <div className={cn("flex flex-col justify-center gap-0.5 min-w-0", paymentEdgeColor ? "pl-2 pr-2 py-0.5" : "px-2 py-0.5")}>
         <span className="min-w-0 truncate font-medium text-[11px] leading-none">
           {reservation.vip && <Star className="inline-block h-2.5 w-2.5 mr-0.5 text-yellow-300 fill-yellow-300" aria-label="VIP" />}
           {displayName}
-          <span className="font-normal opacity-80">
-            {paxText}
-            {bedsText}
-          </span>
-          {priceText && <span className="font-normal opacity-70 ml-1">{priceText}</span>}
+          {bedsText && <span className="font-normal opacity-80">{bedsText}</span>}
+          {priceText && <span className="font-normal opacity-70 ml-1 truncate">{priceText}</span>}
         </span>
+        {(paxText || sourceText) && (
+          <span className="min-w-0 truncate text-[10px] leading-none opacity-85">
+            {paxText}{paxText && sourceText ? " · " : ""}{sourceText}
+          </span>
+        )}
       </div>
       {/* Notes indicator - compact dot */}
       {reservation.notes && (
