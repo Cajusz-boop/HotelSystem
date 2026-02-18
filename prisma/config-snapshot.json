@@ -1,0 +1,757 @@
+{
+  "_exportedAt": "2026-02-18T07:57:12.810Z",
+  "_description": "Snapshot konfiguracji bazy. Generowany przez: npm run db:config:export",
+  "hotelConfig": {
+    "id": "default",
+    "name": "",
+    "address": null,
+    "postalCode": null,
+    "city": null,
+    "nip": null,
+    "krs": null,
+    "logoUrl": null,
+    "phone": null,
+    "email": null,
+    "website": null,
+    "defaultCheckInTime": null,
+    "defaultCheckOutTime": null,
+    "floors": null,
+    "customFormFields": null,
+    "reservationDictionaries": null,
+    "seasons": null,
+    "cancellationPolicyTemplates": null,
+    "authDisabled": true,
+    "updatedAt": "2026-02-16T12:30:50.492Z"
+  },
+  "cennikConfig": {
+    "id": "default",
+    "currency": "PLN",
+    "vatPercent": "0",
+    "pricesAreNetto": true,
+    "updatedAt": "2026-02-14T13:34:21.852Z"
+  },
+  "property": {
+    "name": "Obiekt główny",
+    "code": "default",
+    "reservationStatusColors": null,
+    "overbookingLimitPercent": 0,
+    "localTaxPerPersonPerNight": null,
+    "mealPrices": null,
+    "dunningConfig": null,
+    "housekeepingFloorAssignments": null
+  },
+  "documentNumbering": [
+    {
+      "id": "cmlqddum70001jsvz6knacn0t",
+      "documentType": "INVOICE",
+      "prefix": "FV",
+      "separator": "/",
+      "yearFormat": "YYYY",
+      "sequencePadding": 4,
+      "resetYearly": true,
+      "description": "Faktura VAT",
+      "exampleNumber": "FV/2026/0001",
+      "createdAt": "2026-02-17T08:57:20.959Z",
+      "updatedAt": "2026-02-17T08:57:20.959Z"
+    },
+    {
+      "id": "cmlqdklqu0005jsvzgmqg812m",
+      "documentType": "CORRECTION",
+      "prefix": "KOR",
+      "separator": "/",
+      "yearFormat": "YYYY",
+      "sequencePadding": 4,
+      "resetYearly": true,
+      "description": "Korekta faktury",
+      "exampleNumber": "KOR/2026/0001",
+      "createdAt": "2026-02-17T09:02:36.046Z",
+      "updatedAt": "2026-02-17T09:02:36.046Z"
+    },
+    {
+      "id": "cmlqdklvy0006jsvzqcvnb11h",
+      "documentType": "CONSOLIDATED_INVOICE",
+      "prefix": "FVZ",
+      "separator": "/",
+      "yearFormat": "YYYY",
+      "sequencePadding": 4,
+      "resetYearly": true,
+      "description": "Faktura zbiorcza",
+      "exampleNumber": "FVZ/2026/0001",
+      "createdAt": "2026-02-17T09:02:36.236Z",
+      "updatedAt": "2026-02-17T09:02:36.236Z"
+    },
+    {
+      "id": "cmlqdklwc0007jsvz6wn3bo94",
+      "documentType": "RECEIPT",
+      "prefix": "R",
+      "separator": "/",
+      "yearFormat": "YYYY",
+      "sequencePadding": 4,
+      "resetYearly": true,
+      "description": "Rachunek (nie-VAT)",
+      "exampleNumber": "R/2026/0001",
+      "createdAt": "2026-02-17T09:02:36.250Z",
+      "updatedAt": "2026-02-17T09:02:36.250Z"
+    },
+    {
+      "id": "cmlqdklx50008jsvzj8hlu16w",
+      "documentType": "ACCOUNTING_NOTE",
+      "prefix": "NK",
+      "separator": "/",
+      "yearFormat": "YYYY",
+      "sequencePadding": 4,
+      "resetYearly": true,
+      "description": "Nota księgowa",
+      "exampleNumber": "NK/2026/0001",
+      "createdAt": "2026-02-17T09:02:36.279Z",
+      "updatedAt": "2026-02-17T09:02:36.279Z"
+    },
+    {
+      "id": "cmlqdklxu0009jsvz8xjm2tcp",
+      "documentType": "PROFORMA",
+      "prefix": "PRO",
+      "separator": "/",
+      "yearFormat": "YYYY",
+      "sequencePadding": 4,
+      "resetYearly": true,
+      "description": "Proforma",
+      "exampleNumber": "PRO/2026/0001",
+      "createdAt": "2026-02-17T09:02:36.303Z",
+      "updatedAt": "2026-02-17T09:02:36.303Z"
+    }
+  ],
+  "invoiceTemplates": [
+    {
+      "id": "cmlqdfude0004jsvzpbqda6ia",
+      "templateType": "DEFAULT",
+      "logoBase64": null,
+      "logoUrl": null,
+      "logoWidth": 150,
+      "logoPosition": "left",
+      "sellerName": "Hotel",
+      "sellerAddress": null,
+      "sellerPostalCode": null,
+      "sellerCity": null,
+      "sellerNip": null,
+      "sellerPhone": null,
+      "sellerEmail": null,
+      "sellerWebsite": null,
+      "sellerBankName": null,
+      "sellerBankAccount": null,
+      "headerText": null,
+      "footerText": "Dziękujemy za skorzystanie z naszych usług.",
+      "paperSize": "A4",
+      "fontSize": 14,
+      "fontFamily": "system-ui, sans-serif",
+      "primaryColor": "#111111",
+      "accentColor": "#2563eb",
+      "paymentTermsText": null,
+      "thanksText": "Zapraszamy ponownie!",
+      "createdAt": "2026-02-17T08:58:53.952Z",
+      "updatedAt": "2026-02-17T08:58:53.952Z"
+    }
+  ],
+  "documentTemplates": [],
+  "fiscalReceiptTemplate": [],
+  "emailTemplates": [],
+  "roomTypes": [
+    {
+      "id": "cmlmcybvo0006bsvzgd0zp2cv",
+      "name": "Queen",
+      "basePrice": "300",
+      "sortOrder": 0,
+      "createdAt": "2026-02-14T13:34:12.130Z",
+      "updatedAt": "2026-02-17T08:41:24.744Z"
+    },
+    {
+      "id": "cmlmcybvt0007bsvzq4pz4vle",
+      "name": "Twin",
+      "basePrice": "300",
+      "sortOrder": 0,
+      "createdAt": "2026-02-14T13:34:12.137Z",
+      "updatedAt": "2026-02-17T08:41:34.754Z"
+    },
+    {
+      "id": "cmlmcybvz0008bsvzryohpg95",
+      "name": "Suite",
+      "basePrice": "300",
+      "sortOrder": 0,
+      "createdAt": "2026-02-14T13:34:12.141Z",
+      "updatedAt": "2026-02-17T08:41:31.803Z"
+    },
+    {
+      "id": "cmlp2od3z0000kgvz80hqopxy",
+      "name": "Standard",
+      "basePrice": "300",
+      "sortOrder": 0,
+      "createdAt": "2026-02-16T11:09:49.534Z",
+      "updatedAt": "2026-02-17T08:41:28.896Z"
+    },
+    {
+      "id": "cmlpd3t420000n4vzeya1jahi",
+      "name": "Comfort",
+      "basePrice": "300",
+      "sortOrder": 2,
+      "createdAt": "2026-02-16T16:01:46.271Z",
+      "updatedAt": "2026-02-17T08:41:37.742Z"
+    },
+    {
+      "id": "cmlpd3t4i0001n4vzp0w39g0z",
+      "name": "COMFORT - z widokiem na jezioro",
+      "basePrice": "300",
+      "sortOrder": 3,
+      "createdAt": "2026-02-16T16:01:46.286Z",
+      "updatedAt": "2026-02-17T08:41:41.238Z"
+    },
+    {
+      "id": "cmlpd3t4w0002n4vzmcoibyob",
+      "name": "SIELSKI- z widokiem na jezioro",
+      "basePrice": null,
+      "sortOrder": 4,
+      "createdAt": "2026-02-16T16:01:46.302Z",
+      "updatedAt": "2026-02-16T16:01:46.302Z"
+    },
+    {
+      "id": "cmlpd3t5c0003n4vzohquut8p",
+      "name": "Biuro",
+      "basePrice": null,
+      "sortOrder": 7,
+      "createdAt": "2026-02-16T16:01:46.317Z",
+      "updatedAt": "2026-02-16T16:01:46.317Z"
+    },
+    {
+      "id": "cmlpd3t5m0004n4vz5j9pricb",
+      "name": "SIELSKI",
+      "basePrice": null,
+      "sortOrder": 8,
+      "createdAt": "2026-02-16T16:01:46.328Z",
+      "updatedAt": "2026-02-16T16:01:46.328Z"
+    },
+    {
+      "id": "cmlpd3t5t0005n4vzh8d4j154",
+      "name": "COMFORT -5 os z widokiem na jezioro",
+      "basePrice": null,
+      "sortOrder": 9,
+      "createdAt": "2026-02-16T16:01:46.336Z",
+      "updatedAt": "2026-02-16T16:01:46.336Z"
+    }
+  ],
+  "rateCode": [],
+  "surchargeTypes": [],
+  "packages": [],
+  "derivedRateRules": [],
+  "minibarItems": [],
+  "permissions": [
+    {
+      "id": "cmlp5bynx0000asvzxkuzihlj",
+      "code": "reservation.create",
+      "name": "reservation.create",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.782Z",
+      "updatedAt": "2026-02-16T12:24:09.782Z"
+    },
+    {
+      "id": "cmlp5byop0002asvze0xx178k",
+      "code": "reservation.edit",
+      "name": "reservation.edit",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.814Z",
+      "updatedAt": "2026-02-16T12:24:09.814Z"
+    },
+    {
+      "id": "cmlp5byp50004asvzq892p86u",
+      "code": "reservation.cancel",
+      "name": "reservation.cancel",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.830Z",
+      "updatedAt": "2026-02-16T12:24:09.830Z"
+    },
+    {
+      "id": "cmlp5bypf0006asvzb1nccekl",
+      "code": "reservation.check_in",
+      "name": "reservation.check_in",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.842Z",
+      "updatedAt": "2026-02-16T12:24:09.842Z"
+    },
+    {
+      "id": "cmlp5bypr0008asvzvcm74jd8",
+      "code": "reservation.check_out",
+      "name": "reservation.check_out",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.854Z",
+      "updatedAt": "2026-02-16T12:24:09.854Z"
+    },
+    {
+      "id": "cmlp5byq3000aasvzfzb90sgg",
+      "code": "finance.view",
+      "name": "finance.view",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.867Z",
+      "updatedAt": "2026-02-16T12:24:09.867Z"
+    },
+    {
+      "id": "cmlp5byqe000casvzgbqw8lzp",
+      "code": "finance.post",
+      "name": "finance.post",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.878Z",
+      "updatedAt": "2026-02-16T12:24:09.878Z"
+    },
+    {
+      "id": "cmlp5byqp000easvz48pgg57d",
+      "code": "finance.void",
+      "name": "finance.void",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.888Z",
+      "updatedAt": "2026-02-16T12:24:09.888Z"
+    },
+    {
+      "id": "cmlp5byqy000gasvz4l3xk7j7",
+      "code": "finance.refund",
+      "name": "finance.refund",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.897Z",
+      "updatedAt": "2026-02-16T12:24:09.897Z"
+    },
+    {
+      "id": "cmlp5byr8000iasvzvhek2aik",
+      "code": "rates.view",
+      "name": "rates.view",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.907Z",
+      "updatedAt": "2026-02-16T12:24:09.907Z"
+    },
+    {
+      "id": "cmlp5byri000kasvztj3l543u",
+      "code": "rates.edit",
+      "name": "rates.edit",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.917Z",
+      "updatedAt": "2026-02-16T12:24:09.917Z"
+    },
+    {
+      "id": "cmlp5byrr000masvzb4fed9cx",
+      "code": "reports.view",
+      "name": "reports.view",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.926Z",
+      "updatedAt": "2026-02-16T12:24:09.926Z"
+    },
+    {
+      "id": "cmlp5bys4000oasvzgs29s3cl",
+      "code": "reports.export",
+      "name": "reports.export",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.939Z",
+      "updatedAt": "2026-02-16T12:24:09.939Z"
+    },
+    {
+      "id": "cmlp5bysf000qasvzk0rm3o6r",
+      "code": "reports.management",
+      "name": "reports.management",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.950Z",
+      "updatedAt": "2026-02-16T12:24:09.950Z"
+    },
+    {
+      "id": "cmlp5bysn000sasvz6z1kxzeq",
+      "code": "reports.kpi",
+      "name": "reports.kpi",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.959Z",
+      "updatedAt": "2026-02-16T12:24:09.959Z"
+    },
+    {
+      "id": "cmlp5bysw000uasvzh7yqdxrk",
+      "code": "reports.meals",
+      "name": "reports.meals",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.967Z",
+      "updatedAt": "2026-02-16T12:24:09.967Z"
+    },
+    {
+      "id": "cmlp5byt5000wasvzzwkez3e2",
+      "code": "reports.official",
+      "name": "reports.official",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.976Z",
+      "updatedAt": "2026-02-16T12:24:09.976Z"
+    },
+    {
+      "id": "cmlp5bytf000yasvz8qj47qid",
+      "code": "housekeeping.view",
+      "name": "housekeeping.view",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.986Z",
+      "updatedAt": "2026-02-16T12:24:09.986Z"
+    },
+    {
+      "id": "cmlp5byts0010asvzg6nl4cqc",
+      "code": "housekeeping.update_status",
+      "name": "housekeeping.update_status",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:09.999Z",
+      "updatedAt": "2026-02-16T12:24:09.999Z"
+    },
+    {
+      "id": "cmlp5byu40012asvzjauimjvq",
+      "code": "admin.users",
+      "name": "admin.users",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.011Z",
+      "updatedAt": "2026-02-16T12:24:10.011Z"
+    },
+    {
+      "id": "cmlp5byue0014asvztsiw69ib",
+      "code": "admin.settings",
+      "name": "admin.settings",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.021Z",
+      "updatedAt": "2026-02-16T12:24:10.021Z"
+    },
+    {
+      "id": "cmlp5byup0016asvzk60zmmqk",
+      "code": "owner.portal",
+      "name": "owner.portal",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.032Z",
+      "updatedAt": "2026-02-16T12:24:10.032Z"
+    },
+    {
+      "id": "cmlp5byuz0018asvzvvuu3tay",
+      "code": "module.dashboard",
+      "name": "module.dashboard",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.043Z",
+      "updatedAt": "2026-02-16T12:24:10.043Z"
+    },
+    {
+      "id": "cmlp5byvc001aasvzub4e5xz3",
+      "code": "module.front_office",
+      "name": "module.front_office",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.055Z",
+      "updatedAt": "2026-02-16T12:24:10.055Z"
+    },
+    {
+      "id": "cmlp5byvl001casvzodqnja94",
+      "code": "module.check_in",
+      "name": "module.check_in",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.064Z",
+      "updatedAt": "2026-02-16T12:24:10.064Z"
+    },
+    {
+      "id": "cmlp5byvu001easvzwzzei7sh",
+      "code": "module.guests",
+      "name": "module.guests",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.073Z",
+      "updatedAt": "2026-02-16T12:24:10.073Z"
+    },
+    {
+      "id": "cmlp5byw4001gasvz3rdysvlk",
+      "code": "module.companies",
+      "name": "module.companies",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.083Z",
+      "updatedAt": "2026-02-16T12:24:10.083Z"
+    },
+    {
+      "id": "cmlp5bywd001iasvzco84h8wy",
+      "code": "module.travel_agents",
+      "name": "module.travel_agents",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.092Z",
+      "updatedAt": "2026-02-16T12:24:10.092Z"
+    },
+    {
+      "id": "cmlp5bywm001kasvz4fkv197d",
+      "code": "module.rooms",
+      "name": "module.rooms",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.101Z",
+      "updatedAt": "2026-02-16T12:24:10.101Z"
+    },
+    {
+      "id": "cmlp5bywv001masvzyylbocs9",
+      "code": "module.rates",
+      "name": "module.rates",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.110Z",
+      "updatedAt": "2026-02-16T12:24:10.110Z"
+    },
+    {
+      "id": "cmlp5byx7001oasvzad0ci3kt",
+      "code": "module.housekeeping",
+      "name": "module.housekeeping",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.122Z",
+      "updatedAt": "2026-02-16T12:24:10.122Z"
+    },
+    {
+      "id": "cmlp5byxf001qasvz97o5q7yt",
+      "code": "module.finance",
+      "name": "module.finance",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.131Z",
+      "updatedAt": "2026-02-16T12:24:10.131Z"
+    },
+    {
+      "id": "cmlp5byxp001sasvz7meftx4e",
+      "code": "module.reports",
+      "name": "module.reports",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.140Z",
+      "updatedAt": "2026-02-16T12:24:10.140Z"
+    },
+    {
+      "id": "cmlp5byxy001uasvzsqwuhn0d",
+      "code": "module.channel_manager",
+      "name": "module.channel_manager",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.149Z",
+      "updatedAt": "2026-02-16T12:24:10.149Z"
+    },
+    {
+      "id": "cmlp5byy8001wasvzdbxhwib9",
+      "code": "module.parking",
+      "name": "module.parking",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.160Z",
+      "updatedAt": "2026-02-16T12:24:10.160Z"
+    },
+    {
+      "id": "cmlp5byyh001yasvz5hwuwtlz",
+      "code": "module.mice",
+      "name": "module.mice",
+      "description": null,
+      "createdAt": "2026-02-16T12:24:10.168Z",
+      "updatedAt": "2026-02-16T12:24:10.168Z"
+    }
+  ],
+  "rolePermissions": [
+    {
+      "id": "cmlp5byod0001asvzqr2ozna0",
+      "role": "MANAGER",
+      "permissionId": "cmlp5bynx0000asvzxkuzihlj",
+      "createdAt": "2026-02-16T12:24:09.803Z"
+    },
+    {
+      "id": "cmlp5byow0003asvznaxl9t5x",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byop0002asvze0xx178k",
+      "createdAt": "2026-02-16T12:24:09.823Z"
+    },
+    {
+      "id": "cmlp5bypa0005asvzddyzj0fd",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byp50004asvzq892p86u",
+      "createdAt": "2026-02-16T12:24:09.837Z"
+    },
+    {
+      "id": "cmlp5bypl0007asvzkdhfqg7c",
+      "role": "MANAGER",
+      "permissionId": "cmlp5bypf0006asvzb1nccekl",
+      "createdAt": "2026-02-16T12:24:09.848Z"
+    },
+    {
+      "id": "cmlp5bypy0009asvzvo9hr83n",
+      "role": "MANAGER",
+      "permissionId": "cmlp5bypr0008asvzvcm74jd8",
+      "createdAt": "2026-02-16T12:24:09.862Z"
+    },
+    {
+      "id": "cmlp5byq9000basvz4ly1hzrz",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byq3000aasvzfzb90sgg",
+      "createdAt": "2026-02-16T12:24:09.872Z"
+    },
+    {
+      "id": "cmlp5byqj000dasvzghsafybg",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byqe000casvzgbqw8lzp",
+      "createdAt": "2026-02-16T12:24:09.883Z"
+    },
+    {
+      "id": "cmlp5byqt000fasvzlx9wn6nw",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byqp000easvz48pgg57d",
+      "createdAt": "2026-02-16T12:24:09.892Z"
+    },
+    {
+      "id": "cmlp5byr2000hasvzalkgctvp",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byqy000gasvz4l3xk7j7",
+      "createdAt": "2026-02-16T12:24:09.901Z"
+    },
+    {
+      "id": "cmlp5byre000jasvzyc905xz7",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byr8000iasvzvhek2aik",
+      "createdAt": "2026-02-16T12:24:09.913Z"
+    },
+    {
+      "id": "cmlp5byrm000lasvzkefjd509",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byri000kasvztj3l543u",
+      "createdAt": "2026-02-16T12:24:09.921Z"
+    },
+    {
+      "id": "cmlp5byrz000nasvzlgbpzr14",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byrr000masvzb4fed9cx",
+      "createdAt": "2026-02-16T12:24:09.932Z"
+    },
+    {
+      "id": "cmlp5bys9000pasvzog3iwjbw",
+      "role": "MANAGER",
+      "permissionId": "cmlp5bys4000oasvzgs29s3cl",
+      "createdAt": "2026-02-16T12:24:09.944Z"
+    },
+    {
+      "id": "cmlp5bysj000rasvz56eev5r2",
+      "role": "MANAGER",
+      "permissionId": "cmlp5bysf000qasvzk0rm3o6r",
+      "createdAt": "2026-02-16T12:24:09.954Z"
+    },
+    {
+      "id": "cmlp5byss000tasvzx2qgnhc3",
+      "role": "MANAGER",
+      "permissionId": "cmlp5bysn000sasvz6z1kxzeq",
+      "createdAt": "2026-02-16T12:24:09.963Z"
+    },
+    {
+      "id": "cmlp5byt1000vasvzajv876k3",
+      "role": "MANAGER",
+      "permissionId": "cmlp5bysw000uasvzh7yqdxrk",
+      "createdAt": "2026-02-16T12:24:09.972Z"
+    },
+    {
+      "id": "cmlp5byta000xasvzab37tkye",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byt5000wasvzzwkez3e2",
+      "createdAt": "2026-02-16T12:24:09.981Z"
+    },
+    {
+      "id": "cmlp5bytl000zasvzkr76lrhn",
+      "role": "MANAGER",
+      "permissionId": "cmlp5bytf000yasvz8qj47qid",
+      "createdAt": "2026-02-16T12:24:09.993Z"
+    },
+    {
+      "id": "cmlp5bytz0011asvz3p4dhhye",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byts0010asvzg6nl4cqc",
+      "createdAt": "2026-02-16T12:24:10.005Z"
+    },
+    {
+      "id": "cmlp5byu90013asvzfmyggmc7",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byu40012asvzjauimjvq",
+      "createdAt": "2026-02-16T12:24:10.016Z"
+    },
+    {
+      "id": "cmlp5byuj0015asvzhlv2ig33",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byue0014asvztsiw69ib",
+      "createdAt": "2026-02-16T12:24:10.027Z"
+    },
+    {
+      "id": "cmlp5byuv0017asvz84n2lb2h",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byup0016asvzk60zmmqk",
+      "createdAt": "2026-02-16T12:24:10.038Z"
+    },
+    {
+      "id": "cmlp5byv70019asvz0l9qbv1q",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byuz0018asvzvvuu3tay",
+      "createdAt": "2026-02-16T12:24:10.048Z"
+    },
+    {
+      "id": "cmlp5byvg001basvzofuct952",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byvc001aasvzub4e5xz3",
+      "createdAt": "2026-02-16T12:24:10.060Z"
+    },
+    {
+      "id": "cmlp5byvp001dasvzp2ob4l7s",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byvl001casvzodqnja94",
+      "createdAt": "2026-02-16T12:24:10.068Z"
+    },
+    {
+      "id": "cmlp5byvy001fasvzeqrc6x4y",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byvu001easvzwzzei7sh",
+      "createdAt": "2026-02-16T12:24:10.077Z"
+    },
+    {
+      "id": "cmlp5byw8001hasvzh9ockltf",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byw4001gasvz3rdysvlk",
+      "createdAt": "2026-02-16T12:24:10.087Z"
+    },
+    {
+      "id": "cmlp5bywh001jasvzwq5s2pwt",
+      "role": "MANAGER",
+      "permissionId": "cmlp5bywd001iasvzco84h8wy",
+      "createdAt": "2026-02-16T12:24:10.096Z"
+    },
+    {
+      "id": "cmlp5bywr001lasvz3wndbp0y",
+      "role": "MANAGER",
+      "permissionId": "cmlp5bywm001kasvz4fkv197d",
+      "createdAt": "2026-02-16T12:24:10.106Z"
+    },
+    {
+      "id": "cmlp5byx2001nasvzgdykmgbv",
+      "role": "MANAGER",
+      "permissionId": "cmlp5bywv001masvzyylbocs9",
+      "createdAt": "2026-02-16T12:24:10.117Z"
+    },
+    {
+      "id": "cmlp5byxb001pasvzrhkvx1ir",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byx7001oasvzad0ci3kt",
+      "createdAt": "2026-02-16T12:24:10.126Z"
+    },
+    {
+      "id": "cmlp5byxk001rasvz7d9js5r3",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byxf001qasvz97o5q7yt",
+      "createdAt": "2026-02-16T12:24:10.135Z"
+    },
+    {
+      "id": "cmlp5byxt001tasvz0qn9h7cu",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byxp001sasvz7meftx4e",
+      "createdAt": "2026-02-16T12:24:10.145Z"
+    },
+    {
+      "id": "cmlp5byy3001vasvzfb7ip8x4",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byxy001uasvzsqwuhn0d",
+      "createdAt": "2026-02-16T12:24:10.154Z"
+    },
+    {
+      "id": "cmlp5byyd001xasvzjx82mkzl",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byy8001wasvzdbxhwib9",
+      "createdAt": "2026-02-16T12:24:10.164Z"
+    },
+    {
+      "id": "cmlp5byym001zasvz53olyadk",
+      "role": "MANAGER",
+      "permissionId": "cmlp5byyh001yasvz5hwuwtlz",
+      "createdAt": "2026-02-16T12:24:10.173Z"
+    }
+  ],
+  "roleGroups": [],
+  "roleGroupPermissions": [],
+  "loyaltyProgram": null,
+  "loyaltyTiers": [],
+  "voucherTemplates": []
+}

@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { createAuditLog, getClientIp } from "@/lib/audit";
+import { autoExportConfigSnapshot } from "@/lib/config-snapshot";
 import {
   roomStatusSchema,
   createRoomSchema,
@@ -929,6 +930,7 @@ export async function ensureRoomTypes(): Promise<ActionResult> {
         update: {},
       });
     }
+    autoExportConfigSnapshot();
     return { success: true, data: undefined };
   } catch (e) {
     return {
@@ -963,6 +965,7 @@ export async function updateRoomTypeBasePrice(
       newValue: { basePrice } as unknown as Record<string, unknown>,
       ipAddress: ip,
     });
+    autoExportConfigSnapshot();
     revalidatePath("/cennik");
     revalidatePath("/front-office");
     return { success: true, data: undefined };
@@ -986,6 +989,7 @@ export async function updateRoomTypeName(
       where: { id: roomTypeId },
       data: { name: trimmed },
     });
+    autoExportConfigSnapshot();
     revalidatePath("/cennik");
     revalidatePath("/front-office");
     return { success: true, data: undefined };
@@ -1010,6 +1014,7 @@ export async function updateRoomTypeSortOrder(
       where: { id: roomTypeId },
       data: { sortOrder },
     });
+    autoExportConfigSnapshot();
     revalidatePath("/cennik");
     revalidatePath("/front-office");
     return { success: true, data: undefined };

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { createAuditLog, getClientIp } from "@/lib/audit";
 import { headers } from "next/headers";
 import { Prisma } from "@prisma/client";
+import { autoExportConfigSnapshot } from "@/lib/config-snapshot";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
@@ -188,6 +189,8 @@ export async function updateLoyaltyProgram(
       ipAddress: ip,
     });
 
+    autoExportConfigSnapshot();
+
     return { success: true, data: undefined };
   } catch (e) {
     return {
@@ -273,6 +276,7 @@ async function createDefaultTiers(): Promise<void> {
       update: {},
     });
   }
+  autoExportConfigSnapshot();
 }
 
 /**
@@ -390,6 +394,8 @@ export async function updateLoyaltyTier(
       newValue: data,
       ipAddress: ip,
     });
+
+    autoExportConfigSnapshot();
 
     return { success: true, data: undefined };
   } catch (e) {

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { createAuditLog, getClientIp } from "@/lib/audit";
+import { autoExportConfigSnapshot } from "@/lib/config-snapshot";
 import { blindDropSchema } from "@/lib/validations/schemas";
 import {
   isFiscalEnabled,
@@ -314,6 +315,7 @@ export async function updateDocumentNumberingConfig(
 
     revalidatePath("/finance");
     revalidatePath("/ustawienia");
+    autoExportConfigSnapshot();
 
     return {
       success: true,
@@ -5530,6 +5532,7 @@ export async function updateInvoiceTemplate(
 
     revalidatePath("/finance");
     revalidatePath("/ustawienia");
+    autoExportConfigSnapshot();
 
     return {
       success: true,
@@ -5586,6 +5589,7 @@ export async function removeInvoiceLogo(
 
     revalidatePath("/finance");
     revalidatePath("/ustawienia");
+    autoExportConfigSnapshot();
 
     return { success: true, data: undefined };
   } catch (e) {
@@ -5712,6 +5716,7 @@ export async function updateFiscalReceiptTemplate(
 
     revalidatePath("/finance");
     revalidatePath("/ustawienia");
+    autoExportConfigSnapshot();
 
     return {
       success: true,
@@ -6056,6 +6061,7 @@ export async function updateDocumentTemplate(
     });
 
     revalidatePath("/ustawienia");
+    autoExportConfigSnapshot();
 
     return {
       success: true,

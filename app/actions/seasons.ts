@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { autoExportConfigSnapshot } from "@/lib/config-snapshot";
 
 export type SeasonType = "PEAK" | "OFF_PEAK";
 
@@ -76,6 +77,7 @@ export async function updateSeasons(seasons: SeasonEntry[]): Promise<
       seasons: normalized as object,
     },
   });
+  autoExportConfigSnapshot();
   return { success: true };
 }
 

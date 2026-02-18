@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { createAuditLog, getClientIp } from "@/lib/audit";
 import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { autoExportConfigSnapshot } from "@/lib/config-snapshot";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
@@ -93,6 +94,7 @@ export async function updateMinibarItem(
         ...(data.unit != null && { unit: data.unit }),
       },
     });
+    autoExportConfigSnapshot();
     revalidatePath("/housekeeping");
     return {
       success: true,

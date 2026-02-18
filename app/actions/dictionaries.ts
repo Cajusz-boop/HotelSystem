@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { autoExportConfigSnapshot } from "@/lib/config-snapshot";
 
 export type DictionaryEntry = { code: string; label: string };
 
@@ -163,5 +164,6 @@ export async function updateReservationDictionaries(
       reservationDictionaries: normalized as object,
     },
   });
+  autoExportConfigSnapshot();
   return { success: true };
 }
