@@ -164,7 +164,7 @@ const ROW_HEIGHT_PX = 34;
 const ROOM_LABEL_WIDTH_PX = 120;
 const HEADER_ROW_PX = 40;
 /** Margines wewnętrzny paska – 1px dla minimalnej przerwy przy stylu podziału dni (paski równo z kwadracikami) */
-const BAR_PADDING_PX = 1;
+const BAR_PADDING_PX = 2; /* pionowy odstęp pasków od krawędzi wiersza (jak w KWHotel) */
 
 /** Skale widoku grafiku – określają liczbę dni i szerokość kolumny */
 type ViewScale = "day" | "week" | "month" | "year";
@@ -1674,7 +1674,7 @@ export function TapeChart({
                     pricePerNight != null && pricePerNight > 0
                       ? nights * pricePerNight
                       : undefined;
-                  const padding = styleSplitByDay ? BAR_PADDING_PX : 0;
+                  const padding = BAR_PADDING_PX; /* zawsze odstęp, żeby paski nie były przycięte od góry */
                   // Source-based coloring
                   const reservationSource = reservation.rateCodeName ?? reservation.rateCode ?? "Recepcja";
                   const sourceColor = sourceColors.get(reservationSource);
@@ -1700,7 +1700,7 @@ export function TapeChart({
                     style={{
                       gridColumn: `${gridColumnStart} / ${gridColumnEnd}`,
                       gridRow,
-                      padding: padding,
+                      padding: `${padding}px ${padding}px`,
                       minHeight: ROW_HEIGHT_PX - padding * 2,
                     }}
                     onClick={(e) => {
@@ -1792,7 +1792,7 @@ export function TapeChart({
                     style={{
                       gridColumn: `${ghostPlacement.gridColumnStart} / ${ghostPlacement.gridColumnEnd}`,
                       gridRow: ghostPlacement.gridRow,
-                      padding: styleSplitByDay ? BAR_PADDING_PX : 0,
+                      padding: `${BAR_PADDING_PX}px`,
                     }}
                   >
                     <div
@@ -1800,8 +1800,8 @@ export function TapeChart({
                       style={{
                         left: `${(ghostPlacement.barLeftPercent ?? 0) * 100}%`,
                         width: `${(ghostPlacement.barWidthPercent ?? 1) * 100}%`,
-                        clipPath: "polygon(0% 100%, 5% 0%, 95% 0%, 100% 100%)",
-                        WebkitClipPath: "polygon(0% 100%, 5% 0%, 95% 0%, 100% 100%)",
+                        clipPath: "polygon(6% 0%, 94% 0%, 100% 50%, 94% 100%, 6% 100%, 0% 50%)",
+                        WebkitClipPath: "polygon(6% 0%, 94% 0%, 100% 50%, 94% 100%, 6% 100%, 0% 50%)",
                       }}
                     >
                       <span className="text-xs text-primary font-medium truncate px-2">
