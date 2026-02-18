@@ -70,6 +70,7 @@ import { MonthlyOverviewDialog } from "./monthly-overview-dialog";
 import { FloorPlanDialog } from "./floor-plan-dialog";
 import { DailyMovementsDialog } from "./daily-movements-dialog";
 import { QuickStatsDialog, type QuickStatsTab } from "./quick-stats-dialog";
+import { TapeChartOverviewBar } from "./tape-chart-overview-bar";
 import {
   Dialog,
   DialogContent,
@@ -99,6 +100,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   rowHeightPx: number;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `room-${room.number}` });
+  const isDirty = room.status === "DIRTY";
   return (
     <>
       <div
@@ -106,7 +108,8 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
         data-testid={`room-row-${room.number}`}
         className={cn(
           "sticky left-0 z-[60] flex items-center gap-1.5 border-b border-r border-[hsl(var(--kw-grid-border))] px-2 py-1",
-          isOver ? "bg-primary/10 ring-1 ring-primary" : "bg-card"
+          isOver ? "bg-primary/10 ring-1 ring-primary" : "bg-card",
+          isDirty && "bg-amber-50/80 dark:bg-amber-950/30"
         )}
         style={{
           gridColumn: 1,
@@ -134,7 +137,8 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
             saturday && "kw-cell-saturday",
             sunday && "kw-cell-sunday",
             isBlocked && "bg-destructive/20 cursor-not-allowed opacity-70",
-            isFocused && "ring-2 ring-inset ring-primary bg-primary/10"
+            isFocused && "ring-2 ring-inset ring-primary bg-primary/10",
+            isDirty && "bg-amber-50/80 dark:bg-amber-950/30"
           )}
           style={{
             gridColumn: colIdx + 2,
@@ -159,12 +163,11 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   );
 });
 
-/** Wysokość rzędu – 34px: kompaktowy widok, żeby zmieścić więcej pokoi bez scrollowania */
-const ROW_HEIGHT_PX = 34;
-const ROOM_LABEL_WIDTH_PX = 120;
+/** Wysokość rzędu – 42px: czytelniejsze paski z drugą linią (PAX, źródło) */
+const ROW_HEIGHT_PX = 42;
+const ROOM_LABEL_WIDTH_PX = 140;
 const HEADER_ROW_PX = 40;
-/** Margines wewnętrzny paska – 1px dla minimalnej przerwy przy stylu podziału dni (paski równo z kwadracikami) */
-const BAR_PADDING_PX = 2; /* pionowy odstęp pasków od krawędzi wiersza (jak w KWHotel) */
+const BAR_PADDING_PX = 2;
 
 /** Skale widoku grafiku – określają liczbę dni i szerokość kolumny */
 type ViewScale = "day" | "week" | "month" | "year";
@@ -309,7 +312,7 @@ export function TapeChart({
   const [statusBg, setStatusBg] = useState<Record<string, string> | null>(null);
   const [statusTab, setStatusTab] = useState<"statuses" | "custom" | "sources" | "prices">("statuses");
   const [colorMode, setColorMode] = useState<"status" | "source">("status");
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(true);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [footerOpen, setFooterOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -379,8 +382,19 @@ export function TapeChart({
   }, [allRooms]);
 
   const [roomFeaturesFilter, setRoomFeaturesFilter] = useState<string[]>([]);
+  const [roomTypeFilter, setRoomTypeFilter] = useState<string>("");
+  const [floorFilter, setFloorFilter] = useState<string>("");
   const [showOnlyFreeRooms, setShowOnlyFreeRooms] = useState(false);
   const [highlightConflicts, setHighlightConflicts] = useState(false);
+
+  const roomTypeOptions = useMemo(() => {
+    const types = [...new Set(allRooms.map((r) => r.type).filter(Boolean))].sort();
+    return types;
+  }, [allRooms]);
+  const floorOptions = useMemo(() => {
+    const floors = [...new Set(allRooms.map((r) => r.floor ?? "").filter(Boolean))].sort();
+    return floors;
+  }, [allRooms]);
 
   // Zbiór rezerwacji z konfliktami (nakładające się na ten sam pokój)
   const conflictingReservationIds = useMemo(() => {
@@ -442,6 +456,8 @@ export function TapeChart({
       if (filter && !room.number.toLowerCase().includes(filter) && !room.type.toLowerCase().includes(filter)) {
         return false;
       }
+      if (roomTypeFilter && room.type !== roomTypeFilter) return false;
+      if (floorFilter && (room.floor ?? "") !== floorFilter) return false;
       if (roomFeaturesFilter.length > 0) {
         const roomFeat = room.roomFeatures ?? [];
         const hasAll = roomFeaturesFilter.every((f) => roomFeat.includes(f));
@@ -462,7 +478,7 @@ export function TapeChart({
         }
         return a.number.localeCompare(b.number, undefined, { numeric: true, sensitivity: "base" });
       });
-  }, [allRooms, roomFilter, roomFeaturesFilter, groupingEnabled, showOnlyFreeRooms, roomsWithReservations]);
+  }, [allRooms, roomFilter, roomTypeFilter, floorFilter, roomFeaturesFilter, groupingEnabled, showOnlyFreeRooms, roomsWithReservations]);
 
   const visibleRoomNumbers = useMemo(
     () => new Set(displayRooms.map((room) => room.number)),
@@ -771,7 +787,7 @@ export function TapeChart({
     return map;
   }, [dates]);
 
-  /** Konwencja KWHotel: pasek od połowy dnia zameldowania do połowy dnia wymeldowania – bez nakładania (1–2 maja i 2–3 maja stykają się w połowie 2.). */
+  /** Konwencja KWHotel: pasek od połowy dnia zameldowania do połowy dnia wymeldowania. */
   const reservationPlacements = useMemo(() => {
     return filteredReservations
       .map((res) => {
@@ -802,7 +818,6 @@ export function TapeChart({
 
   const roomByNumber = useMemo(() => new Map(allRooms.map((r) => [r.number, r])), [allRooms]);
 
-  // Ghost preview (konwencja KWHotel: od połowy dnia check-in do połowy dnia check-out)
   const ghostPlacement = useMemo(() => {
     if (!ghostPreview || !activeId) return null;
     const row = roomRowIndex.get(ghostPreview.roomNumber);
@@ -1457,6 +1472,36 @@ export function TapeChart({
                 ))}
               </select>
             )}
+            {roomTypeOptions.length > 0 && (
+              <select
+                name="roomType"
+                data-testid="room-type-filter"
+                value={roomTypeFilter}
+                onChange={(e) => setRoomTypeFilter(e.target.value)}
+                className="h-7 rounded-md border border-input bg-background px-2 text-xs"
+                title="Typ pokoju"
+              >
+                <option value="">Wszystkie typy</option>
+                {roomTypeOptions.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            )}
+            {floorOptions.length > 0 && (
+              <select
+                name="floor"
+                data-testid="floor-filter"
+                value={floorFilter}
+                onChange={(e) => setFloorFilter(e.target.value)}
+                className="h-7 rounded-md border border-input bg-background px-2 text-xs"
+                title="Piętro"
+              >
+                <option value="">Wszystkie piętra</option>
+                {floorOptions.map((f) => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </select>
+            )}
             {allAvailableFeatures.length > 0 && (
               <div className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground">Cechy:</span>
@@ -1517,12 +1562,13 @@ export function TapeChart({
         )}
       </header>
 
-      {/* Grid wrapper – scrollable; przeciąganie komórki = przewijanie w lewo/prawo; min-height żeby kratka/paski były widoczne */}
-      <div
-        ref={scrollContainerRef}
-        className="flex-1 overflow-auto p-1.5 sm:p-2 md:p-3 min-h-0 min-h-[360px]"
-        style={{ willChange: "scroll-position" }}
-      >
+      {/* Grid wrapper + overview bar – scrollable; przeciąganie komórki = przewijanie w lewo/prawo */}
+      <div className="flex flex-1 min-h-0 min-h-[360px]">
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 overflow-auto p-1.5 sm:p-2 md:p-3 min-w-0"
+          style={{ willChange: "scroll-position" }}
+        >
         {displayRooms.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 py-16 text-center text-muted-foreground">
             <BedDouble className="h-12 w-12 opacity-50" />
@@ -1637,16 +1683,22 @@ export function TapeChart({
                   setCreateSheetOpen(true);
                 }}
               >
-                <div className="flex items-center gap-1.5 min-w-0" title={room.type}>
-                  <span className="font-bold text-xs leading-none">{room.number}</span>
-                  {/widok|jezioro/i.test(room.type) || (room.roomFeatures ?? []).some((f) => /widok|jezioro/i.test(f)) ? (
-                    <Waves className="h-3 w-3 text-blue-500 shrink-0" aria-label="Z widokiem na jezioro" />
-                  ) : null}
-                  {hostelMode && (
-                    <span className="text-[10px] text-muted-foreground leading-none">
-                      ({occupancyToday.get(room.number) ?? 0})
-                    </span>
-                  )}
+                <div className="flex flex-col min-w-0 gap-0.5 flex-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-bold text-xs leading-none">{room.number}</span>
+                    {/widok|jezioro/i.test(room.type) || (room.roomFeatures ?? []).some((f) => /widok|jezioro/i.test(f)) ? (
+                      <Waves className="h-3 w-3 text-blue-500 shrink-0" aria-label="Z widokiem na jezioro" />
+                    ) : null}
+                    {hostelMode && (
+                      <span className="text-[10px] text-muted-foreground leading-none">
+                        ({occupancyToday.get(room.number) ?? 0})
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground leading-none">
+                    {room.floor && <span>{room.floor}</span>}
+                    <span className="truncate" title={room.type}>{room.type}</span>
+                  </div>
                 </div>
                 <RoomStatusIcon status={room.status} showLabel={false} compact />
               </RoomRowDroppable>
@@ -1674,7 +1726,8 @@ export function TapeChart({
                     pricePerNight != null && pricePerNight > 0
                       ? nights * pricePerNight
                       : undefined;
-                  const padding = BAR_PADDING_PX; /* zawsze odstęp, żeby paski nie były przycięte od góry */
+                  const barHeightPx = Math.round(ROW_HEIGHT_PX * 0.9);
+                  const barWidthPx = Math.round(barWidthPercent * (gridColumnEnd - gridColumnStart) * effectiveColumnWidthPx);
                   // Source-based coloring
                   const reservationSource = reservation.rateCodeName ?? reservation.rateCode ?? "Recepcja";
                   const sourceColor = sourceColors.get(reservationSource);
@@ -1700,8 +1753,9 @@ export function TapeChart({
                     style={{
                       gridColumn: `${gridColumnStart} / ${gridColumnEnd}`,
                       gridRow,
-                      padding: `${padding}px ${padding}px`,
-                      minHeight: ROW_HEIGHT_PX - padding * 2,
+                      alignSelf: "center",
+                      height: barHeightPx, /* 90% wysokości wiersza */
+                      minHeight: barHeightPx,
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1719,12 +1773,18 @@ export function TapeChart({
                             return next;
                           });
                         } else {
-                          // Normal click - open sheet and clear multi-select
-                          setSelectedReservationIds(new Set());
-                          setSelectedReservation(reservation);
-                          setEditInitialTab("rozliczenie");
-                          setSheetOpen(true);
-                          setHighlightedReservationId(null);
+                          const clickedDate = getDateFromClientX(e.clientX);
+                          if (clickedDate === reservation.checkOut) {
+                            setNewReservationContext({ roomNumber: reservation.room, checkIn: reservation.checkOut });
+                            setCreateSheetOpen(true);
+                            setSelectedReservationIds(new Set());
+                          } else {
+                            setSelectedReservationIds(new Set());
+                            setSelectedReservation(reservation);
+                            setEditInitialTab("rozliczenie");
+                            setSheetOpen(true);
+                            setHighlightedReservationId(null);
+                          }
                         }
                       }
                     }}
@@ -1745,6 +1805,8 @@ export function TapeChart({
                       onSplitClick={(r) => setSplitDialogReservation(r)}
                       statusBg={effectiveStatusBg}
                       hasConflict={conflictingReservationIds.has(reservation.id)}
+                      isCheckInToday={reservation.checkIn === todayStr && reservation.status === "CONFIRMED"}
+                      barWidthPx={barWidthPx}
                       onEdit={(r, initialTab) => {
                         setSelectedReservation(r);
                         setEditInitialTab(initialTab ?? "rozliczenie");
@@ -1792,7 +1854,9 @@ export function TapeChart({
                     style={{
                       gridColumn: `${ghostPlacement.gridColumnStart} / ${ghostPlacement.gridColumnEnd}`,
                       gridRow: ghostPlacement.gridRow,
-                      padding: `${BAR_PADDING_PX}px`,
+                      alignSelf: "center",
+                      height: Math.round(ROW_HEIGHT_PX * 0.9),
+                      minHeight: Math.round(ROW_HEIGHT_PX * 0.9),
                     }}
                   >
                     <div
@@ -1813,6 +1877,17 @@ export function TapeChart({
               </div>
             </div>
         </DndContext>
+        )}
+        </div>
+        {displayRooms.length > 0 && (
+          <TapeChartOverviewBar
+            dates={dates}
+            reservations={filteredReservations}
+            roomsCount={displayRooms.length}
+            todayStr={todayStr}
+            columnWidthPx={COLUMN_WIDTH_PX}
+            scrollContainerRef={scrollContainerRef}
+          />
         )}
       </div>
       <section className="border-t border-[hsl(var(--kw-grid-border))] bg-[hsl(var(--kw-room-label-bg))] no-print" data-hide-print="true">

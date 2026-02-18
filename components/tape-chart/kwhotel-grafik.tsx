@@ -14,6 +14,13 @@ import type { Room, Reservation, ReservationGroupSummary, ReservationStatus } fr
 import { cn } from "@/lib/utils";
 
 const MIN_COLUMN_WIDTH_PX = 64;
+const BAR_POINT_DEPTH_PX = 10;
+function barClipPath(widthPx: number): string {
+  const pct = widthPx > 0 ? Math.min(12, (BAR_POINT_DEPTH_PX / widthPx) * 100) : 6;
+  const r = (100 - pct).toFixed(1);
+  const l = pct.toFixed(1);
+  return `polygon(${l}% 0%, ${r}% 0%, 100% 50%, ${r}% 100%, ${l}% 100%, 0% 50%)`;
+}
 const ROW_HEIGHT_PX = 56;
 const ROOM_LABEL_WIDTH_PX = 180;
 const HEADER_ROW_PX = 48;
@@ -298,6 +305,23 @@ export function KwhotelGrafik({
     setSelectedReservation(res);
     setSheetOpen(true);
   }, []);
+
+  /** Klik na pasek: jeśli w kolumnie dnia wymeldowania → nowa rezerwacja (pokój wolny), inaczej → edycja */
+  const handleBarOrCellClick = useCallback((reservation: Reservation, e: React.MouseEvent) => {
+    const gridEl = gridWrapperRef.current;
+    if (!gridEl) {
+      handleBarClick(reservation);
+      return;
+    }
+    const rect = gridEl.getBoundingClientRect();
+    const colIdx = Math.floor((e.clientX - rect.left - ROOM_LABEL_WIDTH_PX) / MIN_COLUMN_WIDTH_PX);
+    const clickedDate = dates[Math.max(0, Math.min(colIdx, dates.length - 1))];
+    if (clickedDate === reservation.checkOut) {
+      handleCellClick(reservation.room, reservation.checkOut);
+    } else {
+      handleBarClick(reservation);
+    }
+  }, [dates, handleBarClick, handleCellClick]);
   const handleZarezerwuj = () => {
     const defaultRoom = filteredRooms[0] ?? allRooms[0];
     if (defaultRoom) {
@@ -552,7 +576,7 @@ export function KwhotelGrafik({
                     const barLeft = Math.round(left + padding);
                     const barTop = Math.round(top + padding);
                     const barWidth = Math.max(0, Math.round(width - padding * 2));
-                    const barHeight = Math.max(rowHeightPx - padding * 2, 18);
+                    const barHeight = Math.max(Math.round((rowHeightPx - padding * 2) * 0.9), 14);
                     const paxSuffix = reservation.pax != null ? ` -${reservation.pax}os-` : "";
                     const displayName =
                       reservation.guestName.length > 28
@@ -565,7 +589,7 @@ export function KwhotelGrafik({
                         tabIndex={0}
                         data-reservation-id={reservation.id}
                         className={cn(
-                          "absolute pointer-events-auto cursor-pointer overflow-hidden flex items-center px-2 text-white text-[11px] font-medium shadow-sm hover:opacity-95 hover:ring-2 hover:ring-primary/50 rounded-full",
+                          "absolute pointer-events-auto cursor-pointer overflow-hidden flex items-center px-2 text-white text-[11px] font-medium shadow-sm hover:opacity-95 hover:ring-2 hover:ring-primary/50",
                           highlightedReservationId === reservation.id && "ring-2 ring-yellow-300"
                         )}
                         style={{
@@ -574,12 +598,13 @@ export function KwhotelGrafik({
                           width: barWidth,
                           height: barHeight,
                           backgroundColor: bg,
-                          borderRadius: "9999px",
+                          clipPath: barClipPath(barWidth),
+                          WebkitClipPath: barClipPath(barWidth),
                         }}
                         title={`${reservation.guestName} – kliknij aby edytować / meldować`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleBarClick(reservation);
+                          handleBarOrCellClick(reservation, e);
                         }}
                         onKeyDown={(e) => {
                           if (e.key === "Enter" || e.key === " ") {

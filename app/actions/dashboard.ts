@@ -32,6 +32,14 @@ export interface ArrivalItem {
   status: string;
 }
 
+export interface DepartureItem {
+  id: string;
+  guestName: string;
+  room: string;
+  checkOut: string;
+  status: string;
+}
+
 export interface DashboardData {
   vipArrivals: ArrivalItem[];
   dirtyRooms: { number: string; type: string }[];
@@ -39,6 +47,7 @@ export interface DashboardData {
   /** Liczba pokoi OOO zgłoszonych dziś (updatedAt >= start of today) */
   oooNewTodayCount: number;
   todayCheckIns: ArrivalItem[];
+  todayCheckOuts: DepartureItem[];
 }
 
 /** Wewnętrzna logika dashboardu (cacheable – parametry zamiast cookies). */
@@ -54,7 +63,7 @@ async function _getDashboardDataInternal(propertyId: string | null, todayDateStr
   startOfToday.setHours(0, 0, 0, 0);
 
   const baseWhere = propertyId ? { propertyId } : {};
-  const [arrivals, dirtyRooms, oooRooms] = await Promise.all([
+  const [arrivals, departures, dirtyRooms, oooRooms] = await Promise.all([
     prisma.reservation.findMany({
       where: {
         status: { in: ["CONFIRMED", "CHECKED_IN"] },
@@ -62,6 +71,14 @@ async function _getDashboardDataInternal(propertyId: string | null, todayDateStr
       },
       include: { guest: true, room: true },
       orderBy: { checkIn: "asc" },
+    }),
+    prisma.reservation.findMany({
+      where: {
+        status: { in: ["CONFIRMED", "CHECKED_IN"] },
+        checkOut: { gte: today, lt: dayAfter },
+      },
+      include: { guest: true, room: true },
+      orderBy: { checkOut: "asc" },
     }),
     prisma.room.findMany({
       where: { status: "DIRTY", ...baseWhere },
@@ -94,6 +111,23 @@ async function _getDashboardDataInternal(propertyId: string | null, todayDateStr
     .filter((r: { checkIn: Date }) => toDateOnly(r.checkIn) === todayStr)
     .map(mapArrival);
 
+  const mapDeparture = (r: {
+    id: string;
+    guest: { name: string };
+    room: { number: string };
+    checkOut: Date;
+    status: string;
+  }): DepartureItem => ({
+    id: r.id,
+    guestName: r.guest.name,
+    room: r.room.number,
+    checkOut: toDateOnly(r.checkOut),
+    status: r.status,
+  });
+  const todayCheckOuts = departures
+    .filter((r: { checkOut: Date }) => toDateOnly(r.checkOut) === todayStr)
+    .map(mapDeparture);
+
   const oooMapped = oooRooms.map(
     (r: { number: string; type: string; reason: string | null; updatedAt: Date }) => ({
       number: r.number,
@@ -115,6 +149,7 @@ async function _getDashboardDataInternal(propertyId: string | null, todayDateStr
     oooRooms: oooMapped,
     oooNewTodayCount,
     todayCheckIns,
+    todayCheckOuts,
   };
 }
 

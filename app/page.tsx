@@ -9,6 +9,7 @@ import {
   BarChart3,
   UtensilsCrossed,
   LogIn,
+  LogOut,
   TrendingUp,
   TrendingDown,
   Minus,
@@ -154,6 +155,13 @@ export default async function HomePage() {
                 Meldunki
               </span>
               <span className="font-semibold">{data.todayCheckIns.length}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="flex items-center gap-1.5">
+                <LogOut className="h-3.5 w-3.5 text-emerald-500" />
+                Wyjazdy
+              </span>
+              <span className="font-semibold">{data.todayCheckOuts.length}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="flex items-center gap-1.5">
@@ -376,7 +384,7 @@ export default async function HomePage() {
 
       {/* Dzisiejsze check-iny */}
       {data.todayCheckIns.length > 0 && (
-        <section className="rounded-lg border bg-card p-6 shadow-sm">
+        <section className="rounded-lg border bg-card p-6 shadow-sm" data-testid="checkin-section">
           <h2 className="mb-4 text-lg font-semibold">Dzisiejsze meldunki</h2>
           <ul className="space-y-2">
             {data.todayCheckIns.map((a) => (
@@ -386,6 +394,24 @@ export default async function HomePage() {
               >
                 <span className="font-medium">{a.guestName}</span>
                 <span className="text-muted-foreground">Pokój {a.room}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Dzisiejsze wyjazdy (check-out) */}
+      {data.todayCheckOuts.length > 0 && (
+        <section className="rounded-lg border bg-card p-6 shadow-sm" data-testid="checkout-section">
+          <h2 className="mb-4 text-lg font-semibold">Dzisiejsze wyjazdy</h2>
+          <ul className="space-y-2">
+            {data.todayCheckOuts.map((a) => (
+              <li
+                key={a.id}
+                className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+              >
+                <span className="font-medium">{a.guestName}</span>
+                <span className="text-muted-foreground">Pokój {a.room} · wyjazd {a.checkOut}</span>
               </li>
             ))}
           </ul>

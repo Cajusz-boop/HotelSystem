@@ -39,6 +39,7 @@ import { searchCompanies } from "@/app/actions/companies";
 import type { Reservation } from "@/lib/tape-chart-types";
 import { toast } from "sonner";
 import { SplitSquareVertical, User, Building2, Plus, ArrowRightLeft, Percent, Banknote } from "lucide-react";
+import { AddChargeDialog } from "@/components/add-charge-dialog";
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "CONFIRMED", label: "Potwierdzona" },
@@ -294,6 +295,7 @@ export function ReservationEditSheet({
   const [collectDepositLoading, setCollectDepositLoading] = useState(false);
   const collectDepositInFlightRef = useRef(false);
   const [refundDepositLoading, setRefundDepositLoading] = useState(false);
+  const [addChargeDialogOpen, setAddChargeDialogOpen] = useState(false);
 
   useEffect(() => {
     if (open) setActiveTab(initialTabProp ?? "rozliczenie");
@@ -1299,6 +1301,17 @@ export function ReservationEditSheet({
                   )}
                 </div>
               </details>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAddChargeDialogOpen(true)}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Dodaj obciążenie
+                </Button>
+              </div>
               {folioSummaries.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Brak folio. Dodaj folio, aby rozdzielić rozliczenie (np. firma + gość).</p>
               ) : (
@@ -1627,6 +1640,34 @@ export function ReservationEditSheet({
               )}
             </div>
           </details>
+          {reservation && (
+            <AddChargeDialog
+              reservationId={reservation.id}
+              open={addChargeDialogOpen}
+              onOpenChange={setAddChargeDialogOpen}
+              onSuccess={() => {
+                getFolioSummary(reservation.id).then((res) => {
+                  if (res.success && res.data?.folios) {
+                    setFolioSummaries(res.data.folios.map((f: { folioNumber: number; balance: number; totalCharges: number; totalDiscounts?: number; totalPayments: number; billTo?: FolioBillTo; guestId?: string | null; guestName?: string | null; companyId?: string | null; companyName?: string | null; label?: string | null }) => ({
+                      folioNumber: f.folioNumber,
+                      balance: f.balance,
+                      totalCharges: f.totalCharges,
+                      totalDiscounts: f.totalDiscounts ?? 0,
+                      totalPayments: f.totalPayments,
+                      billTo: f.billTo,
+                      guestId: f.guestId,
+                      guestName: f.guestName,
+                      companyId: f.companyId,
+                      companyName: f.companyName,
+                      label: f.label,
+                    })));
+                  }
+                });
+              }}
+              folioNumbers={folioSummaries.length > 0 ? folioSummaries.map((f) => f.folioNumber) : [1]}
+              defaultFolioNumber={folioSummaries[0]?.folioNumber ?? 1}
+            />
+          )}
           <div className="space-y-2">
             <Label htmlFor="pax">Liczba gości (pax)</Label>
             <Input

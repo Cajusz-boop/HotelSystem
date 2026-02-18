@@ -38,7 +38,7 @@ test.describe("Pokoje – zarządzanie", () => {
     }
   });
 
-  test("ROOM-02: kolumna „Piętro" otwiera <select>, a nie <input>", async ({
+  test("ROOM-02: kolumna Pietro otwiera select, a nie input", async ({
     page,
   }) => {
     const firstRow = page.locator("table tbody tr").first();
@@ -50,7 +50,7 @@ test.describe("Pokoje – zarządzanie", () => {
     await expect(floorCell.locator("input")).not.toBeVisible();
   });
 
-  test("ROOM-03: select „Piętro" zawiera opcje (nie jest pusty)", async ({
+  test("ROOM-03: select Pietro zawiera opcje (nie jest pusty)", async ({
     page,
   }) => {
     const firstRow = page.locator("table tbody tr").first();
@@ -66,7 +66,7 @@ test.describe("Pokoje – zarządzanie", () => {
 
     expect(
       count,
-      "Select „Piętro" powinien mieć co najmniej 2 opcje (— brak — + piętra)"
+      "Select Piętro powinien mieć co najmniej 2 opcje"
     ).toBeGreaterThan(1);
   });
 
@@ -102,7 +102,7 @@ test.describe("Pokoje – zarządzanie", () => {
     await expect(floorCell.locator("span")).toHaveText(secondOptionText);
   });
 
-  test("ROOM-05: kolumna „Budynek" otwiera <input> (tekst swobodny)", async ({
+  test("ROOM-05: kolumna Budynek otwiera input (tekst swobodny)", async ({
     page,
   }) => {
     const firstRow = page.locator("table tbody tr").first();
@@ -114,7 +114,7 @@ test.describe("Pokoje – zarządzanie", () => {
     await expect(buildingCell.locator("select")).not.toBeVisible();
   });
 
-  test("ROOM-06: kolumna „Widok" otwiera <select> z opcjami", async ({
+  test("ROOM-06: kolumna Widok otwiera select z opcjami", async ({
     page,
   }) => {
     const firstRow = page.locator("table tbody tr").first();
@@ -128,9 +128,6 @@ test.describe("Pokoje – zarządzanie", () => {
 
     const options = viewSelect.locator("option");
     const count = await options.count();
-    expect(
-      count,
-      "Select „Widok" powinien mieć opcje (— brak — + widoki)"
-    ).toBeGreaterThan(1);
+    expect(count, "Select Widok powinien miec opcje").toBeGreaterThan(1);
   });
 });

@@ -2121,6 +2121,7 @@ export async function registerTransaction(
     paymentMethod?: string;          // metoda płatności: CASH, CARD, TRANSFER, etc.
     paymentDetails?: PaymentDetails; // szczegóły płatności (dla SPLIT, karty, etc.)
     description?: string;
+    folioNumber?: number;            // numer folio (domyślnie 1)
   }
 ): Promise<ActionResult<{ transactionId: string; amount: number; paymentMethod?: string }>> {
   const headersList = await headers();
@@ -2207,6 +2208,7 @@ export async function registerTransaction(
     }
 
     // Utwórz transakcję
+    const folioNum = params.folioNumber != null && params.folioNumber >= 1 ? params.folioNumber : 1;
     const tx = await prisma.transaction.create({
       data: {
         reservationId: params.reservationId,
@@ -2214,6 +2216,8 @@ export async function registerTransaction(
         type: normalizedType,
         paymentMethod: normalizedPaymentMethod,
         paymentDetails: params.paymentDetails ? JSON.stringify(params.paymentDetails) : undefined,
+        description: params.description?.trim() || undefined,
+        folioNumber: folioNum,
         isReadOnly: false,
       },
     });
