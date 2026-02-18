@@ -771,6 +771,7 @@ export function TapeChart({
     return map;
   }, [dates]);
 
+  /** Konwencja hotelowa (jak KWHotel): pasek od początku dnia zameldowania do połowy dnia wymeldowania (1 noc = 1.5 kolumny). */
   const reservationPlacements = useMemo(() => {
     return filteredReservations
       .map((res) => {
@@ -782,11 +783,15 @@ export function TapeChart({
         else endIdx = dates.findIndex((d) => d >= res.checkOut);
         if (endIdx === -1) endIdx = dates.length;
         if (startIdx == null || startIdx >= endIdx) return null;
+        const numDays = endIdx - startIdx;
+        const barWidthPercent = (numDays + 0.5) / (numDays + 1);
+        const gridColumnEnd = Math.min(endIdx + 3, dates.length + 2);
         return {
           reservation: res,
           gridRow: row + 1,
           gridColumnStart: startIdx + 2,
-          gridColumnEnd: endIdx + 2,
+          gridColumnEnd,
+          barWidthPercent,
         };
       })
       .filter((p): p is NonNullable<typeof p> => p != null);
@@ -794,7 +799,7 @@ export function TapeChart({
 
   const roomByNumber = useMemo(() => new Map(allRooms.map((r) => [r.number, r])), [allRooms]);
 
-  // Ghost preview placement for drag-and-drop (używa grid jak paski – równo z kwadracikami)
+  // Ghost preview placement for drag-and-drop (konwencja hotelowa: do połowy dnia check-out)
   const ghostPlacement = useMemo(() => {
     if (!ghostPreview || !activeId) return null;
     const row = roomRowIndex.get(ghostPreview.roomNumber);
@@ -804,13 +809,17 @@ export function TapeChart({
     if (endIdx == null) endIdx = dates.findIndex((d) => d >= ghostPreview.checkOut);
     if (endIdx === -1) endIdx = dates.length;
     if (startIdx == null || startIdx >= endIdx) return null;
+    const numDays = endIdx - startIdx;
+    const barWidthPercent = (numDays + 0.5) / (numDays + 1);
+    const gridColumnEnd = Math.min(endIdx + 3, dates.length + 2);
     const activeReservation = reservations.find((r) => r.id === activeId);
     if (!activeReservation) return null;
     return {
       reservation: { ...activeReservation, room: ghostPreview.roomNumber },
       gridColumnStart: startIdx + 2,
-      gridColumnEnd: endIdx + 2,
+      gridColumnEnd,
       gridRow: row + 1,
+      barWidthPercent,
     };
   }, [ghostPreview, activeId, roomRowIndex, dateIndex, dates, reservations]);
 
@@ -1634,7 +1643,7 @@ export function TapeChart({
               className="absolute inset-0 pointer-events-none overflow-hidden"
               style={{ zIndex: 50, gridTemplateColumns: gridColumns, gridTemplateRows: gridRows, display: "grid" }}
             >
-              {reservationPlacements.map(({ reservation, gridRow, gridColumnStart, gridColumnEnd }) => {
+              {reservationPlacements.map(({ reservation, gridRow, gridColumnStart, gridColumnEnd, barWidthPercent }) => {
                   const room = roomByNumber.get(reservation.room);
                   const priceKey = `${reservation.room}-${reservation.checkIn}`;
                   const pricePerNight =
@@ -1705,6 +1714,7 @@ export function TapeChart({
                       }
                     }}
                   >
+                    <div className="h-full flex items-stretch" style={{ width: `${barWidthPercent * 100}%`, minWidth: 0 }}>
                     <ReservationBarWithMenu
                       reservation={reservation}
                       gridRow={0}
@@ -1756,10 +1766,11 @@ export function TapeChart({
                         }
                       }}
                     />
+                    </div>
                   </div>
                 );
                 })}
-                {/* Ghost preview for drag-and-drop – grid, równo z kwadracikami */}
+                {/* Ghost preview for drag-and-drop – konwencja hotelowa (do połowy dnia check-out) */}
                 {ghostPlacement && (
                   <div
                     className="pointer-events-none flex items-center z-[100]"
@@ -1769,7 +1780,10 @@ export function TapeChart({
                       padding: styleSplitByDay ? BAR_PADDING_PX : 0,
                     }}
                   >
-                    <div className="h-full w-full min-h-[12px] rounded-md border-2 border-dashed border-primary bg-primary/20 flex items-center justify-center">
+                    <div
+                      className="h-full min-h-[12px] rounded-md border-2 border-dashed border-primary bg-primary/20 flex items-center justify-center"
+                      style={{ width: `${(ghostPlacement.barWidthPercent ?? 1) * 100}%` }}
+                    >
                       <span className="text-xs text-primary font-medium truncate px-2">
                         {ghostPlacement.reservation.guestName}
                       </span>
