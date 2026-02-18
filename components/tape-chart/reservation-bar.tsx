@@ -169,7 +169,7 @@ export function ReservationBar({
 
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [tooltipRect, setTooltipRect] = useState<DOMRect | null>(null);
-  const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tooltipTimerRef = useRef<number | NodeJS.Timeout | null>(null);
   const barRef = useRef<HTMLDivElement | null>(null);
 
   const showTooltip = () => {
