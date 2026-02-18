@@ -1,8 +1,37 @@
 import { NextResponse } from "next/server";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import { prisma } from "@/lib/db";
 import { setAuthDisabledCache } from "@/lib/auth-disabled-cache";
 
 export const dynamic = "force-dynamic";
+
+const g = globalThis as unknown as { __configSnapshotImported?: boolean };
+
+/**
+ * Jeśli w bazie brak HotelConfig, a config-snapshot.json istnieje — importuj.
+ * Jednorazowo na proces (flagą globalThis).
+ */
+async function ensureConfigFromSnapshot(): Promise<void> {
+  if (g.__configSnapshotImported) return;
+  g.__configSnapshotImported = true;
+
+  try {
+    const row = await prisma.hotelConfig.findUnique({ where: { id: "default" } });
+    if (row) return;
+
+    const snapshotPath = join(process.cwd(), "prisma", "config-snapshot.json");
+    if (!existsSync(snapshotPath)) return;
+
+    const snapshot = JSON.parse(readFileSync(snapshotPath, "utf-8"));
+    if (!snapshot.hotelConfig) return;
+
+    const hc = snapshot.hotelConfig;
+    await prisma.hotelConfig.create({ data: hc });
+  } catch {
+    // nie blokuj startu
+  }
+}
 
 /**
  * Publiczny endpoint — zwraca czy logowanie jest wyłączone.
@@ -11,6 +40,8 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
+    await ensureConfigFromSnapshot();
+
     const row = await prisma.hotelConfig.findUnique({
       where: { id: "default" },
       select: { authDisabled: true },
