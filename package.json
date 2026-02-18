@@ -6,10 +6,10 @@
   },
   "private": true,
   "scripts": {
-    "predev": "prisma generate && npx tsx scripts/sync-config-on-start.ts",
+    "predev": "prisma generate && prisma db push --skip-generate && npx tsx scripts/sync-config-on-start.ts",
     "dev": "next dev -p 3011",
     "dev:3011": "npx next dev -p 3011",
-    "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && prisma generate && npx tsx scripts/sync-config-on-start.ts && next dev -p 3011",
+    "dev:clean": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && prisma generate && prisma db push --skip-generate && npx tsx scripts/sync-config-on-start.ts && next dev -p 3011",
     "build": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true})\" && next build",
     "postbuild": "node scripts/copy-standalone-assets.cjs",
     "start": "next start",
