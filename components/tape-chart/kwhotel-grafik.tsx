@@ -114,7 +114,7 @@ export function KwhotelGrafik({
   const [highlightedReservationId, setHighlightedReservationId] = useState<string | null>(null);
   const [hoveredBarRes, setHoveredBarRes] = useState<Reservation | null>(null);
   const [hoveredBarRect, setHoveredBarRect] = useState<DOMRect | null>(null);
-  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverTimerRef = useRef<number | NodeJS.Timeout | null>(null);
   const [allRooms, setAllRooms] = useState<Room[]>(rooms);
   const [groups, setGroups] = useState<ReservationGroupSummary[]>(reservationGroups);
 
