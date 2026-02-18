@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   description: "System zarządzania hotelem",
 };
 
+// Nie prerenderuj stron przy buildzie – unikamy błędów useSearchParams() i brakującej bazy
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({
   children,
 }: Readonly<{
