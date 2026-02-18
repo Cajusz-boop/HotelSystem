@@ -105,8 +105,8 @@ $remoteDest = $SSH_TARGET + ":" + $REMOTE_FULL
 
 if ($UseRsync) {
     Write-Host "" ; Write-Host "=== 4/6 Wysylanie tylko zmienionych plikow (rsync) ===" -ForegroundColor Cyan
-    $localBase = $ProjectRoot.Replace("\", "/")
-    $standaloneSrc = $localBase + "/.next/standalone/"
+    # cwRsync na Windows traktuje "c:/path" jako zdalny (host c). Uzywamy sciezki z backslash.
+    $standaloneSrc = (Join-Path $ProjectRoot ".next\standalone") + "\"
     $standaloneDst = $remoteDest + "/.next/standalone/"
     Write-Host "*** Wpisz haslo SSH (moze byc kilka razy) ***" -ForegroundColor Magenta
     # Zapewnij katalog .next na serwerze
@@ -122,7 +122,8 @@ if ($UseRsync) {
     & $RsyncExe -avz -e "ssh" (Join-Path $ProjectRoot "app.js") "$remoteDest/"
     if ($LASTEXITCODE -ne 0) { Write-Host "[BLAD] rsync app.js nie powiodl sie!" -ForegroundColor Red; exit 1 }
     # prisma
-    & $RsyncExe -avz -e "ssh" ($localBase + "/prisma/") "$remoteDest/prisma/"
+    $prismaSrc = (Join-Path $ProjectRoot "prisma") + "\"
+    & $RsyncExe -avz -e "ssh" "$prismaSrc" "$remoteDest/prisma/"
     if ($LASTEXITCODE -ne 0) { Write-Host "[BLAD] rsync prisma nie powiodl sie!" -ForegroundColor Red; exit 1 }
     # SQL diff (jesli jest)
     if (Test-Path $sqlDiffFile) {
