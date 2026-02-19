@@ -7,8 +7,8 @@ export const metadata = {
 
 export default function CheckInPage() {
   return (
-    <div className="flex flex-col gap-8 p-8">
-      <h1 className="text-2xl font-semibold">Meldunek gościa</h1>
+    <div className="flex flex-col gap-4 p-4">
+      <h1 className="text-lg font-semibold">Meldunek gościa</h1>
       <GuestCheckInForm />
     </div>
   );
