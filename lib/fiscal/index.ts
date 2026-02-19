@@ -25,10 +25,18 @@ import {
   getEReceiptCapableModels,
   getInvoiceCapableModels,
 } from "./posnet-models";
+import { prisma } from "@/lib/db";
 
 const FISCAL_ENABLED = process.env.FISCAL_ENABLED === "true";
 /** Domyślnie no-op (mock). Produkcja: ustaw FISCAL_DRIVER=posnet|novitus|elzab. */
 const FISCAL_DRIVER = (process.env.FISCAL_DRIVER ?? "mock") as FiscalConfig["driver"];
+
+/**
+ * For posnet driver: jobs are queued to DB and executed by the browser relay.
+ * For novitus/elzab: direct TCP/IP connection (server can reach printer).
+ * For mock: no-op logging.
+ */
+const USE_RELAY = FISCAL_DRIVER === "posnet";
 
 function getDriver(): FiscalDriver {
   switch (FISCAL_DRIVER) {
@@ -39,8 +47,19 @@ function getDriver(): FiscalDriver {
     case "elzab":
       return elzabDriver;
     default:
-      return mockDriver; // no-op gdy brak drukarki
+      return mockDriver;
   }
+}
+
+async function enqueueFiscalJob(type: string, payload: unknown): Promise<{ success: true; queued: true }> {
+  await prisma.fiscalJob.create({
+    data: {
+      type,
+      status: "pending",
+      payload: payload as never,
+    },
+  });
+  return { success: true, queued: true };
 }
 
 /**
@@ -113,6 +132,10 @@ export async function printFiscalReceipt(
 ): Promise<FiscalReceiptResult> {
   if (!FISCAL_ENABLED) {
     return { success: true };
+  }
+
+  if (USE_RELAY) {
+    return enqueueFiscalJob("receipt", request);
   }
 
   const driver = getDriver();
@@ -215,6 +238,10 @@ export async function printFiscalInvoice(
     return { success: true };
   }
 
+  if (USE_RELAY) {
+    return enqueueFiscalJob("invoice", request);
+  }
+
   const driver = getDriver();
   if (!driver.printInvoice) {
     return { success: false, error: "Sterownik nie obsługuje druku faktur" };
@@ -248,6 +275,10 @@ export async function printFiscalXReport(
       success: true, 
       warning: "Integracja z kasą fiskalną jest wyłączona (FISCAL_ENABLED=false)" 
     };
+  }
+
+  if (USE_RELAY) {
+    return enqueueFiscalJob("report_x", request ?? {});
   }
 
   const driver = getDriver();
@@ -289,6 +320,10 @@ export async function printFiscalZReport(
     };
   }
 
+  if (USE_RELAY) {
+    return enqueueFiscalJob("report_z", request ?? {});
+  }
+
   const driver = getDriver();
   if (!driver.printZReport) {
     return { 
@@ -324,6 +359,10 @@ export async function printFiscalPeriodicReport(
       success: true, 
       warning: "Integracja z kasą fiskalną jest wyłączona (FISCAL_ENABLED=false)" 
     };
+  }
+
+  if (USE_RELAY) {
+    return enqueueFiscalJob("report_periodic", request);
   }
 
   const driver = getDriver();
@@ -364,6 +403,10 @@ export async function printFiscalStorno(
       errorCode: "FISCAL_DISABLED",
       error: "Integracja z kasą fiskalną jest wyłączona (FISCAL_ENABLED=false)",
     };
+  }
+
+  if (USE_RELAY) {
+    return enqueueFiscalJob("storno", request) as Promise<FiscalStornoResult>;
   }
 
   const driver = getDriver();

@@ -100,6 +100,28 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "SQL diff zapisany." -ForegroundColor Green
 }
 
+# === 3b/6 Import konfiguracji (Dane sprzedawcy, szablony) do produkcji ===
+$configSnapshotPath = Join-Path $ProjectRoot "prisma\config-snapshot.json"
+if (Test-Path $configSnapshotPath) {
+  Write-Host "" ; Write-Host "=== 3b/6 Import konfiguracji do bazy produkcyjnej ===" -ForegroundColor Cyan
+  $dbUrl = $DEPLOY_DATABASE_URL
+  if (-not $dbUrl) { $dbUrl = "mysql://$DB_USER`:$DB_PASS@$DB_HOST/$DB_NAME" }
+  $env:DATABASE_URL = $dbUrl
+  try {
+    npx tsx prisma/config-import.ts 2>&1 | ForEach-Object { Write-Host $_ }
+    if ($LASTEXITCODE -eq 0) {
+      Write-Host "Konfiguracja (dane sprzedawcy, logo, szablony) zsynchronizowana z produkcja." -ForegroundColor Green
+    } else {
+      Write-Host "[WARN] config-import zakonczyl sie bledem - pomijam." -ForegroundColor Yellow
+    }
+  } catch {
+    Write-Host "[WARN] Nie udalo sie wykonac config-import:" ($_.Exception.Message) -ForegroundColor Yellow
+  }
+  Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+} else {
+  Write-Host "" ; Write-Host "Brak prisma/config-snapshot.json - pomijam import konfiguracji." -ForegroundColor Gray
+}
+
 # === 4/6 Upload (rsync = tylko zmiany, albo ZIP) ===
 $remoteDest = $SSH_TARGET + ":" + $REMOTE_FULL
 

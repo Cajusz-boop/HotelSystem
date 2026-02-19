@@ -25,6 +25,8 @@
     "symplex:sync:from-kw": "node symplex-bridge/sync.mjs --from-kw",
     "symplex:recon": "node symplex-bridge/sync.mjs --recon",
     "symplex:test": "node symplex-bridge/test-sync.mjs",
+    "bistro:sync": "node bistro-sync/run-sync.mjs",
+    "bistro:menu": "node bistro-sync/sync-menu.mjs --once",
     "test:e2e": "npx tsx scripts/run-e2e.ts",
     "test:e2e:raw": "playwright test",
     "test:e2e:ui": "playwright test --ui",
