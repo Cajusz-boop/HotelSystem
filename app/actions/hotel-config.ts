@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { setAuthDisabledCache } from "@/lib/auth-disabled-cache";
+import { setAuthDisabledCache, invalidateAuthDisabledCache } from "@/lib/auth-disabled-cache";
 import { autoExportConfigSnapshot } from "@/lib/config-snapshot";
 import type {
   HotelConfigData,
@@ -214,6 +214,7 @@ export async function toggleAuthDisabled(disabled: boolean): Promise<
     update: { authDisabled: disabled },
   });
 
+  invalidateAuthDisabledCache();
   setAuthDisabledCache(disabled);
   autoExportConfigSnapshot();
 
