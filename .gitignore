@@ -9,12 +9,13 @@ out
 dist
 build
 
-# Env (has DATABASE_URL)
+# Env (has DATABASE_URL and secrets)
 .env
 .env.local
 .env.staging
 .env.production
 .env.*.local
+.env.deploy
 
 # Prisma
 prisma/migrations/**/migration_lock.toml
@@ -27,6 +28,17 @@ npm-debug.log*
 
 # POSNET bridge spool
 posnet-bridge/spool
+
+# Symplex bridge state and local config
+symplex-bridge/.sync-state.json
+symplex-bridge/.env
+symplex-bridge/sync.log
+symplex-bridge/run-sync.bat
+symplex-bridge/incoming
+symplex-bridge/processed
+
+# Bistro sync config
+bistro-sync/.env
 
 # Manager agent state (manager.py)
 .manager_state.txt
@@ -42,3 +54,13 @@ test-results
 playwright-report
 _next_out.txt
 tsconfig.tsbuildinfo
+
+# Deploy artifacts
+deploy_mydevil.zip
+deploy_standalone.zip
+prisma_full_schema.sql
+prisma_safe_schema.sql
+prisma_clean_schema.sql
+prisma_alter_tables.sql
+prisma_diff.sql
+_deploy_schema_diff.sql
