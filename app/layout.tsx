@@ -7,6 +7,7 @@ import { Providers } from "@/components/providers";
 import { StatusBar } from "@/components/status-bar";
 import { OnboardingGuide } from "@/components/onboarding-guide";
 import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help";
+import { FiscalRelay } from "@/components/fiscal-relay";
 import { getSession } from "@/lib/auth";
 import { getMyPermissions } from "@/app/actions/permissions";
 import "./globals.css";
@@ -82,6 +83,7 @@ export default async function RootLayout({
             <CommandPalette />
             <KeyboardShortcutsHelp />
             <OnboardingGuide />
+            <FiscalRelay />
             <Toaster richColors position="top-right" />
           </div>
         </Providers>

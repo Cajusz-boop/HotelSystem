@@ -1,0 +1,187 @@
+{
+  "_exportedAt": "2026-02-19T10:38:56.331Z",
+  "_description": "Snapshot konfiguracji bazy. Generowany przez: npm run db:config:export",
+  "hotelConfig": null,
+  "cennikConfig": {
+    "id": "default",
+    "currency": "PLN",
+    "vatPercent": "8",
+    "pricesAreNetto": false,
+    "updatedAt": "2026-02-17T12:29:51.048Z"
+  },
+  "property": {
+    "name": "Karczma Łabędź",
+    "code": "default",
+    "reservationStatusColors": null,
+    "overbookingLimitPercent": 0,
+    "localTaxPerPersonPerNight": null,
+    "mealPrices": null,
+    "dunningConfig": null,
+    "housekeepingFloorAssignments": null
+  },
+  "documentNumbering": [
+    {
+      "id": "cmls1qicj0009aj2vsvq95yjx",
+      "documentType": "INVOICE",
+      "prefix": "FV",
+      "separator": "/",
+      "yearFormat": "YYYY",
+      "sequencePadding": 4,
+      "resetYearly": true,
+      "description": "Faktura VAT",
+      "exampleNumber": "FV/2026/0001",
+      "createdAt": "2026-02-18T13:06:48.546Z",
+      "updatedAt": "2026-02-18T13:06:48.546Z"
+    }
+  ],
+  "invoiceTemplates": [
+    {
+      "id": "cmlql22if0001ah2vvcvq91lt",
+      "templateType": "DEFAULT",
+      "logoBase64": null,
+      "logoUrl": null,
+      "logoWidth": 150,
+      "logoPosition": "left",
+      "sellerName": "Karczma Łabędź Łukasz Wojenkowski",
+      "sellerAddress": "ul. Marsa 2",
+      "sellerPostalCode": "14-200",
+      "sellerCity": "Nowa Wieś",
+      "sellerNip": "5711640854",
+      "sellerPhone": "604 070 908",
+      "sellerEmail": "recepcja@labedzhotel.pl",
+      "sellerWebsite": "www.karczma-labedz.pl",
+      "sellerBankName": "Alior Bank",
+      "sellerBankAccount": "64 2490 0005 0000 4530 3746 8866",
+      "headerText": null,
+      "footerText": "Dziękujemy za skorzystanie z naszych usług.",
+      "paperSize": "A4",
+      "fontSize": 16,
+      "fontFamily": "system-ui, sans-serif",
+      "primaryColor": "#111111",
+      "accentColor": "#2563eb",
+      "paymentTermsText": null,
+      "thanksText": "Zapraszamy ponownie!",
+      "createdAt": "2026-02-17T12:32:08.246Z",
+      "updatedAt": "2026-02-19T10:38:48.838Z"
+    }
+  ],
+  "documentTemplates": [
+    {
+      "id": "cmlt8avy10006m82vguo2v5s6",
+      "templateType": "REGISTRATION_CARD",
+      "useInvoiceLogo": true,
+      "logoBase64": null,
+      "logoUrl": null,
+      "logoWidth": 150,
+      "logoPosition": "left",
+      "useInvoiceSeller": true,
+      "hotelName": "Hotel",
+      "hotelAddress": null,
+      "hotelPostalCode": null,
+      "hotelCity": null,
+      "hotelPhone": null,
+      "hotelEmail": null,
+      "hotelWebsite": null,
+      "title": "KARTA MELDUNKOWA",
+      "headerText": null,
+      "footerText": "Podpis gościa jest wymagany. Dane przetwarzane zgodnie z RODO.",
+      "termsText": null,
+      "welcomeText": null,
+      "fontSize": 14,
+      "fontFamily": "system-ui, sans-serif",
+      "primaryColor": "#111111",
+      "accentColor": "#2563eb",
+      "showIdField": true,
+      "showSignatureField": true,
+      "showVehicleField": true,
+      "createdAt": "2026-02-19T08:58:23.161Z",
+      "updatedAt": "2026-02-19T08:58:23.161Z"
+    }
+  ],
+  "fiscalReceiptTemplate": [
+    {
+      "id": "cmlql1x6o0000ah2v9h4d2s0n",
+      "headerLine1": "Karczma Łabędź Łukasz Wojenkowski",
+      "headerLine2": "14-200 Nowa Wieś ul. Marsa 2 ",
+      "headerLine3": "5711640854",
+      "footerLine1": "Dziękujemy za wizytę!",
+      "footerLine2": "Zapraszamy ponownie",
+      "footerLine3": "www.karczma-labedz.pl",
+      "itemNameRoom": "Usługa hotelowa",
+      "itemNameDeposit": "Zaliczka",
+      "itemNameMinibar": "Minibar",
+      "itemNameService": "Usługa",
+      "itemNameLocalTax": "Opłata miejscowa",
+      "itemNameParking": "Parking",
+      "defaultVatRate": 8,
+      "includeRoomNumber": false,
+      "includeStayDates": false,
+      "roomNumberFormat": "pok. {roomNumber}",
+      "createdAt": "2026-02-17T12:32:01.341Z",
+      "updatedAt": "2026-02-18T13:50:04.398Z"
+    }
+  ],
+  "emailTemplates": [],
+  "roomTypes": [
+    {
+      "id": "cmlpdj95y0000v0vz6c1o87ei",
+      "name": "Comfort",
+      "basePrice": "300",
+      "sortOrder": 2,
+      "createdAt": "2026-02-16T16:13:46.901Z",
+      "updatedAt": "2026-02-18T13:06:19.725Z"
+    },
+    {
+      "id": "cmlpdj9700001v0vz0bt25805",
+      "name": "COMFORT - z widokiem na jezioro",
+      "basePrice": "300",
+      "sortOrder": 3,
+      "createdAt": "2026-02-16T16:13:46.942Z",
+      "updatedAt": "2026-02-18T13:06:22.742Z"
+    },
+    {
+      "id": "cmlpdj9850002v0vzmt3w8lgx",
+      "name": "SIELSKI- z widokiem na jezioro",
+      "basePrice": "300",
+      "sortOrder": 4,
+      "createdAt": "2026-02-16T16:13:46.982Z",
+      "updatedAt": "2026-02-18T13:06:25.203Z"
+    },
+    {
+      "id": "cmlpdj9950003v0vzxdjmghzl",
+      "name": "Biuro",
+      "basePrice": "300",
+      "sortOrder": 7,
+      "createdAt": "2026-02-16T16:13:47.019Z",
+      "updatedAt": "2026-02-18T13:06:27.702Z"
+    },
+    {
+      "id": "cmlpdj9a60004v0vzu9y1jg7n",
+      "name": "SIELSKI",
+      "basePrice": "300",
+      "sortOrder": 8,
+      "createdAt": "2026-02-16T16:13:47.056Z",
+      "updatedAt": "2026-02-18T13:06:31.062Z"
+    },
+    {
+      "id": "cmlpdj9b80005v0vzos6joo6c",
+      "name": "COMFORT -5 os z widokiem na jezioro",
+      "basePrice": "300",
+      "sortOrder": 9,
+      "createdAt": "2026-02-16T16:13:47.094Z",
+      "updatedAt": "2026-02-18T13:06:34.423Z"
+    }
+  ],
+  "rateCode": [],
+  "surchargeTypes": [],
+  "packages": [],
+  "derivedRateRules": [],
+  "minibarItems": [],
+  "permissions": [],
+  "rolePermissions": [],
+  "roleGroups": [],
+  "roleGroupPermissions": [],
+  "loyaltyProgram": null,
+  "loyaltyTiers": [],
+  "voucherTemplates": []
+}

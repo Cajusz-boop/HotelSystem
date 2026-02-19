@@ -1,29 +1,101 @@
-# Wdrożenie Hotel PMS na mydevil.net (chmura)
+# Wdrozenie Hotel PMS na mydevil.net
 
-Aplikacja łączy się z bazą MySQL na mydevil (`m14753_hotel_system_rezerwacji`). Baza jest już utworzona i dostępna z serwerów mydevil (PhpMyAdmin działa).
+Aplikacja laczy sie z baza MySQL na mydevil (`m14753_hotel_system_rezerwacji`).
 
-## Jedna komenda: build + synchronizacja (CMD / PowerShell)
+## Zapisz na GitHub i wdróż (jedna komenda)
 
-Z katalogu projektu uruchom:
+Żeby **zapisać zmiany na GitHubie i od razu wdrożyć** na hotel.karczma-labedz.pl:
 
-- **PowerShell:** `.\scripts\deploy-to-mydevil.ps1`
-- **CMD:** `scripts\deploy-to-mydevil.bat`
+```powershell
+.\scripts\zapisz-i-wdroz.ps1 "zapisz dane"
+.\scripts\zapisz-i-wdroz.ps1 "poprawka formularza rezerwacji"
+```
 
-Skrypt: generuje Prisma (native + freebsd14), buduje Next.js, kopiuje static, wysyła **app.js** i **.next** na serwer przez **scp**.
-
-**Porównanie lokal vs chmura:** `.\scripts\compare-local-vs-remote.ps1` — sprawdza, czy pliki (app.js + .next) na serwerze są takie same jak lokalnie (liczby plików i rozmiary). Wymaga SSH (wpisz hasło gdy skrypt poprosi). Przy `scp` wpiszesz hasło SSH (jeśli nie masz klucza). Na końcu na serwerze (SSH) uruchom: `devil www restart hotel.karczma-labedz.pl`.
+Możesz wpisać dowolny komunikat w cudzysłowie. Jeśli go pominiesz, użyte będzie „zapisz dane”. Skrypt: robi commit + push, potem uruchamia deploy (build + upload + restart).
 
 ---
 
-## Wymagania
+## Sam deploy (bez zapisu do Git)
 
-- Konto mydevil z obsługą Node.js
-- Domena skonfigurowana w panelu (Strony WWW → dodana strona typu **Node.js**)
-- Dostęp SSH (opcjonalnie, ułatwia wdrożenie)
+Z katalogu projektu:
 
-## 1. Konfiguracja wstępna (SSH, raz)
+```powershell
+.\scripts\deploy-to-mydevil.ps1
+```
 
-Zaloguj się SSH i wykonaj (zastąp `domena` swoją domeną):
+Skrypt automatycznie:
+1. Generuje Prisma client
+2. Buduje Next.js (standalone)
+3. Generuje SQL diff dla schematu bazy (z `IF NOT EXISTS`)
+4. **Upload:** jeśli w systemie jest **rsync** (np. Git for Windows) — wysyła **tylko zmienione pliki** (lekki deploy, szybciej). W przeciwnym razie pakuje całość do ZIP i wysyła.
+5. Na serwerze: rozpakowanie (przy ZIP) lub już zaktualizowane (przy rsync), migracja bazy, restart
+
+Po zakonczeniu strona jest dostepna: https://hotel.karczma-labedz.pl
+
+### Lekki deploy (rsync) — mniej danych przy każdym wdrożeniu
+
+Jeśli nie chcesz za każdym razem wysyłać całego programu (~setki MB), zainstaluj **rsync**. Skrypt go sam wykryje i będzie wysyłał tylko zmienione pliki.
+
+- **Chocolatey** (zalecane): `choco install rsync` (wymaga [Chocolatey](https://chocolatey.org/install)). Skrypt wykrywa `C:\ProgramData\chocolatey\bin\rsync.exe`.
+- **Git for Windows**: starsze wersje mogły zawierać rsync w `C:\Program Files\Git\usr\bin` — skrypt sprawdza tę ścieżkę.
+- Wymuszenie pełnego ZIP (nawet przy rsync):  
+  `.\scripts\deploy-to-mydevil.ps1 -FullZip`
+
+---
+
+## Konfiguracja (jednorazowo)
+
+### 1. Plik .env.deploy
+
+Utworz plik `.env.deploy` w katalogu projektu (jest w `.gitignore` — nie trafi do repo):
+
+```
+DEPLOY_SSH_USER=karczma-labedz
+DEPLOY_SSH_HOST=panel5.mydevil.net
+DEPLOY_REMOTE_PATH=domains/hotel.karczma-labedz.pl/public_nodejs
+DEPLOY_DOMAIN=hotel.karczma-labedz.pl
+
+# Produkcyjna baza MySQL
+DEPLOY_DB_HOST=mysql5.mydevil.net
+DEPLOY_DB_USER=m14753_hotel_rez
+DEPLOY_DB_PASS=TWOJE_HASLO
+DEPLOY_DB_NAME=m14753_hotel_system_rezerwacji
+DEPLOY_DATABASE_URL=mysql://m14753_hotel_rez:TWOJE_HASLO@mysql5.mydevil.net/m14753_hotel_system_rezerwacji
+```
+
+### 2. Klucz SSH (opcjonalnie, eliminuje wpisywanie hasla)
+
+Bez klucza SSH skrypt pyta o haslo 3 razy (usun .next, wyslij ZIP, migracja+restart).
+Z kluczem — zero pytan.
+
+**Generowanie klucza (PowerShell, raz):**
+
+```powershell
+ssh-keygen -t ed25519 -f $env:USERPROFILE\.ssh\mydevil_key -N '""'
+```
+
+**Kopiowanie klucza na serwer:**
+
+```powershell
+type $env:USERPROFILE\.ssh\mydevil_key.pub | ssh karczma-labedz@panel5.mydevil.net "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+```
+
+(Wpisz haslo SSH po raz ostatni.)
+
+**Konfiguracja SSH (plik `%USERPROFILE%\.ssh\config`):**
+
+```
+Host mydevil panel5.mydevil.net
+  HostName panel5.mydevil.net
+  User karczma-labedz
+  IdentityFile ~/.ssh/mydevil_key
+```
+
+Po tym `ssh mydevil` i `scp ... mydevil:...` dzialaja bez hasla.
+
+### 3. Konfiguracja serwera (SSH, raz)
+
+Zaloguj sie SSH i wykonaj:
 
 ```bash
 mkdir -p ~/.npm-global
@@ -37,9 +109,9 @@ Wersja Node (np. 20):
 mkdir -p ~/bin && ln -fs /usr/local/bin/node20 ~/bin/node && ln -fs /usr/local/bin/npm20 ~/bin/npm && source $HOME/.bash_profile
 ```
 
-## 2. Zmienna DATABASE_URL (baza w chmurze)
+### 4. Zmienna DATABASE_URL na serwerze
 
-W `~/.bash_profile` dopisz (użyj danych z `.env.staging`):
+W `~/.bash_profile` dopisz:
 
 ```bash
 export DATABASE_URL="mysql://m14753_hotel_rez:HASLO@mysql5.mydevil.net:3306/m14753_hotel_system_rezerwacji"
@@ -47,140 +119,155 @@ export DATABASE_URL="mysql://m14753_hotel_rez:HASLO@mysql5.mydevil.net:3306/m147
 
 Potem: `source $HOME/.bash_profile`.
 
-(W panelu DevilWEB nie da się ustawić zmiennych dla Node – tylko przez SSH / plik.)
+Oraz upewnij sie, ze plik `.env` w `public_nodejs` na serwerze zawiera to samo `DATABASE_URL`.
 
-## 3. Umieszczenie projektu na serwerze
+---
 
-Główny katalog aplikacji Node na mydevil to:
+## Co robi skrypt krok po kroku
 
-```text
-/usr/home/TWOJ_LOGIN/domains/TWOJA_DOMENA/public_nodejs
+- **Gdy jest rsync (lekki deploy):** 4 = rsync tylko zmienionych plików (.next/standalone, app.js, prisma, SQL). Na serwerze nie ma usuwania całego .next — rsync nadpisuje i czyści zbędne pliki (`--delete`).
+- **Gdy brak rsync:** 4–5 = pakowanie ZIP, scp, na serwerze `rm -rf .next` i unzip.
+
+```
+deploy-to-mydevil.ps1
+  |
+  1. npx prisma generate
+  2. npm run build  (postbuild kopiuje static + .prisma do standalone)
+  3. npx prisma migrate diff --from-empty --script  ->  _deploy_schema_diff.sql
+  |   (CREATE TABLE IF NOT EXISTS — bezpieczne, nie nadpisuje istniejacych tabel)
+  |
+  3b. Jeśli istnieje prisma/config-snapshot.json — import konfiguracji do bazy produkcyjnej
+  |   (dane sprzedawcy, logo, szablony faktur — zapisane w UI przechodzą na produkcję)
+  |
+  4. Upload: rsync (tylko zmiany) LUB ZIP + scp
+  5. Przy ZIP: ssh: rm -rf .next, unzip
+  6. ssh: mysql --force < SQL (jesli jest), devil www restart
+  |
+  -> Strona dziala
 ```
 
-**Opcja A – upload + build na serwerze (zalecane)**
+## Synchronizacja konfiguracji (dane sprzedawcy, logo, szablony)
 
-1. Wgraj cały projekt (FTP / Menedżer plików) do `public_nodejs` (np. jako podkatalog, potem przenieś pliki do `public_nodejs`).
-2. SSH w katalog projektu:
-   ```bash
-   cd ~/domains/TWOJA_DOMENA/public_nodejs
-   npm install
-   npm run build
-   ```
-3. Skopiuj pliki statyczne Next.js do standalone (katalog musi istnieć – tworzy go build):
-   ```bash
-   mkdir -p .next/standalone/.next
-   cp -r .next/static .next/standalone/.next/
-   ```
+Dane wpisane w **Ustawienia → Szablony** (nazwa firmy, NIP, adres, logo, dane bankowe) są zapisywane w bazie i **automatycznie eksportowane** do pliku `prisma/config-snapshot.json` przy każdym zapisie (tylko lokalnie, w trybie dev).
 
-**Opcja B – build lokalnie, upload gotowego builda (zalecane, gdy build na serwerze się nie udaje)**
+**Aby dane były na produkcji i działały z dowolnego komputera:**
 
-Gdy na serwerze `npm run build` kończy się błędem (np. 404 SWC), zbuduj projekt na swoim PC i wgraj cały katalog z gotowym `.next`.
+1. Wpisz dane w formularzu (Ustawienia → Szablony lub Ustawienia → Dane hotelu) i kliknij **Zapisz**.
+2. Upewnij się, że `prisma/config-snapshot.json` istnieje (po zapisie tworzy go auto-eksport; lub ręcznie: `npm run db:config:export`).
+3. **Zapisz plik w Git:** `git add prisma/config-snapshot.json` i commit.
+4. Wdróż: `.\scripts\deploy-to-mydevil.ps1` (lub `zapisz-i-wdroz.ps1`).
 
-1. **Lokalnie (Windows, w katalogu projektu):**
-   ```powershell
-   npm run build
-   mkdir -p .next\standalone\.next
-   xcopy /E /I .next\static .next\standalone\.next\static
-   ```
-2. **Wgraj na serwer** (FTP / Menedżer plików) do `domains/hotel.karczma-labedz.pl/public_nodejs`:
-   - plik **`app.js`** (z głównego katalogu projektu),
-   - cały katalog **`.next`** (wraz z `.next/standalone` i `.next/static`).
-   Nie kasuj istniejących na serwerze: `package.json`, `node_modules`, `prisma` – zostaw je (potrzebne do działania).
-3. **Na serwerze** tylko restart (bez `npm run build`):
-   ```bash
-   devil www restart hotel.karczma-labedz.pl
-   ```
+Skrypt deploy przed wysłaniem plików **importuje** zawartość `config-snapshot.json` do bazy produkcyjnej. Dzięki temu dane sprzedawcy, logo i szablony są na produkcji niezależnie od tego, z którego komputera robisz deploy — ważne jest, by w repozytorium był aktualny `config-snapshot.json`.
 
-## 4. Plik startowy dla Passenger
+---
 
-Mydevil uruchamia aplikację przez plik `app.js` w `public_nodejs`. W repozytorium jest już `app.js`, który uruchamia serwer Next.js z builda standalone – upewnij się, że ten plik jest w `public_nodejs` (jak w kroku 3).
+## Jak to dziala na MyDevil (krok po kroku)
 
-Usuń domyślny `index.html` w `public`, jeśli istnieje:
+Serwer to **FreeBSD 14**, katalog aplikacji: `~/domains/hotel.karczma-labedz.pl/public_nodejs/`.
+
+### Przy deployu (rsync lub ZIP)
+
+1. **Pliki na serwerze**
+   - **Rsync:** Skrypt z Twojego PC wysyła tylko zmienione pliki do `public_nodejs/.next/standalone/`, `app.js`, `prisma/`. Na MyDevil nic nie odpala rsync — tylko odbiera pliki przez SSH (Twoj rsync łączy się i kopiuje).
+   - **ZIP:** Skrypt wysyła jeden plik `deploy_mydevil.zip`. Później (krok 2) serwer go rozpakowuje.
+
+2. **Komendy wykonywane na MyDevil (przez SSH)**
+   - `cd ~/domains/hotel.karczma-labedz.pl/public_nodejs` — wejście do katalogu aplikacji.
+   - **Tylko przy ZIP:** `rm -rf .next` (usunięcie starego builda), `unzip -o deploy_mydevil.zip`, `rm -f deploy_mydevil.zip`.
+   - **Jeśli jest plik SQL:** `mysql --force -h mysql5.mydevil.net -u ... -p... baza < _deploy_schema_diff.sql` — aktualizacja schematu bazy (CREATE TABLE IF NOT EXISTS, ewentualne nowe tabele/kolumny). `--force` powoduje, że błędy typu „tabela już istnieje” są ignorowane.
+   - `devil www restart hotel.karczma-labedz.pl` — restart aplikacji Node (Passenger).
+   - Na końcu skrypt sprawdza, czy w odpowiedzi jest `DEPLOY_SSH_OK`.
+
+3. **Uruchomienie aplikacji**
+   - Passenger uruchamia `app.js` z katalogu `public_nodejs`.
+   - `app.js` ładuje `.env` (tam jest `DATABASE_URL`), robi `chdir` do `.next/standalone` i uruchamia `server.js` (Next.js).
+   - Baza: MySQL na `mysql5.mydevil.net`; Prisma używa `binaryTargets = ["native", "freebsd14"]`, więc klient jest kompatybilny z FreeBSD.
+
+### Wymagania na MyDevil
+
+- W PATH użytkownika: `mysql` (klient), `unzip` (tylko przy deployu ZIP), `devil` (panel MyDevil).
+- Katalog `public_nodejs` z plikiem `.env` zawierającym `DATABASE_URL` (ustawione raz, np. przy pierwszym deployu).
+
+### Dlaczego usuwamy stary .next?
+
+SCP/unzip **doklada** pliki do istniejacego katalogu — nie usuwa starych.
+Jesli stary build mial plik `webpack-runtime.js` (8 KB) a nowy ma inny (1.5 KB),
+stary plik zostaje i aplikacja sie crashuje (`MODULE_NOT_FOUND`).
+Usuniecie `.next` przed wgraniem nowego builda eliminuje ten problem.
+
+### Dlaczego mysql --force zamiast prisma db push?
+
+Prisma `db push` wymaga binarki `schema-engine`, ktora nie istnieje dla FreeBSD14.
+Dlatego generujemy SQL lokalnie (Windows) i wykonujemy go na serwerze przez `mysql`.
+Flaga `--force` sprawia, ze bledy typu "table already exists" sa ignorowane.
+
+---
+
+## Troubleshooting
+
+### Internal Server Error po deploy
 
 ```bash
-rm -f ~/domains/TWOJA_DOMENA/public_nodejs/public/index.html
+ssh karczma-labedz@panel5.mydevil.net
+tail -30 ~/domains/hotel.karczma-labedz.pl/logs/error.log
 ```
 
-## 5. Restart aplikacji
+### Blad P2022 (ColumnNotFound)
 
-- **Panel:** DevilWEB → Strony WWW → Twoja domena → restart / odśwież.
-- **SSH:** `devil www restart TWOJA_DOMENA`
+Baza nie ma kolumny, ktora Prisma oczekuje. Rozwiazanie: wygeneruj ALTER TABLE lokalnie
+i wykonaj na serwerze. Skrypt deployu robi to automatycznie (krok 3 + 6).
 
-## 6. Weryfikacja
+Jesli musisz recznie:
 
-Wejdź na `https://TWOJA_DOMENA`. Aplikacja powinna działać i korzystać z bazy `m14753_hotel_system_rezerwacji` na `mysql5.mydevil.net` (ta sama baza co w PhpMyAdmin).
+```powershell
+# Lokalnie (Windows):
+npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > fix.sql
+# Edytuj fix.sql: zamien CREATE TABLE na CREATE TABLE IF NOT EXISTS
+# Wyslij i wykonaj:
+scp fix.sql karczma-labedz@panel5.mydevil.net:domains/hotel.karczma-labedz.pl/public_nodejs/
+ssh karczma-labedz@panel5.mydevil.net "cd ~/domains/hotel.karczma-labedz.pl/public_nodejs && mysql --force -h mysql5.mydevil.net -u m14753_hotel_rez -pHASLO m14753_hotel_system_rezerwacji < fix.sql"
+```
+
+### Gateway Timeout (504)
+
+Aplikacja sie uruchamia wolno. Poczekaj 30s i odswiez. Passenger na MyDevil ma timeout ~60s.
+
+### Seed (pierwszy deploy — pusta baza)
+
+Po pierwszym deployu tabela `User` jest pusta. Dodaj admina przez PhpMyAdmin (SQL):
+
+```sql
+INSERT INTO `User` (`id`, `email`, `name`, `passwordHash`, `role`, `createdAt`, `updatedAt`, `totpEnabled`)
+VALUES ('admin-001', 'admin@hotel.local', 'Administrator',
+  '$2b$10$9Tc1XDhVhuG7NBWD9kcn3eWhXHSsfpwx9s/bJQUMpwuAVDgqd2bru',
+  'MANAGER', NOW(), NOW(), 0);
+```
+
+Haslo: `Admin1234#`. Przy pierwszym logowaniu aplikacja poprosi o zmiane.
 
 ---
 
-**Uwagi**
+## Struktura na serwerze
 
-- Logi błędów: `~/domains/TWOJA_DOMENA/logs/error.log`
-- Po 24 h bez ruchu aplikacja może być wyłączona i uruchomi się przy pierwszym wejściu (zgodnie z [dokumentacją mydevil](https://wiki.mydevil.net/Nodejs))
-- Zmiany w schemacie bazy: zob. sekcję **Migracje bazy** poniżej.
+```
+~/domains/hotel.karczma-labedz.pl/
+  public_nodejs/
+    app.js              <- punkt wejscia Passenger
+    .env                <- DATABASE_URL produkcji
+    .next/
+      standalone/       <- pelny build Next.js (server.js + node_modules + .next)
+    prisma/
+      schema.prisma     <- schemat bazy
+    node_modules/       <- zaleznosci (juz na serwerze, nie wysylane przy deploy)
+    package.json        <- juz na serwerze
+  logs/
+    error.log           <- logi bledow
+```
 
----
+## Porownanie lokal vs serwer
 
-## Migracje bazy (Prisma Migrate)
+```powershell
+.\scripts\compare-local-vs-remote.ps1
+```
 
-Aplikacja używa Prisma z `engineType = "client"` i adapterem MariaDB – **nie trzeba** ustawiać `binaryTargets` (silnik działa na FreeBSD w Node.js).
-
-### Migracja: kolumna `Reservation.companyId` (błąd P2022)
-
-Jeśli na produkcji występuje błąd **P2022** (_The column Reservation.companyId does not exist_), trzeba dodać tę kolumnę w bazie.
-
-#### Krok 1 – Lokalnie (Windows)
-
-1. W katalogu projektu upewnij się, że `.env` ma poprawny `DATABASE_URL` (lokalna MySQL/MariaDB).
-2. Zastosuj migrację (dodanie `companyId` do `Reservation`):
-   ```powershell
-   npx prisma migrate deploy
-   ```
-   Prisma utworzy tabelę `_prisma_migrations` (jeśli jej nie ma) i wykona migrację `20260211100000_add_reservation_company_id`.
-3. **Jeśli kolumna `companyId` już istnieje** (np. po wcześniejszym `prisma db push`) i `migrate deploy` zgłasza błąd, oznacz migrację jako zastosowaną:
-   ```powershell
-   npx prisma migrate resolve --applied 20260211100000_add_reservation_company_id
-   ```
-4. Wygeneruj klienta (jeśli potrzeba): `npm run db:generate`.
-
-#### Krok 2 – Produkcja (MyDevil / FreeBSD)
-
-Z Twojego PC nie ma połączenia do bazy na mydevil (P1001), więc migrację uruchamiasz **na serwerze** lub w panelu.
-
-**Opcja A – SSH: migracja z serwera (zalecane)**
-
-1. Upewnij się, że na serwerze jest katalog `prisma` z `schema.prisma` i `prisma/migrations`. Skrypt `deploy-to-mydevil.ps1` kopiuje `prisma` razem z `app.js` i `.next` – po deployu folder `prisma` jest na serwerze.
-2. Zaloguj się SSH do mydevil i przejdź do katalogu aplikacji:
-   ```bash
-   cd ~/domains/hotel.karczma-labedz.pl/public_nodejs
-   ```
-3. Ustaw `DATABASE_URL` (jeśli nie ma w `~/.bash_profile`):
-   ```bash
-   export DATABASE_URL="mysql://m14753_hotel_rez:HASLO@mysql5.mydevil.net:3306/m14753_hotel_system_rezerwacji"
-   ```
-4. Uruchom wdrożenie migracji (zastosuje tylko niezastosowane migracje):
-   ```bash
-   npx prisma migrate deploy
-   ```
-5. Zrestartuj aplikację:
-   ```bash
-   devil www restart hotel.karczma-labedz.pl
-   ```
-
-**Opcja B – PhpMyAdmin (gdy nie ma SSH lub migracje nie są na serwerze)**
-
-1. W panelu mydevil wejdź w **MySQL** (PhpMyAdmin) i wybierz bazę `m14753_hotel_system_rezerwacji`.
-2. Otwórz zakładkę **SQL** i wklej poniższy skrypt (dodanie kolumny, indeksu i klucza obcego), potem wykonaj:
-   ```sql
-   -- Dodanie kolumny companyId do Reservation
-   ALTER TABLE `Reservation` ADD COLUMN `companyId` VARCHAR(191) NULL;
-   CREATE INDEX `Reservation_companyId_idx` ON `Reservation`(`companyId`);
-   ALTER TABLE `Reservation` ADD CONSTRAINT `Reservation_companyId_fkey` FOREIGN KEY (`companyId`) REFERENCES `Company`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
-   ```
-4. Jeśli później na serwerze będziesz używać `prisma migrate deploy`, po wykonaniu powyższego SQL zaloguj się SSH i oznacz migrację jako zastosowaną (żeby Prisma jej ponownie nie uruchamiała):
-   ```bash
-   cd ~/domains/hotel.karczma-labedz.pl/public_nodejs
-   export DATABASE_URL="mysql://..."
-   npx prisma migrate resolve --applied 20260211100000_add_reservation_company_id
-   ```
-
-Po dodaniu kolumny (Opcja A lub B) zrestartuj aplikację; błąd P2022 powinien zniknąć.
+Sprawdza, czy pliki na serwerze sa takie same jak lokalnie (liczba plikow i rozmiary).
