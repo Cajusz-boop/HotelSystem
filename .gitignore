@@ -37,6 +37,9 @@ symplex-bridge/run-sync.bat
 symplex-bridge/incoming
 symplex-bridge/processed
 
+# Bistro sync config
+bistro-sync/.env
+
 # Manager agent state (manager.py)
 .manager_state.txt
 

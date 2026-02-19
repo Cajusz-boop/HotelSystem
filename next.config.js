@@ -24,6 +24,9 @@ const nextConfig = {
     serverActions: {
       bodySizeLimit: "10mb",
     },
+    outputFileTracingIncludes: {
+      "/api/fiscal/bridge-installer": ["./posnet-bridge-installer/**/*"],
+    },
   },
 };
 

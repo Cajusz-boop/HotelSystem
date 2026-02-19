@@ -1575,10 +1575,11 @@ model SpaBooking {
 
 // Gastronomia – pozycja w karcie dań
 model MenuItem {
-  id       String   @id @default(cuid())
-  name     String   // np. "Zupa dnia", "Kawa"
-  price    Decimal  @db.Decimal(10, 2)
-  category String   // np. "Dania główne", "Napoje", "Desery"
+  id         String   @id @default(cuid())
+  externalId String?  @unique // np. AssortmentID z Bistro – do synchronizacji
+  name       String   // np. "Zupa dnia", "Kawa"
+  price      Decimal  @db.Decimal(10, 2)
+  category   String   // np. "Dania główne", "Napoje", "Desery"
   // Diety specjalne i alergeny (Rozporządzenie UE 1169/2011 – informacja dla konsumenta)
   dietTags   Json?   // tablica tagów diet: ["VEGETARIAN", "VEGAN", "GLUTEN_FREE", "LACTOSE_FREE", "HALAL", "KOSHER"]
   allergens  Json?   // tablica alergenów: ["gluten", "skorupiaki", "jaja", "ryby", "orzechy", "soja", "mleko", "seler", "gorczyca", "sezam", "dwutlenek siarki", "łubin", "mięczaki"]
@@ -2445,4 +2446,18 @@ model FiscalReceiptTemplate {
   
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+model FiscalJob {
+  id        String   @id @default(cuid())
+  type      String   // "receipt", "invoice", "report_x", "report_z", "report_periodic", "storno"
+  status    String   @default("pending") // "pending", "processing", "done", "error"
+  payload   Json
+  result    Json?
+  error     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  attempts  Int      @default(0)
+
+  @@index([status, createdAt])
 }

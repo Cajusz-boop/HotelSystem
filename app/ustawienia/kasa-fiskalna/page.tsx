@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
   getFiscalConfigAction,
-  testFiscalConnectionAction,
   supportsFiscalReportsAction,
 } from "@/app/actions/finance";
 import type { FiscalConfig } from "@/lib/fiscal/types";
@@ -27,6 +26,7 @@ import {
   Zap,
   Settings,
   Monitor,
+  Download,
 } from "lucide-react";
 
 type ConnectionStatus = "idle" | "testing" | "ok" | "error";
@@ -75,18 +75,43 @@ export default function KasaFiskalnaPage() {
   const handleTestConnection = async () => {
     setConnectionStatus("testing");
     setTestResult(null);
+
+    const bridgeUrl = "http://127.0.0.1:9977/health";
+    const start = Date.now();
+
     try {
-      const result = await testFiscalConnectionAction();
-      setTestResult(result);
-      setConnectionStatus(result.success ? "ok" : "error");
-      if (result.success) {
-        toast.success(`Połączenie OK${result.responseTimeMs ? ` (${result.responseTimeMs} ms)` : ""}`);
-      } else {
-        toast.error(result.error ?? "Brak połączenia z bridge'em");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(bridgeUrl, { signal: controller.signal });
+      clearTimeout(timeout);
+      const elapsed = Date.now() - start;
+
+      if (!res.ok) {
+        const result: BridgeTestResult = { success: false, responseTimeMs: elapsed, error: `Bridge odpowiedział HTTP ${res.status}` };
+        setTestResult(result);
+        setConnectionStatus("error");
+        toast.error(result.error);
+        return;
       }
-    } catch {
+
+      const data = await res.json().catch(() => null);
+      const result: BridgeTestResult = {
+        success: true,
+        responseTimeMs: elapsed,
+        bridgeInfo: data && typeof data === "object" ? data : undefined,
+      };
+      setTestResult(result);
+      setConnectionStatus("ok");
+      toast.success(`Połączenie OK (${elapsed} ms)`);
+    } catch (e) {
+      const elapsed = Date.now() - start;
+      const msg = e instanceof Error && e.name === "AbortError"
+        ? "Timeout (5s) – bridge nie odpowiada"
+        : "Brak połączenia";
+      const result: BridgeTestResult = { success: false, responseTimeMs: elapsed, error: `${msg}. Uruchom bridge: npm run posnet:bridge` };
+      setTestResult(result);
       setConnectionStatus("error");
-      toast.error("Błąd testu połączenia");
+      toast.error(result.error);
     }
   };
 
@@ -286,16 +311,31 @@ export default function KasaFiskalnaPage() {
                         <p>Wersja bridge: {String(testResult.bridgeInfo.version)}</p>
                       )}
                       {!!testResult.bridgeInfo.mode && (
-                        <p>Tryb: {String(testResult.bridgeInfo.mode)}</p>
+                        <p>Tryb: {String(testResult.bridgeInfo.mode).toUpperCase()}</p>
                       )}
+                      {(() => {
+                        const printer = testResult.bridgeInfo?.printer;
+                        if (!printer || typeof printer !== "object") return null;
+                        const p = printer as Record<string, unknown>;
+                        const status = p.status as Record<string, unknown> | null;
+                        return (
+                          <div className="mt-1 pt-1 border-t border-green-200 dark:border-green-800">
+                            <p className="font-medium">
+                              Drukarka: {String(p.host ?? "?")}:{String(p.port ?? "?")}
+                            </p>
+                            {status?.ok ? (
+                              <p>Status: OK — data/czas drukarki: {String(status.dateTime ?? "?")}</p>
+                            ) : status ? (
+                              <p className="text-amber-600">Status: {String(status.error ?? "brak odpowiedzi")}</p>
+                            ) : null}
+                          </div>
+                        );
+                      })()}
                       {!!testResult.bridgeInfo.counters && typeof testResult.bridgeInfo.counters === "object" && (
                         <p>
                           Paragony: {String((testResult.bridgeInfo.counters as Record<string, unknown>).receipts ?? 0)},
                           Faktury: {String((testResult.bridgeInfo.counters as Record<string, unknown>).invoices ?? 0)}
                         </p>
-                      )}
-                      {!!testResult.bridgeInfo.note && (
-                        <p className="italic">{String(testResult.bridgeInfo.note)}</p>
                       )}
                     </div>
                   )}
@@ -310,12 +350,32 @@ export default function KasaFiskalnaPage() {
           )}
         </section>
 
-        {/* Instrukcja konfiguracji */}
+        {/* Pobierz instalator bridge */}
         <section className="rounded-lg border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Info className="w-5 h-5 text-blue-600" />
-            Jak podłączyć kasę POSNET Trio
+            <Download className="w-5 h-5 text-blue-600" />
+            Instalator bridge POSNET
           </h2>
+
+          <p className="text-sm text-muted-foreground mb-4">
+            Bridge POSNET to mały program, który musi działać na komputerze w recepcji.
+            Łączy się z kasą fiskalną POSNET Trio przez WiFi i drukuje paragony.
+          </p>
+
+          <div className="rounded-md border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 p-4 mb-4">
+            <p className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-3">
+              Pobierz i zainstaluj na komputerze w recepcji:
+            </p>
+            <Button
+              onClick={() => {
+                window.location.href = "/api/fiscal/bridge-installer";
+              }}
+              className="gap-2"
+            >
+              <Download className="w-4 h-4" />
+              Pobierz posnet-bridge-installer.zip
+            </Button>
+          </div>
 
           <div className="space-y-6">
             {/* Krok 1 */}
@@ -323,29 +383,13 @@ export default function KasaFiskalnaPage() {
               <div className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
                 1
               </div>
-              <h3 className="font-medium mb-2">Ustaw zmienne w pliku .env</h3>
-              <p className="text-sm text-muted-foreground mb-3">
-                Otwórz plik <code className="px-1 py-0.5 rounded bg-muted font-mono text-xs">.env</code> w katalogu głównym projektu i dodaj/odkomentuj:
-              </p>
-              <div className="relative rounded-md bg-muted p-4 font-mono text-sm">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-2 top-2 h-7 w-7 p-0"
-                  onClick={() => copyToClipboard("FISCAL_ENABLED=true\nFISCAL_DRIVER=posnet\nFISCAL_POSNET_MODEL=trio\nFISCAL_POSNET_ENDPOINT=http://127.0.0.1:9977/fiscal/print")}
-                  title="Kopiuj"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                </Button>
-                <pre className="whitespace-pre-wrap text-xs leading-relaxed">
-{`FISCAL_ENABLED=true
-FISCAL_DRIVER=posnet
-FISCAL_POSNET_MODEL=trio
-FISCAL_POSNET_ENDPOINT=http://127.0.0.1:9977/fiscal/print`}
-                </pre>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Po zmianie .env zrestartuj serwer aplikacji (<code className="px-1 py-0.5 rounded bg-muted font-mono text-xs">npm run dev</code>).
+              <h3 className="font-medium mb-2">Zainstaluj Node.js (jednorazowo)</h3>
+              <p className="text-sm text-muted-foreground">
+                Wejdź na{" "}
+                <a href="https://nodejs.org" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+                  nodejs.org
+                </a>
+                {" "}i zainstaluj wersję LTS (zielony przycisk). Po instalacji zrestartuj komputer.
               </p>
             </div>
 
@@ -354,25 +398,10 @@ FISCAL_POSNET_ENDPOINT=http://127.0.0.1:9977/fiscal/print`}
               <div className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
                 2
               </div>
-              <h3 className="font-medium mb-2">Uruchom bridge POSNET</h3>
-              <p className="text-sm text-muted-foreground mb-3">
-                Bridge to pośrednik między programem a kasą. Otwórz nowy terminal i uruchom:
-              </p>
-              <div className="relative rounded-md bg-muted p-4 font-mono text-sm">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-2 top-2 h-7 w-7 p-0"
-                  onClick={() => copyToClipboard("npm run posnet:bridge")}
-                  title="Kopiuj"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                </Button>
-                <pre className="text-xs">npm run posnet:bridge</pre>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                Bridge wystartuje na <code className="px-1 py-0.5 rounded bg-muted font-mono text-xs">http://127.0.0.1:9977</code>.
-                Powinien być uruchomiony cały czas gdy kasa ma działać.
+              <h3 className="font-medium mb-2">Rozpakuj pobrany ZIP na Pulpit</h3>
+              <p className="text-sm text-muted-foreground">
+                Kliknij prawym na pobrany plik → <strong>Wyodrębnij wszystkie</strong> → wybierz Pulpit.
+                Powinien powstać folder <code className="px-1 py-0.5 rounded bg-muted font-mono text-xs">posnet-bridge-installer</code>.
               </p>
             </div>
 
@@ -381,9 +410,10 @@ FISCAL_POSNET_ENDPOINT=http://127.0.0.1:9977/fiscal/print`}
               <div className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
                 3
               </div>
-              <h3 className="font-medium mb-2">Przetestuj połączenie</h3>
-              <p className="text-sm text-muted-foreground mb-3">
-                Kliknij przycisk &quot;Testuj połączenie&quot; powyżej. Jeśli zobaczysz zielony status — wszystko działa.
+              <h3 className="font-medium mb-2">Włącz autostart</h3>
+              <p className="text-sm text-muted-foreground">
+                Wejdź do folderu i kliknij dwukrotnie <code className="px-1 py-0.5 rounded bg-muted font-mono text-xs">ZAINSTALUJ-AUTOSTART.bat</code>.
+                Bridge będzie uruchamiał się automatycznie po włączeniu komputera — w tle, bez okna.
               </p>
             </div>
 
@@ -392,14 +422,22 @@ FISCAL_POSNET_ENDPOINT=http://127.0.0.1:9977/fiscal/print`}
               <div className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
                 4
               </div>
-              <h3 className="font-medium mb-2">Gotowe — paragony i faktury drukują się automatycznie</h3>
+              <h3 className="font-medium mb-2">Zrestartuj komputer i przetestuj</h3>
               <p className="text-sm text-muted-foreground">
-                Po włączeniu kasy system automatycznie drukuje:
+                Po restarcie bridge wystartuje automatycznie. Wróć na tę stronę i kliknij <strong>Testuj połączenie</strong> powyżej.
+                Powinien pokazać się zielony status z datą/czasem drukarki.
               </p>
-              <ul className="mt-2 space-y-1 text-sm text-muted-foreground list-disc pl-5">
-                <li><strong>Paragon</strong> — przy każdym obciążeniu pokoju (posting) i rejestracji zaliczki</li>
-                <li><strong>Fakturę</strong> — przy wystawieniu faktury VAT z poziomu rezerwacji (POSNET Trio obsługuje faktury)</li>
-              </ul>
+            </div>
+
+            {/* Krok 5 */}
+            <div className="relative pl-8">
+              <div className="absolute left-0 top-0 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                5
+              </div>
+              <h3 className="font-medium mb-2">Gotowe — paragony drukują się automatycznie</h3>
+              <p className="text-sm text-muted-foreground">
+                System automatycznie drukuje paragony przy obciążeniu pokoju i rejestracji zaliczki.
+              </p>
             </div>
           </div>
         </section>

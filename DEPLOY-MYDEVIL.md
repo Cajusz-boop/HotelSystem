@@ -136,12 +136,30 @@ deploy-to-mydevil.ps1
   3. npx prisma migrate diff --from-empty --script  ->  _deploy_schema_diff.sql
   |   (CREATE TABLE IF NOT EXISTS — bezpieczne, nie nadpisuje istniejacych tabel)
   |
+  3b. Jeśli istnieje prisma/config-snapshot.json — import konfiguracji do bazy produkcyjnej
+  |   (dane sprzedawcy, logo, szablony faktur — zapisane w UI przechodzą na produkcję)
+  |
   4. Upload: rsync (tylko zmiany) LUB ZIP + scp
   5. Przy ZIP: ssh: rm -rf .next, unzip
   6. ssh: mysql --force < SQL (jesli jest), devil www restart
   |
   -> Strona dziala
 ```
+
+## Synchronizacja konfiguracji (dane sprzedawcy, logo, szablony)
+
+Dane wpisane w **Ustawienia → Szablony** (nazwa firmy, NIP, adres, logo, dane bankowe) są zapisywane w bazie i **automatycznie eksportowane** do pliku `prisma/config-snapshot.json` przy każdym zapisie (tylko lokalnie, w trybie dev).
+
+**Aby dane były na produkcji i działały z dowolnego komputera:**
+
+1. Wpisz dane w formularzu (Ustawienia → Szablony lub Ustawienia → Dane hotelu) i kliknij **Zapisz**.
+2. Upewnij się, że `prisma/config-snapshot.json` istnieje (po zapisie tworzy go auto-eksport; lub ręcznie: `npm run db:config:export`).
+3. **Zapisz plik w Git:** `git add prisma/config-snapshot.json` i commit.
+4. Wdróż: `.\scripts\deploy-to-mydevil.ps1` (lub `zapisz-i-wdroz.ps1`).
+
+Skrypt deploy przed wysłaniem plików **importuje** zawartość `config-snapshot.json` do bazy produkcyjnej. Dzięki temu dane sprzedawcy, logo i szablony są na produkcji niezależnie od tego, z którego komputera robisz deploy — ważne jest, by w repozytorium był aktualny `config-snapshot.json`.
+
+---
 
 ## Jak to dziala na MyDevil (krok po kroku)
 
