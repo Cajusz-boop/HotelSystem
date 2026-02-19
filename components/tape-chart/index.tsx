@@ -48,8 +48,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ReservationBarWithMenu } from "./reservation-bar-with-menu";
-import { ReservationEditSheet, type ReservationEditSheetTab } from "./reservation-edit-sheet";
-import { CreateReservationSheet, type CreateReservationContext } from "./create-reservation-sheet";
+import { UnifiedReservationDialog, type UnifiedReservationTab, type CreateReservationContext } from "./unified-reservation-dialog";
 import { RoomStatusIcon } from "./room-status-icon";
 import { getDateRange } from "@/lib/tape-chart-data";
 import { useTapeChartStore } from "@/lib/store/tape-chart-store";
@@ -767,7 +766,7 @@ export function TapeChart({
     checkOut: string;
   } | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [editInitialTab, setEditInitialTab] = useState<ReservationEditSheetTab | undefined>(undefined);
+  const [editInitialTab, setEditInitialTab] = useState<UnifiedReservationTab | undefined>(undefined);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [focusedCell, setFocusedCell] = useState<{ roomIdx: number; dateIdx: number } | null>(null);
   const [selectedReservationIds, setSelectedReservationIds] = useState<Set<string>>(new Set());
@@ -1589,7 +1588,7 @@ export function TapeChart({
       <div className="relative flex flex-1 min-h-0">
         <div
           ref={scrollContainerRef}
-          className="flex-1 overflow-auto p-1.5 sm:p-2 md:p-3 min-w-0 tape-chart-scroll-area mr-[30px]"
+          className="flex-1 overflow-auto p-1.5 sm:p-2 md:p-3 min-w-0 tape-chart-scroll-area mr-[44px]"
           style={{ willChange: "scroll-position" }}
         >
         {displayRooms.length === 0 ? (
@@ -1898,7 +1897,7 @@ export function TapeChart({
         )}
         </div>
         {displayRooms.length > 0 && (
-          <div className="absolute right-0 top-0 bottom-0 w-[30px] shrink-0 pointer-events-auto">
+          <div className="absolute right-0 top-0 bottom-0 w-[44px] shrink-0 pointer-events-auto">
             <TapeChartOverviewBar
               dates={dates}
               reservations={filteredReservations}
@@ -2085,7 +2084,8 @@ export function TapeChart({
           );
         }}
       />
-      <ReservationEditSheet
+      <UnifiedReservationDialog
+        mode="edit"
         reservation={selectedReservation}
         open={sheetOpen}
         onOpenChange={(open) => {
@@ -2106,8 +2106,9 @@ export function TapeChart({
           );
         }}
       />
-      <CreateReservationSheet
-        context={newReservationContext}
+      <UnifiedReservationDialog
+        mode="create"
+        createContext={newReservationContext}
         open={createSheetOpen}
         onOpenChange={setCreateSheetOpen}
         rooms={allRooms}

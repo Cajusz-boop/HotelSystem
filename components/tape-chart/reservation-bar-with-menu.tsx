@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ReservationBar } from "./reservation-bar";
-import type { ReservationEditSheetTab } from "./reservation-edit-sheet";
+import type { UnifiedReservationTab } from "./unified-reservation-dialog";
 import { updateReservationStatus, getCheckoutBalanceWarning } from "@/app/actions/reservations";
 import { printInvoiceForReservation, createProforma, chargeLocalTax, createVatInvoice, createPaymentLink, createReceipt, collectSecurityDeposit } from "@/app/actions/finance";
 import { sendReservationConfirmation, sendThankYouAfterStay } from "@/app/actions/mailing";
@@ -46,7 +46,7 @@ interface ReservationBarWithMenuProps {
   isPlaceholder?: boolean;
   pricePerNight?: number;
   totalAmount?: number;
-  onEdit: (reservation: Reservation, initialTab?: ReservationEditSheetTab) => void;
+  onEdit: (reservation: Reservation, initialTab?: UnifiedReservationTab) => void;
   onStatusChange?: (updated: Reservation) => void;
   /** Resize: przekazane gdy grafik obsługuje zmianę dat przez przeciąganie krawędzi */
   dates?: string[];
@@ -97,8 +97,6 @@ export function ReservationBarWithMenu({
   const [minibarOpen, setMinibarOpen] = useState(false);
   const [preauthOpen, setPreauthOpen] = useState(false);
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
-  const [checkInDialogOpen, setCheckInDialogOpen] = useState(false);
-  const [checkInCashDeposit, setCheckInCashDeposit] = useState("");
   const [checkInSubmitting, setCheckInSubmitting] = useState(false);
   const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
   const [checkoutBalance, setCheckoutBalance] = useState<{
@@ -248,20 +246,14 @@ export function ReservationBarWithMenu({
       } else {
         toast.success("Meldunek zarejestrowany");
       }
-      setCheckInDialogOpen(false);
     } finally {
       setCheckInSubmitting(false);
     }
   }, [reservation.id, onStatusChange]);
 
   const handleCheckIn = useCallback(() => {
-    if (reservation.status === "CONFIRMED") {
-      setCheckInCashDeposit("");
-      setCheckInDialogOpen(true);
-    } else {
-      handleCheckInConfirm("");
-    }
-  }, [reservation.status, handleCheckInConfirm]);
+    handleCheckInConfirm("");
+  }, [handleCheckInConfirm]);
 
   const handleCancel = useCallback(async () => {
     const result = await updateReservationStatus(reservation.id, "CANCELLED");
@@ -441,12 +433,10 @@ export function ReservationBarWithMenu({
   const handleBarClick = useCallback(
     (e: React.MouseEvent) => {
       if (e.ctrlKey || e.metaKey) return;
-      if (reservation.status === "CONFIRMED") {
-        e.stopPropagation();
-        handleCheckIn();
-      }
+      e.stopPropagation();
+      onEdit(reservation);
     },
-    [reservation.status, handleCheckIn]
+    [reservation, onEdit]
   );
 
   return (
@@ -508,25 +498,9 @@ export function ReservationBarWithMenu({
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-56">
-        <ContextMenuItem
-          onSelect={() => onEdit(reservation)}
-          disabled={reservation.status === "CANCELLED" || reservation.status === "CHECKED_OUT"}
-        >
+        {/* === REZERWACJA === */}
+        <ContextMenuItem onSelect={() => onEdit(reservation)}>
           Edytuj rezerwację
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={() => onEdit(reservation, "dokumenty")}
-          disabled={reservation.status === "CANCELLED" || reservation.status === "CHECKED_OUT"}
-        >
-          <Receipt className="mr-2 h-4 w-4" />
-          Wystaw dokument
-        </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={() => onEdit(reservation, "rozliczenie")}
-          disabled={reservation.status === "CANCELLED" || reservation.status === "CHECKED_OUT"}
-        >
-          <CreditCard className="mr-2 h-4 w-4" />
-          Płatności
         </ContextMenuItem>
         {onDuplicate && (
           <ContextMenuItem onSelect={() => onDuplicate(reservation)}>
@@ -535,106 +509,81 @@ export function ReservationBarWithMenu({
         )}
         {onExtendStay && (reservation.status === "CONFIRMED" || reservation.status === "CHECKED_IN") && (
           <>
-            <ContextMenuItem onSelect={handleExtendStay}>
-              Przedłuż pobyt (+1 dzień)
-            </ContextMenuItem>
-            <ContextMenuItem onSelect={handleShortenStay}>
-              Skróć pobyt (-1 dzień)
-            </ContextMenuItem>
+            <ContextMenuItem onSelect={handleExtendStay}>Przedłuż pobyt (+1 dzień)</ContextMenuItem>
+            <ContextMenuItem onSelect={handleShortenStay}>Skróć pobyt (-1 dzień)</ContextMenuItem>
           </>
         )}
-        <ContextMenuItem
-          onSelect={handleCheckIn}
-          disabled={reservation.status !== "CONFIRMED" && reservation.status !== "CHECKED_IN"}
-        >
-          Meldunek
+        {onSplitClick && reservation.status !== "CANCELLED" && reservation.status !== "CHECKED_OUT" && (() => {
+          const nights = Math.round((new Date(reservation.checkOut).getTime() - new Date(reservation.checkIn).getTime()) / (24 * 60 * 60 * 1000));
+          return nights >= 2 ? <ContextMenuItem onSelect={() => onSplitClick(reservation)}>Podziel rezerwację</ContextMenuItem> : null;
+        })()}
+
+        <ContextMenuSeparator />
+
+        {/* === MELDUNEK / WYMELDOWANIE === */}
+        <ContextMenuItem onSelect={handleCheckIn} disabled={reservation.status !== "CONFIRMED"}>
+          Zamelduj
         </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={handleCheckoutClick}
-          disabled={reservation.status !== "CHECKED_IN"}
-        >
+        <ContextMenuItem onSelect={handleCheckoutClick} disabled={reservation.status !== "CHECKED_IN"}>
           Wymelduj
         </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={() =>
-            window.open(
-              `/api/reservations/${reservation.id}/registration-card/pdf`,
-              "_blank",
-              "noopener,noreferrer"
-            )
-          }
-        >
+
+        <ContextMenuSeparator />
+
+        {/* === ROZLICZENIE === */}
+        <ContextMenuItem onSelect={() => onEdit(reservation, "rozliczenie")}>
+          <CreditCard className="mr-2 h-4 w-4" />
+          Rozliczenie (folio / płatności)
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={handleChargeLocalTax}>Nalicz opłatę miejscową</ContextMenuItem>
+        <ContextMenuItem onSelect={() => setMinibarOpen(true)}>Dolicz minibar</ContextMenuItem>
+        <ContextMenuItem onSelect={handleCreatePaymentLink}>Wyślij link do płatności</ContextMenuItem>
+        <ContextMenuItem onSelect={() => setPreauthOpen(true)}>Preautoryzacja karty</ContextMenuItem>
+
+        <ContextMenuSeparator />
+
+        {/* === DOKUMENTY === */}
+        <ContextMenuItem onSelect={() => onEdit(reservation, "dokumenty")}>
+          <Receipt className="mr-2 h-4 w-4" />
+          Dokumenty
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => window.open(`/api/reservations/${reservation.id}/registration-card/pdf`, "_blank", "noopener,noreferrer")}>
           <FileText className="mr-2 h-4 w-4" />
           Drukuj kartę meldunkową
         </ContextMenuItem>
-        <ContextMenuItem onSelect={handlePrintInvoice}>
-          <FileText className="mr-2 h-4 w-4" />
-          Drukuj fakturę (POSNET)
-        </ContextMenuItem>
         <ContextMenuItem onSelect={handleCreateVatInvoice}>
           <FileText className="mr-2 h-4 w-4" />
-          Wystaw fakturę VAT (PDF)
+          Faktura VAT (PDF)
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={handlePrintInvoice}>
+          <FileText className="mr-2 h-4 w-4" />
+          Faktura POSNET
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => setReceiptDialogOpen(true)}>
           <FileText className="mr-2 h-4 w-4" />
-          Wystaw rachunek (nie-VAT)
+          Rachunek (nie-VAT)
         </ContextMenuItem>
         <ContextMenuItem onSelect={handleCreateProforma}>
           <FileText className="mr-2 h-4 w-4" />
-          Wystaw proformę
+          Proforma
         </ContextMenuItem>
-        <ContextMenuItem onSelect={handleChargeLocalTax}>
-          Nalicz opłatę miejscową
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={handleCreatePaymentLink}>
-          Wyślij link do płatności
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => setPreauthOpen(true)}>
-          Preautoryzacja karty
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={handleSendConfirmation}>
-          Wyślij potwierdzenie e-mailem
-        </ContextMenuItem>
-        {(reservation.status === "CHECKED_OUT" && (
-          <ContextMenuItem onSelect={handleSendThankYou}>
-            Wyślij podziękowanie e-mailem
-          </ContextMenuItem>
-        ))}
-        <ContextMenuItem onSelect={handleSendDoorCodeSms}>
-          Wyślij kod do drzwi SMS
-        </ContextMenuItem>
-        {(reservation.status === "CHECKED_IN" && (
-          <ContextMenuItem onSelect={handleSendRoomReadySms}>
-            Wyślij SMS: pokój gotowy
-          </ContextMenuItem>
-        ))}
-        <ContextMenuItem onSelect={handleCreateWebCheckInLink}>
-          Wyślij link Web Check-in
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => setMinibarOpen(true)}>
-          Dolicz minibar do rachunku
-        </ContextMenuItem>
+
         <ContextMenuSeparator />
-        {onSplitClick &&
-          reservation.status !== "CANCELLED" &&
-          reservation.status !== "CHECKED_OUT" &&
-          (() => {
-            const nights = Math.round(
-              (new Date(reservation.checkOut).getTime() - new Date(reservation.checkIn).getTime()) /
-                (24 * 60 * 60 * 1000)
-            );
-            return nights >= 2 ? (
-              <ContextMenuItem onSelect={() => onSplitClick(reservation)}>
-                Podziel rezerwację
-              </ContextMenuItem>
-            ) : null;
-          })()}
+
+        {/* === KOMUNIKACJA === */}
+        <ContextMenuItem onSelect={handleSendConfirmation}>Wyślij potwierdzenie e-mailem</ContextMenuItem>
+        {reservation.status === "CHECKED_OUT" && (
+          <ContextMenuItem onSelect={handleSendThankYou}>Wyślij podziękowanie e-mailem</ContextMenuItem>
+        )}
+        <ContextMenuItem onSelect={handleSendDoorCodeSms}>Wyślij kod do drzwi SMS</ContextMenuItem>
+        {reservation.status === "CHECKED_IN" && (
+          <ContextMenuItem onSelect={handleSendRoomReadySms}>Wyślij SMS: pokój gotowy</ContextMenuItem>
+        )}
+        <ContextMenuItem onSelect={handleCreateWebCheckInLink}>Wyślij link Web Check-in</ContextMenuItem>
+
         <ContextMenuSeparator />
-        <ContextMenuItem
-          onSelect={handleCancel}
-          className="text-destructive focus:text-destructive"
-          disabled={reservation.status === "CANCELLED"}
-        >
+
+        <ContextMenuItem onSelect={handleCancel} className="text-destructive focus:text-destructive" disabled={reservation.status === "CANCELLED"}>
           Anuluj rezerwację
         </ContextMenuItem>
       </ContextMenuContent>
@@ -654,43 +603,7 @@ export function ReservationBarWithMenu({
         open={receiptDialogOpen}
         onOpenChange={setReceiptDialogOpen}
       />
-      <Dialog open={checkInDialogOpen} onOpenChange={setCheckInDialogOpen}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Meldunek – depozyt gotówkowy</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Opcjonalnie podaj kwotę kaucji gotówkowej pobieranej przy meldunku.
-          </p>
-          <div className="space-y-2">
-            <Label htmlFor="checkInCashDeposit">Kaucja gotówkowa (PLN)</Label>
-            <Input
-              id="checkInCashDeposit"
-              type="number"
-              min={0}
-              step={0.01}
-              placeholder="0"
-              value={checkInCashDeposit}
-              onChange={(e) => setCheckInCashDeposit(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setCheckInDialogOpen(false)}
-              disabled={checkInSubmitting}
-            >
-              Anuluj
-            </Button>
-            <Button
-              onClick={() => handleCheckInConfirm(checkInCashDeposit)}
-              disabled={checkInSubmitting}
-            >
-              {checkInSubmitting ? "Zapisywanie…" : "Zamelduj"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Depozyt gotówkowy przeniesiony do zakładki Rozliczenie w ujednoliconym dialogu */}
       <Dialog open={checkoutDialogOpen} onOpenChange={setCheckoutDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

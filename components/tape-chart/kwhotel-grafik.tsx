@@ -5,8 +5,7 @@ import { ChevronLeft, ChevronRight, CalendarPlus, Search, User, Bed, Users, Ban,
 import { getDateRange } from "@/lib/tape-chart-data";
 import { useTapeChartStore } from "@/lib/store/tape-chart-store";
 import { getEffectivePricesBatch } from "@/app/actions/rooms";
-import { ReservationEditSheet } from "./reservation-edit-sheet";
-import { CreateReservationSheet, type CreateReservationContext } from "./create-reservation-sheet";
+import { UnifiedReservationDialog, type CreateReservationContext } from "./unified-reservation-dialog";
 import { GroupReservationSheet } from "./group-reservation-sheet";
 import { RoomBlockSheet } from "./room-block-sheet";
 import { MonthlyOverviewDialog } from "./monthly-overview-dialog";
@@ -1039,7 +1038,8 @@ export function KwhotelGrafik({
         onCreated={handleRoomBlockCreated}
         onDeleted={handleRoomBlockDeleted}
       />
-      <ReservationEditSheet
+      <UnifiedReservationDialog
+        mode="edit"
         reservation={selectedReservation}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
@@ -1056,8 +1056,9 @@ export function KwhotelGrafik({
           );
         }}
       />
-      <CreateReservationSheet
-        context={newReservationContext}
+      <UnifiedReservationDialog
+        mode="create"
+        createContext={newReservationContext}
         open={createSheetOpen}
         onOpenChange={setCreateSheetOpen}
         rooms={allRooms}
