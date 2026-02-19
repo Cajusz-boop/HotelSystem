@@ -1,8 +1,10 @@
 /**
  * Cache w pamięci procesu dla flagi AUTH_DISABLED.
  * Współdzielony między middleware a server actions (ten sam proces Node.js).
- * Dzięki temu zmiana ustawienia działa natychmiast bez restartu serwera.
+ * TTL zapewnia, że zmiana przełącznika w UI działa w ciągu kilku sekund bez restartu.
  */
+
+const CACHE_TTL_MS = 5_000;
 
 const g = globalThis as unknown as {
   __authDisabledCache?: { value: boolean; loadedAt: number };
@@ -15,15 +17,21 @@ export function setAuthDisabledCache(disabled: boolean): void {
 
 /**
  * Odczytaj wartość z cache.
- * - Jeśli cache istnieje — zwraca wartość natychmiast (zero latencji).
- * - Jeśli cache nie istnieje (np. po starcie serwera) — zwraca undefined.
- *   W takim przypadku middleware/auth powinny użyć fallbacku (process.env lub fetch do bazy).
+ * Zwraca undefined jeśli cache nie istnieje lub wygasł (TTL).
  */
 export function getAuthDisabledCache(): boolean | undefined {
-  return g.__authDisabledCache?.value;
+  if (!g.__authDisabledCache) return undefined;
+  if (Date.now() - g.__authDisabledCache.loadedAt > CACHE_TTL_MS) return undefined;
+  return g.__authDisabledCache.value;
 }
 
-/** Sprawdź czy cache jest załadowany */
+/** Sprawdź czy cache jest załadowany i aktualny */
 export function isAuthCacheLoaded(): boolean {
-  return g.__authDisabledCache !== undefined;
+  if (!g.__authDisabledCache) return false;
+  return Date.now() - g.__authDisabledCache.loadedAt <= CACHE_TTL_MS;
+}
+
+/** Wymuś odświeżenie cache przy następnym żądaniu */
+export function invalidateAuthDisabledCache(): void {
+  g.__authDisabledCache = undefined;
 }
