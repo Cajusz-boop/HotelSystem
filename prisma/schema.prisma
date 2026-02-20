@@ -636,6 +636,7 @@ model Reservation {
   company     Company?         @relation(fields: [companyId], references: [id], onDelete: SetNull)
   rateCodeId  String?
   rateCode    RateCode?        @relation(fields: [rateCodeId], references: [id], onDelete: SetNull)
+  rateCodePrice Decimal?       @db.Decimal(10, 2)  // nadpisanie ceny za dobę (gdy różna od rateCode.price)
   groupId     String?
   group       ReservationGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   checkIn     DateTime         @db.Date

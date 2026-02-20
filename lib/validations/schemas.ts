@@ -348,6 +348,7 @@ const reservationBaseSchema = z.object({
   companyId: z.string().optional().nullable(),
   companyData: companyDataSchema.optional().nullable(), // firma do meldunku – przy tworzeniu rezerwacji zapisana do Company i powiązana
   rateCodeId: z.string().optional().nullable(),
+  rateCodePrice: z.number().min(0).optional().nullable(), // nadpisanie ceny za dobę (PLN)
   parkingSpotId: z.string().optional().nullable(), // miejsce parkingowe – powiązane z rezerwacją
   checkIn: dateString,
   checkOut: dateString,

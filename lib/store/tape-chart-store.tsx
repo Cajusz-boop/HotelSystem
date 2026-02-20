@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useRef } from "react";
+import { createContext, useContext, useEffect, useRef } from "react";
 import { createStore, useStore } from "zustand";
 import type { Reservation } from "@/lib/tape-chart-types";
 
@@ -104,6 +104,9 @@ export function TapeChartStoreProvider({
   if (!storeRef.current) {
     storeRef.current = createTapeChartStore(reservations);
   }
+  useEffect(() => {
+    storeRef.current?.getState().hydrate(reservations);
+  }, [reservations]);
   return (
     <TapeChartStoreContext.Provider value={storeRef.current}>
       {children}

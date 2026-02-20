@@ -327,6 +327,7 @@ describe("Fakturowanie – createVatInvoice", () => {
     const expectedNet = Math.round((300 / 1.08) * 100) / 100;
     const expectedVat = 300 - expectedNet;
 
+    // @ts-expect-error - mock zwraca uproszczony obiekt, pełny typ Prisma nie jest potrzebny w teście
     vi.mocked(prisma.invoice.create).mockImplementation(async (args: { data: Record<string, unknown> }) => {
       expect(args.data.vatRate).toBe(8);
       expect(args.data.amountGross).toBeCloseTo(300, 2);
@@ -356,6 +357,7 @@ describe("Fakturowanie – createVatInvoice", () => {
     mockCennikConfig(8, false);
     mockDocumentNumbering();
 
+    // @ts-expect-error - mock zwraca uproszczony obiekt, pełny typ Prisma nie jest potrzebny w teście
     vi.mocked(prisma.invoice.create).mockImplementation(async (args: { data: Record<string, unknown> }) => {
       expect(args.data.vatRate).not.toBe(0);
       expect(Number(args.data.amountVat)).toBeGreaterThan(0);
@@ -383,6 +385,7 @@ describe("Fakturowanie – createVatInvoice", () => {
     mockCennikConfig(8, false);
     mockDocumentNumbering();
 
+    // @ts-expect-error - mock zwraca uproszczony obiekt, pełny typ Prisma nie jest potrzebny w teście
     vi.mocked(prisma.invoice.create).mockImplementation(async (args: { data: Record<string, unknown> }) => {
       expect(args.data.buyerNip).toBe("5711640854");
       expect(args.data.buyerName).toBe("Karczma Łabędź");

@@ -57,22 +57,22 @@ export interface RoomBlock {
   reason?: string;
 }
 
-/** Kolory pasków rezerwacji – pełne, nieprzezroczyste */
+/** Ramka pasków rezerwacji – zawsze czarna, cienka (kolor wypełnienia z RESERVATION_STATUS_BG / ustawień) */
 export const RESERVATION_STATUS_COLORS: Record<ReservationStatus, string> = {
-  CONFIRMED: "border-2 border-blue-800",
-  CHECKED_IN: "border-2 border-blue-900",
-  CHECKED_OUT: "border-2 border-slate-700",
-  CANCELLED: "border-2 border-red-700",
-  NO_SHOW: "border-2 border-amber-700",
+  CONFIRMED: "border border-black",
+  CHECKED_IN: "border border-black",
+  CHECKED_OUT: "border border-black",
+  CANCELLED: "border border-black",
+  NO_SHOW: "border border-black",
 };
 
-/** Tła w rgba – 100% opacity */
+/** Tła – kolory unikalne, Potwierdzona zielona */
 export const RESERVATION_STATUS_BG: Record<ReservationStatus, string> = {
-  CONFIRMED: "rgb(37 99 235)",
-  CHECKED_IN: "rgb(29 78 216)",
-  CHECKED_OUT: "rgb(100 116 139)",
-  CANCELLED: "rgb(239 68 68)",
-  NO_SHOW: "rgb(245 158 11)",
+  CONFIRMED: "rgb(34 197 94)",   // zielony
+  CHECKED_IN: "rgb(59 130 246)", // niebieski
+  CHECKED_OUT: "rgb(100 116 139)", // szary
+  CANCELLED: "rgb(239 68 68)",   // czerwony
+  NO_SHOW: "rgb(245 158 11)",    // pomarańczowy
 };
 
 /** Ikony Lucide dla statusów pokoju */

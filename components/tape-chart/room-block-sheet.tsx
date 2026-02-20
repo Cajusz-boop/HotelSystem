@@ -19,6 +19,8 @@ export interface RoomBlockSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   rooms: Room[];
+  /** Pokój do wstępnego wyboru (np. z menu kontekstowego) */
+  initialRoomNumber?: string | null;
   onCreated?: (block: RoomBlock) => void;
   onDeleted?: (blockId: string) => void;
 }
@@ -27,6 +29,7 @@ export function RoomBlockSheet({
   open,
   onOpenChange,
   rooms,
+  initialRoomNumber,
   onCreated,
   onDeleted,
 }: RoomBlockSheetProps) {
@@ -40,7 +43,10 @@ export function RoomBlockSheet({
 
   useEffect(() => {
     if (open) {
-      setRoomNumber(rooms[0]?.number ?? "");
+      const preferred = initialRoomNumber && rooms.some((r) => r.number === initialRoomNumber)
+        ? initialRoomNumber
+        : rooms[0]?.number ?? "";
+      setRoomNumber(preferred);
       const today = new Date();
       const todayStr = today.toISOString().slice(0, 10);
       setStartDate(todayStr);
@@ -51,7 +57,7 @@ export function RoomBlockSheet({
       setDeleteId(null);
       setError(null);
     }
-  }, [open, rooms]);
+  }, [open, rooms, initialRoomNumber]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

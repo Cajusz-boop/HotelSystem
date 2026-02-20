@@ -44,6 +44,8 @@ export interface TapeChartData {
   reservationGroups: { id: string; name?: string | null; reservationCount: number }[];
   /** Kolory statusów rezerwacji (CONFIRMED, CHECKED_IN itd.) – ładowane z obiektu */
   reservationStatusColors?: Partial<Record<string, string>> | null;
+  /** Id obiektu – do przekazania do TapeChart (unika dodatkowego wywołania getEffectivePropertyId) */
+  propertyId?: string | null;
 }
 
 /** Format daty YYYY-MM-DD w UTC – spójnie z MySQL DATE */
@@ -335,33 +337,45 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
       )
     : null;
 
-  const colorsRes = await getPropertyReservationColors(propertyId);
+  const [colorsRes, roomTypes] = await Promise.all([
+    getPropertyReservationColors(propertyId),
+    prisma.roomType.findMany({ select: { name: true, basePrice: true } }).catch(() => [] as { name: string; basePrice: unknown }[]),
+  ]);
   const reservationStatusColors = colorsRes.success && colorsRes.data && Object.keys(colorsRes.data).length > 0
     ? colorsRes.data
     : null;
+  const typePriceMap = new Map<string, number>(
+    roomTypes
+      .filter((t) => t.basePrice != null)
+      .map((t) => [t.name, Number(t.basePrice)])
+  );
 
   return {
+    propertyId,
     reservations: reservations.map(mapReservationToTapeChart),
-    rooms: rooms.map((r) => ({
-      id: r.id,
-      number: r.number,
-      type: r.type,
-      status: r.status as string,
-      floor: r.floor ?? undefined,
-      price: r.price != null ? Number(r.price) : undefined,
-      reason: r.reason ?? undefined,
-      roomFeatures: Array.isArray(r.roomFeatures)
-        ? (r.roomFeatures as string[])
-        : r.roomFeatures != null
-          ? [String(r.roomFeatures)]
-          : undefined,
-      beds: r.beds ?? undefined,
-      blocks:
-        (blocksByRoomId.get(r.id) ?? []).map((block) => ({
-          ...block,
-          roomNumber: r.number,
-        })),
-    })),
+    rooms: rooms.map((r) => {
+      const roomPrice = r.price != null ? Number(r.price) : typePriceMap.get(r.type);
+      return {
+        id: r.id,
+        number: r.number,
+        type: r.type,
+        status: r.status as string,
+        floor: r.floor ?? undefined,
+        price: roomPrice,
+        reason: r.reason ?? undefined,
+        roomFeatures: Array.isArray(r.roomFeatures)
+          ? (r.roomFeatures as string[])
+          : r.roomFeatures != null
+            ? [String(r.roomFeatures)]
+            : undefined,
+        beds: r.beds ?? undefined,
+        blocks:
+          (blocksByRoomId.get(r.id) ?? []).map((block) => ({
+            ...block,
+            roomNumber: r.number,
+          })),
+      };
+    }),
     reservationGroups: (filteredGroupIds
       ? groups.filter((g) => filteredGroupIds.has(g.id))
       : groups

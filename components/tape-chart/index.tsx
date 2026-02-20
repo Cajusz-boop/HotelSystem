@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   type DragEndEvent,
@@ -43,6 +44,8 @@ import {
   LogOut,
   SprayCan,
   Plus,
+  RefreshCw,
+  StickyNote,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -53,13 +56,13 @@ import { RoomStatusIcon } from "./room-status-icon";
 import { getDateRange } from "@/lib/tape-chart-data";
 import { useTapeChartStore } from "@/lib/store/tape-chart-store";
 import { moveReservation, updateReservationStatus } from "@/app/actions/reservations";
-import { getEffectivePricesBatch } from "@/app/actions/rooms";
+import { getEffectivePricesBatch, updateRoomStatus } from "@/app/actions/rooms";
 import {
   getEffectivePropertyId,
   getPropertyReservationColors,
 } from "@/app/actions/properties";
-import type { Room, Reservation, ReservationGroupSummary } from "@/lib/tape-chart-types";
-import { RESERVATION_STATUS_BG } from "@/lib/tape-chart-types";
+import type { Room, Reservation, ReservationGroupSummary, RoomStatus } from "@/lib/tape-chart-types";
+import { RESERVATION_STATUS_BG, ROOM_STATUS_LABELS } from "@/lib/tape-chart-types";
 import { cn } from "@/lib/utils";
 import { GroupReservationSheet } from "./group-reservation-sheet";
 import { RoomBlockSheet } from "./room-block-sheet";
@@ -76,6 +79,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 const RoomRowDroppable = memo(function RoomRowDroppable({
   room,
@@ -83,6 +96,13 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   dates,
   children,
   onCellClick,
+  onRoomLabelClick,
+  onRoomBlock,
+  onRoomStatusChange,
+  onShowOnlyRoom,
+  onShowAllRooms,
+  showOnlyRoomNumber,
+  previewMode,
   blockedRanges,
   focusedDateIdx,
   columnWidthPx,
@@ -93,6 +113,13 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   dates: string[];
   children: React.ReactNode;
   onCellClick?: (roomNumber: string, dateStr: string) => void;
+  onRoomLabelClick?: (room: Room) => void;
+  onRoomBlock?: (room: Room) => void;
+  onRoomStatusChange?: (room: Room, status: RoomStatus) => void;
+  onShowOnlyRoom?: (room: Room) => void;
+  onShowAllRooms?: () => void;
+  showOnlyRoomNumber?: string | null;
+  previewMode?: boolean;
   blockedRanges?: Array<{ startDate: string; endDate: string; reason?: string }>;
   focusedDateIdx?: number;
   columnWidthPx: number;
@@ -100,24 +127,86 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `room-${room.number}` });
   const isDirty = room.status === "DIRTY";
+  const isFilteredToThis = showOnlyRoomNumber === room.number;
+
+  const labelContent = (
+    <div
+      ref={setNodeRef}
+      data-testid={`room-row-${room.number}`}
+      className={cn(
+        "sticky left-0 z-[60] flex items-center gap-1 border-b border-r border-[hsl(var(--kw-grid-border))] px-1.5 py-0.5",
+        isOver ? "bg-primary/10 ring-1 ring-primary" : rowIdx % 2 === 1 ? "bg-slate-100 dark:bg-slate-800" : "bg-card",
+        isDirty && "bg-amber-50/80 dark:bg-amber-950/30",
+        !previewMode && (onRoomLabelClick || onRoomBlock) && "cursor-pointer hover:bg-muted/50"
+      )}
+      style={{
+        gridColumn: 1,
+        gridRow: rowIdx + 2,
+        minHeight: rowHeightPx,
+      }}
+      onClick={(e) => {
+        if (previewMode || !onRoomLabelClick) return;
+        e.stopPropagation();
+        onRoomLabelClick(room);
+      }}
+    >
+      {children}
+    </div>
+  );
+
+  const wrappedLabel = !previewMode && (onRoomBlock || onRoomStatusChange || onShowOnlyRoom || onShowAllRooms) ? (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{labelContent}</ContextMenuTrigger>
+      <ContextMenuContent className="w-56">
+        {onRoomLabelClick && (
+          <ContextMenuItem onSelect={() => onRoomLabelClick(room)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nowa rezerwacja
+          </ContextMenuItem>
+        )}
+        {onRoomBlock && (
+          <ContextMenuItem onSelect={() => onRoomBlock(room)}>
+            <Ban className="h-4 w-4 mr-2" />
+            Zablokuj pokój (Room Block)
+          </ContextMenuItem>
+        )}
+        {onRoomStatusChange && room.id && (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <SprayCan className="h-4 w-4 mr-2" />
+              Zmień status pokoju
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              {(Object.keys(ROOM_STATUS_LABELS) as RoomStatus[]).map((status) => (
+                <ContextMenuItem
+                  key={status}
+                  onSelect={() => onRoomStatusChange(room, status)}
+                  className={cn(room.status === status && "font-semibold")}
+                >
+                  {ROOM_STATUS_LABELS[status]}
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        )}
+        <ContextMenuSeparator />
+        {onShowOnlyRoom && (
+          <ContextMenuItem onSelect={() => onShowOnlyRoom(room)} disabled={isFilteredToThis}>
+            Pokaż tylko ten pokój
+          </ContextMenuItem>
+        )}
+        {onShowAllRooms && showOnlyRoomNumber && (
+          <ContextMenuItem onSelect={onShowAllRooms}>
+            Pokaż wszystkie pokoje
+          </ContextMenuItem>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
+  ) : labelContent;
+
   return (
     <>
-      <div
-        ref={setNodeRef}
-        data-testid={`room-row-${room.number}`}
-        className={cn(
-          "sticky left-0 z-[60] flex items-center gap-1 border-b border-r border-[hsl(var(--kw-grid-border))] px-1.5 py-0.5",
-          isOver ? "bg-primary/10 ring-1 ring-primary" : rowIdx % 2 === 1 ? "bg-slate-100 dark:bg-slate-800" : "bg-card",
-          isDirty && "bg-amber-50/80 dark:bg-amber-950/30"
-        )}
-        style={{
-          gridColumn: 1,
-          gridRow: rowIdx + 2,
-          minHeight: rowHeightPx,
-        }}
-      >
-        {children}
-      </div>
+      {wrappedLabel}
       {dates.map((dateStr, colIdx) => {
         const saturday = isSaturdayDate(dateStr);
         const sunday = isSundayDate(dateStr);
@@ -267,6 +356,7 @@ export function TapeChart({
   rooms,
   initialHighlightReservationId,
   initialStatusBg,
+  initialPropertyId,
   reservationGroups,
   initialOpenCreate = false,
 }: {
@@ -274,6 +364,8 @@ export function TapeChart({
   initialHighlightReservationId?: string;
   /** Kolory statusów z serwera – unika migania z niebieskiego na zielony przy ładowaniu */
   initialStatusBg?: Partial<Record<string, string>>;
+  /** Id obiektu z serwera – unika dodatkowego wywołania getEffectivePropertyId */
+  initialPropertyId?: string | null;
   reservationGroups: ReservationGroupSummary[];
   /** E2E: otwórz formularz nowej rezerwacji od razu (?e2eOpenCreate=1) */
   initialOpenCreate?: boolean;
@@ -312,16 +404,19 @@ export function TapeChart({
   const [exportRooms, setExportRooms] = useState<string[]>([]);
   const [groupReservationSheetOpen, setGroupReservationSheetOpen] = useState(false);
   const [roomBlockSheetOpen, setRoomBlockSheetOpen] = useState(false);
+  const [roomBlockInitialRoom, setRoomBlockInitialRoom] = useState<string | null>(null);
+  const [showOnlyRoomNumber, setShowOnlyRoomNumber] = useState<string | null>(null);
   const [splitDialogReservation, setSplitDialogReservation] = useState<Reservation | null>(null);
   const [statusColorsDialogOpen, setStatusColorsDialogOpen] = useState(false);
   const [legendDialogOpen, setLegendDialogOpen] = useState(false);
-  const [propertyId, setPropertyId] = useState<string | null>(null);
+  const router = useRouter();
+  const [propertyId, setPropertyId] = useState<string | null>(initialPropertyId ?? null);
   const [statusBg, setStatusBg] = useState<Record<string, string> | null>(
     initialStatusBg && Object.keys(initialStatusBg).length > 0
       ? (Object.fromEntries(Object.entries(initialStatusBg).filter(([, v]) => typeof v === "string")) as Record<string, string>)
       : null
   );
-  const [statusTab, setStatusTab] = useState<"statuses" | "custom" | "sources" | "prices">("statuses");
+  const [statusTab, setStatusTab] = useState<"statuses" | "roomStatus" | "custom" | "sources" | "prices">("statuses");
   const [colorMode, setColorMode] = useState<"status" | "source">("status");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -336,18 +431,28 @@ export function TapeChart({
   const canRedo = useTapeChartStore((s) => s.future.length > 0);
 
   useEffect(() => {
+    if (initialPropertyId != null) return;
     getEffectivePropertyId().then(setPropertyId);
-  }, []);
+  }, [initialPropertyId]);
   useEffect(() => {
     if (!propertyId) return;
+    const hasColorsFromServer = initialStatusBg && Object.keys(initialStatusBg).length > 0;
+    if (hasColorsFromServer) return;
     getPropertyReservationColors(propertyId).then((res) => {
       if (res.success && res.data && Object.keys(res.data).length > 0)
         setStatusBg(res.data as Record<string, string>);
     });
-  }, [propertyId]);
+  }, [propertyId, initialStatusBg]);
+  // Po odświeżeniu strony (router.refresh) – zsynchronizuj kolory z serwera
+  useEffect(() => {
+    if (initialStatusBg && Object.keys(initialStatusBg).length > 0) {
+      setStatusBg(initialStatusBg as Record<string, string>);
+    }
+  }, [initialStatusBg]);
 
   const statusTabOptions = [
     { id: "statuses", label: "Statusy rezerwacji" },
+    { id: "roomStatus", label: "Status pokoju" },
     { id: "custom", label: "Dodatkowe statusy" },
     { id: "sources", label: "Źródła rezerwacji" },
     { id: "prices", label: "Ceny" },
@@ -470,6 +575,7 @@ export function TapeChart({
   const displayRooms = useMemo(() => {
     const filter = roomFilter.trim().toLowerCase();
     const filtered = allRooms.filter((room) => {
+      if (showOnlyRoomNumber && room.number !== showOnlyRoomNumber) return false;
       if (filter && !room.number.toLowerCase().includes(filter) && !room.type.toLowerCase().includes(filter)) {
         return false;
       }
@@ -495,7 +601,7 @@ export function TapeChart({
         }
         return a.number.localeCompare(b.number, undefined, { numeric: true, sensitivity: "base" });
       });
-  }, [allRooms, roomFilter, roomTypeFilter, floorFilter, roomFeaturesFilter, groupingEnabled, showOnlyFreeRooms, roomsWithReservations]);
+  }, [allRooms, roomFilter, roomTypeFilter, floorFilter, roomFeaturesFilter, groupingEnabled, showOnlyFreeRooms, roomsWithReservations, showOnlyRoomNumber]);
 
   const visibleRoomNumbers = useMemo(
     () => new Set(displayRooms.map((room) => room.number)),
@@ -1176,6 +1282,32 @@ export function TapeChart({
     setCreateSheetOpen(true);
   }, [displayRooms, allRooms, viewStartDateStr]);
 
+  const handleRoomLabelClick = useCallback((room: Room) => {
+    setNewReservationContext({
+      roomNumber: room.number,
+      checkIn: viewStartDateStr,
+    });
+    setCreateSheetOpen(true);
+  }, [viewStartDateStr]);
+
+  const handleRoomBlock = useCallback((room: Room) => {
+    setRoomBlockInitialRoom(room.number);
+    setRoomBlockSheetOpen(true);
+  }, []);
+
+  const handleRoomStatusChange = useCallback(async (room: Room, status: RoomStatus) => {
+    if (!room.id) return;
+    const result = await updateRoomStatus({ roomId: room.id, status });
+    if (result.success) {
+      setAllRooms((prev) =>
+        prev.map((r) => (r.number === room.number ? { ...r, status } : r))
+      );
+      toast.success(`Status pokoju ${room.number} zmieniony na ${ROOM_STATUS_LABELS[status]}`);
+    } else {
+      toast.error(result.error ?? "Nie udało się zmienić statusu");
+    }
+  }, []);
+
   const togglePreviewMode = useCallback(() => {
     setPreviewMode((prev) => !prev);
   }, []);
@@ -1451,6 +1583,9 @@ export function TapeChart({
                   <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { setStatusColorsDialogOpen(true); setMoreMenuOpen(false); }}>
                     <Filter className="h-4 w-4 text-muted-foreground" /> Kolory statusów
                   </button>
+                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { router.refresh(); setMoreMenuOpen(false); toast.info("Odświeżanie danych…"); }} title="Pobierz aktualne dane z serwera (rezerwacje, kolory)">
+                    <RefreshCw className="h-4 w-4 text-muted-foreground" /> Odśwież
+                  </button>
                   <div className="mx-2 my-1 h-px bg-border" />
                   <div className="flex items-center gap-2 px-3 py-2">
                     <div className="flex items-center rounded-md border border-input bg-background">
@@ -1499,7 +1634,19 @@ export function TapeChart({
           </button>
           <div className="h-3 w-px bg-border" />
           <div className="flex items-center gap-1.5 text-muted-foreground">
-            <span>{displayRooms.length} pokoi</span>
+            {showOnlyRoomNumber ? (
+              <button
+                type="button"
+                onClick={() => setShowOnlyRoomNumber(null)}
+                className="flex items-center gap-1 rounded-md px-1.5 py-0.5 hover:bg-muted/50 hover:text-foreground"
+                title="Pokaż wszystkie pokoje"
+              >
+                <span>Pokój {showOnlyRoomNumber}</span>
+                <span className="text-primary">×</span>
+              </button>
+            ) : (
+              <span>{displayRooms.length} pokoi</span>
+            )}
             <span className="text-muted-foreground/60">·</span>
             <span>{filteredReservations.length} rez.</span>
           </div>
@@ -1745,6 +1892,7 @@ export function TapeChart({
                   reason: block.reason,
                 }))}
                 focusedDateIdx={focusedCell?.roomIdx === rowIdx ? focusedCell.dateIdx : undefined}
+                previewMode={previewMode}
                 onCellClick={previewMode ? undefined : (roomNumber, dateStr) => {
                   if (didPanRef.current) {
                     didPanRef.current = false;
@@ -1753,15 +1901,25 @@ export function TapeChart({
                   setNewReservationContext({ roomNumber, checkIn: dateStr });
                   setCreateSheetOpen(true);
                 }}
+                onRoomLabelClick={previewMode ? undefined : handleRoomLabelClick}
+                onRoomBlock={previewMode ? undefined : handleRoomBlock}
+                onRoomStatusChange={previewMode ? undefined : handleRoomStatusChange}
+                onShowOnlyRoom={previewMode ? undefined : (room) => setShowOnlyRoomNumber(room.number)}
+                onShowAllRooms={showOnlyRoomNumber ? () => setShowOnlyRoomNumber(null) : undefined}
+                showOnlyRoomNumber={showOnlyRoomNumber}
               >
-                <div className="flex items-center gap-1 min-w-0 flex-1">
-                  <span className="font-semibold text-[13px] leading-tight shrink-0">{room.number}</span>
+                <div
+                  className="flex items-center gap-1.5 min-w-0 flex-1"
+                  title={[room.type, room.price != null ? `${room.price} PLN/dobę` : null, ROOM_STATUS_LABELS[room.status]].filter(Boolean).join(" · ")}
+                >
+                  <span className="font-semibold text-[13px] leading-tight shrink-0 tabular-nums">{room.number}</span>
+                  <span className="text-muted-foreground/60 shrink-0">·</span>
                   {/widok|jezioro/i.test(room.type) || (room.roomFeatures ?? []).some((f) => /widok|jezioro/i.test(f)) ? (
                     <Waves className="h-2.5 w-2.5 text-blue-500 shrink-0" aria-label="Z widokiem na jezioro" />
                   ) : null}
-                  <span className="truncate text-[9px] text-muted-foreground leading-tight" title={room.type}>{room.type}</span>
+                  <span className="truncate text-[10px] text-muted-foreground leading-tight">{room.type}</span>
                   {hostelMode && (
-                    <span className="text-[8px] text-muted-foreground shrink-0">
+                    <span className="text-[8px] text-muted-foreground shrink-0 tabular-nums">
                       ({occupancyToday.get(room.number) ?? 0})
                     </span>
                   )}
@@ -1989,17 +2147,49 @@ export function TapeChart({
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-4 text-sm">
-              {statusTab === "statuses" &&
-                statusLegendItems.map((item) => (
-                  <div key={item.status} className="flex items-center gap-2">
-                    <span
-                      className="inline-block h-3 w-6 rounded-sm border border-border"
-                      style={{ backgroundColor: statusBg?.[item.status] ?? item.color }}
-                      aria-hidden="true"
-                    />
-                    <span className="text-xs">{item.label}</span>
+              {statusTab === "statuses" && (
+                <>
+                  {statusLegendItems.map((item) => (
+                    <div key={item.status} className="flex items-center gap-2">
+                      <span
+                        className="inline-block h-3 w-6 rounded-sm border border-border"
+                        style={{ backgroundColor: statusBg?.[item.status] ?? item.color }}
+                        aria-hidden="true"
+                      />
+                      <span className="text-xs">{item.label}</span>
+                    </div>
+                  ))}
+                  <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+                  <span className="text-[10px] text-muted-foreground mr-1">Pasek z lewej:</span>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block h-3 w-1 rounded-full bg-[rgb(20_184_166)]" aria-hidden title="Opłacona" />
+                    <span className="text-xs">Opłacona</span>
                   </div>
-                ))}
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block h-3 w-1 rounded-full bg-[rgb(234_179_8)]" aria-hidden title="Częściowo opłacona" />
+                    <span className="text-xs">Częściowo opłacona</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block h-3 w-1 rounded-full bg-[rgb(139_92_246)]" aria-hidden title="Nieopłacona" />
+                    <span className="text-xs">Nieopłacona</span>
+                  </div>
+                  <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+                  <div className="flex items-center gap-2">
+                    <StickyNote className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                    <span className="text-xs">Ma uwagi</span>
+                  </div>
+                </>
+              )}
+              {statusTab === "roomStatus" && (
+                <div className="flex flex-wrap items-center gap-3">
+                  {(Object.keys(ROOM_STATUS_LABELS) as RoomStatus[]).map((status) => (
+                    <div key={status} className="flex items-center gap-2">
+                      <RoomStatusIcon status={status} showLabel={false} compact />
+                      <span className="text-xs">{ROOM_STATUS_LABELS[status]}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {statusTab === "custom" && (
                 <p className="text-xs text-muted-foreground">
                   Dodatkowe statusy możesz zdefiniować w module Rezerwacje &gt; Konfiguracja.
@@ -2115,8 +2305,12 @@ export function TapeChart({
       />
       <RoomBlockSheet
         open={roomBlockSheetOpen}
-        onOpenChange={setRoomBlockSheetOpen}
+        onOpenChange={(open) => {
+          setRoomBlockSheetOpen(open);
+          if (!open) setRoomBlockInitialRoom(null);
+        }}
         rooms={allRooms}
+        initialRoomNumber={roomBlockInitialRoom}
         onCreated={(block) => {
           setAllRooms((prev) =>
             prev.map((room) =>
@@ -2211,6 +2405,37 @@ export function TapeChart({
                 </div>
               );
             })}
+            <div className="border-t pt-4 mt-4">
+              <p className="text-xs font-medium text-muted-foreground mb-2">Pasek z lewej – status płatności</p>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-4 w-1 flex-shrink-0 rounded-full" style={{ backgroundColor: "rgb(20 184 166)" }} aria-hidden />
+                  <span className="text-sm">Opłacona</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-4 w-1 flex-shrink-0 rounded-full" style={{ backgroundColor: "rgb(234 179 8)" }} aria-hidden />
+                  <span className="text-sm">Częściowo opłacona</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-4 w-1 flex-shrink-0 rounded-full" style={{ backgroundColor: "rgb(139 92 246)" }} aria-hidden />
+                  <span className="text-sm">Nieopłacona</span>
+                </div>
+                <p className="text-xs font-medium text-muted-foreground mb-2 mt-4">Ikona na pasku</p>
+                <div className="flex items-center gap-2">
+                  <StickyNote className="h-4 w-4 text-muted-foreground" aria-hidden />
+                  <span className="text-sm">Ma uwagi</span>
+                </div>
+                <p className="text-xs font-medium text-muted-foreground mb-2 mt-4">Status pokoju (ikony przy liście)</p>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(ROOM_STATUS_LABELS) as RoomStatus[]).map((status) => (
+                    <div key={status} className="flex items-center gap-1.5">
+                      <RoomStatusIcon status={status} showLabel={false} compact />
+                      <span className="text-xs">{ROOM_STATUS_LABELS[status]}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -370,11 +370,13 @@ function NavLinks({
   fullUrl,
   onLinkClick,
   permissions,
+  session,
 }: {
   pathname: string;
   fullUrl: string;
   onLinkClick?: () => void;
   permissions: string[] | null;
+  session: SessionPayload | null;
 }) {
   const { t } = useI18n();
   const sections = filterNavSections(navSections, permissions);
@@ -464,7 +466,7 @@ function NavLinks({
                         <Icon className="h-4 w-4 shrink-0" />
                         {displayLabel}
                       </Link>
-                      {isActive && children?.map((child) => {
+                      {isActive && (session?.role !== "HOUSEKEEPING" || href !== "/housekeeping") && children?.map((child) => {
                         const isChildActive = child.href.includes("?")
                           ? fullUrl === child.href
                           : pathname === child.href;
@@ -582,6 +584,7 @@ export function AppSidebar({
               fullUrl={fullUrl}
               onLinkClick={closeDrawer}
               permissions={permissions}
+              session={session}
             />
             <SessionBlock session={session} onLinkClick={closeDrawer} />
           </nav>

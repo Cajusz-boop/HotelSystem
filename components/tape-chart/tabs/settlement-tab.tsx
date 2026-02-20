@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,7 @@ import type { RateCodeForUi } from "@/app/actions/rate-codes";
 import { toast } from "sonner";
 import { SplitSquareVertical, User, Building2, Plus, ArrowRightLeft, Percent, Banknote } from "lucide-react";
 import { AddChargeDialog } from "@/components/add-charge-dialog";
+import { cn } from "@/lib/utils";
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "CONFIRMED", label: "Potwierdzona" },
@@ -122,6 +123,7 @@ export interface SettlementTabFormState {
   mealPlan: string;
   eta: string;
   rateCodeId: string;
+  rateCodePrice: string;  // edytowalna cena za dobę (puste = z cennika)
   parkingSpotId: string;
   bedsBooked: string;
   nipInput: string;
@@ -221,10 +223,36 @@ export function SettlementTab({
   onNipLookup,
 }: SettlementTabProps) {
   const isEdit = mode === "edit";
+  const priceInputRef = useRef<HTMLInputElement>(null);
   const roomBeds = rooms.find((r) => r.number === form.room)?.beds ?? 1;
   const nights = computeNights(form.checkIn, form.checkOut);
+
+  /** Gdy brak kodów stawek – pokaż ceny wg typu pokoju z listy pokoi */
+  const fallbackPricesFromRooms = useMemo(() => {
+    const seen = new Set<string>();
+    return rooms
+      .filter((r): r is typeof r & { price: number } => r.price != null && r.price > 0)
+      .reduce<Array<{ key: string; label: string; price: number }>>((acc, r) => {
+        const key = (r.type ?? r.number) + "-" + r.price;
+        if (seen.has(key)) return acc;
+        seen.add(key);
+        acc.push({
+          key,
+          label: r.type ? r.type : `Pokój ${r.number}`,
+          price: r.price,
+        });
+        return acc;
+      }, [])
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [rooms]);
   const dateError = form.checkIn && form.checkOut && nights <= 0;
-  const pricePerNight = effectivePricePerNight ?? rooms.find((r) => r.number === form.room)?.price;
+  const priceFromForm = form.rateCodePrice.trim() ? parseFloat(form.rateCodePrice) : null;
+  const priceFromRate = effectivePricePerNight
+    ?? rateCodes.find((r) => r.id === form.rateCodeId)?.price
+    ?? rooms.find((r) => r.number === form.room)?.price;
+  const pricePerNight = (priceFromForm != null && !Number.isNaN(priceFromForm) && priceFromForm > 0)
+    ? priceFromForm
+    : priceFromRate;
   const totalAmount = pricePerNight != null && pricePerNight > 0 && nights > 0 ? pricePerNight * nights : undefined;
 
   // Edit-mode-only state: folio, transactions, guest history, blacklist
@@ -383,11 +411,33 @@ export function SettlementTab({
           </>)}
 
           <Label className="text-xs text-right text-muted-foreground">📅 Zameld.</Label>
-          <Input id="uni-checkIn" data-testid="create-reservation-checkIn" type="date" className={inputCompact} value={form.checkIn}
-            onChange={(e) => { onFormChange({ checkIn: e.target.value, checkOut: e.target.value ? addDays(e.target.value, 1) : form.checkOut }); }} />
+          <div className="flex flex-col gap-1">
+            <Input id="uni-checkIn" data-testid="create-reservation-checkIn" type="date" className={`${inputCompact} w-36`} value={form.checkIn}
+              onChange={(e) => { onFormChange({ checkIn: e.target.value, checkOut: e.target.value ? addDays(e.target.value, 1) : form.checkOut }); }} />
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-[10px] text-muted-foreground mr-0.5">doby:</span>
+              {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className={cn(
+                    "h-6 min-w-6 rounded border px-1 text-xs font-medium tabular-nums transition-colors",
+                    nights === n
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-input bg-background hover:bg-muted/50"
+                  )}
+                  onClick={() => {
+                    if (form.checkIn) onFormChange({ checkOut: addDays(form.checkIn, n) });
+                  }}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <Label className="text-xs text-right text-muted-foreground">📅 Wymeld.</Label>
-          <Input id="uni-checkOut" data-testid="create-reservation-checkOut" type="date" className={`${inputCompact} ${dateError ? "border-destructive" : ""}`} value={form.checkOut}
+          <Input id="uni-checkOut" data-testid="create-reservation-checkOut" type="date" className={`${inputCompact} min-w-[140px] ${dateError ? "border-destructive" : ""}`} value={form.checkOut}
             onChange={(e) => onFormChange({ checkOut: e.target.value })} min={form.checkIn ? addDays(form.checkIn, 1) : undefined} />
 
           <Label className="text-xs text-right text-muted-foreground">🕐 Godz. od</Label>
@@ -435,7 +485,7 @@ export function SettlementTab({
               <option value="">— brak —</option>
               {CHANNEL_OPTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
-            <Label className="text-xs text-right text-muted-foreground">⏰ ETA</Label>
+            <Label className="text-xs text-right text-muted-foreground">⏰ Godzina przyjazdu</Label>
             <Input id="uni-eta" type="time" className={inputCompact} value={form.eta} onChange={(e) => onFormChange({ eta: e.target.value })} />
           </div>
         )}
@@ -447,16 +497,6 @@ export function SettlementTab({
           </div>
         )}
 
-        <div className="mt-1">
-          <Label className="text-xs text-muted-foreground">📝 Uwagi</Label>
-          <textarea id="uni-notes" className={textareaClass} value={form.notes} onChange={(e) => onFormChange({ notes: e.target.value })} placeholder="Uwagi…" rows={2} maxLength={2000} />
-        </div>
-        {!isEdit && (
-          <div>
-            <Label className="text-xs text-muted-foreground">🔒 Uwagi wewnętrzne</Label>
-            <textarea id="uni-internalNotes" className={textareaClass} value={form.internalNotes} onChange={(e) => onFormChange({ internalNotes: e.target.value })} placeholder="Tylko dla personelu…" rows={2} maxLength={10000} />
-          </div>
-        )}
       </div>
 
       {/* COL 2: Guest data (like KW Hotel "Dane gościa") */}
@@ -651,11 +691,23 @@ export function SettlementTab({
       <div className="space-y-2">
         <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground border-b pb-1">Rozliczenie</h3>
 
-        {/* Price table */}
+        {/* Price table – edytowalna cena */}
         <div className="rounded border bg-muted/20 p-2 text-xs space-y-0.5">
+          <div className="flex justify-between items-center gap-2">
+            <span className="text-muted-foreground">Cena za dobę</span>
+            <Input
+              ref={priceInputRef}
+              type="number"
+              min={0}
+              step={0.01}
+              className="h-6 w-20 text-right text-xs tabular-nums"
+              value={form.rateCodePrice}
+              onChange={(e) => onFormChange({ rateCodePrice: e.target.value })}
+              placeholder={priceFromRate != null ? String(priceFromRate) : "—"}
+            />
+          </div>
           {(pricePerNight != null && pricePerNight > 0) ? (
             <>
-              <div className="flex justify-between"><span className="text-muted-foreground">Cena za dobę</span><span className="font-medium tabular-nums">{pricePerNight.toFixed(2)}</span></div>
               {nights > 0 && (
                 <>
                   <div className="flex justify-between"><span className="text-muted-foreground">Liczba dób</span><span className="tabular-nums">{nights}</span></div>
@@ -671,10 +723,64 @@ export function SettlementTab({
                 </>
               )}
             </>
-          ) : (
-            <span className="text-muted-foreground">Brak ceny</span>
-          )}
+          ) : null}
         </div>
+
+        {/* Podgląd cennika – kliknij stawkę, aby ustawić cenę */}
+        <details className="rounded border bg-muted/10 text-xs" open>
+          <summary className="cursor-pointer px-2 py-1 font-medium text-muted-foreground hover:text-foreground">
+            Podgląd cennika
+          </summary>
+          <div className="border-t px-2 py-1.5 space-y-0.5">
+            {rateCodes.length > 0 ? (
+              rateCodes.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="w-full flex justify-between items-center text-left px-1.5 py-0.5 rounded hover:bg-muted/50"
+                  onClick={() => {
+                    onFormChange({
+                      rateCodeId: c.id,
+                      rateCodePrice: c.price != null ? String(c.price) : "",
+                    });
+                    priceInputRef.current?.focus();
+                  }}
+                >
+                  <span>{c.code} – {c.name}</span>
+                  <span className="tabular-nums text-muted-foreground">{c.price != null ? `${c.price.toFixed(2)} PLN` : "—"}</span>
+                </button>
+              ))
+            ) : fallbackPricesFromRooms.length > 0 ? (
+              fallbackPricesFromRooms.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  className="w-full flex justify-between items-center text-left px-1.5 py-0.5 rounded hover:bg-muted/50"
+                  onClick={() => {
+                    onFormChange({ rateCodePrice: String(f.price) });
+                    priceInputRef.current?.focus();
+                  }}
+                >
+                  <span>{f.label}</span>
+                  <span className="tabular-nums text-muted-foreground">{f.price.toFixed(2)} PLN</span>
+                </button>
+              ))
+            ) : (
+              <p className="text-muted-foreground py-1">Brak stawek. Dodaj Kody stawek w Ustawieniach → Cennik albo uzupełnij ceny typów pokoi.</p>
+            )}
+          </div>
+        </details>
+
+        <div className="mt-1">
+          <Label className="text-xs text-muted-foreground">📝 Uwagi</Label>
+          <textarea id="uni-notes" className={textareaClass} value={form.notes} onChange={(e) => onFormChange({ notes: e.target.value })} placeholder="Uwagi…" rows={2} maxLength={2000} />
+        </div>
+        {!isEdit && (
+          <div>
+            <Label className="text-xs text-muted-foreground">🔒 Uwagi wewnętrzne</Label>
+            <textarea id="uni-internalNotes" className={textareaClass} value={form.internalNotes} onChange={(e) => onFormChange({ internalNotes: e.target.value })} placeholder="Tylko dla personelu…" rows={2} maxLength={10000} />
+          </div>
+        )}
 
         {isEdit && (pricePerNight != null && pricePerNight > 0) && (
           transactions.some((t) => t.type === "ROOM") ? (

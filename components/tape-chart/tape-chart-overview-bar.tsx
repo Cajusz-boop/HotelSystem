@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Reservation } from "@/lib/tape-chart-types";
 
 const OVERVIEW_BAR_WIDTH = 44;
@@ -16,11 +17,15 @@ interface TapeChartOverviewBarProps {
 }
 
 const MONTH_SHORT_PL = ["STY", "LUT", "MAR", "KWI", "MAJ", "CZE", "LIP", "SIE", "WRZ", "PAŹ", "LIS", "GRU"];
-const DAY_NAMES_PL = ["Nd", "Pn", "Wt", "Śr", "Cz", "Pt", "So"];
+const DAY_NAMES_FULL_PL = ["Niedziela", "Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota"];
+const MONTH_NAMES_PL = ["stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca", "lipca", "sierpnia", "września", "października", "listopada", "grudnia"];
 
-function formatShortDate(dateStr: string): string {
+function formatTooltipDate(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00Z");
-  return `${d.getUTCDate()}.${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  const day = d.getUTCDate();
+  const month = MONTH_NAMES_PL[d.getUTCMonth()];
+  const year = d.getUTCFullYear();
+  return `${day} ${month} ${year}`;
 }
 
 function getMonthFromDateStr(dateStr: string): number {
@@ -49,6 +54,7 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
 }: TapeChartOverviewBarProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
   const [viewportRange, setViewportRange] = useState<{ start: number; end: number } | null>(null);
 
   const occupancyByDate = useMemo(() => {
@@ -115,8 +121,10 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
       const y = e.clientY - rect.top + barEl.scrollTop;
       const totalHeight = dates.length * ROW_HEIGHT_PX;
       const ratio = totalHeight > 0 ? y / totalHeight : 0;
-      const idx = Math.floor(ratio * dates.length);
-      setHoveredIdx(Math.max(0, Math.min(idx, dates.length - 1)));
+      const idx = Math.max(0, Math.min(Math.floor(ratio * dates.length), dates.length - 1));
+      setHoveredIdx(idx);
+      const rowCenterY = rect.top + (idx * ROW_HEIGHT_PX - barEl.scrollTop) + ROW_HEIGHT_PX / 2;
+      setTooltipPos({ left: rect.left - 12, top: rowCenterY });
     },
     [dates.length]
   );
@@ -146,9 +154,36 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
 
   const hoveredDate = hoveredIdx !== null ? dates[hoveredIdx] : null;
   const hoveredOccupancy = hoveredIdx !== null ? occupancyByDate[hoveredIdx] : null;
-  const hoveredDayName = hoveredDate ? DAY_NAMES_PL[getDayOfWeek(hoveredDate)] : null;
+  const hoveredDayNameFull = hoveredDate ? DAY_NAMES_FULL_PL[getDayOfWeek(hoveredDate)] : null;
+
+  const tooltipEl =
+    hoveredIdx !== null && hoveredDate && hoveredDayNameFull && tooltipPos && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="fixed z-[200] pointer-events-none whitespace-nowrap"
+            style={{
+              left: Math.max(8, tooltipPos.left - 170),
+              top: tooltipPos.top,
+              transform: "translateY(-50%)",
+            }}
+            role="tooltip"
+          >
+            <div className="bg-popover text-popover-foreground border border-border shadow-lg rounded-md px-2.5 py-1.5 text-xs leading-snug">
+              <div className="font-semibold">{hoveredDayNameFull}</div>
+              <div className="text-muted-foreground text-[11px]">{formatTooltipDate(hoveredDate)}</div>
+              {hoveredOccupancy != null && (
+                <div className="text-muted-foreground text-[10px] mt-0.5">
+                  Obłożenie: <span className="font-medium text-foreground">{hoveredOccupancy}%</span>
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
 
   return (
+    <>
     <div
       className="flex flex-col h-full min-h-0 border-l border-[hsl(var(--kw-grid-border))] bg-[hsl(var(--muted))] cursor-pointer transition-colors no-print select-none"
       style={{ width: OVERVIEW_BAR_WIDTH, minWidth: OVERVIEW_BAR_WIDTH }}
@@ -160,8 +195,7 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
         className="relative w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
         onClick={handleClick}
         onMouseMove={handleMouseMove}
-        onMouseLeave={() => setHoveredIdx(null)}
-        title="Przewiń w górę/dół"
+        onMouseLeave={() => { setHoveredIdx(null); setTooltipPos(null); }}
         role="region"
       >
         {/* Zawartość – pełna wysokość; etykiety miesięcy i viewport wewnątrz = przewijają się razem */}
@@ -231,26 +265,11 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
               </div>
             );
           })}
-          {/* Hover tooltip – wewnątrz contentu, przewija się razem z wierszami */}
-          {hoveredIdx !== null && hoveredDate && (
-            <div
-              className="absolute z-30 pointer-events-none"
-              style={{
-                top: `${hoveredIdx * ROW_HEIGHT_PX}px`,
-                right: "100%",
-                transform: "translateY(-50%)",
-              }}
-            >
-              <div className="mr-1.5 whitespace-nowrap bg-popover text-popover-foreground border border-border shadow-md rounded-md px-2 py-1 text-[10px] leading-snug">
-                <div className="font-semibold">{hoveredDayName} {formatShortDate(hoveredDate)}</div>
-                <div className="text-muted-foreground">
-                  Obłożenie: <span className="font-medium text-foreground">{hoveredOccupancy}%</span>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Tooltip w portalu – nie obcinany przez overflow */}
         </div>
       </div>
     </div>
+    {tooltipEl}
+    </>
   );
 });
