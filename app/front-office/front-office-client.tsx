@@ -8,10 +8,12 @@ export function FrontOfficeClient({
   rooms,
   reservationGroups,
   reservationStatusColors,
+  propertyId: initialPropertyId,
 }: {
   rooms: Room[];
   reservationGroups: ReservationGroupSummary[];
   reservationStatusColors?: Partial<Record<string, string>> | null;
+  propertyId?: string | null;
 }) {
   const searchParams = useSearchParams();
   const raw = searchParams.get("reservationId");
@@ -22,6 +24,7 @@ export function FrontOfficeClient({
       rooms={rooms}
       reservationGroups={reservationGroups}
       initialStatusBg={reservationStatusColors ?? undefined}
+      initialPropertyId={initialPropertyId ?? undefined}
       initialHighlightReservationId={reservationId}
       initialOpenCreate={e2eOpenCreate}
     />

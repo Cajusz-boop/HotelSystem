@@ -250,3 +250,17 @@
 .kw-today-column-line {
   border-left: 2px solid hsl(var(--kw-today-border));
 }
+
+/* ── Tryb sprzątania: strona bez sidebaru ─────────── */
+body.sprzatanie-standalone .no-print:has(.kw-sidebar),
+body.sprzatanie-standalone .no-print:has(header.fixed) {
+  display: none !important;
+}
+body.sprzatanie-standalone main {
+  padding-left: 0 !important;
+  padding-top: 0 !important;
+}
+body.sprzatanie-standalone {
+  min-height: 100dvh;
+  -webkit-tap-highlight-color: transparent;
+}

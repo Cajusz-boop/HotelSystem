@@ -40,6 +40,7 @@ export default async function MiceGrafikPage() {
         reservationCount: g.reservationCount,
       })),
       reservationStatusColors: result.reservationStatusColors ?? null,
+      propertyId: result.propertyId ?? null,
     };
 
     if (data.rooms.length === 0) {
@@ -60,6 +61,7 @@ export default async function MiceGrafikPage() {
             rooms={data.rooms}
             reservationGroups={data.reservationGroups}
             reservationStatusColors={data.reservationStatusColors}
+            propertyId={data.propertyId}
           />
         </TapeChartStoreProvider>
       </div>

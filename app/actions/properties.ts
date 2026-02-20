@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { cookies } from "next/headers";
@@ -94,6 +95,8 @@ export async function updatePropertyReservationColors(
           Object.keys(colors).length > 0 ? (colors as Prisma.InputJsonValue) : Prisma.JsonNull,
       },
     });
+    revalidatePath("/front-office");
+    revalidatePath("/mice/grafik");
     return { success: true, data: undefined };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Błąd zapisu" };
@@ -127,6 +130,8 @@ export async function updatePropertyOverbookingLimit(
       where: { id: propertyId },
       data: { overbookingLimitPercent: value },
     });
+    revalidatePath("/front-office");
+    revalidatePath("/mice/grafik");
     return { success: true, data: undefined };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Błąd zapisu" };
@@ -353,6 +358,8 @@ export async function updatePropertyLocalTax(
           value == null || value <= 0 ? null : new Prisma.Decimal(value),
       },
     });
+    revalidatePath("/front-office");
+    revalidatePath("/mice/grafik");
     return { success: true, data: undefined };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Błąd zapisu" };

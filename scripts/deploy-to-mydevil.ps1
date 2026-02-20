@@ -87,6 +87,8 @@ if ($LASTEXITCODE -ne 0) {
 
 -- Migracja: nazwa produktu noclegowego w szablonie faktury (ALTER ignorowany jesli kolumna juz jest)
 ALTER TABLE InvoiceTemplate ADD COLUMN roomProductName VARCHAR(191) NULL;
+-- Migracja: nadpisanie ceny za dobę w rezerwacji (mysql --force ignoruje błąd gdy kolumna już jest)
+ALTER TABLE Reservation ADD COLUMN rateCodePrice DECIMAL(10,2) NULL;
 "@
     [System.IO.File]::WriteAllText($sqlDiffFile, $sqlContent, [System.Text.Encoding]::UTF8)
     Write-Host "SQL diff zapisany." -ForegroundColor Green
@@ -144,40 +146,49 @@ if (-not $FullZip) {
     }
 
     # --- 4a: Generuj manifest lokalny (MD5, format: HASH  sciezka) ---
-    Write-Host "Generowanie manifestu lokalnego (MD5)..." -ForegroundColor Yellow
+    Write-Host "Generowanie manifestu lokalnego (MD5, rownolegle)..." -ForegroundColor Yellow
     $rootNorm = $ProjectRoot.TrimEnd('\', '/') + '\'
-    $manifestLines = @()
-
-    # Zbierz TYLKO pliki (nie katalogi, nie symlinki) za pomoca -File
+    $allFiles = [System.Collections.ArrayList]::new()
     $standalonePath = Join-Path $ProjectRoot ".next\standalone"
     if (Test-Path $standalonePath) {
-        foreach ($fileItem in (Get-ChildItem -Path $standalonePath -Recurse -File)) {
-            $relPath = $fileItem.FullName.Replace($rootNorm, "").Replace("\", "/")
-            $hashResult = Get-FileHash -Path $fileItem.FullName -Algorithm MD5 -ErrorAction SilentlyContinue
-            if ($hashResult) {
-                $manifestLines += $hashResult.Hash.ToLower() + "  " + $relPath
-            }
-        }
+        Get-ChildItem -Path $standalonePath -Recurse -File | ForEach-Object { [void]$allFiles.Add($_.FullName) }
     }
-
     $appJsPath = Join-Path $ProjectRoot "app.js"
-    if (Test-Path $appJsPath) {
-        $relPath = "app.js"
-        $hashResult = Get-FileHash -Path $appJsPath -Algorithm MD5 -ErrorAction SilentlyContinue
-        if ($hashResult) {
-            $manifestLines += $hashResult.Hash.ToLower() + "  " + $relPath
-        }
-    }
-
+    if (Test-Path $appJsPath) { [void]$allFiles.Add($appJsPath) }
     $prismaPath = Join-Path $ProjectRoot "prisma"
     if (Test-Path $prismaPath) {
-        foreach ($fileItem in (Get-ChildItem -Path $prismaPath -Recurse -File)) {
-            $relPath = $fileItem.FullName.Replace($rootNorm, "").Replace("\", "/")
-            $hashResult = Get-FileHash -Path $fileItem.FullName -Algorithm MD5 -ErrorAction SilentlyContinue
-            if ($hashResult) {
-                $manifestLines += $hashResult.Hash.ToLower() + "  " + $relPath
+        Get-ChildItem -Path $prismaPath -Recurse -File | ForEach-Object { [void]$allFiles.Add($_.FullName) }
+    }
+
+    $manifestLines = @()
+    $maxParallel = [Math]::Max(4, [System.Environment]::ProcessorCount - 1)
+    $runspacePool = [runspacefactory]::CreateRunspacePool(1, $maxParallel)
+    $runspacePool.Open()
+    try {
+        $jobs = New-Object System.Collections.ArrayList
+        foreach ($fullPath in $allFiles) {
+            $pathCopy = $fullPath
+            $scriptBlock = {
+                param([string]$path, [string]$root)
+                $h = Get-FileHash -Path $path -Algorithm MD5 -ErrorAction SilentlyContinue
+                if ($h) {
+                    $rel = $path.Replace($root, "").Replace("\", "/")
+                    return $h.Hash.ToLower() + "  " + $rel
+                }
+                return $null
             }
+            $ps = [powershell]::Create().AddScript($scriptBlock).AddArgument($pathCopy).AddArgument($rootNorm)
+            $ps.RunspacePool = $runspacePool
+            [void]$jobs.Add([pscustomobject]@{ Pipe = $ps; Handle = $ps.BeginInvoke() })
         }
+        foreach ($j in $jobs) {
+            $r = $j.Pipe.EndInvoke($j.Handle)
+            if ($r) { $manifestLines += $r }
+            $j.Pipe.Dispose()
+        }
+    } finally {
+        $runspacePool.Close()
+        $runspacePool.Dispose()
     }
 
     [System.IO.File]::WriteAllLines($manifestLocal, $manifestLines, $utf8NoBom)

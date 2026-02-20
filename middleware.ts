@@ -94,6 +94,7 @@ export async function middleware(request: NextRequest) {
     "/check-in/guest",
     "/guest-app",
     "/api-docs",
+    "/sprzatanie",
   ];
   const isPublic = publicPaths.some(
     (p) => path === p || path.startsWith(p + "/")

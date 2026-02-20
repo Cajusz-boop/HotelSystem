@@ -3,7 +3,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Star } from "lucide-react";
+import { Star, StickyNote } from "lucide-react";
 import type { Reservation } from "@/lib/tape-chart-types";
 import { RESERVATION_STATUS_COLORS, RESERVATION_STATUS_BG } from "@/lib/tape-chart-types";
 import { cn } from "@/lib/utils";
@@ -185,7 +185,7 @@ export function ReservationBar({
   const defaultBg = RESERVATION_STATUS_BG[reservation.status as keyof typeof RESERVATION_STATUS_BG] ?? RESERVATION_STATUS_BG.CONFIRMED;
   const bgColor = ensureOpaque(statusBg?.[reservation.status] ?? defaultBg);
   const bgGradient = `linear-gradient(to bottom, ${lightenColor(bgColor)} 0%, ${bgColor} 100%)`;
-  const barShadow = "0 2px 6px rgba(0,0,0,0.12)";
+  const barShadow = "0 1px 3px rgba(0,0,0,0.1), inset 0 0 0 1px rgba(255,255,255,0.15)";
   const isGroupReservation = Boolean(reservation.groupId);
 
   const STATUS_PL: Record<string, string> = {
@@ -249,11 +249,11 @@ export function ReservationBar({
 
   const paymentEdgeColor =
     reservation.paymentStatus === "PAID"
-      ? "rgb(22 163 74)"
+      ? "rgb(20 184 166)"
       : reservation.paymentStatus === "PARTIAL"
         ? "rgb(234 179 8)"
         : reservation.paymentStatus === "UNPAID"
-          ? "rgb(239 68 68)"
+          ? "rgb(139 92 246)"
           : undefined;
 
   const POINT_DEPTH_PX = 10;
@@ -280,9 +280,9 @@ export function ReservationBar({
             }}
             role="tooltip"
           >
-            <div className="text-xs text-gray-800 space-y-1 font-medium">
+            <div className="text-xs text-gray-800 space-y-1 font-medium max-w-[320px] break-words">
               {tooltipLines.map((line, i) => (
-                <div key={i} className="whitespace-nowrap">
+                <div key={i} className="break-words">
                   {line}
                 </div>
               ))}
@@ -299,7 +299,7 @@ export function ReservationBar({
         data-testid="reservation-bar"
         data-reservation-id={reservation.id}
         className={cn(
-          "relative z-10 flex h-full w-full min-h-0 flex-col justify-center gap-0 text-xs leading-snug font-semibold text-white overflow-hidden antialiased",
+          "relative z-10 flex h-full w-full min-h-0 flex-col justify-center gap-0 text-xs leading-snug font-semibold text-white overflow-hidden antialiased transition-[filter] duration-150 hover:brightness-105",
           colorClass,
           isPlaceholder && "border-2 border-dashed opacity-80",
           isDragging && "z-50 cursor-grabbing opacity-90",
@@ -324,12 +324,12 @@ export function ReservationBar({
         {/* Payment status edge indicator */}
         {paymentEdgeColor && (
           <div
-            className="absolute left-0 top-0 bottom-0 w-[2px]"
+            className="absolute left-0 top-0 bottom-0 w-[4px]"
             style={{ backgroundColor: paymentEdgeColor }}
             aria-hidden
           />
         )}
-        <div className={cn("flex items-center justify-center min-h-0 min-w-0 overflow-hidden text-center", paymentEdgeColor ? "pl-2 pr-1.5 py-0.5" : "px-1.5 py-0.5")}>
+        <div className={cn("flex items-center justify-center min-h-0 min-w-0 overflow-hidden text-center", paymentEdgeColor ? "pl-2.5 pr-1.5 py-0.5" : "px-1.5 py-0.5")}>
           <span
             className={cn(
               "leading-snug font-semibold tabular-nums antialiased",
@@ -337,7 +337,7 @@ export function ReservationBar({
               !barHeightPx && "text-xs"
             )}
             style={{
-              textShadow: "0 1px 2px rgba(0,0,0,0.25)",
+              textShadow: "0 1px 3px rgba(0,0,0,0.4)",
               ...(barHeightPx != null && barHeightPx > 0 && {
                 fontSize: `${Math.max(9, Math.min(16, Math.round(barHeightPx * 0.48)))}px`,
               }),
@@ -347,13 +347,14 @@ export function ReservationBar({
             {barLabel}
           </span>
         </div>
-        {/* Notes indicator - compact dot */}
+        {/* Notes indicator */}
         {reservation.notes && (
-          <span
-            title={`Uwagi: ${reservation.notes}`}
-            className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-white/70"
-            aria-label="Ma uwagi"
-          />
+          <span title={`Uwagi: ${reservation.notes}`}>
+            <StickyNote
+              className="absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-white/90 shrink-0"
+              aria-label="Ma uwagi"
+            />
+          </span>
         )}
       </div>
       {tooltipEl}

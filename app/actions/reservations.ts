@@ -127,6 +127,7 @@ function toUiReservation(r: {
   internalNotes?: string | null;
   specialRequests?: string | null;
   rateCode?: { id: string; code: string; name: string; price: unknown } | null;
+  rateCodePrice?: unknown; // Decimal | null – nadpisanie ceny za dobę
   parkingBookings?: Array<{ parkingSpotId: string; parkingSpot: { number: string } }>;
   group?: { id: string; name: string | null } | null;
 }) {
@@ -174,7 +175,7 @@ function toUiReservation(r: {
     rateCodeId: r.rateCode?.id ?? undefined,
     rateCode: r.rateCode?.code ?? undefined,
     rateCodeName: r.rateCode?.name ?? undefined,
-    rateCodePrice: r.rateCode?.price != null ? Number(r.rateCode.price) : undefined,
+    rateCodePrice: r.rateCodePrice != null ? Number(r.rateCodePrice) : (r.rateCode?.price != null ? Number(r.rateCode.price) : undefined),
     groupId: r.group?.id ?? undefined,
     groupName: r.group?.name ?? undefined,
     parkingSpotId: firstParking?.parkingSpotId ?? undefined,
@@ -694,6 +695,7 @@ export async function createReservation(
         roomId: room.id,
         ...(companyId ? { companyId } : {}),
         ...(data.rateCodeId != null && data.rateCodeId !== "" ? { rateCodeId: data.rateCodeId } : {}),
+        ...(data.rateCodePrice != null && data.rateCodePrice > 0 ? { rateCodePrice: data.rateCodePrice } : {}),
         checkIn: new Date(data.checkIn),
         checkOut: new Date(data.checkOut),
         checkInTime: data.checkInTime?.trim() || null,
@@ -2325,6 +2327,7 @@ export async function updateReservation(
     if (input.agentId !== undefined) data.agentId = input.agentId ?? null;
     if (input.agentData !== undefined) data.agentData = input.agentData ?? null;
     if (input.rateCodeId !== undefined) data.rateCodeId = (input.rateCodeId === "" || input.rateCodeId == null) ? null : input.rateCodeId;
+    if (input.rateCodePrice !== undefined) (data as Record<string, unknown>).rateCodePrice = input.rateCodePrice != null && input.rateCodePrice > 0 ? input.rateCodePrice : null;
     if (input.notes !== undefined) data.notes = (input.notes === "" || input.notes == null) ? null : input.notes;
     if (input.internalNotes !== undefined) data.internalNotes = (input.internalNotes === "" || input.internalNotes == null) ? null : input.internalNotes;
     if (input.specialRequests !== undefined) data.specialRequests = (input.specialRequests === "" || input.specialRequests == null) ? null : input.specialRequests;
