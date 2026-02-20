@@ -1,7 +1,7 @@
-# Wdrozenie na MyDevil: build lokalnie -> upload (ZIP lub rsync) -> migracja bazy -> restart
-# Gdy jest rsync (np. Git for Windows): wysylane sa tylko zmienione pliki (lekki deploy).
+# Wdrozenie na MyDevil: build lokalnie -> upload (delta tar+scp) -> migracja bazy -> restart
+# Transfer: manifest MD5 -> diff -> tar tylko zmienionych + scp (bez rsync).
 # Uruchom: powershell -ExecutionPolicy Bypass -File .\scripts\deploy-to-mydevil.ps1
-# Opcja: -FullZip - wymusza pelny ZIP zamiast rsync (gdy rsync jest dostepny).
+# Opcja: -FullZip - wymusza pelny ZIP (wszystko w jednym archiwum, wolniejszy ale prostszy).
 
 param([switch]$FullZip)
 
@@ -10,24 +10,10 @@ Write-Host "=== deploy-to-mydevil.ps1 start ===" -ForegroundColor Green
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
 
-# Wykryj rsync (tylko zmienione pliki = lekki deploy)
-# Szukaj: PATH, Chocolatey, Git for Windows
-$RsyncExe = $null
-foreach ($c in @("rsync", "C:\ProgramData\chocolatey\bin\rsync.exe", "C:\Program Files\Git\usr\bin\rsync.exe", "C:\Program Files (x86)\Git\usr\bin\rsync.exe")) {
-    if ($c -eq "rsync") {
-        $p = Get-Command rsync -ErrorAction SilentlyContinue
-        if ($p) { $RsyncExe = $p.Source; break }
-    } elseif (Test-Path $c) {
-        $RsyncExe = $c
-        break
-    }
-}
-$UseRsync = (-not $FullZip) -and $RsyncExe
-if ($UseRsync) {
-    Write-Host "Tryb: lekki (rsync - tylko zmienione pliki)" -ForegroundColor Green
+if ($FullZip) {
+    Write-Host "Tryb: pelny ZIP (wymuszone -FullZip)" -ForegroundColor Yellow
 } else {
-    if ($FullZip) { Write-Host "Tryb: pelny ZIP (wymuszone -FullZip)" -ForegroundColor Yellow }
-    else { Write-Host "Tryb: pelny ZIP (brak rsync - zainstaluj: choco install rsync lub Git for Windows)" -ForegroundColor Yellow }
+    Write-Host "Tryb: lekki (delta tar+scp - tylko zmienione pliki)" -ForegroundColor Green
 }
 
 # Wczytaj zmienne z .env.deploy
@@ -54,6 +40,7 @@ if (Test-Path $envFile) {
 
 $SSH_TARGET = $SSH_USER + "@" + $SSH_HOST
 $REMOTE_FULL = "~/" + $REMOTE_PATH
+$keyPath = Join-Path $env:USERPROFILE ".ssh\id_ed25519"
 
 Write-Host ("Cel: " + $SSH_TARGET + ":" + $REMOTE_PATH) -ForegroundColor Yellow
 Write-Host ("Domena: " + $DOMAIN) -ForegroundColor Yellow
@@ -77,9 +64,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Sprawdz czy standalone zostal wygenerowany
-$standaloneDir = Join-Path (Join-Path $nextDir "standalone") "server.js"
-if (-not (Test-Path $standaloneDir)) {
-    Write-Host "[BLAD] Brak .next/standalone/server.js - build nie wygenerował standalone!" -ForegroundColor Red
+$standaloneCheck = Join-Path (Join-Path $nextDir "standalone") "server.js"
+if (-not (Test-Path $standaloneCheck)) {
+    Write-Host "[BLAD] Brak .next/standalone/server.js - build nie wygenerowal standalone!" -ForegroundColor Red
     exit 1
 }
 Write-Host "Build OK - standalone wygenerowany." -ForegroundColor Green
@@ -103,60 +90,203 @@ if ($LASTEXITCODE -ne 0) {
 # === 3b/6 Import konfiguracji (Dane sprzedawcy, szablony) do produkcji ===
 $configSnapshotPath = Join-Path $ProjectRoot "prisma\config-snapshot.json"
 if (Test-Path $configSnapshotPath) {
-  Write-Host "" ; Write-Host "=== 3b/6 Import konfiguracji do bazy produkcyjnej ===" -ForegroundColor Cyan
-  $dbUrl = $DEPLOY_DATABASE_URL
-  if (-not $dbUrl) { $dbUrl = "mysql://$DB_USER`:$DB_PASS@$DB_HOST/$DB_NAME" }
-  $env:DATABASE_URL = $dbUrl
-  try {
-    npx tsx prisma/config-import.ts 2>&1 | ForEach-Object { Write-Host $_ }
-    if ($LASTEXITCODE -eq 0) {
-      Write-Host "Konfiguracja (dane sprzedawcy, logo, szablony) zsynchronizowana z produkcja." -ForegroundColor Green
-    } else {
-      Write-Host "[WARN] config-import zakonczyl sie bledem - pomijam." -ForegroundColor Yellow
+    Write-Host "" ; Write-Host "=== 3b/6 Import konfiguracji do bazy produkcyjnej ===" -ForegroundColor Cyan
+    $dbUrl = $DEPLOY_DATABASE_URL
+    if (-not $dbUrl) { $dbUrl = "mysql://$DB_USER`:$DB_PASS@$DB_HOST/$DB_NAME" }
+    $env:DATABASE_URL = $dbUrl
+    try {
+        npx tsx prisma/config-import.ts 2>&1 | ForEach-Object { Write-Host $_ }
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Konfiguracja (dane sprzedawcy, logo, szablony) zsynchronizowana z produkcja." -ForegroundColor Green
+        } else {
+            Write-Host "[WARN] config-import zakonczyl sie bledem - pomijam." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "[WARN] Nie udalo sie wykonac config-import:" ($_.Exception.Message) -ForegroundColor Yellow
     }
-  } catch {
-    Write-Host "[WARN] Nie udalo sie wykonac config-import:" ($_.Exception.Message) -ForegroundColor Yellow
-  }
-  Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+    Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
 } else {
-  Write-Host "" ; Write-Host "Brak prisma/config-snapshot.json - pomijam import konfiguracji." -ForegroundColor Gray
+    Write-Host "" ; Write-Host "Brak prisma/config-snapshot.json - pomijam import konfiguracji." -ForegroundColor Gray
 }
 
-# === 4/6 Upload (rsync = tylko zmiany, albo ZIP) ===
-$remoteDest = $SSH_TARGET + ":" + $REMOTE_FULL
+# === 4/6 Upload plikow na serwer (delta transfer: manifest MD5 -> tar delta -> scp) ===
+if (-not $FullZip) {
+    # === Tryb lekki: delta transfer bez rsync (manifest + tar+scp) ===
+    Write-Host "" ; Write-Host "=== 4/6 Wysylanie plikow (delta tar+scp) ===" -ForegroundColor Cyan
 
-if ($UseRsync) {
-    Write-Host "" ; Write-Host "=== 4/6 Wysylanie tylko zmienionych plikow (rsync) ===" -ForegroundColor Cyan
-    # cwRsync traktuje "C:" jako host. Uzywamy sciezek wzglednych (Push-Location).
-    $standaloneDst = $remoteDest + "/.next/standalone/"
-    Write-Host "*** Wpisz haslo SSH (moze byc kilka razy) ***" -ForegroundColor Magenta
-    # Zapewnij katalog .next na serwerze
-    $mkCmd = "mkdir -p " + $REMOTE_FULL + "/.next"
-    $mkCmd | ssh $SSH_TARGET "sh -s" 2>&1 | Out-Null
-    # rsync standalone – z katalogu projektu, sciezka wzgledna bez C:
-    Push-Location $ProjectRoot
-    try {
-        & $RsyncExe -avz --delete -e "ssh" ".next/standalone/" "$standaloneDst"
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $manifestLocal = Join-Path $ProjectRoot "_deploy_manifest_local.txt"
+    $manifestRemote = Join-Path $ProjectRoot "_deploy_manifest_remote.txt"
+    $changedList = Join-Path $ProjectRoot "_deploy_changed.txt"
+    $deletedList = Join-Path $ProjectRoot "_deploy_deleted.txt"
+    $deltaTar = Join-Path $ProjectRoot "_deploy_delta.tar.gz"
+
+    @($manifestLocal, $manifestRemote, $changedList, $deletedList, $deltaTar) | ForEach-Object {
+        if (Test-Path $_) { Remove-Item $_ -Force }
+    }
+
+    # --- 4a: Generuj manifest lokalny (MD5, format: HASH  sciezka) ---
+    Write-Host "Generowanie manifestu lokalnego (MD5)..." -ForegroundColor Yellow
+    $rootNorm = $ProjectRoot.TrimEnd('\', '/') + '\'
+    $manifestLines = @()
+
+    # Zbierz TYLKO pliki (nie katalogi, nie symlinki) za pomoca -File
+    $standalonePath = Join-Path $ProjectRoot ".next\standalone"
+    if (Test-Path $standalonePath) {
+        foreach ($fileItem in (Get-ChildItem -Path $standalonePath -Recurse -File)) {
+            $relPath = $fileItem.FullName.Replace($rootNorm, "").Replace("\", "/")
+            $hashResult = Get-FileHash -Path $fileItem.FullName -Algorithm MD5 -ErrorAction SilentlyContinue
+            if ($hashResult) {
+                $manifestLines += $hashResult.Hash.ToLower() + "  " + $relPath
+            }
+        }
+    }
+
+    $appJsPath = Join-Path $ProjectRoot "app.js"
+    if (Test-Path $appJsPath) {
+        $relPath = "app.js"
+        $hashResult = Get-FileHash -Path $appJsPath -Algorithm MD5 -ErrorAction SilentlyContinue
+        if ($hashResult) {
+            $manifestLines += $hashResult.Hash.ToLower() + "  " + $relPath
+        }
+    }
+
+    $prismaPath = Join-Path $ProjectRoot "prisma"
+    if (Test-Path $prismaPath) {
+        foreach ($fileItem in (Get-ChildItem -Path $prismaPath -Recurse -File)) {
+            $relPath = $fileItem.FullName.Replace($rootNorm, "").Replace("\", "/")
+            $hashResult = Get-FileHash -Path $fileItem.FullName -Algorithm MD5 -ErrorAction SilentlyContinue
+            if ($hashResult) {
+                $manifestLines += $hashResult.Hash.ToLower() + "  " + $relPath
+            }
+        }
+    }
+
+    [System.IO.File]::WriteAllLines($manifestLocal, $manifestLines, $utf8NoBom)
+    Write-Host ("Manifest: " + $manifestLines.Count + " plikow") -ForegroundColor Gray
+
+    # --- 4b: Pobierz manifest z serwera ---
+    Write-Host "Pobieranie manifestu z serwera..." -ForegroundColor Yellow
+    scp -i $keyPath ($SSH_TARGET + ":" + $REMOTE_FULL + "/_deploy_manifest.txt") $manifestRemote 2>$null | Out-Null
+    $hasRemoteManifest = Test-Path $manifestRemote
+    if (-not $hasRemoteManifest) {
+        Write-Host "Brak manifestu na serwerze - pelny transfer (pierwszy deploy)." -ForegroundColor Yellow
+    }
+
+    # --- 4c: Porownaj manifesty ---
+    $changedFiles = @()
+    $deletedFiles = @()
+
+    if ($hasRemoteManifest) {
+        $remoteLines = Get-Content $manifestRemote | Where-Object { $_.Trim() -ne "" }
+        $remoteMap = @{}
+        foreach ($line in $remoteLines) {
+            if ($line -match '^([a-f0-9]{32})\s+(.+)$') {
+                $remoteMap[$matches[2].Trim()] = $matches[1]
+            }
+        }
+        $localLines = Get-Content $manifestLocal | Where-Object { $_.Trim() -ne "" }
+        $localMap = @{}
+        foreach ($line in $localLines) {
+            if ($line -match '^([a-f0-9]{32})\s+(.+)$') {
+                $localMap[$matches[2].Trim()] = $matches[1]
+            }
+        }
+        foreach ($path in $localMap.Keys) {
+            if (-not $remoteMap.ContainsKey($path) -or $remoteMap[$path] -ne $localMap[$path]) {
+                $changedFiles += $path
+            }
+        }
+        foreach ($path in $remoteMap.Keys) {
+            if (-not $localMap.ContainsKey($path)) {
+                $deletedFiles += $path
+            }
+        }
+    } else {
+        $changedFiles = $manifestLines | ForEach-Object {
+            if ($_ -match '^[a-f0-9]{32}\s+(.+)$') { $matches[1].Trim() }
+        } | Where-Object { $_ }
+    }
+
+    Write-Host ("Zmienionych/nowych: " + $changedFiles.Count + ", do usuniecia: " + $deletedFiles.Count) -ForegroundColor Cyan
+
+    # --- 4d: Pakuj TYLKO zmienione pliki ---
+    if ($changedFiles.Count -gt 0) {
+        # WAZNE: bsdtar na Windows wymaga backslashy w sciezkach w pliku -T
+        # Manifest uzywa forward slash (do zgodnosci z serwerem), wiec konwertujemy z powrotem
+        $tarPaths = $changedFiles | ForEach-Object { $_.Replace("/", "\") }
+        [System.IO.File]::WriteAllLines($changedList, $tarPaths, $utf8NoBom)
+
+        if (Test-Path $deltaTar) { Remove-Item $deltaTar -Force }
+        tar -czf $deltaTar -C $ProjectRoot -T $changedList
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "[BLAD] rsync .next/standalone nie powiodl sie!" -ForegroundColor Red
+            Write-Host "[BLAD] tar delta nie powiodl sie!" -ForegroundColor Red
             exit 1
         }
-        & $RsyncExe -avz -e "ssh" "app.js" "$remoteDest/"
-        if ($LASTEXITCODE -ne 0) { Write-Host "[BLAD] rsync app.js nie powiodl sie!" -ForegroundColor Red; exit 1 }
-        & $RsyncExe -avz -e "ssh" "prisma/" "$remoteDest/prisma/"
-        if ($LASTEXITCODE -ne 0) { Write-Host "[BLAD] rsync prisma nie powiodl sie!" -ForegroundColor Red; exit 1 }
-        if (Test-Path "_deploy_schema_diff.sql") {
-            & $RsyncExe -avz -e "ssh" "_deploy_schema_diff.sql" "$remoteDest/_deploy_schema_diff.sql"
-            if ($LASTEXITCODE -ne 0) { Write-Host "[BLAD] rsync SQL nie powiodl sie!" -ForegroundColor Red; exit 1 }
+        $sizeMB = [math]::Round((Get-Item $deltaTar).Length / 1MB, 1)
+        Write-Host ("Delta: " + $changedFiles.Count + " plikow, " + $sizeMB + " MB") -ForegroundColor Green
+
+        Write-Host "Wysylanie delta na serwer..." -ForegroundColor Yellow
+        scp -i $keyPath $deltaTar ($SSH_TARGET + ":" + $REMOTE_FULL + "/")
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[BLAD] scp delta nie powiodl sie!" -ForegroundColor Red
+            exit 1
         }
-    } finally {
-        Pop-Location
+        Write-Host "Rozpakowywanie delta na serwerze..." -ForegroundColor Yellow
+        ssh -i $keyPath $SSH_TARGET ("cd " + $REMOTE_FULL + " && tar -xzf _deploy_delta.tar.gz && rm -f _deploy_delta.tar.gz")
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[BLAD] Rozpakowanie delta na serwerze nie powiodlo sie!" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "Delta OK" -ForegroundColor Green
+    } else {
+        Write-Host "Brak zmienionych plikow - pomijam transfer delta." -ForegroundColor Green
     }
-    Write-Host "Rsync zakonczony (wyslane tylko zmienione pliki)." -ForegroundColor Green
+
+    # --- 4e: Usun pliki ktore zniknely (rsync --delete) ---
+    if ($deletedFiles.Count -gt 0) {
+        [System.IO.File]::WriteAllLines($deletedList, $deletedFiles, $utf8NoBom)
+        scp -i $keyPath $deletedList ($SSH_TARGET + ":" + $REMOTE_FULL + "/_deploy_deleted.txt")
+        if ($LASTEXITCODE -eq 0) {
+            ssh -i $keyPath $SSH_TARGET ("cd " + $REMOTE_FULL + " && while read -r f; do rm -f `"`$f`"; done < _deploy_deleted.txt; rm -f _deploy_deleted.txt")
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host ("Usunieto " + $deletedFiles.Count + " plikow na serwerze.") -ForegroundColor Green
+            } else {
+                Write-Host "[WARN] Usuwanie usunietych plikow moglo sie nie powiesc" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "[WARN] Nie udalo sie wyslac listy do usuniecia" -ForegroundColor Yellow
+        }
+    }
+
+    # --- 4f: Zapisz nowy manifest na serwerze ---
+    Write-Host "Aktualizacja manifestu na serwerze..." -ForegroundColor Yellow
+    scp -i $keyPath $manifestLocal ($SSH_TARGET + ":" + $REMOTE_FULL + "/_deploy_manifest.txt")
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[WARN] Zapis manifestu nie powiodl sie" -ForegroundColor Yellow
+    }
+
+    # --- 4g: SQL diff (jesli istnieje) ---
+    if (Test-Path $sqlDiffFile) {
+        Write-Host "Wysylanie SQL diff..." -ForegroundColor Yellow
+        scp -i $keyPath $sqlDiffFile ($SSH_TARGET + ":" + $REMOTE_FULL + "/_deploy_schema_diff.sql")
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[BLAD] scp SQL nie powiodl sie!" -ForegroundColor Red
+            exit 1
+        }
+        Write-Host "SQL diff OK" -ForegroundColor Green
+    }
+
+    # Posprzataj pliki tymczasowe
+    @($manifestLocal, $manifestRemote, $changedList, $deletedList, $deltaTar) | ForEach-Object {
+        if (Test-Path $_) { Remove-Item $_ -Force -ErrorAction SilentlyContinue }
+    }
+    Write-Host "Transfer zakonczony." -ForegroundColor Green
+
 } else {
     # === Pelny ZIP ===
     Write-Host "" ; Write-Host "=== 4/6 Pakowanie ZIP ===" -ForegroundColor Cyan
-    $zipFile = Join-Path $ProjectRoot "deploy_mydevil.zip"
+    $zipFile = Join-Path $ProjectRoot "deploy_mydevil.tar"
     if (Test-Path $zipFile) { Remove-Item $zipFile -Force }
 
     $tmpDeploy = Join-Path $ProjectRoot "_deploy_tmp"
@@ -180,15 +310,24 @@ if ($UseRsync) {
         Copy-Item $sqlDiffFile -Destination (Join-Path $tmpDeploy "_deploy_schema_diff.sql")
     }
 
-    Write-Host "Pakowanie ZIP..." -ForegroundColor Yellow
-    Compress-Archive -Path (Join-Path $tmpDeploy "*") -DestinationPath $zipFile -Force
+    Write-Host "Pakowanie ZIP (tar)..." -ForegroundColor Yellow
+    Push-Location $tmpDeploy
+    try {
+        tar -cf $zipFile -C $tmpDeploy .
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[BLAD] tar nie powiodl sie!" -ForegroundColor Red
+            exit 1
+        }
+    } finally {
+        Pop-Location
+    }
     Remove-Item $tmpDeploy -Recurse -Force
 
     $zipSizeMB = [math]::Round((Get-Item $zipFile).Length / 1MB, 1)
-    Write-Host ("ZIP gotowy: " + $zipSizeMB + " MB") -ForegroundColor Green
+    Write-Host ("Archiwum gotowe: " + $zipSizeMB + " MB") -ForegroundColor Green
 
     if ($zipSizeMB -lt 10) {
-        Write-Host ("[BLAD] ZIP za maly (" + $zipSizeMB + " MB) - prawdopodobnie .next/standalone sie nie skopiował!") -ForegroundColor Red
+        Write-Host ("[BLAD] Archiwum za male (" + $zipSizeMB + " MB) - prawdopodobnie .next/standalone sie nie skopiowal!") -ForegroundColor Red
         exit 1
     }
 
@@ -205,15 +344,14 @@ if ($UseRsync) {
 
 # === 6/6 Na serwerze: (przy ZIP: rozpakuj) migracja + restart ===
 Write-Host "" ; Write-Host "=== 6/6 Migracja bazy + restart ===" -ForegroundColor Cyan
-Write-Host "*** Wpisz haslo SSH ***" -ForegroundColor Magenta
 
 $cmd = "cd " + $REMOTE_FULL + " || exit 1" + "`n"
-if (-not $UseRsync) {
+if ($FullZip) {
     $cmd += "echo USUWANIE_NEXT" + "`n"
     $cmd += "rm -rf .next" + "`n"
     $cmd += "echo ROZPAKOWYWANIE" + "`n"
-    $cmd += "unzip -o deploy_mydevil.zip" + "`n"
-    $cmd += "rm -f deploy_mydevil.zip" + "`n"
+    $cmd += "tar xf deploy_mydevil.tar" + "`n"
+    $cmd += "rm -f deploy_mydevil.tar" + "`n"
 }
 
 if (Test-Path $sqlDiffFile) {
