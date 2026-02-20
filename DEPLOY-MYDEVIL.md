@@ -41,6 +41,17 @@ Jeśli nie chcesz za każdym razem wysyłać całego programu (~setki MB), zains
 - Wymuszenie pełnego ZIP (nawet przy rsync):  
   `.\scripts\deploy-to-mydevil.ps1 -FullZip`
 
+**Rsync a brudny shell (MyDevil):** Na shared hostingu `.bashrc` może wypisywać powitania na stdout przy połączeniu SSH, co rozbija protokół rsync (błąd code 12). Skrypt używa `-T` i wrappera `/bin/sh`, ale jeśli rsync nadal się wykłada, dodaj na **początek** pliku `~/.bashrc` na serwerze:
+
+```bash
+case $- in
+  *i*) ;;
+    *) return;;
+esac
+```
+
+To standardowy guard — przy połączeniu non-interactive (rsync, scp) shell wychodzi z `.bashrc` bez wypisywania niczego.
+
 ---
 
 ## Konfiguracja (jednorazowo)
