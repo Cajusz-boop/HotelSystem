@@ -16,8 +16,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ReservationBar } from "./reservation-bar";
 import type { UnifiedReservationTab } from "./unified-reservation-dialog";
 import { updateReservationStatus, getCheckoutBalanceWarning } from "@/app/actions/reservations";
@@ -65,6 +63,10 @@ interface ReservationBarWithMenuProps {
   onExtendStay?: (reservation: Reservation, newCheckOut: string) => void;
   /** Szerokość paska w px – do wyliczenia stałego clipPath */
   barWidthPx?: number;
+  /** Wysokość paska w px – do skalowania czcionki */
+  barHeightPx?: number;
+  /** Tylko w widoku Dzień – maksimum informacji na pasku */
+  showFullInfo?: boolean;
 }
 
 export function ReservationBarWithMenu({
@@ -89,6 +91,8 @@ export function ReservationBarWithMenu({
   onDuplicate,
   onExtendStay,
   barWidthPx,
+  barHeightPx,
+  showFullInfo,
 }: ReservationBarWithMenuProps) {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartPos = useRef<{ x: number; y: number } | null>(null);
@@ -97,7 +101,7 @@ export function ReservationBarWithMenu({
   const [minibarOpen, setMinibarOpen] = useState(false);
   const [preauthOpen, setPreauthOpen] = useState(false);
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
-  const [checkInSubmitting, setCheckInSubmitting] = useState(false);
+  const [_checkInSubmitting, setCheckInSubmitting] = useState(false);
   const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
   const [checkoutBalance, setCheckoutBalance] = useState<{
     balance: number;
@@ -464,6 +468,8 @@ export function ReservationBarWithMenu({
             hasConflict={hasConflict}
             isCheckInToday={isCheckInToday}
             barWidthPx={barWidthPx}
+            barHeightPx={barHeightPx}
+            showFullInfo={showFullInfo}
           />
           {canResize && (
             <>

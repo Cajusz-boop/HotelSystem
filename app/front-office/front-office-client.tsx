@@ -7,18 +7,23 @@ import type { ReservationGroupSummary, Room } from "@/lib/tape-chart-types";
 export function FrontOfficeClient({
   rooms,
   reservationGroups,
+  reservationStatusColors,
 }: {
   rooms: Room[];
   reservationGroups: ReservationGroupSummary[];
+  reservationStatusColors?: Partial<Record<string, string>> | null;
 }) {
   const searchParams = useSearchParams();
   const raw = searchParams.get("reservationId");
   const reservationId = raw?.trim() || undefined;
+  const e2eOpenCreate = searchParams.get("e2eOpenCreate") === "1";
   return (
     <TapeChart
       rooms={rooms}
       reservationGroups={reservationGroups}
+      initialStatusBg={reservationStatusColors ?? undefined}
       initialHighlightReservationId={reservationId}
+      initialOpenCreate={e2eOpenCreate}
     />
   );
 }

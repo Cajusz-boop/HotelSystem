@@ -105,9 +105,10 @@ async function generateInvoiceHtml(id: string): Promise<string> {
     const gross = Number(invoice.amountGross);
     const vatRate = Number(invoice.vatRate);
 
-    // Buduj pozycje faktury z transakcji
+    // Buduj pozycje faktury z transakcji (nazwa noclegu z szablonu)
+    const roomLabel = (template.roomProductName?.trim() || "Nocleg") as string;
     const TYPE_LABELS: Record<string, string> = {
-      ROOM: "Nocleg",
+      ROOM: roomLabel,
       LOCAL_TAX: "Opłata miejscowa",
       MINIBAR: "Minibar",
       GASTRONOMY: "Gastronomia",

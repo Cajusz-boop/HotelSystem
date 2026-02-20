@@ -7,7 +7,9 @@ import { toast } from "sonner";
 import {
   getFiscalConfigAction,
   supportsFiscalReportsAction,
+  printTestReceiptAction,
 } from "@/app/actions/finance";
+import { FISCAL_JOB_ENQUEUED_EVENT } from "@/components/fiscal-relay";
 import type { FiscalConfig } from "@/lib/fiscal/types";
 import {
   ArrowLeft,
@@ -20,8 +22,6 @@ import {
   FileText,
   Receipt,
   AlertTriangle,
-  Info,
-  Copy,
   ExternalLink,
   Zap,
   Settings,
@@ -115,7 +115,30 @@ export default function KasaFiskalnaPage() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
+  const [printingTest, setPrintingTest] = useState(false);
+  const [printTestResult, setPrintTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+
+  const handlePrintTest = async () => {
+    setPrintingTest(true);
+    setPrintTestResult(null);
+    try {
+      const result = await printTestReceiptAction();
+      setPrintTestResult(result);
+      if (result.success) {
+        window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
+        toast.success("Paragon testowy wysłany do drukarki!");
+      } else {
+        toast.error(result.error ?? "Błąd druku");
+      }
+    } catch {
+      setPrintTestResult({ success: false, error: "Błąd komunikacji z serwerem" });
+      toast.error("Błąd komunikacji z serwerem");
+    } finally {
+      setPrintingTest(false);
+    }
+  };
+
+  const _copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success("Skopiowano do schowka");
   };
@@ -138,7 +161,7 @@ export default function KasaFiskalnaPage() {
   const isEnabled = config?.enabled ?? false;
   const driver = config?.driver ?? "mock";
   const isPosnet = driver === "posnet";
-  const isMock = driver === "mock";
+  const _isMock = driver === "mock";
   const modelName = config?.posnetModelConfig?.displayName ?? config?.posnetModel ?? "—";
   const supportsInvoice = config?.posnetModelConfig?.supportsInvoice ?? false;
   const supportsEReceipt = config?.posnetModelConfig?.supportsEReceipt ?? false;
@@ -349,6 +372,61 @@ export default function KasaFiskalnaPage() {
             </div>
           )}
         </section>
+
+        {/* Testowy paragon */}
+        {isEnabled && connectionStatus === "ok" && (
+          <section className="rounded-lg border bg-card p-6 shadow-sm">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-orange-600" />
+              Wydruk testowy
+            </h2>
+
+            <p className="text-sm text-muted-foreground mb-4">
+              Wydrukuj paragon testowy (0.01 PLN) aby sprawdzić czy cały łańcuch działa:
+              serwer &rarr; baza danych &rarr; przeglądarka &rarr; bridge &rarr; drukarka.
+            </p>
+
+            <Button
+              onClick={handlePrintTest}
+              disabled={printingTest}
+              variant="default"
+            >
+              {printingTest ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Wysyłanie...
+                </>
+              ) : (
+                <>
+                  <Receipt className="w-4 h-4 mr-2" />
+                  Wydrukuj paragon testowy
+                </>
+              )}
+            </Button>
+
+            {printTestResult && (
+              <div
+                className={`mt-4 rounded-md border p-4 text-sm ${
+                  printTestResult.success
+                    ? "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30"
+                    : "border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30"
+                }`}
+              >
+                {printTestResult.success ? (
+                  <p className="font-medium text-green-800 dark:text-green-400">
+                    Paragon testowy wysłany do kolejki. FiscalRelay pobierze go i wyśle do bridge&apos;a w ciągu kilku sekund.
+                    Sprawdź czy drukarka wydrukowała paragon.
+                  </p>
+                ) : (
+                  <div>
+                    <p className="font-medium text-red-800 dark:text-red-400">Błąd</p>
+                    <p className="mt-1 text-red-700 dark:text-red-500">{printTestResult.error}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Pobierz instalator bridge */}
         <section className="rounded-lg border bg-card p-6 shadow-sm">

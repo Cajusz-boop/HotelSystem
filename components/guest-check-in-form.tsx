@@ -343,7 +343,7 @@ export function GuestCheckInForm() {
             {suggestionsOpen && guestSuggestions.length > 0 && (
               <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-auto rounded border border-border bg-popover py-1 shadow-xl" data-testid="guest-suggestions-dropdown" role="listbox">
                 {guestSuggestions.map((g) => (
-                  <button key={g.id} type="button" role="option"
+                  <button key={g.id} type="button" role="option" aria-selected={selectedGuest?.id === g.id}
                     className="flex w-full flex-col items-start gap-0.5 px-3 py-1.5 text-left text-xs hover:bg-accent focus:bg-accent focus:outline-none"
                     onClick={() => selectGuest(g)}>
                     <span className="font-medium">{g.name}</span>

@@ -23,7 +23,7 @@ interface QuickStatsDialogProps {
   todayStr: string;
 }
 
-const ROOM_STATUS_PL: Record<string, string> = {
+const _ROOM_STATUS_PL: Record<string, string> = {
   DIRTY: "Brudny",
   CLEAN: "Czysty",
   OOO: "Wyłączony",

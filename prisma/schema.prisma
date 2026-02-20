@@ -2149,6 +2149,9 @@ model InvoiceTemplate {
   // Domyślne teksty
   paymentTermsText String?  @db.Text  // warunki płatności
   thanksText       String?  // podziękowanie na końcu (np. "Dziękujemy za skorzystanie z naszych usług")
+
+  // Nazwa produktu/usługi noclegowej na fakturze (np. "Nocleg", "Usługa noclegowa")
+  roomProductName  String?  // nadpisuje domyślne "Nocleg" w pozycjach faktury
   
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt

@@ -57,6 +57,7 @@ tsconfig.tsbuildinfo
 
 # Deploy artifacts
 deploy_mydevil.zip
+deploy_mydevil.tar
 deploy_standalone.zip
 prisma_full_schema.sql
 prisma_safe_schema.sql

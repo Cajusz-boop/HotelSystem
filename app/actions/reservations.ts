@@ -477,6 +477,35 @@ export async function getReservationsByGuestId(
 }
 
 /**
+ * Pobiera dane firmy (NIP) powiązane z rezerwacją — do formularza rozliczenia.
+ */
+export async function getReservationCompany(
+  reservationId: string
+): Promise<ActionResult<{ nip: string; name: string; address?: string | null; postalCode?: string | null; city?: string | null } | null>> {
+  if (!reservationId?.trim()) return { success: true, data: null };
+  try {
+    const res = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      select: { company: { select: { nip: true, name: true, address: true, postalCode: true, city: true } } },
+    });
+    if (!res?.company) return { success: true, data: null };
+    const c = res.company;
+    return {
+      success: true,
+      data: {
+        nip: c.nip ?? "",
+        name: c.name ?? "",
+        address: c.address,
+        postalCode: c.postalCode,
+        city: c.city,
+      },
+    };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd" };
+  }
+}
+
+/**
  * Tworzy nową rezerwację; zwraca pełny obiekt rezerwacji do dodania do Tape Chart.
  * @param input - dane rezerwacji (walidowane przez reservationSchema)
  * @returns ActionResult z toUiReservation lub błędem walidacji/zapisu
@@ -2300,6 +2329,25 @@ export async function updateReservation(
     if (input.internalNotes !== undefined) data.internalNotes = (input.internalNotes === "" || input.internalNotes == null) ? null : input.internalNotes;
     if (input.specialRequests !== undefined) data.specialRequests = (input.specialRequests === "" || input.specialRequests == null) ? null : input.specialRequests;
     if (input.bedsBooked !== undefined) data.bedsBooked = input.bedsBooked == null ? null : Number(input.bedsBooked);
+
+    // Firma / NIP (dla faktury VAT)
+    if (input.companyId !== undefined) {
+      (data as Record<string, unknown>).companyId = input.companyId && input.companyId.trim() ? input.companyId.trim() : null;
+    }
+    if (input.companyData && typeof input.companyData === "object" && input.companyData.nip?.trim()) {
+      const companyResult = await createOrUpdateCompany({
+        nip: input.companyData.nip.trim(),
+        name: input.companyData.name?.trim() ?? "",
+        address: input.companyData.address?.trim() || undefined,
+        postalCode: input.companyData.postalCode?.trim() || undefined,
+        city: input.companyData.city?.trim() || undefined,
+        country: input.companyData.country?.trim() || undefined,
+      });
+      if (!companyResult.success) {
+        return { success: false, error: companyResult.error ?? "Błąd zapisu firmy" };
+      }
+      (data as Record<string, unknown>).companyId = companyResult.data.companyId;
+    }
 
     const effCheckIn = data.checkIn ?? prev.checkIn;
     const effParkingSpotId = input.parkingSpotId !== undefined

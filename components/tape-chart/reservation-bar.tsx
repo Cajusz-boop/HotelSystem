@@ -8,6 +8,26 @@ import type { Reservation } from "@/lib/tape-chart-types";
 import { RESERVATION_STATUS_COLORS, RESERVATION_STATUS_BG } from "@/lib/tape-chart-types";
 import { cn } from "@/lib/utils";
 
+/** Rozjaśnia kolor (hex/rgb) – do gradientu (jaśniejszy u góry) */
+function lightenColor(color: string, amount = 0.12): string {
+  const hexMatch = color.match(/^#?([a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/);
+  if (hexMatch) {
+    const hex = hexMatch[1];
+    const r = hex.length === 3 ? parseInt(hex[0] + hex[0], 16) : parseInt(hex.slice(0, 2), 16);
+    const g = hex.length === 3 ? parseInt(hex[1] + hex[1], 16) : parseInt(hex.slice(2, 4), 16);
+    const b = hex.length === 3 ? parseInt(hex[2] + hex[2], 16) : parseInt(hex.slice(4, 6), 16);
+    const blend = (c: number) => Math.min(255, Math.round(c + (255 - c) * amount));
+    return `rgb(${blend(r)} ${blend(g)} ${blend(b)})`;
+  }
+  const rgbMatch = color.match(/rgb\((\d+)\s+(\d+)\s+(\d+)\)/);
+  if (rgbMatch) {
+    const [, r, g, b] = rgbMatch.map(Number);
+    const blend = (c: number) => Math.min(255, Math.round(c + (255 - c) * amount));
+    return `rgb(${blend(r)} ${blend(g)} ${blend(b)})`;
+  }
+  return color;
+}
+
 /** Zamienia rgba/hex z alpha na nieprzezroczysty rgb (composite nad białym) */
 export function ensureOpaque(color: string): string {
   const rgbaMatch = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*[\d.]+)?\s*\)/);
@@ -86,6 +106,10 @@ interface ReservationBarProps {
   isCheckInToday?: boolean;
   /** Szerokość paska w px – do wyliczenia stałego clipPath (opcjonalnie) */
   barWidthPx?: number;
+  /** Wysokość paska w px – do skalowania czcionki proporcjonalnie do wielkości komórki */
+  barHeightPx?: number;
+  /** Tylko w widoku Dzień – maksimum informacji na pasku */
+  showFullInfo?: boolean;
 }
 
 export function ReservationBar({
@@ -102,8 +126,11 @@ export function ReservationBar({
   hasConflict,
   isCheckInToday = false,
   barWidthPx,
+  barHeightPx,
+  showFullInfo = false,
 }: ReservationBarProps) {
   const shortName = shortGuestLabel(reservation.guestName, privacyMode);
+  const displayName = showFullInfo && !privacyMode ? reservation.guestName : shortName;
   const nights =
     reservation.checkIn && reservation.checkOut
       ? Math.max(
@@ -121,17 +148,44 @@ export function ReservationBar({
         ? `${totalAmount.toFixed(0)} PLN`
         : `${pricePerNight} PLN`
       : "";
+  const paxShort = reservation.pax != null && reservation.pax > 0 ? `${reservation.pax} os.` : "";
+  const sourceShort = reservation.rateCodeName ?? reservation.rateCode ?? "";
+  const paymentIcon =
+    reservation.paymentStatus === "PAID"
+      ? "✓"
+      : reservation.paymentStatus === "PARTIAL"
+        ? "◐"
+        : reservation.paymentStatus === "UNPAID"
+          ? "○"
+          : "";
+
+  const groupShort = reservation.groupName ? `[${reservation.groupName}]` : "";
   const barLabel =
-    barWidthPx != null && barWidthPx > 0
-      ? barWidthPx < 56
-        ? [shortName.split(" ")[0] ?? shortName, nightsShort].filter(Boolean).join(" ")
-        : barWidthPx < 120
-          ? [shortName, nightsShort].filter(Boolean).join(" · ")
-          : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ")
-      : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ");
-  const colorClass = RESERVATION_STATUS_COLORS[reservation.status];
+    showFullInfo
+      ? [
+          displayName,
+          groupShort,
+          nightsShort,
+          paxShort,
+          priceShort,
+          sourceShort,
+          paymentIcon,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : barWidthPx != null && barWidthPx > 0
+        ? barWidthPx < 56
+          ? [shortName.split(" ")[0] ?? shortName, nightsShort].filter(Boolean).join(" ")
+          : barWidthPx < 120
+            ? [shortName, nightsShort].filter(Boolean).join(" · ")
+            : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ")
+        : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ");
+  const hasCustomColor = Boolean(statusBg?.[reservation.status]);
+  const colorClass = hasCustomColor ? "" : RESERVATION_STATUS_COLORS[reservation.status];
   const defaultBg = RESERVATION_STATUS_BG[reservation.status as keyof typeof RESERVATION_STATUS_BG] ?? RESERVATION_STATUS_BG.CONFIRMED;
   const bgColor = ensureOpaque(statusBg?.[reservation.status] ?? defaultBg);
+  const bgGradient = `linear-gradient(to bottom, ${lightenColor(bgColor)} 0%, ${bgColor} 100%)`;
+  const barShadow = "0 2px 6px rgba(0,0,0,0.12)";
   const isGroupReservation = Boolean(reservation.groupId);
 
   const STATUS_PL: Record<string, string> = {
@@ -245,7 +299,7 @@ export function ReservationBar({
         data-testid="reservation-bar"
         data-reservation-id={reservation.id}
         className={cn(
-          "relative z-10 flex h-full w-full min-h-0 flex-col justify-center gap-0 text-xs leading-snug font-semibold text-white shadow-sm overflow-hidden antialiased",
+          "relative z-10 flex h-full w-full min-h-0 flex-col justify-center gap-0 text-xs leading-snug font-semibold text-white overflow-hidden antialiased",
           colorClass,
           isPlaceholder && "border-2 border-dashed opacity-80",
           isDragging && "z-50 cursor-grabbing opacity-90",
@@ -256,7 +310,8 @@ export function ReservationBar({
         style={{
           gridRow,
           gridColumn: `${gridColumnStart} / ${gridColumnEnd}`,
-          backgroundColor: bgColor,
+          background: bgGradient,
+          boxShadow: barShadow,
           clipPath,
           WebkitClipPath: clipPath,
         }}
@@ -274,8 +329,20 @@ export function ReservationBar({
             aria-hidden
           />
         )}
-        <div className={cn("flex items-center justify-center min-h-0 min-w-0 overflow-hidden", paymentEdgeColor ? "pl-2 pr-1.5 py-0.5" : "px-1.5 py-0.5")}>
-          <span className="min-w-0 truncate text-xs leading-snug font-semibold tabular-nums antialiased">
+        <div className={cn("flex items-center justify-center min-h-0 min-w-0 overflow-hidden text-center", paymentEdgeColor ? "pl-2 pr-1.5 py-0.5" : "px-1.5 py-0.5")}>
+          <span
+            className={cn(
+              "leading-snug font-semibold tabular-nums antialiased",
+              showFullInfo ? "min-w-0 break-words line-clamp-2" : "min-w-0 truncate",
+              !barHeightPx && "text-xs"
+            )}
+            style={{
+              textShadow: "0 1px 2px rgba(0,0,0,0.25)",
+              ...(barHeightPx != null && barHeightPx > 0 && {
+                fontSize: `${Math.max(9, Math.min(16, Math.round(barHeightPx * 0.48)))}px`,
+              }),
+            }}
+          >
             {reservation.vip && <Star className="inline h-2.5 w-2.5 mr-0.5 text-yellow-300 fill-yellow-300 align-middle shrink-0" aria-label="VIP" />}
             {barLabel}
           </span>

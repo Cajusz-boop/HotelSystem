@@ -128,6 +128,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
         return (
         <div
           key={`cell-${room.number}-${colIdx}`}
+          data-testid={`cell-${room.number}-${dateStr}`}
           data-cell
           data-date={dateStr}
           data-room={room.number}
@@ -167,18 +168,18 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
 const ROW_HEIGHT_PX = 24; // ~25 − 2%
 const ROOM_LABEL_WIDTH_PX = 140;
 const HEADER_ROW_PX = 40;
-const BAR_PADDING_PX = 2;
+const _BAR_PADDING_PX = 2;
 
-/** Skale widoku grafiku – określają liczbę dni i szerokość kolumny */
+/** Skale widoku grafiku – liczba dni (kolumn) bardzo duża, żeby można było przewijać w nieskończoność */
 type ViewScale = "day" | "week" | "month" | "year";
 const VIEW_SCALE_CONFIG: Record<ViewScale, { days: number; columnWidth: number; label: string }> = {
-  day: { days: 14, columnWidth: 120, label: "Dzień" },
-  week: { days: 28, columnWidth: 80, label: "Tydzień" },
-  month: { days: 60, columnWidth: 48, label: "Miesiąc" },
-  year: { days: 365, columnWidth: 12, label: "Rok" },
+  day: { days: 365, columnWidth: 480, label: "Dzień" },     // szerokie kolumny – 2–3 widoczne, paski z pełną info
+  week: { days: 365, columnWidth: 100, label: "Tydzień" }, // ~rok
+  month: { days: 365, columnWidth: 48, label: "Miesiąc" },  // ~rok
+  year: { days: 1095, columnWidth: 12, label: "Rok" },      // 3 lata
 };
 
-/** Poziomy zoom dla gęstości widoku (mnożnik szerokości kolumn) */
+/** Zoom dla wysokości wierszy – wpływa tylko na wysokość komórek (nie na szerokość kolumn) */
 const ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
 const DEFAULT_ZOOM_INDEX = 2; // 1x
 
@@ -192,7 +193,7 @@ const WEEKDAY_SHORT: Record<number, string> = {
   6: "So",
 };
 
-function isWeekendDate(dateStr: string): boolean {
+function _isWeekendDate(dateStr: string): boolean {
   const d = new Date(dateStr + "Z");
   const w = d.getUTCDay();
   return w === 0 || w === 6; // Nd / So
@@ -206,7 +207,7 @@ function isSundayDate(dateStr: string): boolean {
   return new Date(dateStr + "Z").getUTCDay() === 0;
 }
 
-function isPastDate(dateStr: string, todayStr: string): boolean {
+function _isPastDate(dateStr: string, todayStr: string): boolean {
   return dateStr < todayStr;
 }
 
@@ -265,11 +266,17 @@ class ConditionalPointerSensor extends PointerSensor {
 export function TapeChart({
   rooms,
   initialHighlightReservationId,
+  initialStatusBg,
   reservationGroups,
+  initialOpenCreate = false,
 }: {
   rooms: Room[];
   initialHighlightReservationId?: string;
+  /** Kolory statusów z serwera – unika migania z niebieskiego na zielony przy ładowaniu */
+  initialStatusBg?: Partial<Record<string, string>>;
   reservationGroups: ReservationGroupSummary[];
+  /** E2E: otwórz formularz nowej rezerwacji od razu (?e2eOpenCreate=1) */
+  initialOpenCreate?: boolean;
 }) {
   const today = useMemo(() => new Date(), []);
   const todayStr = useMemo(() => {
@@ -309,10 +316,14 @@ export function TapeChart({
   const [statusColorsDialogOpen, setStatusColorsDialogOpen] = useState(false);
   const [legendDialogOpen, setLegendDialogOpen] = useState(false);
   const [propertyId, setPropertyId] = useState<string | null>(null);
-  const [statusBg, setStatusBg] = useState<Record<string, string> | null>(null);
+  const [statusBg, setStatusBg] = useState<Record<string, string> | null>(
+    initialStatusBg && Object.keys(initialStatusBg).length > 0
+      ? (Object.fromEntries(Object.entries(initialStatusBg).filter(([, v]) => typeof v === "string")) as Record<string, string>)
+      : null
+  );
   const [statusTab, setStatusTab] = useState<"statuses" | "custom" | "sources" | "prices">("statuses");
   const [colorMode, setColorMode] = useState<"status" | "source">("status");
-  const [filtersOpen, setFiltersOpen] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [footerOpen, setFooterOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -342,7 +353,13 @@ export function TapeChart({
     { id: "prices", label: "Ceny" },
   ] as const;
 
-  const [viewStartDate, setViewStartDate] = useState<Date>(() => addDays(new Date(today), -7));
+  const [viewStartDate, setViewStartDate] = useState<Date>(() => {
+    if (DEFAULT_VIEW_SCALE === "day" || DEFAULT_VIEW_SCALE === "week" || DEFAULT_VIEW_SCALE === "month") {
+      return new Date(today);
+    }
+    const days = VIEW_SCALE_CONFIG[DEFAULT_VIEW_SCALE].days;
+    return addDays(new Date(today), -Math.floor(days / 2));
+  });
   const [viewScale, setViewScale] = useState<ViewScale>(DEFAULT_VIEW_SCALE);
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
   const [highlightedReservationId, setHighlightedReservationId] = useState<string | null>(
@@ -351,7 +368,7 @@ export function TapeChart({
 
   const currentViewConfig = VIEW_SCALE_CONFIG[viewScale];
   const zoomMultiplier = ZOOM_LEVELS[zoomIndex];
-  const COLUMN_WIDTH_PX = Math.round(currentViewConfig.columnWidth * zoomMultiplier);
+  const COLUMN_WIDTH_PX = currentViewConfig.columnWidth; // zoom wpływa tylko na wysokość wierszy
   const DAYS_VIEW = currentViewConfig.days;
 
   const handleZoomIn = useCallback(() => {
@@ -491,7 +508,12 @@ export function TapeChart({
     if (goToDateValue) {
       const d = new Date(goToDateValue + "T12:00:00");
       if (!Number.isNaN(d.getTime())) {
-        setViewStartDate(addDays(d, -7));
+        if (viewScale === "day" || viewScale === "week" || viewScale === "month") {
+          setViewStartDate(d);
+        } else {
+          const days = VIEW_SCALE_CONFIG[viewScale].days;
+          setViewStartDate(addDays(d, -Math.floor(days / 2)));
+        }
         setGoToDateOpen(false);
         setGoToDateValue("");
       }
@@ -514,9 +536,14 @@ export function TapeChart({
     setViewStartDate(addDays(viewStartDate, navigationStep));
   };
   const handleGoToToday = useCallback(() => {
-    setViewStartDate(addDays(new Date(today), -7));
+    if (viewScale === "day" || viewScale === "week" || viewScale === "month") {
+      setViewStartDate(new Date(today));
+    } else {
+      const days = VIEW_SCALE_CONFIG[viewScale].days;
+      setViewStartDate(addDays(new Date(today), -Math.floor(days / 2)));
+    }
     didScrollToTodayRef.current = false;
-  }, [today]);
+  }, [today, viewScale]);
 
   const handleOpenExportDialog = () => {
     // Initialize with current view range
@@ -550,42 +577,39 @@ export function TapeChart({
   const didPanRef = useRef(false);
   const didScrollToTodayRef = useRef(false);
 
-  /** Szerokość kolumny dat i wysokość wierszy – dostosowane do widocznego obszaru (filtry/legenda zmieniają dostępną przestrzeń) */
-  const [effectiveColumnWidthPx, setEffectiveColumnWidthPx] = useState(COLUMN_WIDTH_PX);
+  /** Szerokość kolumny = stała COLUMN_WIDTH_PX – siatka szersza niż kontener, przewijanie myszką w każdym widoku */
+  const effectiveColumnWidthPx = COLUMN_WIDTH_PX;
   const [effectiveRowHeightPx, setEffectiveRowHeightPx] = useState(ROW_HEIGHT_PX);
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container || dates.length === 0) return;
     const measure = () => {
-      const cw = container.clientWidth;
-      const ch = container.clientHeight;
-      const padH = 32;
-      const padV = 40; // padding (24px) + horizontal scrollbar (~15px)
-      const dateAreaWidth = Math.max(0, cw - ROOM_LABEL_WIDTH_PX - padH);
-      const roomAreaHeight = Math.max(0, ch - HEADER_ROW_PX - padV);
-      const colW = Math.max(COLUMN_WIDTH_PX, dateAreaWidth / dates.length);
+      // zoom wpływa tylko na wysokość komórek (wierszy pokoi)
       const rowH = displayRooms.length > 0
-        ? Math.max(16, roomAreaHeight / displayRooms.length)
+        ? Math.max(16, Math.round(ROW_HEIGHT_PX * zoomMultiplier))
         : ROW_HEIGHT_PX;
-      setEffectiveColumnWidthPx(Math.round(colW));
-      setEffectiveRowHeightPx(Math.round(rowH));
+      setEffectiveRowHeightPx(rowH);
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(container);
     return () => ro.disconnect();
-  }, [dates.length, displayRooms.length, COLUMN_WIDTH_PX]);
+  }, [dates.length, displayRooms.length, zoomMultiplier]);
 
   const getDateFromClientX = useCallback(
     (clientX: number): string | null => {
       const gridEl = gridWrapperRef.current;
-      if (!gridEl) return null;
-      const gridLeft = gridEl.getBoundingClientRect().left;
-      const col = Math.floor((clientX - gridLeft - ROOM_LABEL_WIDTH_PX) / effectiveColumnWidthPx);
+      if (!gridEl || dates.length === 0) return null;
+      const rect = gridEl.getBoundingClientRect();
+      const gridLeft = rect.left;
+      const dateAreaWidth = gridEl.offsetWidth - ROOM_LABEL_WIDTH_PX;
+      if (dateAreaWidth <= 0) return null;
+      const colWidth = dateAreaWidth / dates.length;
+      const col = Math.floor((clientX - gridLeft - ROOM_LABEL_WIDTH_PX) / colWidth);
       if (col < 0 || col >= dates.length) return null;
       return dates[col] ?? null;
     },
-    [dates, effectiveColumnWidthPx]
+    [dates]
   );
 
   const handleResize = useCallback(
@@ -607,8 +631,10 @@ export function TapeChart({
   const handleGridPointerDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     const target = e.target;
-    // Przeciąganie kwadracika (komórka dnia) lub nagłówka daty = przewijanie w lewo/prawo
-    if (!(target instanceof HTMLElement) || !target.closest("[data-cell], [data-date-header]")) return;
+    // Przeciąganie siatki (komórka, nagłówek lub tło) = przewijanie – nie gdy klik na pasek rezerwacji (DnD)
+    if (!(target instanceof HTMLElement)) return;
+    if (target.closest("[data-reservation-id]")) return;
+    if (!target.closest("[data-cell], [data-date-header], [data-grid-draggable]")) return;
     const ref = scrollContainerRef.current;
     if (!ref) return;
     const startX = e.clientX;
@@ -782,6 +808,17 @@ export function TapeChart({
     const requests = filteredReservations.map((r) => ({ roomNumber: r.room, dateStr: r.checkIn }));
     getEffectivePricesBatch(requests).then(setEffectivePricesMap);
   }, [filteredReservations]);
+
+  useEffect(() => {
+    if (initialOpenCreate && displayRooms.length > 0 && !createSheetOpen) {
+      const defaultRoom = displayRooms[0];
+      setNewReservationContext({
+        roomNumber: defaultRoom?.number ?? "",
+        checkIn: viewStartDateStr,
+      });
+      setCreateSheetOpen(true);
+    }
+  }, [initialOpenCreate, displayRooms, viewStartDateStr, createSheetOpen]);
 
   const roomRowIndex = useMemo(() => {
     const map = new Map<string, number>();
@@ -1168,8 +1205,8 @@ export function TapeChart({
     }
   }, [clientSearchTerm, reservations]);
 
-  /* Kolumny i wiersze dostosowane do widocznego obszaru – gdy filtry/legenda zajmą miejsce, kratki się zawężą */
-  const gridColumns = `${ROOM_LABEL_WIDTH_PX}px repeat(${dates.length}, minmax(${effectiveColumnWidthPx}px, 1fr))`;
+  /* Kolumny o stałej szerokości – siatka zawsze szersza niż kontener → przewijanie myszką we wszystkich widokach */
+  const gridColumns = `${ROOM_LABEL_WIDTH_PX}px repeat(${dates.length}, ${effectiveColumnWidthPx}px)`;
   const gridRows = `${HEADER_ROW_PX}px repeat(${displayRooms.length}, ${effectiveRowHeightPx}px)`;
 
   return (
@@ -1189,14 +1226,14 @@ export function TapeChart({
         {/* Row 1: Navigation + Primary Actions */}
         <div className="flex items-center justify-between gap-2 px-3 py-2 md:px-4">
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handlePrev} aria-label="Tydzień wstecz">
+            <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handlePrev} aria-label="Okres wstecz">
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="sm" className="h-8 px-2.5 gap-1 font-semibold" onClick={handleGoToToday} aria-label="Wróć do dziś" title="Wróć do dziś">
+            <Button variant="outline" size="sm" className="h-8 px-2.5 gap-1 font-semibold" onClick={handleGoToToday} aria-label="Wróć do dziś" title="Ustaw widok od dziś">
               <CalendarDays className="h-3.5 w-3.5" />
               Dziś
             </Button>
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleNext} aria-label="Tydzień naprzód">
+            <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={handleNext} aria-label="Okres naprzód">
               <ChevronRight className="h-4 w-4" />
             </Button>
             <Button
@@ -1238,7 +1275,18 @@ export function TapeChart({
                     "rounded-none first:rounded-l-md last:rounded-r-md border-0 h-8 px-2.5 text-xs touch-manipulation",
                     viewScale === scale && "bg-primary text-primary-foreground"
                   )}
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setViewScale(scale); }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setViewScale(scale);
+                    if (scale === "day" || scale === "week" || scale === "month") {
+                      setViewStartDate(new Date(today));
+                    } else {
+                      const days = VIEW_SCALE_CONFIG[scale].days;
+                      setViewStartDate(addDays(new Date(today), -Math.floor(days / 2)));
+                    }
+                    didScrollToTodayRef.current = false;
+                  }}
                   title={`Widok: ${VIEW_SCALE_CONFIG[scale].label} (${VIEW_SCALE_CONFIG[scale].days} dni)`}
                 >
                   {VIEW_SCALE_CONFIG[scale].label}
@@ -1246,7 +1294,7 @@ export function TapeChart({
               ))}
             </div>
 
-            <div className="flex items-center gap-0.5 rounded-md border bg-muted/30 px-0.5" role="group" aria-label="Zoom">
+            <div className="flex items-center gap-0.5 rounded-md border bg-muted/30 px-0.5" role="group" aria-label="Wysokość wierszy">
               <Button
                 type="button"
                 variant="ghost"
@@ -1254,8 +1302,8 @@ export function TapeChart({
                 className="h-8 w-8 min-w-8 min-h-8 p-0 touch-manipulation"
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleZoomOut(); }}
                 disabled={zoomIndex === 0}
-                title="Zmniejsz gęstość widoku (zoom out)"
-                aria-label="Zmniejsz gęstość widoku"
+                title="Zmniejsz wysokość wierszy"
+                aria-label="Zmniejsz wysokość wierszy"
               >
                 <ZoomOut className="h-4 w-4" />
               </Button>
@@ -1269,8 +1317,8 @@ export function TapeChart({
                 )}
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (zoomIndex < ZOOM_LEVELS.length - 1) handleZoomIn(); }}
                 disabled={zoomIndex === ZOOM_LEVELS.length - 1}
-                title={zoomIndex === ZOOM_LEVELS.length - 1 ? `Maksymalne powiększenie – ${Math.round(zoomMultiplier * 100)}%` : `Kliknij aby powiększyć – obecnie ${Math.round(zoomMultiplier * 100)}%`}
-                aria-label={`Skala widoku ${Math.round(zoomMultiplier * 100)}%`}
+                title={zoomIndex === ZOOM_LEVELS.length - 1 ? `Maksymalna wysokość wierszy – ${Math.round(zoomMultiplier * 100)}%` : `Kliknij aby powiększyć wysokość – obecnie ${Math.round(zoomMultiplier * 100)}%`}
+                aria-label={`Wysokość wierszy ${Math.round(zoomMultiplier * 100)}%`}
               >
                 {Math.round(zoomMultiplier * 100)}%
               </button>
@@ -1281,8 +1329,8 @@ export function TapeChart({
                 className="h-8 w-8 min-w-8 min-h-8 p-0 touch-manipulation"
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleZoomIn(); }}
                 disabled={zoomIndex === ZOOM_LEVELS.length - 1}
-                title="Zwiększ gęstość widoku (zoom in)"
-                aria-label="Zwiększ gęstość widoku"
+                title="Zwiększ wysokość wierszy"
+                aria-label="Zwiększ wysokość wierszy"
               >
                 <ZoomIn className="h-4 w-4" />
               </Button>
@@ -1347,7 +1395,7 @@ export function TapeChart({
 
             <div className="mx-1 h-5 w-px bg-border" />
 
-            <Button variant="default" size="sm" className="gap-1.5 h-8 font-semibold" onClick={handleCreateReservationClick}>
+            <Button variant="default" size="sm" className="gap-1.5 h-8 font-semibold" onClick={handleCreateReservationClick} data-testid="create-reservation-open-btn">
               <Plus className="h-4 w-4" />
               Zarezerwuj
             </Button>
@@ -1609,6 +1657,7 @@ export function TapeChart({
         >
           <div
             ref={gridWrapperRef}
+            data-grid-draggable
             className="relative w-full min-w-max cursor-grab active:cursor-grabbing"
             onMouseDown={handleGridPointerDown}
           >
@@ -1824,6 +1873,8 @@ export function TapeChart({
                       hasConflict={conflictingReservationIds.has(reservation.id)}
                       isCheckInToday={reservation.checkIn === todayStr && reservation.status === "CONFIRMED"}
                       barWidthPx={barWidthPx}
+                      barHeightPx={barHeightPx}
+                      showFullInfo={viewScale === "day"}
                       onEdit={(r, initialTab) => {
                         setSelectedReservation(r);
                         setEditInitialTab(initialTab ?? "rozliczenie");
@@ -1943,7 +1994,7 @@ export function TapeChart({
                   <div key={item.status} className="flex items-center gap-2">
                     <span
                       className="inline-block h-3 w-6 rounded-sm border border-border"
-                      style={{ backgroundColor: item.color }}
+                      style={{ backgroundColor: statusBg?.[item.status] ?? item.color }}
                       aria-hidden="true"
                     />
                     <span className="text-xs">{item.label}</span>

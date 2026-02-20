@@ -51,7 +51,7 @@ import { useI18n } from "@/components/i18n-provider";
 
 const SECTIONS_STATE_KEY = "pms-sidebar-sections";
 const ICON_RAIL_WIDTH = "w-12"; // 48px
-const ICON_RAIL_REM = "3rem";
+const _ICON_RAIL_REM = "3rem";
 
 type NavItem = {
   href: string;

@@ -17,7 +17,6 @@ import {
   UtensilsCrossed,
   Tent,
   Bike,
-  CreditCard,
   Phone,
   CalendarDays,
   KeyRound,

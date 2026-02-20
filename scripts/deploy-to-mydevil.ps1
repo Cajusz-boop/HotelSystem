@@ -83,8 +83,26 @@ if ($LASTEXITCODE -ne 0) {
     $rawSql = $null
 } else {
     $safeSql = $rawSql -replace 'CREATE TABLE `', 'CREATE TABLE IF NOT EXISTS `'
-    [System.IO.File]::WriteAllText($sqlDiffFile, ($safeSql -join "`n"), [System.Text.Encoding]::UTF8)
+    $sqlContent = ($safeSql -join "`n") + @"
+
+-- Migracja: nazwa produktu noclegowego w szablonie faktury (ALTER ignorowany jesli kolumna juz jest)
+ALTER TABLE InvoiceTemplate ADD COLUMN roomProductName VARCHAR(191) NULL;
+"@
+    [System.IO.File]::WriteAllText($sqlDiffFile, $sqlContent, [System.Text.Encoding]::UTF8)
     Write-Host "SQL diff zapisany." -ForegroundColor Green
+}
+
+# === 3a/6 Eksport konfiguracji z lokalnej bazy (snapshot jest aktualny przed deployem) ===
+Write-Host "" ; Write-Host "=== 3a/6 Eksport konfiguracji z lokalnej bazy ===" -ForegroundColor Cyan
+try {
+    npx tsx prisma/config-export.ts 2>&1 | ForEach-Object { Write-Host $_ }
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "config-snapshot.json zaktualizowany z lokalnej bazy." -ForegroundColor Green
+    } else {
+        Write-Host "[WARN] config-export zakonczyl sie bledem - uzywa istniejacego snapshot." -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "[WARN] Brak lokalnej bazy lub blad exportu - uzywa istniejacego config-snapshot.json" -ForegroundColor Yellow
 }
 
 # === 3b/6 Import konfiguracji (Dane sprzedawcy, szablony) do produkcji ===
@@ -212,33 +230,46 @@ if (-not $FullZip) {
 
     # --- 4d: Pakuj TYLKO zmienione pliki ---
     if ($changedFiles.Count -gt 0) {
-        # WAZNE: bsdtar na Windows wymaga backslashy w sciezkach w pliku -T
-        # Manifest uzywa forward slash (do zgodnosci z serwerem), wiec konwertujemy z powrotem
-        $tarPaths = $changedFiles | ForEach-Object { $_.Replace("/", "\") }
-        [System.IO.File]::WriteAllLines($changedList, $tarPaths, $utf8NoBom)
+        # Walidacja: tylko sciezki do istniejacych plikow (unikamy "Couldn't visit directory")
+        $validPaths = @()
+        foreach ($p in $changedFiles) {
+            $winPath = $p.Replace("/", [System.IO.Path]::DirectorySeparatorChar)
+            $fullPath = Join-Path $ProjectRoot $winPath
+            if (Test-Path $fullPath -PathType Leaf) {
+                $validPaths += $p
+            } else {
+                Write-Host "Pomijam (brak pliku): $p" -ForegroundColor DarkGray
+            }
+        }
+        if ($validPaths.Count -eq 0) {
+            Write-Host "[WARN] Wszystkie sciezki pominiete - brak plikow do wyslania." -ForegroundColor Yellow
+        } else {
+            # tar na Windows: forward slash dziala, cudzyslowy przy spacjach w sciezkach
+            [System.IO.File]::WriteAllLines($changedList, $validPaths, $utf8NoBom)
+            if (Test-Path $deltaTar) { Remove-Item $deltaTar -Force }
+            $tarErr = & tar -czf $deltaTar -C $ProjectRoot -T $changedList 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "[BLAD] tar delta nie powiodl sie!" -ForegroundColor Red
+                Write-Host $tarErr -ForegroundColor Red
+                exit 1
+            }
+            $sizeMB = [math]::Round((Get-Item $deltaTar).Length / 1MB, 1)
+            Write-Host ("Delta: " + $validPaths.Count + " plikow, " + $sizeMB + " MB") -ForegroundColor Green
 
-        if (Test-Path $deltaTar) { Remove-Item $deltaTar -Force }
-        tar -czf $deltaTar -C $ProjectRoot -T $changedList
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "[BLAD] tar delta nie powiodl sie!" -ForegroundColor Red
-            exit 1
+            Write-Host "Wysylanie delta na serwer..." -ForegroundColor Yellow
+            scp -i $keyPath $deltaTar ($SSH_TARGET + ":" + $REMOTE_FULL + "/")
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "[BLAD] scp delta nie powiodl sie!" -ForegroundColor Red
+                exit 1
+            }
+            Write-Host "Rozpakowywanie delta na serwerze (usun stary .next/static, potem extract)..." -ForegroundColor Yellow
+            ssh -i $keyPath $SSH_TARGET ("cd " + $REMOTE_FULL + " && rm -rf .next/standalone/.next/static && tar -xzf _deploy_delta.tar.gz && rm -f _deploy_delta.tar.gz")
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "[BLAD] Rozpakowanie delta na serwerze nie powiodlo sie!" -ForegroundColor Red
+                exit 1
+            }
+            Write-Host "Delta OK" -ForegroundColor Green
         }
-        $sizeMB = [math]::Round((Get-Item $deltaTar).Length / 1MB, 1)
-        Write-Host ("Delta: " + $changedFiles.Count + " plikow, " + $sizeMB + " MB") -ForegroundColor Green
-
-        Write-Host "Wysylanie delta na serwer..." -ForegroundColor Yellow
-        scp -i $keyPath $deltaTar ($SSH_TARGET + ":" + $REMOTE_FULL + "/")
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "[BLAD] scp delta nie powiodl sie!" -ForegroundColor Red
-            exit 1
-        }
-        Write-Host "Rozpakowywanie delta na serwerze..." -ForegroundColor Yellow
-        ssh -i $keyPath $SSH_TARGET ("cd " + $REMOTE_FULL + " && tar -xzf _deploy_delta.tar.gz && rm -f _deploy_delta.tar.gz")
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "[BLAD] Rozpakowanie delta na serwerze nie powiodlo sie!" -ForegroundColor Red
-            exit 1
-        }
-        Write-Host "Delta OK" -ForegroundColor Green
     } else {
         Write-Host "Brak zmienionych plikow - pomijam transfer delta." -ForegroundColor Green
     }
@@ -332,9 +363,13 @@ if (-not $FullZip) {
     }
 
     Write-Host "" ; Write-Host "=== 5/6 Wysylanie ZIP na serwer ===" -ForegroundColor Cyan
-    Write-Host "*** Wpisz haslo SSH ***" -ForegroundColor Magenta
     $scpDest = $SSH_TARGET + ":" + $REMOTE_FULL + "/"
-    scp $zipFile $scpDest
+    if (Test-Path $keyPath) {
+      scp -i $keyPath $zipFile $scpDest
+    } else {
+      Write-Host "*** Wpisz haslo SSH (brak klucza w $keyPath) ***" -ForegroundColor Magenta
+      scp $zipFile $scpDest
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[BLAD] scp nie powiodlo sie!" -ForegroundColor Red
         exit 1
@@ -369,7 +404,8 @@ $cmd += "echo DEPLOY_SSH_OK"
 $cmdFile = Join-Path $ProjectRoot "_deploy_ssh_cmd.sh"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllText($cmdFile, $cmd.Replace("`r`n", "`n").Replace("`r", "`n"), $utf8NoBom)
-$sshRaw = Get-Content $cmdFile -Raw | ssh $SSH_TARGET "sh -s" 2>&1
+$sshArgs = if (Test-Path $keyPath) { @("-i", $keyPath, $SSH_TARGET) } else { @($SSH_TARGET) }
+$sshRaw = Get-Content $cmdFile -Raw | ssh @sshArgs "sh -s" 2>&1
 $sshExitCode = $LASTEXITCODE
 Remove-Item $cmdFile -Force
 

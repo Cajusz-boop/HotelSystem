@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { getEffectivePropertyId } from "@/app/actions/properties";
+import { getEffectivePropertyId, getPropertyReservationColors } from "@/app/actions/properties";
 export interface TapeChartReservation {
   id: string;
   guestName: string;
@@ -42,6 +42,8 @@ export interface TapeChartData {
   reservations: TapeChartReservation[];
   rooms: TapeChartRoom[];
   reservationGroups: { id: string; name?: string | null; reservationCount: number }[];
+  /** Kolory statusów rezerwacji (CONFIRMED, CHECKED_IN itd.) – ładowane z obiektu */
+  reservationStatusColors?: Partial<Record<string, string>> | null;
 }
 
 /** Format daty YYYY-MM-DD w UTC – spójnie z MySQL DATE */
@@ -333,6 +335,11 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
       )
     : null;
 
+  const colorsRes = await getPropertyReservationColors(propertyId);
+  const reservationStatusColors = colorsRes.success && colorsRes.data && Object.keys(colorsRes.data).length > 0
+    ? colorsRes.data
+    : null;
+
   return {
     reservations: reservations.map(mapReservationToTapeChart),
     rooms: rooms.map((r) => ({
@@ -363,5 +370,6 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
       name: g.name,
       reservationCount: g._count.reservations,
     })),
+    reservationStatusColors,
   };
 }
