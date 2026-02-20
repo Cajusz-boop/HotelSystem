@@ -369,7 +369,7 @@ export function SettlementTab({
         <div className="grid grid-cols-[80px_1fr] items-center gap-x-2 gap-y-1">
           <Label className="text-xs text-right text-muted-foreground">🚪 Pokój</Label>
           {rooms.length > 0 ? (
-            <select id="uni-room" value={form.room} onChange={(e) => onFormChange({ room: e.target.value })} required className={selectClass}>
+            <select id="uni-room" data-testid="create-reservation-room" value={form.room} onChange={(e) => onFormChange({ room: e.target.value })} required className={selectClass}>
               <option value="">— wybierz —</option>
               {rooms.map((r) => <option key={r.number} value={r.number}>{r.number}{r.type ? ` · ${r.type}` : ""}</option>)}
             </select>
@@ -383,11 +383,11 @@ export function SettlementTab({
           </>)}
 
           <Label className="text-xs text-right text-muted-foreground">📅 Zameld.</Label>
-          <Input id="uni-checkIn" type="date" className={inputCompact} value={form.checkIn}
+          <Input id="uni-checkIn" data-testid="create-reservation-checkIn" type="date" className={inputCompact} value={form.checkIn}
             onChange={(e) => { onFormChange({ checkIn: e.target.value, checkOut: e.target.value ? addDays(e.target.value, 1) : form.checkOut }); }} />
 
           <Label className="text-xs text-right text-muted-foreground">📅 Wymeld.</Label>
-          <Input id="uni-checkOut" type="date" className={`${inputCompact} ${dateError ? "border-destructive" : ""}`} value={form.checkOut}
+          <Input id="uni-checkOut" data-testid="create-reservation-checkOut" type="date" className={`${inputCompact} ${dateError ? "border-destructive" : ""}`} value={form.checkOut}
             onChange={(e) => onFormChange({ checkOut: e.target.value })} min={form.checkIn ? addDays(form.checkIn, 1) : undefined} />
 
           <Label className="text-xs text-right text-muted-foreground">🕐 Godz. od</Label>
@@ -397,7 +397,7 @@ export function SettlementTab({
           <Input id="uni-checkOutTime" type="time" className={inputCompact} value={form.checkOutTime} onChange={(e) => onFormChange({ checkOutTime: e.target.value })} />
 
           <Label className="text-xs text-right text-muted-foreground">🅿️ Parking</Label>
-          <select id="uni-parking" value={form.parkingSpotId} onChange={(e) => onFormChange({ parkingSpotId: e.target.value })} className={selectClass}>
+          <select id="uni-parking" data-testid="create-reservation-parking" value={form.parkingSpotId} onChange={(e) => onFormChange({ parkingSpotId: e.target.value })} className={selectClass}>
             <option value="">— brak —</option>
             {parkingSpots.map((s) => <option key={s.id} value={s.id}>{s.number}</option>)}
           </select>
@@ -409,7 +409,7 @@ export function SettlementTab({
           </select>
 
           <Label className="text-xs text-right text-muted-foreground">📋 Status</Label>
-          <select id="uni-status" value={form.status} onChange={(e) => onFormChange({ status: e.target.value })} className={selectClass}>
+          <select id="uni-status" data-testid="create-reservation-status" value={form.status} onChange={(e) => onFormChange({ status: e.target.value })} className={selectClass}>
             {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
         </div>
@@ -469,6 +469,7 @@ export function SettlementTab({
             <Input
               ref={guestInputRef}
               id="uni-guestName"
+              data-testid="create-reservation-guest"
               className={inputCompact}
               value={form.guestName}
               onChange={(e) => { onFormChange({ guestName: e.target.value }); onSearchGuest(e.target.value, "name"); }}
@@ -575,7 +576,7 @@ export function SettlementTab({
                 </div>
               </div>
 
-              {/* NIP inline */}
+              {/* NIP inline — create mode */}
               <div className="mt-1 border-t pt-1">
                 <Label className="text-xs text-muted-foreground">🏢 NIP (firma/faktura)</Label>
                 <div className="flex gap-1">
@@ -607,6 +608,41 @@ export function SettlementTab({
                 )}
               </div>
             </>
+          )}
+
+          {/* NIP w trybie edycji — dla faktury VAT */}
+          {isEdit && (
+            <div className="mt-2 border-t pt-2">
+              <Label className="text-xs text-muted-foreground">🏢 NIP firmy (dla faktury VAT)</Label>
+              <p className="text-[10px] text-muted-foreground mb-1">Wpisz NIP i wybierz firmę, by móc wystawić fakturę.</p>
+              <div className="flex gap-1">
+                <Input id="uni-nip-edit" type="text" inputMode="numeric" className={`${inputCompact} flex-1`} value={form.nipInput}
+                  onChange={(e) => {
+                    const d = e.target.value.replace(/\D/g, "").slice(0, 10);
+                    let formatted = d;
+                    if (d.length > 3) formatted = `${d.slice(0, 3)}-${d.slice(3)}`;
+                    if (d.length > 6) formatted = `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+                    if (d.length > 8) formatted = `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6, 8)}-${d.slice(8)}`;
+                    onFormChange({ nipInput: formatted, companyFound: false });
+                  }}
+                  placeholder="000-000-00-00" autoComplete="off" />
+                <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] px-2 shrink-0"
+                  disabled={nipLookupLoading || form.nipInput.replace(/\D/g, "").length !== 10}
+                  onClick={onNipLookup}>
+                  {nipLookupLoading ? "…" : "Sprawdź"}
+                </Button>
+              </div>
+              {form.companyFound && (
+                <div className="mt-1 space-y-0.5 rounded border bg-muted/30 p-1.5 text-xs">
+                  <Input className="h-6 text-xs" value={form.companyName} onChange={(e) => onFormChange({ companyName: e.target.value })} placeholder="Nazwa firmy" />
+                  <Input className="h-6 text-xs" value={form.companyAddress} onChange={(e) => onFormChange({ companyAddress: e.target.value })} placeholder="Adres" />
+                  <div className="grid grid-cols-[80px_1fr] gap-1">
+                    <Input className="h-6 text-xs" value={form.companyPostalCode} onChange={(e) => onFormChange({ companyPostalCode: e.target.value })} placeholder="00-000" />
+                    <Input className="h-6 text-xs" value={form.companyCity} onChange={(e) => onFormChange({ companyCity: e.target.value })} placeholder="Miasto" />
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

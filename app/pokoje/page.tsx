@@ -670,7 +670,7 @@ export default function PokojePage() {
 
   const queryClient = useQueryClient();
 
-  const { data: _initialData, isLoading: queryLoading } = useQuery({
+  const { data: _initialData } = useQuery({
     queryKey: ["pokoje-initial"],
     queryFn: async () => {
       await ensureRoomTypes();
@@ -699,7 +699,7 @@ export default function PokojePage() {
     setLoading(false);
   }, [_initialData]);
 
-  const load = useCallback(async () => {
+  const _load = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["pokoje-initial"] });
   }, [queryClient]);
 

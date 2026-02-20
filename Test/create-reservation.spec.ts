@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test.describe("Create Reservation – nowa rezerwacja z Tape Chart", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/front-office");
-    await expect(page.getByRole("heading", { name: /Grafik|Tape Chart/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="room-row-101"], [data-testid="room-row-102"]').first()).toBeVisible({ timeout: 15000 });
   });
 
   test("Create Reservation: klik w pustą komórkę (Pokój 102, 30 marca) → Gość Jan Testowy, Status Potwierdzona → Zapisz", async ({

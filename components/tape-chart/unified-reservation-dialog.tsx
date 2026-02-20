@@ -10,13 +10,14 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { createReservation, updateReservation, updateReservationStatus, getCheckoutBalanceWarning, findGuestsForCheckIn, type GuestCheckInSuggestion } from "@/app/actions/reservations";
-import { postRoomChargeOnCheckout, createVatInvoice, printInvoiceForReservation } from "@/app/actions/finance";
+import { createReservation, updateReservation, updateReservationStatus, getCheckoutBalanceWarning, findGuestsForCheckIn, getReservationCompany, type GuestCheckInSuggestion } from "@/app/actions/reservations";
+import { postRoomChargeOnCheckout, createVatInvoice, printFiscalReceiptForReservation } from "@/app/actions/finance";
 import { lookupCompanyByNip } from "@/app/actions/companies";
 import { getEffectivePriceForRoomOnDate, getRatePlanInfoForRoomDate } from "@/app/actions/rooms";
 import { getRateCodes, type RateCodeForUi } from "@/app/actions/rate-codes";
 import { getParkingSpotsForSelect } from "@/app/actions/parking";
 import { toast } from "sonner";
+import { FISCAL_JOB_ENQUEUED_EVENT } from "@/components/fiscal-relay";
 import type { Reservation } from "@/lib/tape-chart-types";
 import type { ReservationSource, ReservationChannel, MealPlan } from "@/lib/validations/schemas";
 import { SettlementTab, type SettlementTabFormState } from "./tabs/settlement-tab";
@@ -124,7 +125,7 @@ export function UnifiedReservationDialog({
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [docChoiceOpen, setDocChoiceOpen] = useState(false);
   const [docChoiceResId, setDocChoiceResId] = useState<string | null>(null);
-  const [docChoiceGuestName, setDocChoiceGuestName] = useState("");
+  const [_docChoiceGuestName, setDocChoiceGuestName] = useState("");
   const [docIssuing, setDocIssuing] = useState(false);
 
   // Guest autocomplete
@@ -160,6 +161,25 @@ export function UnifiedReservationDialog({
         parkingSpotId: reservation.parkingSpotId ?? "",
         notes: reservation.notes ?? "",
         bedsBooked: reservation.bedsBooked != null ? String(reservation.bedsBooked) : "",
+      });
+      // Załaduj firmę (NIP) powiązaną z rezerwacją
+      getReservationCompany(reservation.id).then((r) => {
+        if (r.success && r.data) {
+          const c = r.data;
+          let nipFormatted = (c.nip ?? "").replace(/\D/g, "");
+          if (nipFormatted.length > 3) nipFormatted = `${nipFormatted.slice(0, 3)}-${nipFormatted.slice(3)}`;
+          if (nipFormatted.length > 6) nipFormatted = `${nipFormatted.slice(0, 6)}-${nipFormatted.slice(6)}`;
+          if (nipFormatted.length > 8) nipFormatted = `${nipFormatted.slice(0, 8)}-${nipFormatted.slice(8)}`;
+          setForm((prev) => ({
+            ...prev,
+            nipInput: nipFormatted,
+            companyName: c.name ?? "",
+            companyAddress: c.address ?? "",
+            companyPostalCode: c.postalCode ?? "",
+            companyCity: c.city ?? "",
+            companyFound: true,
+          }));
+        }
       });
     } else if (!isEdit && createContext) {
       setForm({
@@ -287,8 +307,13 @@ export function UnifiedReservationDialog({
     if (raw.length === 10 && !form.companyFound) handleNipLookup();
   }, [form.nipInput, form.companyFound, handleNipLookup]);
 
-  const openRegistrationCard = useCallback((reservationId: string) => {
-    window.open(`/api/reservations/${reservationId}/registration-card/pdf`, "_blank", "noopener,noreferrer");
+  const openRegistrationCard = useCallback((reservationId: string, triggerPrint = false) => {
+    const printWindow = window.open(`/api/reservations/${reservationId}/registration-card/pdf`, "_blank", "noopener,noreferrer");
+    if (triggerPrint && printWindow) {
+      printWindow.addEventListener("load", () => {
+        setTimeout(() => printWindow.print(), 500);
+      });
+    }
   }, []);
 
   const handleSubmit = useCallback(async (e?: React.FormEvent) => {
@@ -303,6 +328,8 @@ export function UnifiedReservationDialog({
       if (isEdit && reservation) {
         const roomData = rooms.find((r) => r.number === form.room.trim());
         const roomBeds = roomData?.beds ?? 1;
+        const nipRaw = form.nipInput.replace(/\D/g, "");
+        const hasCompany = nipRaw.length === 10 && form.companyName.trim();
         const result = await updateReservation(reservation.id, {
           guestName: form.guestName.trim() || undefined,
           room: form.room.trim() || undefined,
@@ -316,12 +343,21 @@ export function UnifiedReservationDialog({
           rateCodeId: form.rateCodeId || undefined,
           parkingSpotId: form.parkingSpotId || null,
           notes: form.notes.trim() || null,
+          ...(hasCompany ? {
+            companyData: {
+              nip: nipRaw,
+              name: form.companyName.trim(),
+              address: form.companyAddress.trim() || undefined,
+              postalCode: form.companyPostalCode.trim() || undefined,
+              city: form.companyCity.trim() || undefined,
+            },
+          } : {}),
         });
         if (result.success && result.data) {
           onSaved?.(result.data as Reservation);
           if (saveAndPrintRef.current) {
             saveAndPrintRef.current = false;
-            openRegistrationCard(reservation.id);
+            openRegistrationCard(reservation.id, true);
           }
           onOpenChange(false);
         } else {
@@ -385,7 +421,7 @@ export function UnifiedReservationDialog({
           onCreated?.(createdRes);
           if (saveAndPrintRef.current) {
             saveAndPrintRef.current = false;
-            openRegistrationCard(createdRes.id);
+            openRegistrationCard(createdRes.id, true);
           }
           onOpenChange(false);
         } else {
@@ -460,7 +496,7 @@ export function UnifiedReservationDialog({
     } finally {
       setCheckoutLoading(false);
     }
-  }, [reservation?.id, reservation?.status, onSaved]);
+  }, [reservation?.id, reservation?.status, reservation?.guestName, onSaved]);
 
   const handleDocChoice = useCallback(async (choice: "vat" | "posnet" | "none") => {
     if (choice === "none" || !docChoiceResId) {
@@ -484,10 +520,11 @@ export function UnifiedReservationDialog({
           toast.error("error" in result ? result.error : "Błąd wystawiania faktury");
         }
       } else {
-        const result = await printInvoiceForReservation(docChoiceResId);
+        const result = await printFiscalReceiptForReservation(docChoiceResId);
         if (result.success) {
-          toast.success(result.data?.invoiceNumber
-            ? `Paragon wydrukowany: ${result.data.invoiceNumber}`
+          window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
+          toast.success(result.data?.receiptNumber
+            ? `Paragon wydrukowany: ${result.data.receiptNumber}`
             : "Paragon wysłany do kasy fiskalnej (POSNET)");
         } else {
           toast.error("error" in result ? result.error : "Błąd druku paragonu");
@@ -550,7 +587,7 @@ export function UnifiedReservationDialog({
                 onNipLookup={handleNipLookup}
               />
 
-              {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+              {error && <p data-testid="create-reservation-error" className="mt-2 text-xs text-destructive">{error}</p>}
 
               <DialogFooter className="mt-3 gap-1 sm:gap-0 border-t pt-2 flex-wrap">
                 <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => onOpenChange(false)}>Anuluj</Button>
@@ -565,7 +602,7 @@ export function UnifiedReservationDialog({
                   title="Ctrl+Shift+Enter">
                   {saving && saveAndPrintRef.current ? "Zapisywanie…" : "🖨️ Zapisz i drukuj"}
                 </Button>
-                <Button ref={saveBtnRef} type="submit" size="sm" className="h-7 text-xs" disabled={saving} title="Ctrl+Enter">
+                <Button ref={saveBtnRef} type="submit" size="sm" className="h-7 text-xs" disabled={saving} title="Ctrl+Enter" data-testid="create-reservation-save">
                   {saving && !saveAndPrintRef.current ? "Zapisywanie…" : "💾 Zapisz"}
                 </Button>
               </DialogFooter>

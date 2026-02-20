@@ -15,8 +15,6 @@ const KEEP_ALIVE_INTERVAL_MS = 4 * 60 * 1000; // 4 minuty
  */
 function useKeepAlive() {
   useEffect(() => {
-    let timer: ReturnType<typeof setInterval>;
-
     function ping() {
       if (document.hidden) return;
       fetch("/api/health", { method: "GET", cache: "no-store" }).catch(() => {});
@@ -24,7 +22,7 @@ function useKeepAlive() {
 
     // Pierwsze rozgrzanie zaraz po załadowaniu strony
     ping();
-    timer = setInterval(ping, KEEP_ALIVE_INTERVAL_MS);
+    const timer = setInterval(ping, KEEP_ALIVE_INTERVAL_MS);
 
     // Gdy użytkownik wraca na kartę po dłuższej nieobecności – natychmiast pinguj
     function onVisibilityChange() {

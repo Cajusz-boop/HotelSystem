@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 const BRIDGE_BASE = "http://127.0.0.1:9977";
+/** Event wysyłany gdy job został dodany do kolejki (np. po rozliczeniu) – przyspiesza poll. */
+export const FISCAL_JOB_ENQUEUED_EVENT = "fiscal-job-enqueued";
 const POLL_INTERVAL_MS = 3000;
-const POLL_IDLE_INTERVAL_MS = 5000;
 
 type JobType = "receipt" | "invoice" | "report_x" | "report_z" | "report_periodic" | "storno";
 
@@ -109,6 +111,8 @@ export function FiscalRelay() {
     };
   }, []);
 
+  const pollTriggerRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     if (bridgeAvailable !== true) return;
 
@@ -123,6 +127,9 @@ export function FiscalRelay() {
         if (job) {
           const result = await sendToBridge(job);
           await reportResult(job.id, result.success, result.data ?? undefined, result.error);
+          if (!result.success) {
+            toast.error(`Nie udało się wydrukować dokumentu fiskalnego: ${result.error ?? "nieznany błąd"}`);
+          }
         }
       } finally {
         processing.current = false;
@@ -133,10 +140,17 @@ export function FiscalRelay() {
       }
     }
 
+    pollTriggerRef.current = poll;
     poll();
+
+    const onEnqueued = () => {
+      pollTriggerRef.current();
+    };
+    window.addEventListener(FISCAL_JOB_ENQUEUED_EVENT, onEnqueued);
 
     return () => {
       mounted = false;
+      window.removeEventListener(FISCAL_JOB_ENQUEUED_EVENT, onEnqueued);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [bridgeAvailable]);

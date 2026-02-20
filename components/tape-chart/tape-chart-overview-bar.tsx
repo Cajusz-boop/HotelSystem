@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Reservation } from "@/lib/tape-chart-types";
 
 const OVERVIEW_BAR_WIDTH = 44;
+const ROW_HEIGHT_PX = 4;
 
 interface TapeChartOverviewBarProps {
   dates: string[];
@@ -92,10 +93,12 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const container = scrollContainerRef.current;
-      if (!container) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const y = e.clientY - rect.top;
-      const ratio = y / rect.height;
+      const barEl = barRef.current;
+      if (!container || !barEl) return;
+      const rect = barEl.getBoundingClientRect();
+      const y = e.clientY - rect.top + barEl.scrollTop;
+      const totalHeight = dates.length * ROW_HEIGHT_PX;
+      const ratio = totalHeight > 0 ? y / totalHeight : 0;
       const idx = Math.floor(ratio * dates.length);
       const safeIdx = Math.max(0, Math.min(idx, dates.length - 1));
       const scrollLeft = safeIdx * columnWidthPx - container.clientWidth / 2;
@@ -106,9 +109,12 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const y = e.clientY - rect.top;
-      const ratio = y / rect.height;
+      const barEl = barRef.current;
+      if (!barEl) return;
+      const rect = barEl.getBoundingClientRect();
+      const y = e.clientY - rect.top + barEl.scrollTop;
+      const totalHeight = dates.length * ROW_HEIGHT_PX;
+      const ratio = totalHeight > 0 ? y / totalHeight : 0;
       const idx = Math.floor(ratio * dates.length);
       setHoveredIdx(Math.max(0, Math.min(idx, dates.length - 1)));
     },
@@ -136,9 +142,6 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
     return set;
   }, [dates]);
 
-  const firstDateLabel = dates.length > 0 ? formatShortDate(dates[0]) : "";
-  const lastDateLabel = dates.length > 0 ? formatShortDate(dates[dates.length - 1]) : "";
-
   if (dates.length === 0) return null;
 
   const hoveredDate = hoveredIdx !== null ? dates[hoveredIdx] : null;
@@ -149,23 +152,47 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
     <div
       className="flex flex-col h-full min-h-0 border-l border-[hsl(var(--kw-grid-border))] bg-[hsl(var(--muted))] cursor-pointer transition-colors no-print select-none"
       style={{ width: OVERVIEW_BAR_WIDTH, minWidth: OVERVIEW_BAR_WIDTH }}
-      role="scrollbar"
-      aria-label={`Mini-mapa: ${firstDateLabel} – ${lastDateLabel}`}
+      role="region"
+      aria-label="Mini-mapa dat – przewiń w górę/dół"
     >
-      <div className="text-[8px] leading-none text-center text-muted-foreground font-semibold py-1 border-b border-border shrink-0">
-        {firstDateLabel}
-      </div>
-
       <div
         ref={barRef}
-        className="relative w-full flex-1 min-h-0 overflow-hidden"
+        className="relative w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
         onClick={handleClick}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => setHoveredIdx(null)}
-        title=""
+        title="Przewiń w górę/dół"
+        role="region"
       >
-        {/* Discrete day segments */}
-        <div className="absolute inset-0 flex flex-col">
+        {/* Zawartość – pełna wysokość; etykiety miesięcy i viewport wewnątrz = przewijają się razem */}
+        <div
+          className="relative flex flex-col shrink-0"
+          style={{ height: dates.length * ROW_HEIGHT_PX, minHeight: dates.length * ROW_HEIGHT_PX }}
+        >
+          {/* Warstwa etykiet miesięcy i viewport – absolute względem pełnej wysokości contentu */}
+          {viewportRange && (
+            <div
+              className="absolute left-0 right-0 z-20 pointer-events-none border-y-2 border-primary/70"
+              style={{
+                top: `${(viewportRange.start / 100) * dates.length * ROW_HEIGHT_PX}px`,
+                height: `${Math.max(2, ((viewportRange.end - viewportRange.start) / 100) * dates.length * ROW_HEIGHT_PX)}px`,
+                background: "rgba(var(--primary-rgb, 37,99,235), 0.08)",
+                boxShadow: "0 0 0 1px hsl(var(--primary) / 0.3)",
+              }}
+            />
+          )}
+          {monthBoundaries.map(({ idx, label }) => (
+            <div
+              key={`month-${idx}`}
+              className="absolute left-0 right-0 z-10 pointer-events-none"
+              style={{ top: `${idx * ROW_HEIGHT_PX}px` }}
+            >
+              <div className="w-full border-t border-foreground/25" />
+              <span className="absolute left-0 right-0 text-[8px] leading-tight text-center text-foreground/70 font-bold bg-muted/90 py-px -translate-y-px">
+                {label}
+              </span>
+            </div>
+          ))}
           {dates.map((dateStr, i) => {
             const occupancy = occupancyByDate[i] ?? 0;
             const isToday = dateStr === todayStr;
@@ -175,8 +202,8 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
             return (
               <div
                 key={dateStr}
-                className="relative flex-1 min-h-0 flex items-stretch"
-                style={{ minHeight: 1 }}
+                className="relative flex items-stretch shrink-0"
+                style={{ height: ROW_HEIGHT_PX, minHeight: ROW_HEIGHT_PX }}
               >
                 {/* Occupancy fill bar — horizontal from left */}
                 <div
@@ -204,57 +231,25 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
               </div>
             );
           })}
-        </div>
-
-        {/* Viewport indicator */}
-        {viewportRange && (
-          <div
-            className="absolute left-0 right-0 z-20 pointer-events-none border-y-2 border-primary/70"
-            style={{
-              top: `${viewportRange.start}%`,
-              height: `${Math.max(2, viewportRange.end - viewportRange.start)}%`,
-              background: "rgba(var(--primary-rgb, 37,99,235), 0.08)",
-              boxShadow: "0 0 0 1px hsl(var(--primary) / 0.3)",
-            }}
-          />
-        )}
-
-        {/* Month boundaries */}
-        {monthBoundaries.map(({ idx, label }) => (
-          <div
-            key={`month-${idx}`}
-            className="absolute left-0 right-0 z-10 pointer-events-none"
-            style={{ top: `${(idx / dates.length) * 100}%` }}
-          >
-            <div className="w-full border-t border-foreground/25" />
-            <span className="absolute left-0 right-0 text-[8px] leading-tight text-center text-foreground/70 font-bold bg-muted/90 py-px">
-              {label}
-            </span>
-          </div>
-        ))}
-
-        {/* Hover tooltip */}
-        {hoveredIdx !== null && hoveredDate && (
-          <div
-            className="absolute z-30 pointer-events-none"
-            style={{
-              top: `${(hoveredIdx / dates.length) * 100}%`,
-              right: "100%",
-              transform: "translateY(-50%)",
-            }}
-          >
-            <div className="mr-1.5 whitespace-nowrap bg-popover text-popover-foreground border border-border shadow-md rounded-md px-2 py-1 text-[10px] leading-snug">
-              <div className="font-semibold">{hoveredDayName} {formatShortDate(hoveredDate)}</div>
-              <div className="text-muted-foreground">
-                Obłożenie: <span className="font-medium text-foreground">{hoveredOccupancy}%</span>
+          {/* Hover tooltip – wewnątrz contentu, przewija się razem z wierszami */}
+          {hoveredIdx !== null && hoveredDate && (
+            <div
+              className="absolute z-30 pointer-events-none"
+              style={{
+                top: `${hoveredIdx * ROW_HEIGHT_PX}px`,
+                right: "100%",
+                transform: "translateY(-50%)",
+              }}
+            >
+              <div className="mr-1.5 whitespace-nowrap bg-popover text-popover-foreground border border-border shadow-md rounded-md px-2 py-1 text-[10px] leading-snug">
+                <div className="font-semibold">{hoveredDayName} {formatShortDate(hoveredDate)}</div>
+                <div className="text-muted-foreground">
+                  Obłożenie: <span className="font-medium text-foreground">{hoveredOccupancy}%</span>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-      </div>
-
-      <div className="text-[8px] leading-none text-center text-muted-foreground font-semibold py-1 border-t border-border shrink-0">
-        {lastDateLabel}
+          )}
+        </div>
       </div>
     </div>
   );

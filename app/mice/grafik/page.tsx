@@ -29,7 +29,7 @@ export default async function MiceGrafikPage() {
 
     const result = roomIds.length > 0
       ? await getTapeChartData({ roomIds })
-      : { reservations: [], rooms: [], reservationGroups: [] };
+      : { reservations: [], rooms: [], reservationGroups: [], reservationStatusColors: null };
 
     const data = {
       reservations: result.reservations as Reservation[],
@@ -39,6 +39,7 @@ export default async function MiceGrafikPage() {
         name: g.name ?? undefined,
         reservationCount: g.reservationCount,
       })),
+      reservationStatusColors: result.reservationStatusColors ?? null,
     };
 
     if (data.rooms.length === 0) {
@@ -58,6 +59,7 @@ export default async function MiceGrafikPage() {
           <MiceGrafikClient
             rooms={data.rooms}
             reservationGroups={data.reservationGroups}
+            reservationStatusColors={data.reservationStatusColors}
           />
         </TapeChartStoreProvider>
       </div>

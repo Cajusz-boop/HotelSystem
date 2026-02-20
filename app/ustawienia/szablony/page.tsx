@@ -396,6 +396,27 @@ export default function SzablonyPage() {
           </div>
         </section>
 
+        {/* Nazwy pozycji na fakturze */}
+        <section className="rounded-lg border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Nazwy pozycji</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Określ, jak mają być nazywane produkty/usługi na fakturze. Puste pole = domyślna nazwa.
+          </p>
+          <div>
+            <Label htmlFor="roomProductName">Nazwa usługi noclegowej</Label>
+            <Input
+              id="roomProductName"
+              value={getValue("roomProductName") as string}
+              onChange={(e) => handleFieldChange("roomProductName", e.target.value || null)}
+              placeholder="Nocleg"
+              className="mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Domyślnie: „Nocleg”. Możesz np. zmienić na „Usługa noclegowa” albo własną nazwę.
+            </p>
+          </div>
+        </section>
+
         {/* Nagłówek i stopka */}
         <section className="rounded-lg border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-semibold mb-4">Nagłówek i stopka</h2>

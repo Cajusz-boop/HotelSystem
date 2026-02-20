@@ -574,6 +574,32 @@ export async function testFiscalConnectionAction(): Promise<{
 }
 
 /**
+ * Tworzy testowy job fiskalny (paragon za 0.01 PLN) do sprawdzenia łańcucha:
+ * serwer → baza → FiscalRelay → bridge → drukarka.
+ */
+export async function printTestReceiptAction(): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  if (!(await isFiscalEnabled())) {
+    return { success: false, error: "Kasa fiskalna wyłączona (FISCAL_ENABLED=false)" };
+  }
+
+  try {
+    const result = await printFiscalReceipt({
+      transactionId: `TEST-${Date.now()}`,
+      reservationId: "TEST",
+      items: [{ name: "Test wydruku", quantity: 1, unitPrice: 0.01 }],
+      totalAmount: 0.01,
+      paymentType: "CASH",
+    });
+    return { success: result.success, error: ("error" in result ? result.error : undefined) as string | undefined };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd" };
+  }
+}
+
+/**
  * Sprawdza, czy sterownik obsługuje raporty fiskalne X, Z, okresowe i storno.
  * @returns Obiekt z flagami supportsXReport, supportsZReport, supportsPeriodicReport, supportsStorno
  */
@@ -3675,7 +3701,104 @@ export async function voidTransaction(
   }
 }
 
-/** Druk faktury na POSNET dla rezerwacji (wymaga firmy przy meldunku) */
+/** Druk paragonu fiskalnego (kasa POSNET) dla rezerwacji – bez wymogu NIP. */
+export async function printFiscalReceiptForReservation(
+  reservationId: string,
+  paymentType: string = "CASH"
+): Promise<ActionResult<{ receiptNumber?: string }>> {
+  try {
+    let reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: { transactions: true },
+    });
+    if (!reservation) {
+      return { success: false, error: "Rezerwacja nie istnieje" };
+    }
+
+    // Auto-naliczanie noclegu
+    const hasRoomCharge = reservation.transactions.some(
+      (t) => t.type === "ROOM" && Number(t.amount) > 0 && (t.status === "ACTIVE" || t.status == null)
+    );
+    if (!hasRoomCharge) {
+      const roomChargeResult = await postRoomChargeOnCheckout(reservationId);
+      if (roomChargeResult.success && roomChargeResult.data && !roomChargeResult.data.skipped) {
+        const updated = await prisma.reservation.findUnique({
+          where: { id: reservationId },
+          include: { transactions: true },
+        });
+        if (updated) reservation = updated;
+      }
+    }
+
+    const chargeTypes = ["ROOM", "LOCAL_TAX", "MINIBAR", "GASTRONOMY", "SPA", "PARKING", "RENTAL", "PHONE", "LAUNDRY", "TRANSPORT", "ATTRACTION", "OTHER"];
+    const chargeTransactions = reservation.transactions.filter(
+      (t) => chargeTypes.includes(t.type) && Number(t.amount) > 0 && (t.status === "ACTIVE" || t.status == null)
+    );
+    const totalAmount = chargeTransactions.reduce((s, t) => s + Number(t.amount), 0);
+
+    if (totalAmount <= 0) {
+      return { success: false, error: "Brak pozycji do wydrukowania na paragonie" };
+    }
+
+    const typeToName: Record<string, string> = {
+      ROOM: "Nocleg",
+      LOCAL_TAX: "Opłata miejscowa",
+      MINIBAR: "Minibar",
+      GASTRONOMY: "Gastronomia",
+      SPA: "Spa",
+      PARKING: "Parking",
+      RENTAL: "Wynajem",
+      PHONE: "Telefon",
+      LAUNDRY: "Pralnia",
+      TRANSPORT: "Transport",
+      ATTRACTION: "Atrakcje",
+      OTHER: "Inne",
+    };
+
+    const items = chargeTransactions.map((t) => ({
+      name: typeToName[t.type] ?? t.type,
+      quantity: 1,
+      unitPrice: Number(t.amount),
+      vatRate: 8,
+    }));
+
+    const templateResult = await getFiscalReceiptTemplate();
+    const headerLines: string[] = [];
+    const footerLines: string[] = [];
+    if (templateResult.success && templateResult.data) {
+      const t = templateResult.data;
+      if (t.headerLine1) headerLines.push(t.headerLine1);
+      if (t.headerLine2) headerLines.push(t.headerLine2);
+      if (t.headerLine3) headerLines.push(t.headerLine3);
+      if (t.footerLine1) footerLines.push(t.footerLine1);
+      if (t.footerLine2) footerLines.push(t.footerLine2);
+      if (t.footerLine3) footerLines.push(t.footerLine3);
+    }
+
+    const receiptRequest = {
+      transactionId: `RECEIPT-${reservationId}-${Date.now()}`,
+      reservationId,
+      items,
+      totalAmount,
+      paymentType,
+      headerLines: headerLines.length > 0 ? headerLines : undefined,
+      footerLines: footerLines.length > 0 ? footerLines : undefined,
+    };
+
+    const result = await printFiscalReceipt(receiptRequest);
+    if (!result.success) {
+      return { success: false, error: result.error ?? "Błąd druku paragonu" };
+    }
+    return { success: true, data: { receiptNumber: result.receiptNumber } };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd druku paragonu",
+    };
+  }
+}
+
+/** Druk faktury na POSNET dla rezerwacji (wymaga firmy z NIP przy rezerwacji) */
 export async function printInvoiceForReservation(
   reservationId: string
 ): Promise<ActionResult<{ invoiceNumber?: string }>> {
@@ -5419,6 +5542,7 @@ export interface InvoiceTemplateData {
   accentColor: string;
   paymentTermsText: string | null;
   thanksText: string | null;
+  roomProductName: string | null;
 }
 
 /**
@@ -5473,6 +5597,7 @@ export async function getInvoiceTemplate(
         accentColor: template.accentColor,
         paymentTermsText: template.paymentTermsText,
         thanksText: template.thanksText,
+        roomProductName: template.roomProductName,
       },
     };
   } catch (e) {
@@ -5528,6 +5653,7 @@ export async function updateInvoiceTemplate(
     if (data.accentColor !== undefined) updateData.accentColor = data.accentColor;
     if (data.paymentTermsText !== undefined) updateData.paymentTermsText = data.paymentTermsText;
     if (data.thanksText !== undefined) updateData.thanksText = data.thanksText;
+    if (data.roomProductName !== undefined) updateData.roomProductName = data.roomProductName;
 
     const updated = await prisma.invoiceTemplate.update({
       where: { id: template.id },
@@ -5566,6 +5692,7 @@ export async function updateInvoiceTemplate(
         accentColor: updated.accentColor,
         paymentTermsText: updated.paymentTermsText,
         thanksText: updated.thanksText,
+        roomProductName: updated.roomProductName,
       },
     };
   } catch (e) {

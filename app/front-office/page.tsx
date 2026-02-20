@@ -7,7 +7,7 @@ import type { Reservation, ReservationGroupSummary, Room } from "@/lib/tape-char
 export const dynamic = "force-dynamic";
 
 export default async function FrontOfficePage() {
-  let data: { reservations: Reservation[]; rooms: Room[]; reservationGroups: ReservationGroupSummary[] };
+  let data: { reservations: Reservation[]; rooms: Room[]; reservationGroups: ReservationGroupSummary[]; reservationStatusColors?: Partial<Record<string, string>> | null };
   try {
     const result = await getTapeChartData();
     data = {
@@ -18,6 +18,7 @@ export default async function FrontOfficePage() {
         name: g.name ?? undefined,
         reservationCount: g.reservationCount,
       })),
+      reservationStatusColors: result.reservationStatusColors ?? null,
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : "Nie udało się załadować danych.";
@@ -34,7 +35,7 @@ export default async function FrontOfficePage() {
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       <TapeChartStoreProvider reservations={data.reservations}>
-        <FrontOfficeClient rooms={data.rooms} reservationGroups={data.reservationGroups} />
+        <FrontOfficeClient rooms={data.rooms} reservationGroups={data.reservationGroups} reservationStatusColors={data.reservationStatusColors} />
       </TapeChartStoreProvider>
     </div>
   );
