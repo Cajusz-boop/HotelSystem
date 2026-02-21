@@ -6,27 +6,39 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { I18nProvider } from "@/components/i18n-provider";
 
 const KEEP_ALIVE_INTERVAL_MS = 4 * 60 * 1000; // 4 minuty
+const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minut - jeśli dłużej nieaktywny, przeładuj
 
 /**
  * Ping /api/health co 4 min żeby:
  *  - Passenger nie uśpił procesu Node po bezczynności
  *  - Połączenie z bazą nie wygasło (MariaDB wait_timeout)
  * Działa tylko gdy karta przeglądarki jest aktywna (document.hidden).
+ * 
+ * Po powrocie z długiej nieaktywności (>10min) - automatycznie odświeża stronę.
  */
 function useKeepAlive() {
   useEffect(() => {
+    let lastActiveTime = Date.now();
+
     function ping() {
       if (document.hidden) return;
+      lastActiveTime = Date.now();
       fetch("/api/health", { method: "GET", cache: "no-store" }).catch(() => {});
     }
 
-    // Pierwsze rozgrzanie zaraz po załadowaniu strony
     ping();
     const timer = setInterval(ping, KEEP_ALIVE_INTERVAL_MS);
 
-    // Gdy użytkownik wraca na kartę po dłuższej nieobecności – natychmiast pinguj
     function onVisibilityChange() {
-      if (!document.hidden) ping();
+      if (!document.hidden) {
+        const inactiveTime = Date.now() - lastActiveTime;
+        if (inactiveTime > STALE_THRESHOLD_MS) {
+          console.log(`[KeepAlive] Inactive for ${Math.round(inactiveTime / 1000 / 60)}min, reloading...`);
+          window.location.reload();
+          return;
+        }
+        ping();
+      }
     }
     document.addEventListener("visibilitychange", onVisibilityChange);
 
@@ -43,8 +55,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 5 * 60 * 1000, // 5 min – dane nie są refetchowane przy powrocie na zakładkę
-            gcTime: 10 * 60 * 1000, // 10 min – dane żyją w pamięci nawet po odmontowaniu komponentu
+            staleTime: 5 * 60 * 1000,
+            gcTime: 10 * 60 * 1000,
+            refetchOnWindowFocus: false,
+            refetchOnReconnect: false,
+            retry: 1,
           },
         },
       })

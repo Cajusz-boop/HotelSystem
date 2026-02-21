@@ -26,6 +26,8 @@ interface PostingBody {
   cashierName?: string;
   /** Zrodlo systemu POS */
   posSystem?: string;
+  /** Gdy true, nie zapisuj do listy nieprzypisanych jeśli brak rezerwacji */
+  requireReservation?: boolean;
 }
 
 /**
@@ -64,6 +66,7 @@ export async function POST(request: NextRequest) {
       receiptNumber,
       cashierName,
       posSystem,
+      requireReservation = false,
     } = body;
 
     if (typeof amount !== "number" || amount <= 0) {
@@ -74,6 +77,7 @@ export async function POST(request: NextRequest) {
     }
 
     let resId: string | null = null;
+    let roomNumberNormalized: string | null = roomNumber?.trim() || null;
 
     if (reservationId) {
       const res = await prisma.reservation.findUnique({
@@ -91,27 +95,84 @@ export async function POST(request: NextRequest) {
         where: { number: roomNumber },
         include: { reservations: true },
       });
+      
       if (!room) {
-        return NextResponse.json(
-          { error: "Pokój nie istnieje" },
-          { status: 404 }
-        );
+        // Pokój nie istnieje w HotelSystem - zapisz jako nieprzypisane
+        if (requireReservation) {
+          return NextResponse.json(
+            { error: "Pokój nie istnieje" },
+            { status: 404 }
+          );
+        }
+        // Zapisz do listy nieprzypisanych
+        const unassigned = await prisma.unassignedGastronomyCharge.create({
+          data: {
+            roomNumber: roomNumber,
+            amount,
+            description,
+            posSystem,
+            receiptNumber,
+            cashierName,
+            items: items?.length ? JSON.parse(JSON.stringify(items)) : undefined,
+            status: "PENDING",
+          },
+        });
+        revalidatePath("/front-office");
+        return NextResponse.json({
+          success: true,
+          unassigned: true,
+          unassignedChargeId: unassigned.id,
+          roomNumber,
+          amount,
+          reason: "Pokój nie istnieje w systemie - zapisano jako nieprzypisane",
+        });
       }
+      
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
       const active = room.reservations.find(
         (r) =>
           r.status === "CHECKED_IN" &&
           r.checkIn <= today &&
-          r.checkOut > today
+          r.checkOut >= today
       );
+      
       if (!active) {
-        return NextResponse.json(
-          { error: "Brak aktywnej rezerwacji dla tego pokoju w dniu dzisiejszym" },
-          { status: 404 }
-        );
+        // Brak aktywnej rezerwacji - zapisz jako nieprzypisane
+        if (requireReservation) {
+          return NextResponse.json(
+            { error: "Brak aktywnej rezerwacji dla tego pokoju w dniu dzisiejszym" },
+            { status: 404 }
+          );
+        }
+        // Zapisz do listy nieprzypisanych
+        const unassigned = await prisma.unassignedGastronomyCharge.create({
+          data: {
+            roomNumber: roomNumber,
+            amount,
+            description,
+            posSystem,
+            receiptNumber,
+            cashierName,
+            items: items?.length ? JSON.parse(JSON.stringify(items)) : undefined,
+            status: "PENDING",
+          },
+        });
+        revalidatePath("/front-office");
+        return NextResponse.json({
+          success: true,
+          unassigned: true,
+          unassignedChargeId: unassigned.id,
+          roomNumber,
+          amount,
+          reason: "Brak aktywnej rezerwacji - zapisano jako nieprzypisane",
+        });
       }
       resId = active.id;
+      roomNumberNormalized = room.number;
     } else {
       return NextResponse.json(
         { error: "Podaj reservationId lub roomNumber" },

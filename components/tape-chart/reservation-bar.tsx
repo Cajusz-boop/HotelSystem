@@ -303,9 +303,9 @@ export function ReservationBar({
           colorClass,
           isPlaceholder && "border-2 border-dashed opacity-80",
           isDragging && "z-50 cursor-grabbing opacity-90",
-          hasConflict && "ring-2 ring-red-500 ring-offset-1 animate-pulse",
+          hasConflict && "ring-2 ring-red-500 ring-offset-1",
           isGroupReservation && "border-l-4 border-l-amber-400",
-          isCheckInToday && "ring-2 ring-white/90 ring-offset-1 animate-pulse"
+          isCheckInToday && "ring-2 ring-white/90 ring-offset-1"
         )}
         style={{
           gridRow,

@@ -541,3 +541,191 @@ export async function getGuestRestaurantHistory(
     };
   }
 }
+
+// =============================================================================
+// NIEPRZYPISANE OBCIĄŻENIA GASTRONOMICZNE (z Bistro gdy brak rezerwacji)
+// =============================================================================
+
+export interface UnassignedChargeForUi {
+  id: string;
+  roomNumber: string;
+  amount: number;
+  description: string | null;
+  posSystem: string | null;
+  receiptNumber: string | null;
+  cashierName: string | null;
+  items: Array<{ name: string; quantity: number; unitPrice: number }>;
+  status: string;
+  createdAt: string;
+  assignedToReservationId: string | null;
+}
+
+/**
+ * Pobiera listę nieprzypisanych obciążeń gastronomicznych.
+ */
+export async function getUnassignedGastronomyCharges(
+  status: "PENDING" | "ASSIGNED" | "CANCELLED" | "ALL" = "PENDING"
+): Promise<ActionResult<UnassignedChargeForUi[]>> {
+  try {
+    const where = status === "ALL" ? {} : { status };
+    const charges = await prisma.unassignedGastronomyCharge.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+
+    const data = charges.map((c) => {
+      let items: Array<{ name: string; quantity: number; unitPrice: number }> = [];
+      if (c.items) {
+        try {
+          const parsed = c.items as unknown;
+          if (Array.isArray(parsed)) {
+            items = parsed.map((it: Record<string, unknown>) => ({
+              name: String(it.name ?? "Pozycja"),
+              quantity: Number(it.quantity ?? 1),
+              unitPrice: Number(it.unitPrice ?? 0),
+            }));
+          }
+        } catch { /* ignore */ }
+      }
+      return {
+        id: c.id,
+        roomNumber: c.roomNumber,
+        amount: Number(c.amount),
+        description: c.description,
+        posSystem: c.posSystem,
+        receiptNumber: c.receiptNumber,
+        cashierName: c.cashierName,
+        items,
+        status: c.status,
+        createdAt: c.createdAt.toISOString(),
+        assignedToReservationId: c.assignedToReservationId,
+      };
+    });
+
+    return { success: true, data };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd odczytu nieprzypisanych obciążeń",
+    };
+  }
+}
+
+/**
+ * Przypisuje nieprzypisane obciążenie do rezerwacji.
+ * Tworzy transakcję F_B i aktualizuje status.
+ */
+export async function assignGastronomyChargeToReservation(
+  chargeId: string,
+  reservationId: string,
+  assignedBy?: string
+): Promise<ActionResult<{ transactionId: string }>> {
+  try {
+    const charge = await prisma.unassignedGastronomyCharge.findUnique({
+      where: { id: chargeId },
+    });
+    if (!charge) {
+      return { success: false, error: "Obciążenie nie istnieje" };
+    }
+    if (charge.status !== "PENDING") {
+      return { success: false, error: "Obciążenie zostało już przypisane lub anulowane" };
+    }
+
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+    });
+    if (!reservation) {
+      return { success: false, error: "Rezerwacja nie istnieje" };
+    }
+
+    // Przygotuj externalRef z pozycjami
+    const externalRefData: Record<string, unknown> = {};
+    if (charge.receiptNumber) externalRefData.receiptNumber = charge.receiptNumber;
+    if (charge.cashierName) externalRefData.cashierName = charge.cashierName;
+    if (charge.posSystem) externalRefData.posSystem = charge.posSystem;
+    if (charge.items) externalRefData.items = charge.items;
+
+    // Utwórz transakcję
+    const tx = await prisma.transaction.create({
+      data: {
+        reservationId,
+        amount: charge.amount,
+        type: "RESTAURANT",
+        description: charge.description ?? `Obciążenie gastronomiczne (${charge.posSystem ?? "POS"})`,
+        category: "F_B",
+        subcategory: "RESTAURANT",
+        externalRef: Object.keys(externalRefData).length > 0 ? JSON.stringify(externalRefData) : undefined,
+        isReadOnly: false,
+      },
+    });
+
+    // Zaktualizuj status obciążenia
+    await prisma.unassignedGastronomyCharge.update({
+      where: { id: chargeId },
+      data: {
+        status: "ASSIGNED",
+        assignedToReservationId: reservationId,
+        assignedAt: new Date(),
+        assignedBy,
+        createdTransactionId: tx.id,
+      },
+    });
+
+    revalidatePath("/front-office");
+    return { success: true, data: { transactionId: tx.id } };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd przypisywania obciążenia",
+    };
+  }
+}
+
+/**
+ * Anuluje nieprzypisane obciążenie (np. błędne dane z POS).
+ */
+export async function cancelUnassignedGastronomyCharge(
+  chargeId: string
+): Promise<ActionResult> {
+  try {
+    const charge = await prisma.unassignedGastronomyCharge.findUnique({
+      where: { id: chargeId },
+    });
+    if (!charge) {
+      return { success: false, error: "Obciążenie nie istnieje" };
+    }
+    if (charge.status !== "PENDING") {
+      return { success: false, error: "Obciążenie zostało już przypisane lub anulowane" };
+    }
+
+    await prisma.unassignedGastronomyCharge.update({
+      where: { id: chargeId },
+      data: { status: "CANCELLED" },
+    });
+
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd anulowania obciążenia",
+    };
+  }
+}
+
+/**
+ * Liczba nieprzypisanych obciążeń (do wyświetlenia w menu/dashboard).
+ */
+export async function getUnassignedGastronomyChargesCount(): Promise<ActionResult<number>> {
+  try {
+    const count = await prisma.unassignedGastronomyCharge.count({
+      where: { status: "PENDING" },
+    });
+    return { success: true, data: count };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd odczytu liczby nieprzypisanych obciążeń",
+    };
+  }
+}

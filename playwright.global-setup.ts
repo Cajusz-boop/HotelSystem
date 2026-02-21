@@ -26,7 +26,7 @@ async function globalSetup(config: FullConfig) {
       // Formularz logowania widoczny — zaloguj się
       await page.getByLabel(/Email/i).waitFor({ state: "visible", timeout: 10000 });
       await page.getByLabel(/Email/i).fill("admin@hotel.local");
-      await page.getByLabel(/Hasło|Password/i).fill("admin123");
+      await page.getByRole("textbox", { name: /Hasło|Password/i }).fill("admin123");
       await page.locator('button[type="submit"]').click();
       await page.waitForLoadState("networkidle").catch(() => null);
       await Promise.race([

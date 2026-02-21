@@ -71,27 +71,51 @@ if (-not (Test-Path $standaloneCheck)) {
 }
 Write-Host "Build OK - standalone wygenerowany." -ForegroundColor Green
 
+# Wyczysc smieci ze standalone (git, archiwa testowe)
+$standaloneDir = Join-Path $nextDir "standalone"
+$junkPatterns = @(".git", "*.tar", "*.tar.gz", "*.zip", "_test_*", "deploy_*")
+foreach ($pattern in $junkPatterns) {
+    $junkPath = Join-Path $standaloneDir $pattern
+    if (Test-Path $junkPath) {
+        Remove-Item $junkPath -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "Usunieto z standalone: $pattern" -ForegroundColor DarkGray
+    }
+}
+
 # === 3/6 SQL diff ===
 Write-Host "" ; Write-Host "=== 3/6 Generowanie SQL diff ===" -ForegroundColor Cyan
 $sqlDiffFile = Join-Path $ProjectRoot "_deploy_schema_diff.sql"
-Write-Host "Generuje pelny schemat SQL z IF NOT EXISTS..." -ForegroundColor Yellow
 $env:PRISMA_HIDE_DEPRECATION_WARNINGS = "1"
 
-$rawSql = npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script 2>$null
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "[WARN] prisma migrate diff nie powiodlo sie - pomijam migracje bazy" -ForegroundColor Yellow
-    $rawSql = $null
-} else {
-    $safeSql = $rawSql -replace 'CREATE TABLE `', 'CREATE TABLE IF NOT EXISTS `'
-    $sqlContent = ($safeSql -join "`n") + @"
+# Buduj URL do bazy produkcyjnej
+$prodDbUrl = $DEPLOY_DATABASE_URL
+if (-not $prodDbUrl) { $prodDbUrl = "mysql://${DB_USER}:${DB_PASS}@${DB_HOST}/${DB_NAME}" }
 
--- Migracja: nazwa produktu noclegowego w szablonie faktury (ALTER ignorowany jesli kolumna juz jest)
-ALTER TABLE InvoiceTemplate ADD COLUMN roomProductName VARCHAR(191) NULL;
--- Migracja: nadpisanie ceny za dobę w rezerwacji (mysql --force ignoruje błąd gdy kolumna już jest)
-ALTER TABLE Reservation ADD COLUMN rateCodePrice DECIMAL(10,2) NULL;
-"@
-    [System.IO.File]::WriteAllText($sqlDiffFile, $sqlContent, [System.Text.Encoding]::UTF8)
-    Write-Host "SQL diff zapisany." -ForegroundColor Green
+# Proba 1: diff wzgledem produkcyjnej bazy (tylko rzeczywiste roznice)
+Write-Host "Generuje SQL diff wzgledem bazy produkcyjnej..." -ForegroundColor Yellow
+$rawSql = npx prisma migrate diff --from-url $prodDbUrl --to-schema-datamodel prisma/schema.prisma --script 2>$null
+
+if ($LASTEXITCODE -ne 0 -or -not $rawSql) {
+    # Proba 2: fallback na pelny schemat z IF NOT EXISTS
+    Write-Host "[INFO] Diff wzgledem bazy nie powiodl sie - generuje pelny schemat..." -ForegroundColor Yellow
+    $rawSql = npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[WARN] prisma migrate diff nie powiodlo sie - pomijam migracje bazy" -ForegroundColor Yellow
+        $rawSql = $null
+    } else {
+        $rawSql = $rawSql -replace 'CREATE TABLE `', 'CREATE TABLE IF NOT EXISTS `'
+    }
+}
+
+if ($rawSql) {
+    $sqlContent = ($rawSql -join "`n").Trim()
+    if ($sqlContent -eq "" -or $sqlContent -eq "-- This is an empty migration.") {
+        Write-Host "Baza zsynchronizowana - brak zmian SQL." -ForegroundColor Green
+        $rawSql = $null
+    } else {
+        [System.IO.File]::WriteAllText($sqlDiffFile, $sqlContent, [System.Text.Encoding]::UTF8)
+        Write-Host "SQL diff zapisany." -ForegroundColor Green
+    }
 }
 
 # === 3a/6 Eksport konfiguracji z lokalnej bazy (snapshot jest aktualny przed deployem) ===
@@ -142,7 +166,7 @@ if (-not $FullZip) {
     $deltaTar = Join-Path $ProjectRoot "_deploy_delta.tar.gz"
 
     @($manifestLocal, $manifestRemote, $changedList, $deletedList, $deltaTar) | ForEach-Object {
-        if (Test-Path $_) { Remove-Item $_ -Force }
+        if (Test-Path $_) { Remove-Item $_ -Force -ErrorAction SilentlyContinue }
     }
 
     # --- 4a: Generuj manifest lokalny (MD5, format: HASH  sciezka) ---
@@ -257,7 +281,7 @@ if (-not $FullZip) {
         } else {
             # tar na Windows: forward slash dziala, cudzyslowy przy spacjach w sciezkach
             [System.IO.File]::WriteAllLines($changedList, $validPaths, $utf8NoBom)
-            if (Test-Path $deltaTar) { Remove-Item $deltaTar -Force }
+            if (Test-Path $deltaTar) { Remove-Item $deltaTar -Force -ErrorAction SilentlyContinue }
             $tarErr = & tar -czf $deltaTar -C $ProjectRoot -T $changedList 2>&1
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "[BLAD] tar delta nie powiodl sie!" -ForegroundColor Red

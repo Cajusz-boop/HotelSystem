@@ -549,7 +549,7 @@ export function ReportsPageClient({
                 Data: new Date().toISOString().slice(0, 10),
                 Wartość: Math.round(Math.random() * 10000) / 100,
               }));
-              exportToExcel(rows, "Raport 10k", "raport-10k-test.xlsx");
+              void exportToExcel(rows, "Raport 10k", "raport-10k-test.xlsx");
             }}
           >
             <FileDown className="mr-2 h-4 w-4" />
@@ -821,7 +821,7 @@ export function ReportsPageClient({
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    exportToExcel(
+                    void exportToExcel(
                       occupancyReport.days.map((r) => ({
                         Data: r.date,
                         "Zajęte pokoje": r.occupiedRooms,
@@ -1042,7 +1042,7 @@ export function ReportsPageClient({
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    exportToExcel(
+                    void exportToExcel(
                       revenueReport.byType.map((r) => ({
                         Typ: r.type,
                         "Kwota (PLN)": r.amount,
@@ -1129,7 +1129,7 @@ export function ReportsPageClient({
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    exportToExcel(
+                    void exportToExcel(
                       segmentReport.bySegment.map((r) => ({
                         Segment: r.segment,
                         Rezerwacji: r.reservationCount,
@@ -1209,7 +1209,7 @@ export function ReportsPageClient({
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    exportToExcel(
+                    void exportToExcel(
                       sourceReport.bySource.map((r) => ({
                         Źródło: r.source,
                         Rezerwacji: r.reservationCount,
@@ -1294,7 +1294,7 @@ export function ReportsPageClient({
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    exportToExcel(
+                    void exportToExcel(
                       commissionOtaReport.rows.map((r) => ({
                         "Agent / OTA": `${r.agentName} (${r.agentCode})`,
                         "% prowizji": r.commissionPercent,
@@ -1407,7 +1407,7 @@ export function ReportsPageClient({
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    exportToExcel(
+                    void exportToExcel(
                       channelReport.byChannel.map((r) => ({
                         Kanał: r.channel,
                         Rezerwacji: r.reservationCount,
