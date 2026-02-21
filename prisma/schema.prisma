@@ -4,7 +4,7 @@
 generator client {
   provider      = "prisma-client-js"
   engineType    = "client"
-  binaryTargets = ["native", "freebsd14"]
+  binaryTargets = ["native", "freebsd14", "debian-openssl-3.0.x"]
   // Przy engineType=client silnik to WASM/Node (bez binariów), ale binaryTargets trzymane zgodnie z zasadami projektu.
   // FreeBSD: działanie zapewnia @prisma/adapter-mariadb (czysty Node.js).
 }
@@ -708,6 +708,7 @@ model Reservation {
   package           Package? @relation(fields: [packageId], references: [id], onDelete: SetNull)
   receptionSales    ReceptionSale[]
   phoneCallLogs     PhoneCallLog[]
+  unassignedGastronomyCharges UnassignedGastronomyCharge[] @relation("UnassignedCharges")
 
   @@index([checkIn, checkOut])
   @@index([roomId])
@@ -2464,4 +2465,40 @@ model FiscalJob {
   attempts  Int      @default(0)
 
   @@index([status, createdAt])
+}
+
+// Nieprzypisane obciążenia gastronomiczne (z Bistro/POS gdy brak rezerwacji)
+model UnassignedGastronomyCharge {
+  id            String   @id @default(cuid())
+  
+  // Dane z systemu POS
+  roomNumber    String              // numer pokoju (np. "004")
+  amount        Decimal  @db.Decimal(12, 2)
+  description   String?  @db.Text
+  posSystem     String?             // "KWHotel Bistro", "Symplex"
+  receiptNumber String?             // numer rachunku POS
+  cashierName   String?             // kelner/kasjer
+  
+  // Pozycje zamówienia (JSON array: [{name, quantity, unitPrice}])
+  items         Json?
+  
+  // Status przypisania
+  status        String   @default("PENDING")  // PENDING, ASSIGNED, CANCELLED
+  
+  // Jeśli przypisane do rezerwacji
+  assignedToReservationId String?
+  assignedToReservation   Reservation? @relation("UnassignedCharges", fields: [assignedToReservationId], references: [id])
+  assignedAt              DateTime?
+  assignedBy              String?      // kto przypisał
+  
+  // Automatycznie utworzona transakcja (po przypisaniu)
+  createdTransactionId    String?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([status])
+  @@index([roomNumber])
+  @@index([createdAt])
+  @@index([assignedToReservationId])
 }

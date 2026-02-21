@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { getRoomsForHousekeeping, updateRoomStatus } from "@/app/actions/rooms";
+import { broadcastRoomStatusChange } from "@/hooks/useRoomsSync";
 import { toast } from "sonner";
 import { CheckCircle2, Circle, Wifi, WifiOff } from "lucide-react";
 
@@ -34,6 +35,8 @@ export default function SprzatanieClient() {
       updateRoomStatus({ roomId, status: "CLEAN" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: HOUSEKEEPING_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["rooms", "sync"] });
+      broadcastRoomStatusChange();
       toast.success("Pokój oznaczony jako posprzątany");
     },
     onError: (err: Error) => {

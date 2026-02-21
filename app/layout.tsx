@@ -61,7 +61,7 @@ export default async function RootLayout({
   }
   fix();
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',fix);
-  setInterval(fix,50);
+  setInterval(fix,200);
 })();
 `,
           }}

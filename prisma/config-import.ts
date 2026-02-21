@@ -207,16 +207,26 @@ async function main() {
     prisma.permission as unknown as { upsert: (args: unknown) => Promise<unknown> },
   );
 
-  // RolePermission
+  // RolePermission - sprawdź czy permissionId istnieje przed upsert
   if ((snapshot.rolePermissions as unknown[])?.length) {
+    const existingPermissions = await prisma.permission.findMany({ select: { id: true } });
+    const permissionIds = new Set(existingPermissions.map((p) => p.id));
+    
+    let imported = 0;
+    let skipped = 0;
     for (const row of snapshot.rolePermissions as Record<string, unknown>[]) {
+      if (!permissionIds.has(row.permissionId as string)) {
+        skipped++;
+        continue;
+      }
       await prisma.rolePermission.upsert({
         where: { id: row.id as string },
         update: stripAutoFields(row),
         create: row as unknown as Prisma.RolePermissionCreateInput,
       });
+      imported++;
     }
-    console.log(`  RolePermission: ${(snapshot.rolePermissions as unknown[]).length} rekordów`);
+    console.log(`  RolePermission: ${imported} rekordów` + (skipped > 0 ? ` (pominięto ${skipped} - brak permissionId)` : ""));
   }
 
   // RoleGroup

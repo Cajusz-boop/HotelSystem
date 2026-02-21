@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { GastronomyClient } from "./gastronomy-client";
 import { ObciazenieForm } from "./obciazenie-form";
+import { UnassignedChargesSection } from "./unassigned-charges";
 
 export const metadata = {
   title: "Moduł gastronomii",
@@ -14,6 +15,7 @@ export default function GastronomyPage() {
       <p className="text-muted-foreground mb-6">
         Restauracja hotelowa, room service, bankiety – zamówienia, karty dań, rozliczenia.
       </p>
+      <UnassignedChargesSection />
       <GastronomyClient />
       <div className="mt-10 pt-6 border-t">
         <ObciazenieForm />

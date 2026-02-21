@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import {
   DndContext,
   type DragEndEvent,
@@ -51,12 +52,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ReservationBarWithMenu } from "./reservation-bar-with-menu";
-import { UnifiedReservationDialog, type UnifiedReservationTab, type CreateReservationContext } from "./unified-reservation-dialog";
 import { RoomStatusIcon } from "./room-status-icon";
 import { getDateRange } from "@/lib/tape-chart-data";
 import { useTapeChartStore } from "@/lib/store/tape-chart-store";
 import { moveReservation, updateReservationStatus } from "@/app/actions/reservations";
 import { getEffectivePricesBatch, updateRoomStatus } from "@/app/actions/rooms";
+import { useRoomsSync, broadcastRoomStatusChange } from "@/hooks/useRoomsSync";
 import {
   getEffectivePropertyId,
   getPropertyReservationColors,
@@ -64,15 +65,19 @@ import {
 import type { Room, Reservation, ReservationGroupSummary, RoomStatus } from "@/lib/tape-chart-types";
 import { RESERVATION_STATUS_BG, ROOM_STATUS_LABELS } from "@/lib/tape-chart-types";
 import { cn } from "@/lib/utils";
-import { GroupReservationSheet } from "./group-reservation-sheet";
-import { RoomBlockSheet } from "./room-block-sheet";
-import { SplitReservationDialog } from "./split-reservation-dialog";
-import { StatusColorsDialog } from "./status-colors-dialog";
-import { MonthlyOverviewDialog } from "./monthly-overview-dialog";
-import { FloorPlanDialog } from "./floor-plan-dialog";
-import { DailyMovementsDialog } from "./daily-movements-dialog";
-import { QuickStatsDialog, type QuickStatsTab } from "./quick-stats-dialog";
 import { TapeChartOverviewBar } from "./tape-chart-overview-bar";
+import type { UnifiedReservationTab, CreateReservationContext } from "./unified-reservation-dialog";
+import type { QuickStatsTab } from "./quick-stats-dialog";
+
+const UnifiedReservationDialog = dynamic(() => import("./unified-reservation-dialog").then((m) => m.UnifiedReservationDialog), { ssr: false });
+const GroupReservationSheet = dynamic(() => import("./group-reservation-sheet").then((m) => m.GroupReservationSheet), { ssr: false });
+const RoomBlockSheet = dynamic(() => import("./room-block-sheet").then((m) => m.RoomBlockSheet), { ssr: false });
+const SplitReservationDialog = dynamic(() => import("./split-reservation-dialog").then((m) => m.SplitReservationDialog), { ssr: false });
+const StatusColorsDialog = dynamic(() => import("./status-colors-dialog").then((m) => m.StatusColorsDialog), { ssr: false });
+const MonthlyOverviewDialog = dynamic(() => import("./monthly-overview-dialog").then((m) => m.MonthlyOverviewDialog), { ssr: false });
+const FloorPlanDialog = dynamic(() => import("./floor-plan-dialog").then((m) => m.FloorPlanDialog), { ssr: false });
+const DailyMovementsDialog = dynamic(() => import("./daily-movements-dialog").then((m) => m.DailyMovementsDialog), { ssr: false });
+const QuickStatsDialog = dynamic(() => import("./quick-stats-dialog").then((m) => m.QuickStatsDialog), { ssr: false });
 import {
   Dialog,
   DialogContent,
@@ -251,6 +256,17 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
       })}
     </>
   );
+}, (prevProps, nextProps) => {
+  if (prevProps.room.status !== nextProps.room.status) return false;
+  if (prevProps.room.number !== nextProps.room.number) return false;
+  if (prevProps.rowIdx !== nextProps.rowIdx) return false;
+  if (prevProps.focusedDateIdx !== nextProps.focusedDateIdx) return false;
+  if (prevProps.showOnlyRoomNumber !== nextProps.showOnlyRoomNumber) return false;
+  if (prevProps.previewMode !== nextProps.previewMode) return false;
+  if (prevProps.columnWidthPx !== nextProps.columnWidthPx) return false;
+  if (prevProps.rowHeightPx !== nextProps.rowHeightPx) return false;
+  if (prevProps.dates.length !== nextProps.dates.length) return false;
+  return true;
 });
 
 /** Wysokość rzędu – 21px (zmniejszona o połowę) */
@@ -382,6 +398,23 @@ export function TapeChart({
   useEffect(() => setAllRooms(rooms), [rooms]);
   const [groups, setGroups] = useState<ReservationGroupSummary[]>(reservationGroups);
   useEffect(() => setGroups(reservationGroups), [reservationGroups]);
+
+  // Polling statusów pokoi + BroadcastChannel sync między kartami
+  useRoomsSync({
+    pollingInterval: 10_000,
+    onStatusChange: useCallback((syncedRooms: Array<{ id: string; number: string; status: RoomStatus }>) => {
+      const statusMap = new Map(syncedRooms.map((r) => [r.number, r.status]));
+      setAllRooms((prev) =>
+        prev.map((room) => {
+          const newStatus = statusMap.get(room.number);
+          if (newStatus && newStatus !== room.status) {
+            return { ...room, status: newStatus };
+          }
+          return room;
+        })
+      );
+    }, []),
+  });
 
   const [roomFilter, setRoomFilter] = useState("");
   // Room/client search fields are always visible in the filters panel
@@ -1296,13 +1329,19 @@ export function TapeChart({
   }, []);
 
   const handleRoomStatusChange = useCallback(async (room: Room, status: RoomStatus) => {
-    if (!room.id) return;
+    if (!room.id) {
+      toast.error(`Brak ID pokoju ${room.number} - odśwież stronę`);
+      return;
+    }
     const result = await updateRoomStatus({ roomId: room.id, status });
     if (result.success) {
-      setAllRooms((prev) =>
-        prev.map((r) => (r.number === room.number ? { ...r, status } : r))
-      );
-      toast.success(`Status pokoju ${room.number} zmieniony na ${ROOM_STATUS_LABELS[status]}`);
+      const effectiveStatus: RoomStatus = status === "INSPECTED" ? "CLEAN" : status;
+      setAllRooms((prev) => {
+        const updated = prev.map((r) => (r.number === room.number ? { ...r, status: effectiveStatus } : r));
+        return updated;
+      });
+      broadcastRoomStatusChange();
+      toast.success(`Status pokoju ${room.number} zmieniony na ${ROOM_STATUS_LABELS[effectiveStatus]}`);
     } else {
       toast.error(result.error ?? "Nie udało się zmienić statusu");
     }
@@ -1880,7 +1919,7 @@ export function TapeChart({
             {/* Room rows: sticky first column (droppable) + day cells */}
             {displayRooms.map((room, rowIdx) => (
               <RoomRowDroppable
-                key={room.number}
+                key={`${room.number}-${room.status}`}
                 room={room}
                 rowIdx={rowIdx}
                 dates={dates}
