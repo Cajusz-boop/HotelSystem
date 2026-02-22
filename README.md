@@ -90,6 +90,22 @@ npm run db:seed
 
 ---
 
-## Wdrożenie na mydevil.net
+## Wdrożenie produkcyjne
+
+### Hetzner (główny serwer)
+
+**Pierwszy raz na nowym komputerze:**
+```powershell
+.\scripts\setup-ssh.ps1
+```
+
+Skrypt skonfiguruje SSH. Musisz też **ręcznie skopiować klucz** `~/.ssh/hetzner_key` z komputera, który już ma dostęp.
+
+**Deploy:**
+```powershell
+.\scripts\deploy-to-hetzner.ps1
+```
+
+### MyDevil (backup)
 
 Zobacz plik `DEPLOY-MYDEVIL.md`.
