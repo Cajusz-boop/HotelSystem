@@ -43,6 +43,18 @@ Write-Host ("Cel: " + $SSH_TARGET + ":" + $REMOTE_PATH) -ForegroundColor Yellow
 Write-Host ("Domena: " + $DOMAIN) -ForegroundColor Yellow
 Write-Host ""
 
+# === Test polaczenia SSH ===
+Write-Host "Testowanie polaczenia SSH..." -ForegroundColor Yellow
+$sshTestResult = ssh -o BatchMode=yes -o ConnectTimeout=10 hetzner "echo SSH_OK" 2>&1
+if ($sshTestResult -match "SSH_OK") {
+    Write-Host "Polaczenie SSH OK" -ForegroundColor Green
+} else {
+    Write-Host "[BLAD] Nie mozna polaczyc z serwerem!" -ForegroundColor Red
+    Write-Host $sshTestResult -ForegroundColor Red
+    exit 1
+}
+Write-Host ""
+
 # === 1/6 Prisma generate ===
 Write-Host "=== 1/6 Prisma generate ===" -ForegroundColor Cyan
 npx prisma generate
@@ -141,7 +153,7 @@ if (-not $FullZip) {
 
     # --- 3b: Pobierz manifest z serwera ---
     Write-Host "Pobieranie manifestu z serwera..." -ForegroundColor Yellow
-    scp -i $keyPath ($SSH_TARGET + ":" + $REMOTE_PATH + "/_deploy_manifest.txt") $manifestRemote 2>$null | Out-Null
+    scp hetzner:($REMOTE_PATH + "/_deploy_manifest.txt") $manifestRemote 2>$null | Out-Null
     $hasRemoteManifest = Test-Path $manifestRemote
     if (-not $hasRemoteManifest) {
         Write-Host "Brak manifestu na serwerze - pelny transfer (pierwszy deploy)." -ForegroundColor Yellow
@@ -211,13 +223,13 @@ if (-not $FullZip) {
             Write-Host ("Delta: " + $validPaths.Count + " plikow, " + $sizeMB + " MB") -ForegroundColor Green
 
             Write-Host "Wysylanie delta na serwer..." -ForegroundColor Yellow
-            scp -i $keyPath $deltaTar ($SSH_TARGET + ":" + $REMOTE_PATH + "/")
+            scp $deltaTar hetzner:($REMOTE_PATH + "/")
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "[BLAD] scp delta nie powiodl sie!" -ForegroundColor Red
                 exit 1
             }
             Write-Host "Rozpakowywanie delta na serwerze..." -ForegroundColor Yellow
-            ssh -i $keyPath $SSH_TARGET ("cd " + $REMOTE_PATH + " && rm -rf .next/standalone/.next/static && tar -xzf _deploy_delta.tar.gz && rm -f _deploy_delta.tar.gz")
+            ssh hetzner ("cd " + $REMOTE_PATH + " && rm -rf .next/standalone/.next/static && tar -xzf _deploy_delta.tar.gz && rm -f _deploy_delta.tar.gz")
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "[BLAD] Rozpakowanie delta na serwerze nie powiodlo sie!" -ForegroundColor Red
                 exit 1
@@ -231,9 +243,9 @@ if (-not $FullZip) {
     # --- 3e: Usun pliki ktore zniknely ---
     if ($deletedFiles.Count -gt 0) {
         [System.IO.File]::WriteAllLines($deletedList, $deletedFiles, $utf8NoBom)
-        scp -i $keyPath $deletedList ($SSH_TARGET + ":" + $REMOTE_PATH + "/_deploy_deleted.txt")
+        scp $deletedList hetzner:($REMOTE_PATH + "/_deploy_deleted.txt")
         if ($LASTEXITCODE -eq 0) {
-            ssh -i $keyPath $SSH_TARGET ("cd " + $REMOTE_PATH + " && while read -r f; do rm -f `"`$f`"; done < _deploy_deleted.txt; rm -f _deploy_deleted.txt")
+            ssh hetzner ("cd " + $REMOTE_PATH + " && while read -r f; do rm -f `"`$f`"; done < _deploy_deleted.txt; rm -f _deploy_deleted.txt")
             if ($LASTEXITCODE -eq 0) {
                 Write-Host ("Usunieto " + $deletedFiles.Count + " plikow na serwerze.") -ForegroundColor Green
             } else {
@@ -246,7 +258,7 @@ if (-not $FullZip) {
 
     # --- 3f: Zapisz nowy manifest na serwerze ---
     Write-Host "Aktualizacja manifestu na serwerze..." -ForegroundColor Yellow
-    scp -i $keyPath $manifestLocal ($SSH_TARGET + ":" + $REMOTE_PATH + "/_deploy_manifest.txt")
+    scp $manifestLocal hetzner:($REMOTE_PATH + "/_deploy_manifest.txt")
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[WARN] Zapis manifestu nie powiodl sie" -ForegroundColor Yellow
     }
@@ -280,7 +292,7 @@ if (-not $FullZip) {
     }
 
     Write-Host "Wysylanie na serwer..." -ForegroundColor Yellow
-    scp -i $keyPath $tarFile ($SSH_TARGET + ":" + $REMOTE_PATH + "/")
+    scp $tarFile hetzner:($REMOTE_PATH + "/")
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[BLAD] scp nie powiodl sie!" -ForegroundColor Red
         exit 1
@@ -288,7 +300,7 @@ if (-not $FullZip) {
     Write-Host "Upload OK" -ForegroundColor Green
 
     Write-Host "Rozpakowywanie na serwerze..." -ForegroundColor Yellow
-    ssh -i $keyPath $SSH_TARGET ("cd " + $REMOTE_PATH + " && rm -rf .next && tar -xzf _deploy_hetzner.tar.gz && rm -f _deploy_hetzner.tar.gz")
+    ssh hetzner ("cd " + $REMOTE_PATH + " && rm -rf .next && tar -xzf _deploy_hetzner.tar.gz && rm -f _deploy_hetzner.tar.gz")
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[BLAD] Rozpakowanie nie powiodlo sie!" -ForegroundColor Red
         exit 1
@@ -317,19 +329,20 @@ if (-not $FullZip) {
         }
     }
     [System.IO.File]::WriteAllLines($manifestLocal, $manifestLines, $utf8NoBom)
-    scp -i $keyPath $manifestLocal ($SSH_TARGET + ":" + $REMOTE_PATH + "/_deploy_manifest.txt")
+    scp $manifestLocal hetzner:($REMOTE_PATH + "/_deploy_manifest.txt")
     Remove-Item $manifestLocal -Force -ErrorAction SilentlyContinue
 
     if (Test-Path $tarFile) { Remove-Item $tarFile -Force }
     Write-Host "Transfer zakonczony." -ForegroundColor Green
 }
 
-# === 4/6 Konfiguracja na serwerze ===
-Write-Host "" ; Write-Host "=== 4/6 Konfiguracja serwera ===" -ForegroundColor Cyan
+# === 4/6 Konfiguracja + Prisma + PM2 (jedno polaczenie SSH) ===
+Write-Host "" ; Write-Host "=== 4/6 Konfiguracja + Prisma + Restart PM2 ===" -ForegroundColor Cyan
 
-$configCmd = @"
+$serverCmd = @"
 cd $REMOTE_PATH || exit 1
 
+echo "=== Konfiguracja ==="
 # Utwórz .env jeśli nie istnieje
 if [ ! -f .env ]; then
     echo "DATABASE_URL=$DB_URL" > .env
@@ -357,20 +370,9 @@ module.exports = {
   }]
 };
 PMEOF
-
 echo "CONFIG_OK"
-"@
 
-$configCmd | ssh -i $keyPath $SSH_TARGET "bash -s"
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "[WARN] Konfiguracja mogla sie nie powiesc" -ForegroundColor Yellow
-}
-
-# === 5/6 Prisma na serwerze (opcjonalnie) ===
-Write-Host "" ; Write-Host "=== 5/6 Prisma db push (na serwerze) ===" -ForegroundColor Cyan
-
-$prismaCmd = @"
-cd $REMOTE_PATH || exit 1
+echo "=== Prisma ==="
 export DATABASE_URL="$DB_URL"
 cd .next/standalone
 if [ -f node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node ]; then
@@ -380,17 +382,9 @@ else
     npx prisma generate --schema=../../prisma/schema.prisma 2>/dev/null || true
 fi
 echo "PRISMA_OK"
-"@
 
-$prismaCmd | ssh -i $keyPath $SSH_TARGET "bash -s"
-
-# === 6/6 Restart PM2 ===
-Write-Host "" ; Write-Host "=== 6/6 Restart PM2 ===" -ForegroundColor Cyan
-
-$restartCmd = @"
+echo "=== PM2 ==="
 cd $REMOTE_PATH
-export DATABASE_URL="$DB_URL"
-
 if pm2 list | grep -q hotel-pms; then
     echo "Restart aplikacji..."
     pm2 restart hotel-pms --update-env
@@ -406,9 +400,9 @@ pm2 list
 echo "DEPLOY_OK"
 "@
 
-$restartCmd | ssh -i $keyPath $SSH_TARGET "bash -s"
+$serverCmd | ssh hetzner "bash -s"
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "[WARN] Restart mogl sie nie powiesc - sprawdz logi" -ForegroundColor Yellow
+    Write-Host "[WARN] Konfiguracja/restart mogla sie nie powiesc - sprawdz logi" -ForegroundColor Yellow
 }
 
 Write-Host ""
