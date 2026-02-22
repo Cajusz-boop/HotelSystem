@@ -37,7 +37,8 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo [4/5] Budowanie aplikacji...
+echo [4/5] Zatrzymanie PM2 i budowanie aplikacji...
+call pm2 stop hotel-pms 2>nul
 call npm run build
 if %errorlevel% neq 0 (
     echo BLAD: npm run build nie powiodl sie
