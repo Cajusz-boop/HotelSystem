@@ -1,0 +1,26 @@
+================================================================================
+PROMPTY DLA CURSOR AI - KOMPUTER B (Hotel System PMS)
+================================================================================
+
+--- PIERWSZY RAZ (tylko raz, przy pierwszym uruchomieniu) ---
+
+Sklonuj repozytorium https://github.com/Cajusz-boop/HotelSystem.git do C:\HotelSystem, a następnie uruchom skrypt setup: .\scripts\setup-new-computer.ps1
+
+
+--- CODZIENNE UŻYCIE ---
+
+Pobierz najnowsze zmiany z GitHub (git pull)
+
+Uruchom aplikację (npm run dev)
+
+
+--- WYSYŁANIE ZMIAN ---
+
+Wyślij zmiany na GitHub z opisem: [tu wpisz co zmieniłeś]
+
+
+--- DEPLOY NA SERWER HETZNER ---
+
+Wyślij zmiany na GitHub i zrób deploy na Hetzner
+
+================================================================================
