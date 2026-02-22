@@ -102,7 +102,7 @@ export async function getCampsiteAvailability(
       },
     });
 
-    const data = campsites.map((c) => ({
+    const data = campsites.map((c: typeof campsites[number]) => ({
       id: c.id,
       number: c.number,
       type: c.type,
