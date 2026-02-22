@@ -220,7 +220,7 @@ export async function getCampsiteBookingsInRange(
       orderBy: [{ campsiteId: "asc" }, { startDate: "asc" }],
     });
 
-    const data = list.map((b) => ({
+    const data = list.map((b: typeof list[number]) => ({
       id: b.id,
       campsiteId: b.campsiteId,
       campsiteNumber: b.campsite.number,
