@@ -30,7 +30,7 @@ export function OnboardingGuide() {
     <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
       <DialogContent className="sm:max-w-md" aria-describedby="onboarding-description">
         <DialogHeader>
-          <DialogTitle>Witaj w Hotel PMS</DialogTitle>
+          <DialogTitle>Witaj w systemie Hotel Łabędź</DialogTitle>
         </DialogHeader>
         <div id="onboarding-description" className="space-y-3 text-sm text-muted-foreground">
           <p>Krótki przewodnik po systemie:</p>

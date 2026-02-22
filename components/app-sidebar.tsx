@@ -567,7 +567,7 @@ export function AppSidebar({
           <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Otwórz menu" onClick={openDrawer}>
             <Menu className="h-5 w-5" />
           </Button>
-          <span className="text-sm font-semibold">Hotel PMS</span>
+          <img src="/logo.png" alt="Hotel Łabędź" className="h-8 w-auto rounded" />
         </div>
       </header>
 

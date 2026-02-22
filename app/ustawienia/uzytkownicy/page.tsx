@@ -26,10 +26,12 @@ import {
   createUser,
   updateUser,
   deleteUser,
+  setUserPin,
+  toggleUserActive,
   type UserListItem,
 } from "@/app/actions/users";
 import { toast } from "sonner";
-import { Users, ArrowLeft, Save, Plus, Pencil, Trash2 } from "lucide-react";
+import { Users, ArrowLeft, Save, Plus, Pencil, Trash2, KeyRound, UserCheck, UserX } from "lucide-react";
 
 const ROLE_LABELS: Record<string, string> = {
   RECEPTION: "Recepcja",
@@ -64,6 +66,10 @@ export default function UzytkownicyPage() {
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editResetPassword, setEditResetPassword] = useState("");
+
+  // PIN dialog
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinValue, setPinValue] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -204,6 +210,45 @@ export default function UzytkownicyPage() {
     setDeleteOpen(true);
   };
 
+  // --- PIN ---
+
+  const openPinDialog = (u: UserListItem) => {
+    setSelectedUser(u);
+    setPinValue("");
+    setPinOpen(true);
+  };
+
+  const handleSetPin = async () => {
+    if (!selectedUser) return;
+    if (pinValue && !/^\d{4}$/.test(pinValue)) {
+      toast.error("PIN musi składać się z 4 cyfr");
+      return;
+    }
+    setDialogLoading(true);
+    const result = await setUserPin(selectedUser.id, pinValue || null);
+    setDialogLoading(false);
+    if (result.success) {
+      toast.success(pinValue ? "PIN ustawiony" : "PIN usunięty");
+      setPinOpen(false);
+      setSelectedUser(null);
+      load();
+    } else {
+      toast.error("error" in result ? result.error : "Błąd");
+    }
+  };
+
+  // --- Toggle active ---
+
+  const handleToggleActive = async (u: UserListItem) => {
+    const result = await toggleUserActive(u.id);
+    if (result.success) {
+      toast.success(result.isActive ? "Użytkownik aktywowany" : "Użytkownik dezaktywowany");
+      load();
+    } else {
+      toast.error("error" in result ? result.error : "Błąd");
+    }
+  };
+
   const handleDelete = async () => {
     if (!selectedUser) return;
     setDialogLoading(true);
@@ -274,22 +319,38 @@ export default function UzytkownicyPage() {
             <tr className="border-b bg-muted/50">
               <th className="text-left p-3 font-medium">Użytkownik</th>
               <th className="text-left p-3 font-medium">Rola</th>
+              <th className="text-left p-3 font-medium">PIN</th>
               <th className="text-left p-3 font-medium">Max rabat %</th>
               <th className="text-left p-3 font-medium">Max rabat (PLN)</th>
               <th className="text-left p-3 font-medium">Max void (PLN)</th>
-              <th className="p-3 w-36 text-right font-medium">Akcje</th>
+              <th className="p-3 w-48 text-right font-medium">Akcje</th>
             </tr>
           </thead>
           <tbody>
             {users.map((u) => {
               const { maxPercent, maxAmount, maxVoid } = getEditValues(u);
               return (
-                <tr key={u.id} className="border-b last:border-0">
+                <tr key={u.id} className={`border-b last:border-0 ${!u.isActive ? "opacity-50" : ""}`}>
                   <td className="p-3">
-                    <div className="font-medium">{u.name}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="font-medium">{u.name}</div>
+                      {!u.isActive && (
+                        <span className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">nieaktywny</span>
+                      )}
+                    </div>
                     <div className="text-muted-foreground text-xs">{u.email}</div>
                   </td>
                   <td className="p-3">{ROLE_LABELS[u.role] ?? u.role}</td>
+                  <td className="p-3">
+                    {u.hasPin ? (
+                      <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400 px-2 py-1 rounded">
+                        <KeyRound className="h-3 w-3" />
+                        Ustawiony
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Brak</span>
+                    )}
+                  </td>
                   <td className="p-3">
                     <Input
                       type="number"
@@ -334,6 +395,22 @@ export default function UzytkownicyPage() {
                         title="Zapisz limity"
                       >
                         {savingId === u.id ? "…" : <Save className="h-4 w-4" />}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => openPinDialog(u)}
+                        title={u.hasPin ? "Zmień PIN" : "Ustaw PIN"}
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleToggleActive(u)}
+                        title={u.isActive ? "Dezaktywuj" : "Aktywuj"}
+                      >
+                        {u.isActive ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
                       </Button>
                       <Button
                         size="sm"
@@ -497,6 +574,46 @@ export default function UzytkownicyPage() {
             </Button>
             <Button variant="destructive" onClick={handleDelete} disabled={dialogLoading}>
               {dialogLoading ? "Usuwanie…" : "Usuń"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Ustaw PIN */}
+      <Dialog open={pinOpen} onOpenChange={setPinOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedUser?.hasPin ? "Zmień PIN" : "Ustaw PIN"}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedUser?.name} — wprowadź 4-cyfrowy PIN do szybkiego logowania.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-2">
+              <Label htmlFor="pin">PIN (4 cyfry)</Label>
+              <Input
+                id="pin"
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="••••"
+                value={pinValue}
+                onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ""))}
+                className="text-center text-2xl tracking-[0.5em]"
+              />
+              <p className="text-xs text-muted-foreground">
+                Zostaw puste, aby usunąć PIN.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPinOpen(false)}>
+              Anuluj
+            </Button>
+            <Button onClick={handleSetPin} disabled={dialogLoading}>
+              {dialogLoading ? "Zapisywanie…" : "Zapisz"}
             </Button>
           </DialogFooter>
         </DialogContent>
