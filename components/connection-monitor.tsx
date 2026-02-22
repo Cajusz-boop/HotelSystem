@@ -51,9 +51,9 @@ export function ConnectionMonitor() {
 
   // Główna logika monitorowania
   useEffect(() => {
-    let intervalId: NodeJS.Timeout;
-    let redirectTimeout: NodeJS.Timeout;
-    let countdownInterval: NodeJS.Timeout;
+    let intervalId: NodeJS.Timeout | undefined;
+    let redirectTimeout: NodeJS.Timeout | undefined;
+    let countdownInterval: NodeJS.Timeout | undefined;
 
     const checkConnection = async () => {
       if (isOnLocalServer) {
@@ -129,9 +129,9 @@ export function ConnectionMonitor() {
 
     return () => {
       clearTimeout(initialCheck);
-      clearInterval(intervalId);
-      clearTimeout(redirectTimeout);
-      clearInterval(countdownInterval);
+      if (intervalId) clearInterval(intervalId);
+      if (redirectTimeout) clearTimeout(redirectTimeout);
+      if (countdownInterval) clearInterval(countdownInterval);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
