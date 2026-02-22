@@ -50,7 +50,7 @@ export async function getCampsites(): Promise<
     });
     return {
       success: true,
-      data: list.map((c) => ({
+      data: list.map((c: typeof list[number]) => ({
         id: c.id,
         number: c.number,
         type: c.type,
