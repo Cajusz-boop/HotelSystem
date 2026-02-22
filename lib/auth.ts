@@ -118,4 +118,16 @@ export async function verifyPending2FAToken(token: string): Promise<{ userId: st
   }
 }
 
+/** Hashuje PIN (4 cyfry) */
+export async function hashPin(pin: string): Promise<string> {
+  const bcrypt = await import("bcryptjs");
+  return bcrypt.default.hash(pin, 10);
+}
+
+/** Weryfikuje PIN */
+export async function verifyPin(pin: string, hash: string): Promise<boolean> {
+  const bcrypt = await import("bcryptjs");
+  return bcrypt.default.compare(pin, hash);
+}
+
 export { COOKIE_NAME };

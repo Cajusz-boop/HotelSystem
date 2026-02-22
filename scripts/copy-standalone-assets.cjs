@@ -45,3 +45,13 @@ if (fs.existsSync(prismaSrc)) {
 } else {
   console.warn("copy-standalone-assets: brak node_modules/.prisma (pomijam)");
 }
+
+// public -> .next/standalone/public (dla PWA: manifest.json, sw.js, icons)
+const publicSrc = path.join(root, "public");
+const publicDest = path.join(standaloneDir, "public");
+if (fs.existsSync(publicSrc)) {
+  copyRecursive(publicSrc, publicDest);
+  console.log("copy-standalone-assets: public -> standalone/public (PWA assets)");
+} else {
+  console.warn("copy-standalone-assets: brak public (pomijam)");
+}

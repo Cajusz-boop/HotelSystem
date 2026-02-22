@@ -1839,6 +1839,10 @@ model User {
   role         String   @default("RECEPTION")  // RECEPTION | MANAGER | HOUSEKEEPING | OWNER
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  isActive     Boolean  @default(true)  // czy użytkownik aktywny (widoczny na ekranie logowania PIN)
+
+  // PIN do szybkiego logowania (4 cyfry, bcrypt hash)
+  pin          String?  @db.VarChar(128)
 
   // Limity rabatowe per użytkownik (null = użyj domyślnego z env)
   maxDiscountPercent Decimal? @db.Decimal(5, 2)  // max % rabatu (np. 20 = 20%)

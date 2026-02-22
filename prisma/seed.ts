@@ -20,15 +20,24 @@ async function main() {
   const existingUser = await prisma.user.findUnique({ where: { email: defaultEmail } }).catch(() => null);
   if (!existingUser) {
     const hash = await bcrypt.hash("Admin1234#", 10);
+    const pinHash = await bcrypt.hash("1234", 10);
     await prisma.user.create({
       data: {
         email: defaultEmail,
         name: "Administrator",
         passwordHash: hash,
+        pin: pinHash,
         role: "MANAGER",
       },
     });
-    console.log("Utworzono użytkownika:", defaultEmail, "(hasło: Admin1234#)");
+    console.log("Utworzono użytkownika:", defaultEmail, "(hasło: Admin1234#, PIN: 1234)");
+  } else if (!existingUser.pin) {
+    const pinHash = await bcrypt.hash("1234", 10);
+    await prisma.user.update({
+      where: { email: defaultEmail },
+      data: { pin: pinHash },
+    });
+    console.log("Ustawiono PIN dla:", defaultEmail, "(PIN: 1234)");
   }
 
   // Użytkownik Google OAuth (logowanie przez Google Workspace)

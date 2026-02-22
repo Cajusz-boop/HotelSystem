@@ -2,7 +2,7 @@
 
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
-import { getSession } from "@/lib/auth";
+import { getSession, hashPin } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 
 const VALID_ROLES = ["RECEPTION", "MANAGER", "HOUSEKEEPING", "OWNER"] as const;
@@ -12,6 +12,8 @@ export type UserListItem = {
   email: string;
   name: string;
   role: string;
+  hasPin: boolean;
+  isActive: boolean;
   maxDiscountPercent: number | null;
   maxDiscountAmount: number | null;
   maxVoidAmount: number | null;
@@ -31,6 +33,8 @@ export async function listUsersForAdmin(): Promise<
       email: true,
       name: true,
       role: true,
+      pin: true,
+      isActive: true,
       maxDiscountPercent: true,
       maxDiscountAmount: true,
       maxVoidAmount: true,
@@ -44,6 +48,8 @@ export async function listUsersForAdmin(): Promise<
       email: u.email,
       name: u.name,
       role: u.role,
+      hasPin: !!u.pin,
+      isActive: u.isActive,
       maxDiscountPercent: u.maxDiscountPercent != null ? Number(u.maxDiscountPercent) : null,
       maxDiscountAmount: u.maxDiscountAmount != null ? Number(u.maxDiscountAmount) : null,
       maxVoidAmount: u.maxVoidAmount != null ? Number(u.maxVoidAmount) : null,
@@ -175,4 +181,54 @@ export async function deleteUser(
 
   await prisma.user.delete({ where: { id: userId } });
   return { success: true };
+}
+
+/** Ustawienie lub zmiana PIN użytkownika (wymaga admin.users). */
+export async function setUserPin(
+  userId: string,
+  pin: string | null
+): Promise<{ success: true } | { success: false; error: string }> {
+  const session = await getSession();
+  if (!session) return { success: false, error: "Zaloguj się" };
+  const allowed = await can(session.role, "admin.users");
+  if (!allowed) return { success: false, error: "Brak uprawnień" };
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return { success: false, error: "Użytkownik nie istnieje." };
+
+  if (pin === null || pin === "") {
+    await prisma.user.update({ where: { id: userId }, data: { pin: null } });
+    return { success: true };
+  }
+
+  if (!/^\d{4}$/.test(pin)) {
+    return { success: false, error: "PIN musi składać się z 4 cyfr." };
+  }
+
+  const pinHash = await hashPin(pin);
+  await prisma.user.update({ where: { id: userId }, data: { pin: pinHash } });
+  return { success: true };
+}
+
+/** Przełączenie statusu aktywności użytkownika (wymaga admin.users). */
+export async function toggleUserActive(
+  userId: string
+): Promise<{ success: true; isActive: boolean } | { success: false; error: string }> {
+  const session = await getSession();
+  if (!session) return { success: false, error: "Zaloguj się" };
+  const allowed = await can(session.role, "admin.users");
+  if (!allowed) return { success: false, error: "Brak uprawnień" };
+
+  if (userId === session.userId) {
+    return { success: false, error: "Nie możesz dezaktywować własnego konta." };
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return { success: false, error: "Użytkownik nie istnieje." };
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: { isActive: !user.isActive },
+  });
+  return { success: true, isActive: updated.isActive };
 }
