@@ -8,6 +8,7 @@ import { StatusBar } from "@/components/status-bar";
 import { OnboardingGuide } from "@/components/onboarding-guide";
 import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help";
 import { FiscalRelay } from "@/components/fiscal-relay";
+import { ConnectionMonitor } from "@/components/connection-monitor";
 import { getSession } from "@/lib/auth";
 import { getMyPermissions } from "@/app/actions/permissions";
 import "./globals.css";
@@ -16,8 +17,8 @@ import "./globals.css";
 const fontClass = "font-sans";
 
 export const metadata: Metadata = {
-  title: "Hotel PMS – System rezerwacji",
-  description: "System zarządzania hotelem",
+  title: "Hotel Łabędź – System rezerwacji",
+  description: "System zarządzania Hotelem Łabędź w Iławie",
 };
 
 // Nie prerenderuj stron przy buildzie – unikamy błędów useSearchParams() i brakującej bazy
@@ -33,9 +34,30 @@ export default async function RootLayout({
   return (
     <html lang="pl" suppressHydrationWarning>
       <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#8B6914" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Hotel Łabędź" />
+        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){var t=localStorage.getItem('pms-theme');if(t==='dark')document.documentElement.classList.add('dark');else document.documentElement.classList.remove('dark');})();`,
+          }}
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('/sw.js').then(function(reg){
+      console.log('[SW] Registered:',reg.scope);
+    }).catch(function(err){
+      console.log('[SW] Registration failed:',err);
+    });
+  });
+}
+`,
           }}
         />
       </head>
@@ -67,6 +89,7 @@ export default async function RootLayout({
           }}
         />
         <Providers>
+          <ConnectionMonitor />
           <a href="#main-content" className="skip-link">
             Przejdź do treści
           </a>
