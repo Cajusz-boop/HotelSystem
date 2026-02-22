@@ -1,0 +1,61 @@
+================================================================================
+         INSTRUKCJA SYNCHRONIZACJI BAZ DANYCH
+================================================================================
+
+ARCHITEKTURA:
+  Hetzner (glowny)    <---->    Lokalny (backup)
+  hotel.karczma-labedz.pl       10.119.169.20:3000
+
+--------------------------------------------------------------------------------
+SCENARIUSZ: Normalny dzien pracy
+--------------------------------------------------------------------------------
+  - Pracujesz na: https://hotel.karczma-labedz.pl
+  - Lokalny serwer jest tylko backupem
+
+--------------------------------------------------------------------------------
+SCENARIUSZ: Awaria internetu
+--------------------------------------------------------------------------------
+  1. Przegladarka nie dziala na hotel.karczma-labedz.pl
+  
+  2. Otworz: http://10.119.169.20:3000
+     (lub http://localhost:3000 jesli jestes na serwerze)
+  
+  3. Pracuj normalnie - wszystko zapisuje sie lokalnie
+  
+  4. Gdy INTERNET WROCI:
+     a) Na serwerze lokalnym uruchom:
+        E:\HotelSystem\scripts\sync-db-TO-hetzner.bat
+        
+     b) Poczekaj az skonczy
+     
+     c) Wroc do pracy na: https://hotel.karczma-labedz.pl
+
+--------------------------------------------------------------------------------
+DOSTEPNE SKRYPTY (uruchamiaj na serwerze lokalnym przez AnyDesk)
+--------------------------------------------------------------------------------
+
+  sync-db-from-hetzner.bat
+    - Kierunek: Hetzner --> Lokalny
+    - Kiedy: Przed praca offline (pobierz swiezne dane)
+    - NADPISUJE dane lokalne
+  
+  sync-db-TO-hetzner.bat
+    - Kierunek: Lokalny --> Hetzner
+    - Kiedy: Po pracy offline (wyslij zmiany)
+    - NADPISUJE dane na Hetzner
+
+  aktualizuj-serwer-lokalny.bat
+    - Aktualizuje KOD aplikacji z GitHub
+    - Nie dotyka bazy danych
+
+--------------------------------------------------------------------------------
+DANE DOSTEPU
+--------------------------------------------------------------------------------
+  AnyDesk do serwera lokalnego: 540261132 / Wojtek1415
+  
+  MySQL lokalny:  root:root123 / baza: hotel_pms
+  MySQL Hetzner:  hotel:HotelPMS2024#Secure / baza: hotel_pms
+  
+  SSH Hetzner:    root@65.108.245.25 (klucz w C:\Users\Admin\.ssh\id_ed25519)
+
+================================================================================
