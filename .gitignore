@@ -16,6 +16,7 @@ build
 .env.production
 .env.*.local
 .env.deploy
+.env.deploy.*
 
 # Prisma
 prisma/migrations/**/migration_lock.toml
@@ -56,6 +57,7 @@ _next_out.txt
 tsconfig.tsbuildinfo
 
 # Deploy artifacts
+_deploy_temp/
 deploy_mydevil.zip
 deploy_mydevil.tar
 deploy_standalone.zip
