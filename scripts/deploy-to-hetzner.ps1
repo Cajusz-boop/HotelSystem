@@ -243,7 +243,7 @@ if (-not $FullZip) {
 
     # --- 3e: Usun pliki ktore zniknely ---
     if ($deletedFiles.Count -gt 0) {
-        [System.IO.File]::WriteAllLines($deletedList, $deletedFiles, $utf8NoBom)
+        [System.IO.File]::WriteAllText($deletedList, ($deletedFiles -join "`n") + "`n", $utf8NoBom)
         scp -i $keyPath $deletedList "${SCP_DEST}/_deploy_deleted.txt"
         if ($LASTEXITCODE -eq 0) {
             ssh hetzner ("cd " + $REMOTE_PATH + " && while read -r f; do rm -f `"`$f`"; done < _deploy_deleted.txt; rm -f _deploy_deleted.txt")
@@ -401,6 +401,8 @@ pm2 list
 echo "DEPLOY_OK"
 "@
 
+# LF only - bash na Linuxie nie rozumie CRLF (powoduje $'\r': command not found)
+$serverCmd = $serverCmd -replace "`r`n", "`n" -replace "`r", "`n"
 $serverCmd | ssh hetzner "bash -s"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[WARN] Konfiguracja/restart mogla sie nie powiesc - sprawdz logi" -ForegroundColor Yellow
