@@ -51,10 +51,26 @@ else
     log "Schema unchanged - skipping prisma"
 fi
 
-# 4. Build
-log "Building..."
-npm run build
-log "Build OK"
+# 4. Build (retry on OOM Kill - exit 137)
+MAX_BUILD_RETRIES=5
+RETRY_DELAY=90
+for attempt in $(seq 1 $MAX_BUILD_RETRIES); do
+    log "Building... (attempt $attempt/$MAX_BUILD_RETRIES)"
+    if npm run build; then
+        log "Build OK"
+        break
+    fi
+    BUILD_EXIT=$?
+    if [ $attempt -eq $MAX_BUILD_RETRIES ]; then
+        log "Build FAILED after $MAX_BUILD_RETRIES attempts (last exit: $BUILD_EXIT)"
+        exit 1
+    fi
+    # 137 = OOM Kill, 130 = Ctrl+C; retry po zwolnieniu pamięci
+    log "Build failed (exit $BUILD_EXIT) - waiting ${RETRY_DELAY}s before retry..."
+    sync
+    sleep $RETRY_DELAY
+    rm -rf .next
+done
 
 # 5. Kopiuj static do standalone
 log "Copying static files..."
