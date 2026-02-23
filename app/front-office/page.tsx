@@ -1,15 +1,25 @@
-import { TapeChartStoreProvider } from "@/lib/store/tape-chart-store";
+import { Suspense } from "react";
 import { getTapeChartData } from "@/app/actions/tape-chart";
 import { FrontOfficeClient } from "./front-office-client";
 import { FrontOfficeError } from "./front-office-error";
+import FrontOfficeLoading from "./loading";
 import type { Reservation, ReservationGroupSummary, Room } from "@/lib/tape-chart-types";
 
-export const dynamic = "force-dynamic";
+// Cache 15s – kolejne wejścia w ciągu 15 s będą z cache. revalidatePath z akcji (rezerwacja, pokój itd.) wymusi odświeżenie po zmianach.
+export const revalidate = 15;
 
-export default async function FrontOfficePage() {
+const INITIAL_DAYS_FORWARD = 15;
+
+async function FrontOfficeData() {
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const future = new Date(now);
+  future.setDate(future.getDate() + INITIAL_DAYS_FORWARD);
+  const dateToInitial = future.toISOString().slice(0, 10);
+
   let data: { reservations: Reservation[]; rooms: Room[]; reservationGroups: ReservationGroupSummary[]; reservationStatusColors?: Partial<Record<string, string>> | null; propertyId?: string | null };
   try {
-    const result = await getTapeChartData();
+    const result = await getTapeChartData({ dateFrom: today, dateTo: dateToInitial });
     data = {
       reservations: result.reservations as Reservation[],
       rooms: result.rooms as Room[],
@@ -34,10 +44,22 @@ export default async function FrontOfficePage() {
     );
   }
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-      <TapeChartStoreProvider reservations={data.reservations}>
-        <FrontOfficeClient rooms={data.rooms} reservationGroups={data.reservationGroups} reservationStatusColors={data.reservationStatusColors} propertyId={data.propertyId} />
-      </TapeChartStoreProvider>
-    </div>
+    <FrontOfficeClient
+      initialData={{
+        rooms: data.rooms,
+        reservationGroups: data.reservationGroups,
+        reservationStatusColors: data.reservationStatusColors,
+        propertyId: data.propertyId,
+        reservations: data.reservations,
+      }}
+    />
+  );
+}
+
+export default function FrontOfficePage() {
+  return (
+    <Suspense fallback={<FrontOfficeLoading />}>
+      <FrontOfficeData />
+    </Suspense>
   );
 }

@@ -1,5 +1,6 @@
 "use server";
 
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getEffectivePropertyId, getPropertyReservationColors } from "@/app/actions/properties";
 export interface TapeChartReservation {
@@ -138,14 +139,19 @@ function mapReservationToTapeChart(r: {
 /** Opcje dla getTapeChartData – filtr roomIds (np. dla MICE: tylko sale konferencyjne). */
 export interface GetTapeChartDataOptions {
   roomIds?: string[];
-  /** Początek zakresu dat (YYYY-MM-DD). Domyślnie: 90 dni wstecz. */
+  /** Początek zakresu dat (YYYY-MM-DD). Domyślnie: 14 dni wstecz. */
   dateFrom?: string;
-  /** Koniec zakresu dat (YYYY-MM-DD). Domyślnie: 400 dni w przód. */
+  /** Koniec zakresu dat (YYYY-MM-DD). Domyślnie: 90 dni w przód. */
   dateTo?: string;
 }
 
-/** Pobiera dane do Tape Chart: rezerwacje i pokoje. Działa także gdy w bazie brak RateCode / rateCodeId (stary schemat). */
-export async function getTapeChartData(options?: GetTapeChartDataOptions): Promise<TapeChartData> {
+const TAPE_CHART_CACHE_REVALIDATE = 30;
+
+/** Wewnętrzna implementacja – bez cache. */
+async function fetchTapeChartDataUncached(
+  options: GetTapeChartDataOptions | undefined,
+  propertyId: string | null
+): Promise<TapeChartData> {
   const roomIds = options?.roomIds?.filter(Boolean);
   const filterByRoomIds = roomIds != null && roomIds.length > 0;
   let reservations: Array<{
@@ -179,13 +185,11 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
   let roomBlocks: Array<{ id: string; roomId: string; startDate: Date; endDate: Date; reason: string | null }>;
   let groups: Array<{ id: string; name: string | null; _count: { reservations: number } }>;
 
-  const propertyId = await getEffectivePropertyId();
-
   const now = new Date();
   const defaultFrom = new Date(now);
-  defaultFrom.setDate(defaultFrom.getDate() - 90);
+  defaultFrom.setDate(defaultFrom.getDate() - 14);
   const defaultTo = new Date(now);
-  defaultTo.setDate(defaultTo.getDate() + 400);
+  defaultTo.setDate(defaultTo.getDate() + 90);
 
   const dateFrom = options?.dateFrom ? new Date(options.dateFrom + "T00:00:00Z") : defaultFrom;
   const dateTo = options?.dateTo ? new Date(options.dateTo + "T23:59:59Z") : defaultTo;
@@ -197,11 +201,13 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
   };
   const reservationWhere = {
     ...(filterByRoomIds ? { roomId: { in: roomIds! } } : {}),
+    ...(propertyId ? { room: { propertyId } } : {}),
     checkOut: { gte: dateFrom },
     checkIn: { lte: dateTo },
   };
   const blockWhere = {
     ...(filterByRoomIds ? { roomId: { in: roomIds! } } : {}),
+    ...(propertyId ? { room: { propertyId } } : {}),
     endDate: { gte: dateFrom },
     startDate: { lte: dateTo },
   };
@@ -212,9 +218,9 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
         include: {
           guest: { select: { name: true, isBlacklisted: true } },
           room: { select: { number: true } },
-          rateCode: true,
-          group: true,
-          parkingBookings: { include: { parkingSpot: true } },
+          rateCode: { select: { id: true, code: true, name: true, price: true } },
+          group: { select: { id: true, name: true } },
+          parkingBookings: { take: 1, include: { parkingSpot: { select: { number: true } } } },
         },
         orderBy: { checkIn: "asc" },
       }),
@@ -254,8 +260,8 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
           include: {
             guest: { select: { name: true, isBlacklisted: true } },
             room: { select: { number: true } },
-            group: true,
-            parkingBookings: { include: { parkingSpot: true } },
+            group: { select: { id: true, name: true } },
+            parkingBookings: { take: 1, include: { parkingSpot: { select: { number: true } } } },
           },
           orderBy: { checkIn: "asc" },
         }),
@@ -386,4 +392,18 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
     })),
     reservationStatusColors,
   };
+}
+
+/** Pobiera dane do Tape Chart: rezerwacje i pokoje. Cache 30 s. Działa także gdy w bazie brak RateCode / rateCodeId (stary schemat). */
+export async function getTapeChartData(options?: GetTapeChartDataOptions): Promise<TapeChartData> {
+  const propertyId = await getEffectivePropertyId();
+  const roomIdsKey = options?.roomIds?.slice().sort().join(",") ?? "all";
+  const fromKey = options?.dateFrom ?? "default";
+  const toKey = options?.dateTo ?? "default";
+
+  return unstable_cache(
+    () => fetchTapeChartDataUncached(options, propertyId),
+    ["tape-chart", propertyId ?? "n", roomIdsKey, fromKey, toKey],
+    { revalidate: TAPE_CHART_CACHE_REVALIDATE }
+  )();
 }
