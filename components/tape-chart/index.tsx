@@ -326,7 +326,7 @@ function formatDateHeader(dateStr: string, todayStr: string): string {
   return isToday ? `DZIŚ ${day}.${String(month).padStart(2, "0")}` : label;
 }
 
-const DEFAULT_VIEW_SCALE: ViewScale = "month";
+const DEFAULT_VIEW_SCALE: ViewScale = "week";
 
 function addDays(d: Date, days: number): Date {
   const out = new Date(d);
