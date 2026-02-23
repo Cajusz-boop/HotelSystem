@@ -26,8 +26,8 @@ log "Git pull OK"
 log "Restoring production .env..."
 cp /tmp/hotel-env-backup /var/www/hotel/.env 2>/dev/null || true
 
-# 2. Install dependencies (tylko jesli package.json sie zmienil)
-if [ package.json -nt node_modules/.package-lock.json ] 2>/dev/null; then
+# 2. Install dependencies (tylko jesli package.json sie zmienil albo brak node_modules)
+if [ "package.json" -nt "node_modules/.package-lock.json" ] 2>/dev/null || [ ! -d "node_modules" ]; then
     log "Installing dependencies..."
     npm ci --production=false
     log "npm ci OK"
@@ -40,13 +40,14 @@ SCHEMA_HASH=$(md5sum prisma/schema.prisma | cut -d' ' -f1)
 LAST_HASH_FILE="/var/www/hotel/.last_schema_hash"
 LAST_HASH=""
 [ -f "$LAST_HASH_FILE" ] && LAST_HASH=$(cat "$LAST_HASH_FILE")
+SCHEMA_CHANGED=false
+[ "$SCHEMA_HASH" != "$LAST_HASH" ] && SCHEMA_CHANGED=true
 
-if [ "$SCHEMA_HASH" != "$LAST_HASH" ]; then
+if [ "$SCHEMA_CHANGED" = true ]; then
     log "Prisma generate..."
     npx prisma generate
-    npx prisma db push --accept-data-loss 2>/dev/null || true
-    echo "$SCHEMA_HASH" > "$LAST_HASH_FILE"
     log "Prisma OK"
+    echo "$SCHEMA_HASH" > "$LAST_HASH_FILE"
 else
     log "Schema unchanged - skipping prisma"
 fi
@@ -71,6 +72,19 @@ for attempt in $(seq 1 $MAX_BUILD_RETRIES); do
     sleep $RETRY_DELAY
     rm -rf .next
 done
+
+# 3b. Prisma db push (po buildzie, tylko jesli schema sie zmienila)
+if [ "$SCHEMA_CHANGED" = true ]; then
+    log "Prisma db push..."
+    if npx prisma db push --accept-data-loss; then
+        log "Prisma db push OK"
+    else
+        ERR_MSG="[$(date '+%Y-%m-%d %H:%M:%S')] Prisma db push FAILED - schema migracja nie powiodla sie, deploy przerwany"
+        log "$ERR_MSG"
+        echo "$ERR_MSG" >> /var/www/hotel/deploy-errors.log
+        exit 1
+    fi
+fi
 
 # 5. Kopiuj static do standalone
 log "Copying static files..."
@@ -99,6 +113,26 @@ log "Restarting PM2..."
 pm2 restart hotel-pms --update-env || pm2 start .next/standalone/server.js --name hotel-pms
 pm2 save
 log "PM2 restart OK"
+
+# 10. Health check (max 30 s, co 3 s)
+log "Health check..."
+HEALTH_URL="https://hotel.karczma-labedz.pl/api/health"
+HEALTH_OK=false
+for i in $(seq 1 10); do
+    sleep 3
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "$HEALTH_URL" 2>/dev/null || echo "000")
+    if [ "$CODE" = "200" ]; then
+        HEALTH_OK=true
+        log "Health check OK (HTTP $CODE)"
+        break
+    fi
+    log "Health check attempt $i/10: HTTP $CODE"
+done
+if [ "$HEALTH_OK" = false ]; then
+    ERR_MSG="[$(date '+%Y-%m-%d %H:%M:%S')] Deploy health check FAILED - $HEALTH_URL nie zwraca 200 po restarcie PM2"
+    log "$ERR_MSG"
+    echo "$ERR_MSG" >> /var/www/hotel/deploy-errors.log
+fi
 
 log "=== Deploy completed ==="
 echo ""
