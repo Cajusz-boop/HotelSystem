@@ -27,12 +27,27 @@ alwaysApply: true
 
 ## 2. Deploy na produkcję (Hetzner)
 
+### Dwa sposoby deployu — WAŻNE!
+
+**A) Automatyczny (domyślny): GitHub Webhook**
+- Push do `master` → GitHub wysyła webhook na `https://hotel.karczma-labedz.pl/webhook`
+- Serwer uruchamia `deploy.sh`: git pull → build na serwerze → pm2 restart
+- **Nie trzeba** ręcznie uruchamiać skryptów — wystarczy `git push origin master`
+- Szybki commit+push: `.\scripts\git-deploy.ps1`
+
+**B) Ręczny (alternatywa):** gdy webhook się wysypie (np. OOM "Killed" podczas build)
 ```powershell
 .\scripts\deploy-to-hetzner.ps1
 ```
+Skrypt: build LOKALNIE → tar → scp → unpack → pm2 restart. Obciąża PC, nie serwer.
 
-Skrypt: build → tar → scp → unpack → pm2 restart.
-Konfiguracja w `.env.deploy.hetzner`.
+**Sprawdzenie statusu deployu:**
+```bash
+ssh hetzner "tail -100 /var/www/hotel/deploy.log"
+ssh hetzner "pm2 logs github-webhook --lines 30 --nostream"
+```
+
+**Konfiguracja webhooka:** `scripts/setup-webhook-hetzner.sh`, `webhook-server.js`, `deploy.sh`
 
 ## 3. Dane dostępowe Hetzner
 
@@ -112,7 +127,11 @@ ssh hetzner "systemctl reload nginx"
 
 ```bash
 ssh hetzner
-pm2 logs hotel-pms --lines 50   # logi aplikacji
+pm2 logs hotel-pms --lines 50      # logi aplikacji
+tail -100 /var/www/hotel/deploy.log   # logi deploy (webhook)
+pm2 logs github-webhook --lines 30 # logi webhooka
 tail -50 /var/log/nginx/error.log  # logi nginx
-systemctl status mariadb        # status bazy
+systemctl status mariadb           # status bazy
 ```
+
+**Deploy "Killed" podczas build:** VPS brakuje RAM (OOM). Użyj `.\scripts\deploy-to-hetzner.ps1` — build lokalnie, upload gotowych plików.

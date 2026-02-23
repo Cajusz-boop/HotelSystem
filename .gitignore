@@ -67,6 +67,8 @@ prisma_clean_schema.sql
 prisma_alter_tables.sql
 prisma_diff.sql
 _deploy_schema_diff.sql
+hotel_prod_dump.sql
+*_dump.sql
 _deploy_*.txt
 _deploy_*.tar.gz
 _test_*.tar.gz
