@@ -409,6 +409,8 @@ export const reservationSchema = reservationBaseSchema
   )
   .refine(
     (data) => {
+      // Oba pola muszą być podane razem (albo oba puste). Typowe godziny hotelowe:
+      // check-in 14:00, check-out 11:00 – są na różnych dniach, więc nie porównujemy kolejności.
       if (!data.checkInTime && !data.checkOutTime) return true;
       if (data.checkInTime && data.checkOutTime) {
         const inDt = new Date(`${data.checkIn}T${data.checkInTime}`);
@@ -417,7 +419,7 @@ export const reservationSchema = reservationBaseSchema
       }
       return false; // oba muszą być podane razem
     },
-    { message: "Podaj obie godziny (od–do) w formacie HH:mm; godzina do musi być po godzinie od", path: ["checkOutTime"] }
+    { message: "Podaj obie godziny (od–do) w formacie HH:mm", path: ["checkOutTime"] }
   );
 
 export type ReservationInput = z.infer<typeof reservationSchema>;
