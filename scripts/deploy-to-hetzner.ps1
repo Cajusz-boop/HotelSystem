@@ -37,6 +37,7 @@ if (Test-Path $envFile) {
 }
 
 $SSH_TARGET = $SSH_USER + "@" + $SSH_HOST
+$SCP_DEST = $SSH_TARGET + ":" + $REMOTE_PATH
 $keyPath = $SSH_KEY -replace '~', $env:USERPROFILE
 
 Write-Host ("Cel: " + $SSH_TARGET + ":" + $REMOTE_PATH) -ForegroundColor Yellow
@@ -153,7 +154,7 @@ if (-not $FullZip) {
 
     # --- 3b: Pobierz manifest z serwera ---
     Write-Host "Pobieranie manifestu z serwera..." -ForegroundColor Yellow
-    scp hetzner:($REMOTE_PATH + "/_deploy_manifest.txt") $manifestRemote 2>$null | Out-Null
+    scp -i $keyPath "${SCP_DEST}/_deploy_manifest.txt" $manifestRemote 2>$null | Out-Null
     $hasRemoteManifest = Test-Path $manifestRemote
     if (-not $hasRemoteManifest) {
         Write-Host "Brak manifestu na serwerze - pelny transfer (pierwszy deploy)." -ForegroundColor Yellow
@@ -223,7 +224,7 @@ if (-not $FullZip) {
             Write-Host ("Delta: " + $validPaths.Count + " plikow, " + $sizeMB + " MB") -ForegroundColor Green
 
             Write-Host "Wysylanie delta na serwer..." -ForegroundColor Yellow
-            scp $deltaTar hetzner:($REMOTE_PATH + "/")
+            scp -i $keyPath $deltaTar "${SCP_DEST}/"
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "[BLAD] scp delta nie powiodl sie!" -ForegroundColor Red
                 exit 1
@@ -243,7 +244,7 @@ if (-not $FullZip) {
     # --- 3e: Usun pliki ktore zniknely ---
     if ($deletedFiles.Count -gt 0) {
         [System.IO.File]::WriteAllLines($deletedList, $deletedFiles, $utf8NoBom)
-        scp $deletedList hetzner:($REMOTE_PATH + "/_deploy_deleted.txt")
+        scp -i $keyPath $deletedList "${SCP_DEST}/_deploy_deleted.txt"
         if ($LASTEXITCODE -eq 0) {
             ssh hetzner ("cd " + $REMOTE_PATH + " && while read -r f; do rm -f `"`$f`"; done < _deploy_deleted.txt; rm -f _deploy_deleted.txt")
             if ($LASTEXITCODE -eq 0) {
@@ -258,7 +259,7 @@ if (-not $FullZip) {
 
     # --- 3f: Zapisz nowy manifest na serwerze ---
     Write-Host "Aktualizacja manifestu na serwerze..." -ForegroundColor Yellow
-    scp $manifestLocal hetzner:($REMOTE_PATH + "/_deploy_manifest.txt")
+    scp -i $keyPath $manifestLocal "${SCP_DEST}/_deploy_manifest.txt"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[WARN] Zapis manifestu nie powiodl sie" -ForegroundColor Yellow
     }
@@ -292,7 +293,7 @@ if (-not $FullZip) {
     }
 
     Write-Host "Wysylanie na serwer..." -ForegroundColor Yellow
-    scp $tarFile hetzner:($REMOTE_PATH + "/")
+    scp -i $keyPath $tarFile "${SCP_DEST}/"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[BLAD] scp nie powiodl sie!" -ForegroundColor Red
         exit 1
@@ -329,7 +330,7 @@ if (-not $FullZip) {
         }
     }
     [System.IO.File]::WriteAllLines($manifestLocal, $manifestLines, $utf8NoBom)
-    scp $manifestLocal hetzner:($REMOTE_PATH + "/_deploy_manifest.txt")
+    scp -i $keyPath $manifestLocal "${SCP_DEST}/_deploy_manifest.txt"
     Remove-Item $manifestLocal -Force -ErrorAction SilentlyContinue
 
     if (Test-Path $tarFile) { Remove-Item $tarFile -Force }

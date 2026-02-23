@@ -410,7 +410,11 @@ export const reservationSchema = reservationBaseSchema
   .refine(
     (data) => {
       if (!data.checkInTime && !data.checkOutTime) return true;
-      if (data.checkInTime && data.checkOutTime) return data.checkOutTime > data.checkInTime;
+      if (data.checkInTime && data.checkOutTime) {
+        const inDt = new Date(`${data.checkIn}T${data.checkInTime}`);
+        const outDt = new Date(`${data.checkOut}T${data.checkOutTime}`);
+        return outDt > inDt;
+      }
       return false; // oba muszą być podane razem
     },
     { message: "Podaj obie godziny (od–do) w formacie HH:mm; godzina do musi być po godzinie od", path: ["checkOutTime"] }
