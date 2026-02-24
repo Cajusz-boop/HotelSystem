@@ -1,5 +1,6 @@
 "use server";
 
+import { ReservationStatus } from "@prisma/client";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getEffectivePropertyId, getPropertyReservationColors } from "@/app/actions/properties";
@@ -202,6 +203,7 @@ async function fetchTapeChartDataUncached(
   const reservationWhere = {
     ...(filterByRoomIds ? { roomId: { in: roomIds! } } : {}),
     ...(propertyId ? { room: { propertyId } } : {}),
+    status: { notIn: [ReservationStatus.CANCELLED, ReservationStatus.NO_SHOW] },
     checkOut: { gte: dateFrom },
     checkIn: { lte: dateTo },
   };

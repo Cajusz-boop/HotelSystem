@@ -16,26 +16,36 @@ interface FrontOfficeInitialData {
 }
 
 export function FrontOfficeClient({ initialData }: { initialData: FrontOfficeInitialData }) {
-  const [data, setData] = useState(initialData);
+  const [data, setData] = useState(() => ({
+    rooms: initialData?.rooms ?? [],
+    reservationGroups: initialData?.reservationGroups ?? [],
+    reservationStatusColors: initialData?.reservationStatusColors ?? null,
+    propertyId: initialData?.propertyId ?? null,
+    reservations: initialData?.reservations ?? [],
+  }));
   const searchParams = useSearchParams();
   const raw = searchParams.get("reservationId");
   const reservationId = raw?.trim() || undefined;
   const e2eOpenCreate = searchParams.get("e2eOpenCreate") === "1";
 
   useEffect(() => {
-    getTapeChartData().then((full) => {
-      setData({
-        rooms: full.rooms as Room[],
-        reservationGroups: full.reservationGroups.map((g) => ({
-          id: g.id,
-          name: g.name ?? undefined,
-          reservationCount: g.reservationCount,
-        })),
-        reservationStatusColors: full.reservationStatusColors ?? null,
-        propertyId: full.propertyId ?? null,
-        reservations: full.reservations as Reservation[],
-      });
-    });
+    getTapeChartData()
+      .then((full) => {
+        const next = full && typeof full === "object" ? full : null;
+        if (!next) return;
+        setData({
+          rooms: (full?.rooms ?? []) as Room[],
+          reservationGroups: (next.reservationGroups ?? []).map((g) => ({
+            id: g?.id,
+            name: g?.name ?? undefined,
+            reservationCount: g?.reservationCount ?? 0,
+          })),
+          reservationStatusColors: next.reservationStatusColors ?? null,
+          propertyId: next.propertyId ?? null,
+          reservations: (full?.reservations ?? []) as Reservation[],
+        });
+      })
+      .catch((err) => console.error("[FrontOffice] getTapeChartData failed:", err));
   }, []);
 
   return (

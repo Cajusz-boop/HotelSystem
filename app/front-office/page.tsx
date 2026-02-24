@@ -20,10 +20,13 @@ async function FrontOfficeData() {
   let data: { reservations: Reservation[]; rooms: Room[]; reservationGroups: ReservationGroupSummary[]; reservationStatusColors?: Partial<Record<string, string>> | null; propertyId?: string | null };
   try {
     const result = await getTapeChartData({ dateFrom: today, dateTo: dateToInitial });
+    if (!result?.rooms || !result?.reservations) {
+      throw new Error("Nieprawidłowa odpowiedź z getTapeChartData");
+    }
     data = {
       reservations: result.reservations as Reservation[],
       rooms: result.rooms as Room[],
-      reservationGroups: result.reservationGroups.map((g) => ({
+      reservationGroups: (result.reservationGroups ?? []).map((g) => ({
         id: g.id,
         name: g.name ?? undefined,
         reservationCount: g.reservationCount,

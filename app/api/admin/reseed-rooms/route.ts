@@ -12,8 +12,15 @@ import { prisma } from "@/lib/db";
  * and recreates the test reservations.
  *
  * Requires admin.settings permission.
+ * WYŁĄCZONE W PRODUKCJI – chroni przed przypadkowym usunięciem rezerwacji gości.
  */
 export async function POST() {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      { error: "Reseed wyłączony w produkcji. Chroni to dane gości przed utratą." },
+      { status: 403 }
+    );
+  }
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const allowed = await can(session.role, "admin.settings");
