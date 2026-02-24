@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
@@ -57,6 +58,7 @@ import { getDateRange } from "@/lib/tape-chart-data";
 import { useTapeChartStore } from "@/lib/store/tape-chart-store";
 import { moveReservation, updateReservation, updateReservationStatus } from "@/app/actions/reservations";
 import { getEffectivePricesBatch, updateRoomStatus } from "@/app/actions/rooms";
+import { getTapeChartData } from "@/app/actions/tape-chart";
 import { useRoomsSync, broadcastRoomStatusChange } from "@/hooks/useRoomsSync";
 import {
   getEffectivePropertyId,
@@ -189,6 +191,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   focusedDateIdx,
   columnWidthPx,
   rowHeightPx,
+  virtualizedRow,
 }: {
   room: Room;
   rowIdx: number;
@@ -206,10 +209,13 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   focusedDateIdx?: number;
   columnWidthPx: number;
   rowHeightPx: number;
+  /** W trybie wirtualizacji: jedna linia siatki (gridRow: 1) */
+  virtualizedRow?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `room-${room.number}` });
   const isDirty = room.status === "DIRTY";
   const isFilteredToThis = showOnlyRoomNumber === room.number;
+  const gridRow = virtualizedRow ? 1 : rowIdx + 2;
 
   const labelContent = (
     <div
@@ -223,7 +229,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
       )}
       style={{
         gridColumn: 1,
-        gridRow: rowIdx + 2,
+        gridRow,
         minHeight: rowHeightPx,
       }}
       onClick={(e) => {
@@ -321,6 +327,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   if (prevProps.room.status !== nextProps.room.status) return false;
   if (prevProps.room.number !== nextProps.room.number) return false;
   if (prevProps.rowIdx !== nextProps.rowIdx) return false;
+  if (prevProps.virtualizedRow !== nextProps.virtualizedRow) return false;
   if (prevProps.focusedDateIdx !== nextProps.focusedDateIdx) return false;
   if (prevProps.showOnlyRoomNumber !== nextProps.showOnlyRoomNumber) return false;
   if (prevProps.previewMode !== nextProps.previewMode) return false;
@@ -336,13 +343,13 @@ const ROOM_LABEL_WIDTH_PX = 140;
 const HEADER_ROW_PX = 40;
 const _BAR_PADDING_PX = 2;
 
-/** Skale widoku grafiku – liczba dni (kolumn) bardzo duża, żeby można było przewijać w nieskończoność */
+/** Skale widoku grafiku – liczba dni (kolumn). Ograniczone dla wydajności DOM (Faza 1 PRD). */
 type ViewScale = "day" | "week" | "month" | "year";
 const VIEW_SCALE_CONFIG: Record<ViewScale, { days: number; columnWidth: number; label: string }> = {
-  day: { days: 365, columnWidth: 480, label: "Dzień" },     // szerokie kolumny – 2–3 widoczne, paski z pełną info
-  week: { days: 365, columnWidth: 100, label: "Tydzień" }, // ~rok
-  month: { days: 365, columnWidth: 48, label: "Miesiąc" },  // ~rok
-  year: { days: 1095, columnWidth: 12, label: "Rok" },      // 3 lata
+  day: { days: 1, columnWidth: 480, label: "Dzień" },       // 1 kolumna
+  week: { days: 42, columnWidth: 100, label: "Tydzień" },   // 6 tygodni
+  month: { days: 93, columnWidth: 48, label: "Miesiąc" },    // ~3 miesiące
+  year: { days: 365, columnWidth: 12, label: "Rok" },       // rok
 };
 
 /** Zoom dla wysokości wierszy – wpływa tylko na wysokość komórek (nie na szerokość kolumn) */
@@ -434,6 +441,7 @@ export function TapeChart({
   initialHighlightReservationId,
   initialStatusBg,
   initialPropertyId,
+  initialTodayStr,
   reservationGroups,
   initialOpenCreate = false,
 }: {
@@ -443,17 +451,20 @@ export function TapeChart({
   initialStatusBg?: Partial<Record<string, string>>;
   /** Id obiektu z serwera – unika dodatkowego wywołania getEffectivePropertyId */
   initialPropertyId?: string | null;
+  /** Data YYYY-MM-DD z SSR – unika błędu hydratacji (server vs client) */
+  initialTodayStr?: string;
   reservationGroups: ReservationGroupSummary[];
   /** E2E: otwórz formularz nowej rezerwacji od razu (?e2eOpenCreate=1) */
   initialOpenCreate?: boolean;
 }) {
   const today = useMemo(() => new Date(), []);
-  const todayStr = useMemo(() => {
+  const clientTodayStr = useMemo(() => {
     const y = today.getFullYear();
     const m = String(today.getMonth() + 1).padStart(2, "0");
     const d = String(today.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }, [today]);
+  const todayStr = initialTodayStr ?? clientTodayStr;
 
   const [allRooms, setAllRooms] = useState<Room[]>(rooms);
   useEffect(() => setAllRooms(rooms), [rooms]);
@@ -564,11 +575,20 @@ export function TapeChart({
   const [highlightedReservationId, setHighlightedReservationId] = useState<string | null>(
     () => initialHighlightReservationId ?? null
   );
+  /** Lazy loading: doładowane dni w prawo (scroll). Reset przy zmianie widoku/daty. */
+  const [extraDaysLoaded, setExtraDaysLoaded] = useState(0);
+  /** Po mount – unika błędu hydratacji (virtualizer zwraca inny wynik na serwerze vs klient). */
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const currentViewConfig = VIEW_SCALE_CONFIG[viewScale];
   const zoomMultiplier = ZOOM_LEVELS[zoomIndex];
   const COLUMN_WIDTH_PX = currentViewConfig.columnWidth; // zoom wpływa tylko na wysokość wierszy
   const DAYS_VIEW = currentViewConfig.days;
+
+  useEffect(() => {
+    setExtraDaysLoaded(0);
+  }, [viewScale, viewStartDate]);
 
   const handleZoomIn = useCallback(() => {
     setZoomIndex((prev) => Math.min(prev + 1, ZOOM_LEVELS.length - 1));
@@ -579,14 +599,54 @@ export function TapeChart({
   }, []);
 
   const dates = useMemo(() => {
-    const end = addDays(viewStartDate, DAYS_VIEW);
+    const totalDays = Math.max(1, DAYS_VIEW + extraDaysLoaded);
+    const end = addDays(viewStartDate, totalDays - 1);
     return getDateRange(viewStartDate, end);
-  }, [viewStartDate, DAYS_VIEW]);
+  }, [viewStartDate, DAYS_VIEW, extraDaysLoaded]);
 
   const viewStartDateStr = useMemo(
     () => viewStartDate.toISOString().slice(0, 10),
     [viewStartDate]
   );
+
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const loadingMoreRef = useRef(false);
+  const extendDateRange = useCallback(() => {
+    if (loadingMoreRef.current) return;
+    const extension = Math.max(7, Math.ceil(DAYS_VIEW / 2));
+    loadingMoreRef.current = true;
+    const nextLoaded = extraDaysLoaded + extension;
+    setExtraDaysLoaded(nextLoaded);
+    const lastDate = addDays(viewStartDate, Math.max(0, DAYS_VIEW + nextLoaded - 1));
+    const dateToStr = lastDate.toISOString().slice(0, 10);
+    getTapeChartData({ dateFrom: viewStartDateStr, dateTo: dateToStr })
+      .then((res) => {
+        setReservations((prevRes) => {
+          const byId = new Map(prevRes.map((r) => [r.id, r]));
+          (res.reservations as Reservation[]).forEach((r) => byId.set(r.id, r));
+          return Array.from(byId.values()).sort((a, b) =>
+            (a.checkIn as string).localeCompare(b.checkIn as string)
+          ) as Reservation[];
+        });
+      })
+      .finally(() => {
+        loadingMoreRef.current = false;
+      });
+  }, [DAYS_VIEW, extraDaysLoaded, viewStartDate, viewStartDateStr, setReservations]);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    const sentinel = sentinelRef.current;
+    if (!container || !sentinel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) extendDateRange();
+      },
+      { root: container, rootMargin: "200px", threshold: 0 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [extendDateRange]);
 
   const allAvailableFeatures = useMemo(() => {
     const set = new Set<string>();
@@ -776,6 +836,15 @@ export function TapeChart({
   const gridWrapperRef = useRef<HTMLDivElement>(null);
   const didPanRef = useRef(false);
   const didScrollToTodayRef = useRef(false);
+  const pointerPosRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      pointerPosRef.current = { x: e.clientX, y: e.clientY };
+    };
+    document.addEventListener("pointermove", onMove, { passive: true });
+    return () => document.removeEventListener("pointermove", onMove);
+  }, []);
 
   /** Szerokość kolumny = stała COLUMN_WIDTH_PX – siatka szersza niż kontener, przewijanie myszką w każdym widoku */
   const effectiveColumnWidthPx = COLUMN_WIDTH_PX;
@@ -810,6 +879,30 @@ export function TapeChart({
       return dates[col] ?? null;
     },
     [dates]
+  );
+
+  const getDropTarget = useCallback(
+    (clientX: number, clientY: number): { room: Room; date: string } | null => {
+      const gridEl = gridWrapperRef.current;
+      if (!gridEl || displayRooms.length === 0 || dates.length === 0) return null;
+      const rect = gridEl.getBoundingClientRect();
+      const localX = clientX - rect.left;
+      const localY = clientY - rect.top;
+      const firstRow = gridEl.querySelector("[data-room-row]");
+      const headerHeight = firstRow
+        ? firstRow.getBoundingClientRect().top - rect.top
+        : HEADER_ROW_PX;
+      if (localY < headerHeight) return null;
+      const rowIndex = Math.floor((localY - headerHeight) / effectiveRowHeightPx);
+      if (rowIndex < 0 || rowIndex >= displayRooms.length) return null;
+      const colIndex = Math.floor((localX - ROOM_LABEL_WIDTH_PX) / effectiveColumnWidthPx);
+      if (colIndex < 0 || colIndex >= dates.length) return null;
+      const room = displayRooms[rowIndex];
+      const date = dates[colIndex];
+      if (!room || !date) return null;
+      return { room, date };
+    },
+    [displayRooms, dates, effectiveRowHeightPx, effectiveColumnWidthPx]
   );
 
   const handleResize = useCallback(
@@ -1220,65 +1313,32 @@ export function TapeChart({
       const { active, over } = event;
       setActiveId(null);
       setGhostPreview(null);
-      if (!over) return;
       const resId = active.id as string;
-      const overId = over.id as string;
       const reservation = reservations.find((r) => r.id === resId);
       if (!reservation) return;
 
-      if (overId.startsWith("cell-")) {
-        const parsed = parseCellId(overId);
-        if (!parsed) return;
-        const { roomNumber: newRoomNumber, dateStr: targetDateStr } = parsed;
-        const targetRoom = roomByNumber.get(newRoomNumber);
-        if (!targetRoom) return;
+      const pos = pointerPosRef.current;
+      let target: { room: Room; date: string } | null = null;
 
-        if (targetRoom.status === "DIRTY" || targetRoom.status === "OOO" || targetRoom.status === "INSPECTION") {
-          toast.error(
-            `Nie można przenieść rezerwacji na pokój ${targetRoom.number}. Status: ${targetRoom.status}${targetRoom.reason ? ` (${targetRoom.reason})` : ""}. Zmień status pokoju lub wybierz inny pokój.`
-          );
-          return;
+      if (pos.x !== 0 || pos.y !== 0) {
+        target = getDropTarget(pos.x, pos.y);
+      }
+      if (!target && over) {
+        const overId = over.id as string;
+        if (overId.startsWith("room-")) {
+          const newRoomNumber = overId.replace("room-", "");
+          const targetRoom = roomByNumber.get(newRoomNumber);
+          if (targetRoom) {
+            target = { room: targetRoom, date: reservation.checkIn };
+          }
         }
-
-        const nights = Math.max(1, Math.ceil(
-          (new Date(reservation.checkOut + "T12:00:00Z").getTime() -
-            new Date(reservation.checkIn + "T12:00:00Z").getTime()) /
-            (24 * 60 * 60 * 1000)
-        ));
-        const newCheckIn = targetDateStr;
-        const newCheckOut = addDaysToDateStr(newCheckIn, nights);
-
-        if (newCheckOut <= newCheckIn) {
-          toast.error("Data wyjazdu musi być po dacie przyjazdu");
-          return;
-        }
-
-        const blockOverlap = targetRoom.blocks?.some(
-          (b) => newCheckIn < b.endDate && newCheckOut > b.startDate
-        );
-        if (blockOverlap) {
-          toast.error("Pokój jest zablokowany (Room Block) w tym terminie.");
-          return;
-        }
-
-        const result = await updateReservation(resId, { room: newRoomNumber, checkIn: newCheckIn, checkOut: newCheckOut });
-        if (result?.success && result?.data) {
-          const updated = result.data;
-          setReservations((prev) =>
-            prev.map((r) => (r.id === resId ? { ...r, room: updated.room, checkIn: updated.checkIn, checkOut: updated.checkOut } : r))
-          );
-          toast.success(`Rezerwacja przeniesiona: pokój ${newRoomNumber}, ${newCheckIn} – ${newCheckOut}`);
-        } else if (!result?.success) {
-          toast.error("error" in result ? result.error : "Nie można przenieść rezerwacji");
-        }
+      }
+      if (!target) {
+        toast.error("Upuszczono poza siatką");
         return;
       }
 
-      if (!overId.startsWith("room-")) return;
-      const newRoomNumber = overId.replace("room-", "");
-      const targetRoom = roomByNumber.get(newRoomNumber);
-      if (!targetRoom) return;
-
+      const targetRoom = target.room;
       if (targetRoom.status === "DIRTY" || targetRoom.status === "OOO" || targetRoom.status === "INSPECTION") {
         toast.error(
           `Nie można przenieść rezerwacji na pokój ${targetRoom.number}. Status: ${targetRoom.status}${targetRoom.reason ? ` (${targetRoom.reason})` : ""}. Zmień status pokoju lub wybierz inny pokój.`
@@ -1294,20 +1354,57 @@ export function TapeChart({
         return;
       }
 
-      if (reservation.room === newRoomNumber) return;
+      const newRoomNumber = targetRoom.number;
+      if (reservation.room === newRoomNumber && target.date === reservation.checkIn) {
+        return;
+      }
 
-      const result = await moveReservation({ reservationId: resId, newRoomNumber });
-      if (result?.success && result?.data) {
+      const oldCheckInStr =
+        typeof reservation.checkIn === "string"
+          ? reservation.checkIn.slice(0, 10)
+          : new Date(reservation.checkIn).toISOString().slice(0, 10);
+      const oldCheckOutStr =
+        typeof reservation.checkOut === "string"
+          ? reservation.checkOut.slice(0, 10)
+          : new Date(reservation.checkOut).toISOString().slice(0, 10);
+      const oldCheckInDate = new Date(oldCheckInStr);
+      const targetDateObj = new Date(target.date);
+      const daysDiff = Math.round(
+        (targetDateObj.getTime() - oldCheckInDate.getTime()) / (1000 * 60 * 60 * 24)
+      );
+      const newCheckInDate = new Date(oldCheckInDate);
+      newCheckInDate.setDate(newCheckInDate.getDate() + daysDiff);
+      const newCheckInStr = newCheckInDate.toISOString().slice(0, 10);
+      const newCheckOutDate = new Date(oldCheckOutStr);
+      newCheckOutDate.setDate(newCheckOutDate.getDate() + daysDiff);
+      const newCheckOutStr = newCheckOutDate.toISOString().slice(0, 10);
+      const roomChanged = newRoomNumber !== reservation.room;
+      const dateChanged = daysDiff !== 0;
+      if (!roomChanged && !dateChanged) return;
+
+      const result = await moveReservation({
+        reservationId: resId,
+        newRoomNumber,
+        newCheckIn: dateChanged ? newCheckInStr : undefined,
+        newCheckOut: dateChanged ? newCheckOutStr : undefined,
+      });
+      if (result.success && result.data) {
         const updated = result.data;
         setReservations((prev) =>
-          prev.map((r) => (r.id === resId ? { ...r, room: updated.room } : r))
+          prev.map((r) => (r.id === resId ? { ...r, room: updated.room, checkIn: updated.checkIn, checkOut: updated.checkOut } : r)) as Reservation[]
         );
-        toast.success(`Rezerwacja przeniesiona do pokoju ${newRoomNumber}`);
-      } else if (!result?.success) {
+        const msg = [
+          roomChanged && `pokój ${newRoomNumber}`,
+          dateChanged && `${newCheckInStr}–${newCheckOutStr}`,
+        ]
+          .filter(Boolean)
+          .join(", ");
+        toast.success(msg ? `Przeniesiono rezerwację → ${msg}` : "Przeniesiono rezerwację");
+      } else if (!result.success) {
         toast.error("error" in result ? result.error : "Nie można przenieść rezerwacji");
       }
     },
-    [setReservations, roomByNumber, reservations, addDaysToDateStr]
+    [setReservations, roomByNumber, reservations, getDropTarget]
   );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dnd-kit sensor activator signature mismatch
@@ -1359,8 +1456,8 @@ export function TapeChart({
         // Enter - open reservation at focused cell
         if (e.key === "Enter" && focusedCell) {
           e.preventDefault();
-          const room = displayRooms[focusedCell.roomIdx];
-          const dateStr = dates[focusedCell.dateIdx];
+          const room = displayRooms[focusedCell?.roomIdx ?? -1];
+          const dateStr = dates[focusedCell?.dateIdx ?? -1];
           if (room && dateStr) {
             // Find reservation at this cell
             const res = reservations.find(
@@ -1403,8 +1500,8 @@ export function TapeChart({
         // "I" - Check In, "O" - Check Out
         if ((e.key === "i" || e.key === "I") && focusedCell) {
           e.preventDefault();
-          const room = displayRooms[focusedCell.roomIdx];
-          const dateStr = dates[focusedCell.dateIdx];
+          const room = displayRooms[focusedCell?.roomIdx ?? -1];
+          const dateStr = dates[focusedCell?.dateIdx ?? -1];
           if (room && dateStr) {
             const res = reservations.find(
               (r) =>
@@ -1428,8 +1525,8 @@ export function TapeChart({
 
         if ((e.key === "o" || e.key === "O") && focusedCell) {
           e.preventDefault();
-          const room = displayRooms[focusedCell.roomIdx];
-          const dateStr = dates[focusedCell.dateIdx];
+          const room = displayRooms[focusedCell?.roomIdx ?? -1];
+          const dateStr = dates[focusedCell?.dateIdx ?? -1];
           if (room && dateStr) {
             const res = reservations.find(
               (r) =>
@@ -1529,6 +1626,28 @@ export function TapeChart({
   /* Kolumny o stałej szerokości – siatka zawsze szersza niż kontener → przewijanie myszką we wszystkich widokach */
   const gridColumns = `${ROOM_LABEL_WIDTH_PX}px repeat(${dates.length}, ${effectiveColumnWidthPx}px)`;
   const gridRows = `${HEADER_ROW_PX}px repeat(${displayRooms.length}, ${effectiveRowHeightPx}px)`;
+
+  const rowVirtualizer = useVirtualizer({
+    count: displayRooms.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => effectiveRowHeightPx,
+    overscan: 12,
+    paddingStart: HEADER_ROW_PX,
+  });
+
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const visibleRowSet = useMemo(() => {
+    const set = new Set(virtualRows.map((v) => v.index + 2));
+    if (ghostPlacement) set.add(ghostPlacement.gridRow);
+    return set;
+  }, [virtualRows, ghostPlacement?.gridRow]);
+  const visiblePlacements = useMemo(
+    () => reservationPlacements.filter((p) => visibleRowSet.has(p.gridRow)),
+    [reservationPlacements, visibleRowSet]
+  );
+
+  const totalGridWidthPx = ROOM_LABEL_WIDTH_PX + dates.length * effectiveColumnWidthPx;
+  const totalRowHeightPx = displayRooms.length * effectiveRowHeightPx;
 
   return (
     <div className="relative z-0 flex flex-1 min-h-0 flex-col">
@@ -1998,135 +2117,149 @@ export function TapeChart({
             ref={gridWrapperRef}
             data-grid-draggable
             className="relative w-full min-w-max cursor-grab active:cursor-grabbing"
+            style={{ height: rowVirtualizer.getTotalSize(), minWidth: totalGridWidthPx }}
             onMouseDown={handleGridPointerDown}
           >
+            {/* Sticky header: corner + date columns */}
             <div
-              className="grid w-full min-w-max"
+              className="sticky top-0 z-[60] grid w-full min-w-max border-b border-[hsl(var(--kw-grid-border))]"
               style={{
                 gridTemplateColumns: gridColumns,
-                gridTemplateRows: gridRows,
+                gridTemplateRows: `${HEADER_ROW_PX}px`,
+                minHeight: HEADER_ROW_PX,
+                maxHeight: HEADER_ROW_PX,
+                background: "hsl(var(--kw-room-label-bg))",
               }}
             >
-            {/* Sticky corner cell */}
-            <div
-              className="sticky left-0 top-0 z-[60] flex items-center border-b border-r border-[hsl(var(--kw-grid-border))] px-3 py-2 text-sm font-semibold"
-              style={{ gridColumn: 1, gridRow: 1, minHeight: HEADER_ROW_PX, maxHeight: HEADER_ROW_PX, background: 'hsl(var(--kw-room-label-bg))' }}
-            >
-              Pokój
+              <div className="flex items-center px-3 py-2 text-sm font-semibold border-r border-[hsl(var(--kw-grid-border))]">
+                Pokój
+              </div>
+              {dates.map((dateStr, i) => {
+                const isToday = dateStr === todayStr;
+                const saturday = isSaturdayDate(dateStr);
+                const sunday = isSundayDate(dateStr);
+                return (
+                  <div
+                    key={dateStr}
+                    data-date-header
+                    className={cn(
+                      "flex items-center justify-center border-r border-[hsl(var(--kw-grid-border))] px-2 py-2 text-center text-xs font-medium cursor-grab active:cursor-grabbing",
+                      isToday ? "kw-header-today text-[13px]" : saturday ? "kw-header-saturday" : sunday ? "kw-header-sunday" : "kw-header-default"
+                    )}
+                    style={{ minWidth: effectiveColumnWidthPx }}
+                  >
+                    {formatDateHeader(dateStr, todayStr)}
+                  </div>
+                );
+              })}
             </div>
 
-            {/* Sticky date headers – KWHotel style: Saturday blue, Sunday red, today yellow */}
-            {dates.map((dateStr, i) => {
-              const isToday = dateStr === todayStr;
-              const saturday = isSaturdayDate(dateStr);
-              const sunday = isSundayDate(dateStr);
-              return (
-                <div
-                  key={dateStr}
-                  data-date-header
-                  className={cn(
-                    "sticky top-0 z-[60] flex items-center justify-center border-b border-r border-[hsl(var(--kw-grid-border))] px-2 py-2 text-center text-xs font-medium cursor-grab active:cursor-grabbing",
-                    isToday
-                      ? "kw-header-today text-[13px]"
-                      : saturday
-                        ? "kw-header-saturday"
-                        : sunday
-                          ? "kw-header-sunday"
-                          : "kw-header-default"
-                  )}
-                  style={{
-                    gridColumn: i + 2,
-                    gridRow: 1,
-                    minWidth: effectiveColumnWidthPx,
-                    minHeight: HEADER_ROW_PX,
-                    maxHeight: HEADER_ROW_PX,
-                  }}
-                >
-                  {formatDateHeader(dateStr, todayStr)}
-                </div>
-              );
-            })}
+            {/* Virtualized room rows – render dopiero po mount (unika hydratacji: virtualizer inny na SSR) */}
+            <div
+              className="relative w-full"
+              style={{ height: totalRowHeightPx }}
+            >
+              {mounted && virtualRows.map((virtualRow) => {
+                const room = displayRooms[virtualRow.index];
+                if (!room) return null;
+                return (
+                  <div
+                    key={`${room.number}-${room.status}-${virtualRow.key}`}
+                    data-index={virtualRow.index}
+                    data-room-row
+                    ref={rowVirtualizer.measureElement}
+                    className="absolute left-0 grid w-full min-w-max"
+                    style={{
+                      top: virtualRow.start - HEADER_ROW_PX,
+                      height: virtualRow.size,
+                      gridTemplateColumns: gridColumns,
+                      gridTemplateRows: "1fr",
+                    }}
+                  >
+                    <RoomRowDroppable
+                      room={room}
+                      rowIdx={virtualRow.index}
+                      dates={dates}
+                      columnWidthPx={effectiveColumnWidthPx}
+                      rowHeightPx={effectiveRowHeightPx}
+                      virtualizedRow
+                      blockedRanges={room.blocks?.map((block) => ({
+                        startDate: block.startDate,
+                        endDate: block.endDate,
+                        reason: block.reason,
+                      }))}
+                      focusedDateIdx={focusedCell?.roomIdx === virtualRow.index ? focusedCell.dateIdx : undefined}
+                      previewMode={previewMode}
+                      onCellClick={previewMode ? undefined : (roomNumber, dateStr) => {
+                        if (didPanRef.current) {
+                          didPanRef.current = false;
+                          return;
+                        }
+                        setNewReservationContext({ roomNumber, checkIn: dateStr });
+                        setCreateSheetOpen(true);
+                      }}
+                      onRoomLabelClick={previewMode ? undefined : handleRoomLabelClick}
+                      onRoomBlock={previewMode ? undefined : handleRoomBlock}
+                      onRoomStatusChange={previewMode ? undefined : handleRoomStatusChange}
+                      onShowOnlyRoom={previewMode ? undefined : (r) => setShowOnlyRoomNumber(r.number)}
+                      onShowAllRooms={showOnlyRoomNumber ? () => setShowOnlyRoomNumber(null) : undefined}
+                      showOnlyRoomNumber={showOnlyRoomNumber}
+                    >
+                      <div
+                        className="flex items-center gap-1.5 min-w-0 flex-1"
+                        title={[room.type, room.price != null ? `${room.price} PLN/dobę` : null, ROOM_STATUS_LABELS[room.status]].filter(Boolean).join(" · ")}
+                      >
+                        <span className="font-semibold text-[13px] leading-tight shrink-0 tabular-nums">{room.number}</span>
+                        <span className="text-muted-foreground/60 shrink-0">·</span>
+                        {/widok|jezioro/i.test(room.type) || (room.roomFeatures ?? []).some((f) => /widok|jezioro/i.test(f)) ? (
+                          <Waves className="h-2.5 w-2.5 text-blue-500 shrink-0" aria-label="Z widokiem na jezioro" />
+                        ) : null}
+                        <span className="truncate text-[10px] text-muted-foreground leading-tight">{room.type}</span>
+                        {hostelMode && (
+                          <span className="text-[8px] text-muted-foreground shrink-0 tabular-nums">
+                            ({occupancyToday.get(room.number) ?? 0})
+                          </span>
+                        )}
+                      </div>
+                      <RoomStatusIcon status={room.status} showLabel={false} compact />
+                    </RoomRowDroppable>
+                  </div>
+                );
+              })}
+            </div>
 
-            {/* Today column highlight – KWHotel yellow */}
+            {/* Today column highlight – KWHotel yellow (overlay) */}
             {dates.indexOf(todayStr) >= 0 && (
               <>
                 <div
-                  className="pointer-events-none z-[5] kw-today-column"
+                  className="pointer-events-none absolute z-[5] kw-today-column"
                   style={{
-                    gridColumn: `${dates.indexOf(todayStr) + 2} / ${dates.indexOf(todayStr) + 3}`,
-                    gridRow: "1 / -1",
+                    left: ROOM_LABEL_WIDTH_PX + dates.indexOf(todayStr) * effectiveColumnWidthPx,
+                    top: HEADER_ROW_PX,
+                    width: effectiveColumnWidthPx,
+                    height: totalRowHeightPx,
                   }}
                   aria-hidden="true"
                 />
                 <div
-                  className="pointer-events-none z-[6] kw-today-column-line"
+                  className="pointer-events-none absolute z-[6] kw-today-column-line"
                   style={{
-                    gridColumn: `${dates.indexOf(todayStr) + 2} / ${dates.indexOf(todayStr) + 3}`,
-                    gridRow: "1 / -1",
+                    left: ROOM_LABEL_WIDTH_PX + dates.indexOf(todayStr) * effectiveColumnWidthPx,
+                    top: HEADER_ROW_PX,
+                    width: effectiveColumnWidthPx,
+                    height: totalRowHeightPx,
                   }}
                   aria-hidden="true"
                 />
               </>
             )}
 
-            {/* Room rows: sticky first column (droppable) + day cells */}
-            {displayRooms.map((room, rowIdx) => (
-              <RoomRowDroppable
-                key={`${room.number}-${room.status}`}
-                room={room}
-                rowIdx={rowIdx}
-                dates={dates}
-                columnWidthPx={effectiveColumnWidthPx}
-                rowHeightPx={effectiveRowHeightPx}
-                blockedRanges={room.blocks?.map((block) => ({
-                  startDate: block.startDate,
-                  endDate: block.endDate,
-                  reason: block.reason,
-                }))}
-                focusedDateIdx={focusedCell?.roomIdx === rowIdx ? focusedCell.dateIdx : undefined}
-                previewMode={previewMode}
-                onCellClick={previewMode ? undefined : (roomNumber, dateStr) => {
-                  if (didPanRef.current) {
-                    didPanRef.current = false;
-                    return;
-                  }
-                  setNewReservationContext({ roomNumber, checkIn: dateStr });
-                  setCreateSheetOpen(true);
-                }}
-                onRoomLabelClick={previewMode ? undefined : handleRoomLabelClick}
-                onRoomBlock={previewMode ? undefined : handleRoomBlock}
-                onRoomStatusChange={previewMode ? undefined : handleRoomStatusChange}
-                onShowOnlyRoom={previewMode ? undefined : (room) => setShowOnlyRoomNumber(room.number)}
-                onShowAllRooms={showOnlyRoomNumber ? () => setShowOnlyRoomNumber(null) : undefined}
-                showOnlyRoomNumber={showOnlyRoomNumber}
-              >
-                <div
-                  className="flex items-center gap-1.5 min-w-0 flex-1"
-                  title={[room.type, room.price != null ? `${room.price} PLN/dobę` : null, ROOM_STATUS_LABELS[room.status]].filter(Boolean).join(" · ")}
-                >
-                  <span className="font-semibold text-[13px] leading-tight shrink-0 tabular-nums">{room.number}</span>
-                  <span className="text-muted-foreground/60 shrink-0">·</span>
-                  {/widok|jezioro/i.test(room.type) || (room.roomFeatures ?? []).some((f) => /widok|jezioro/i.test(f)) ? (
-                    <Waves className="h-2.5 w-2.5 text-blue-500 shrink-0" aria-label="Z widokiem na jezioro" />
-                  ) : null}
-                  <span className="truncate text-[10px] text-muted-foreground leading-tight">{room.type}</span>
-                  {hostelMode && (
-                    <span className="text-[8px] text-muted-foreground shrink-0 tabular-nums">
-                      ({occupancyToday.get(room.number) ?? 0})
-                    </span>
-                  )}
-                </div>
-                <RoomStatusIcon status={room.status} showLabel={false} compact />
-              </RoomRowDroppable>
-            ))}
-
-            </div>
-            {/* Reservation bars – overlay w siatce, paski równo z kwadracikami */}
+            {/* Reservation bars – overlay, tylko widoczne wiersze (po mount, unika hydratacji) */}
             <div
               className="absolute inset-0 pointer-events-none overflow-visible"
               style={{ zIndex: 50, gridTemplateColumns: gridColumns, gridTemplateRows: gridRows, display: "grid" }}
             >
-              {reservationPlacements.map(({ reservation, gridRow, gridColumnStart, gridColumnEnd, barLeftPercent, barWidthPercent }) => {
+              {mounted && visiblePlacements.map(({ reservation, gridRow, gridColumnStart, gridColumnEnd, barLeftPercent, barWidthPercent }) => {
                   const room = roomByNumber.get(reservation.room);
                   const priceKey = `${reservation.room}-${reservation.checkIn}`;
                   const pricePerNight =
@@ -2294,6 +2427,16 @@ export function TapeChart({
                 )}
               </div>
             </div>
+            {/* Sentinel dla lazy loading: przy scrollu w prawo doładowujemy kolejne dni */}
+            <div
+              ref={sentinelRef}
+              aria-hidden="true"
+              className="absolute top-0 h-1 w-6"
+              style={{
+                left: ROOM_LABEL_WIDTH_PX + dates.length * effectiveColumnWidthPx - 8,
+                pointerEvents: "none",
+              }}
+            />
         </DndContext>
         )}
         </div>
