@@ -304,7 +304,7 @@ export function ReservationBar({
           "relative z-10 flex h-full w-full min-h-0 flex-col justify-center gap-0 text-xs leading-snug font-semibold text-white overflow-hidden antialiased transition-[filter] duration-150 hover:brightness-105",
           colorClass,
           isPlaceholder && "border-2 border-dashed opacity-80",
-          isDragging && "z-50 cursor-grabbing opacity-90",
+          isDragging && "z-50 cursor-grabbing opacity-30",
           hasConflict && "ring-2 ring-red-500 ring-offset-1",
           isGroupReservation && "border-l-4 border-l-amber-400",
           isCheckInToday && "ring-2 ring-white/90 ring-offset-1"
@@ -316,6 +316,8 @@ export function ReservationBar({
           boxShadow: barShadow,
           clipPath,
           WebkitClipPath: clipPath,
+          userSelect: "none",
+          touchAction: "none",
         }}
         title={tooltipText}
         onMouseEnter={showTooltip}
