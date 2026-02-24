@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
   DndContext,
+  DragOverlay,
   type DragEndEvent,
   type DragMoveEvent,
   PointerSensor,
@@ -1249,64 +1250,9 @@ export function TapeChart({
     return map;
   }, [reservations, todayStr]);
 
-  /** Dodaje dni do daty YYYY-MM-DD (dla drag-drop cell) */
-  const addDaysToDateStr = useCallback((dateStr: string, days: number): string => {
-    const d = new Date(dateStr + "T12:00:00Z");
-    d.setUTCDate(d.getUTCDate() + days);
-    return d.toISOString().slice(0, 10);
+  const handleDragMove = useCallback(() => {
+    // Ghost wyłączony – używamy tylko DragOverlay
   }, []);
-
-  const handleDragMove = useCallback(
-    (event: DragMoveEvent) => {
-      const { active, over } = event;
-      if (!over) {
-        setGhostPreview(null);
-        return;
-      }
-      const overId = over.id as string;
-      const resId = active.id as string;
-      const reservation = reservations.find((r) => r.id === resId);
-      if (!reservation) {
-        setGhostPreview(null);
-        return;
-      }
-      if (overId.startsWith("cell-")) {
-        const parsed = parseCellId(overId);
-        if (!parsed || parsed.roomNumber === reservation.room) {
-          setGhostPreview(null);
-          return;
-        }
-        const nights = Math.max(1, Math.ceil(
-          (new Date(reservation.checkOut + "T12:00:00Z").getTime() -
-            new Date(reservation.checkIn + "T12:00:00Z").getTime()) /
-            (24 * 60 * 60 * 1000)
-        ));
-        const newCheckIn = parsed.dateStr;
-        const newCheckOut = addDaysToDateStr(newCheckIn, nights);
-        setGhostPreview({
-          roomNumber: parsed.roomNumber,
-          checkIn: newCheckIn,
-          checkOut: newCheckOut,
-        });
-        return;
-      }
-      if (overId.startsWith("room-")) {
-        const targetRoomNumber = overId.replace("room-", "");
-        if (reservation.room === targetRoomNumber) {
-          setGhostPreview(null);
-          return;
-        }
-        setGhostPreview({
-          roomNumber: targetRoomNumber,
-          checkIn: reservation.checkIn,
-          checkOut: reservation.checkOut,
-        });
-      } else {
-        setGhostPreview(null);
-      }
-    },
-    [reservations, addDaysToDateStr]
-  );
 
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
@@ -2398,33 +2344,6 @@ export function TapeChart({
                   </div>
                 );
                 })}
-                {/* Ghost preview for drag-and-drop – konwencja hotelowa (do połowy dnia check-out) */}
-                {ghostPlacement && (
-                  <div
-                    className="pointer-events-none flex items-center z-[100] relative"
-                    style={{
-                      gridColumn: `${ghostPlacement.gridColumnStart} / ${ghostPlacement.gridColumnEnd}`,
-                      gridRow: ghostPlacement.gridRow,
-                      alignSelf: "center",
-                      height: Math.round(effectiveRowHeightPx * 0.9),
-                      minHeight: Math.round(effectiveRowHeightPx * 0.9),
-                    }}
-                  >
-                    <div
-                      className="absolute inset-y-0 min-h-[10px] border-2 border-dashed border-primary bg-primary/20 flex items-center justify-center"
-                      style={{
-                        left: `${(ghostPlacement.barLeftPercent ?? 0) * 100}%`,
-                        width: `${(ghostPlacement.barWidthPercent ?? 1) * 100}%`,
-                        clipPath: "polygon(6% 0%, 94% 0%, 100% 50%, 94% 100%, 6% 100%, 0% 50%)",
-                        WebkitClipPath: "polygon(6% 0%, 94% 0%, 100% 50%, 94% 100%, 6% 100%, 0% 50%)",
-                      }}
-                    >
-                      <span className="text-[9px] text-primary font-medium truncate px-1.5">
-                        {ghostPlacement.reservation.guestName}
-                      </span>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
             {/* Sentinel dla lazy loading: przy scrollu w prawo doładowujemy kolejne dni */}
@@ -2437,6 +2356,39 @@ export function TapeChart({
                 pointerEvents: "none",
               }}
             />
+            <DragOverlay dropAnimation={null}>
+              {activeId ? (() => {
+                const res = reservations.find((r) => r.id === activeId);
+                if (!res) return null;
+                const nights =
+                  Math.ceil(
+                    (new Date(res.checkOut).getTime() - new Date(res.checkIn).getTime()) /
+                      (1000 * 60 * 60 * 24)
+                  ) || 1;
+                const w = nights * effectiveColumnWidthPx;
+                const h = Math.max(16, effectiveRowHeightPx - 4);
+                const bg =
+                  RESERVATION_STATUS_BG[res.status as keyof typeof RESERVATION_STATUS_BG] ??
+                  RESERVATION_STATUS_BG.CONFIRMED;
+                return (
+                  <div
+                    className="flex items-center justify-center rounded border border-black text-white font-semibold text-xs overflow-hidden whitespace-nowrap cursor-grabbing"
+                    style={{
+                      width: w,
+                      height: h,
+                      minWidth: 40,
+                      backgroundColor: bg,
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                      userSelect: "none",
+                      pointerEvents: "none",
+                      padding: "0 6px",
+                    }}
+                  >
+                    <span className="truncate">{res.guestName}</span>
+                  </div>
+                );
+              })() : null}
+            </DragOverlay>
         </DndContext>
         )}
         </div>
