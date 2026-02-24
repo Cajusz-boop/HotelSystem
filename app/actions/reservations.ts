@@ -2092,7 +2092,7 @@ export async function moveReservation(
   if (!parsed.success) {
     return { success: false, error: parsed.error.errors[0]?.message ?? "Błąd walidacji" };
   }
-  const { reservationId, newRoomNumber } = parsed.data;
+  const { reservationId, newRoomNumber, newCheckIn, newCheckOut } = parsed.data;
 
   const headersList = await headers();
   const ip = getClientIp(headersList);
@@ -2118,14 +2118,18 @@ export async function moveReservation(
       return { success: false, error: `Pokój ${newRoomNumber} nie istnieje` };
     }
 
-    // Walidacja: sprawdź nakładanie się z innymi rezerwacjami w nowym pokoju
+    // Efektywne daty: nowe jeśli podane, w przeciwnym razie obecne
+    const effectiveCheckIn = newCheckIn ? new Date(newCheckIn) : reservation.checkIn;
+    const effectiveCheckOut = newCheckOut ? new Date(newCheckOut) : reservation.checkOut;
+
+    // Walidacja: sprawdź nakładanie się z innymi rezerwacjami w nowym pokoju (używamy efektywnych dat)
     const overlappingInNewRoom = await prisma.reservation.findFirst({
       where: {
         roomId: newRoom.id,
         id: { not: reservationId },
         status: { notIn: ["CANCELLED", "NO_SHOW"] },
-        checkIn: { lt: reservation.checkOut },
-        checkOut: { gt: reservation.checkIn },
+        checkIn: { lt: effectiveCheckOut },
+        checkOut: { gt: effectiveCheckIn },
       },
       select: { id: true, guest: { select: { name: true } }, checkIn: true, checkOut: true },
     });
@@ -2149,7 +2153,7 @@ export async function moveReservation(
       if (limitPercent === 0) {
         return {
           success: false,
-          error: `Pokój ${newRoomNumber} jest zajęty w terminie ${formatDate(reservation.checkIn)} - ${formatDate(reservation.checkOut)} (gość: ${overlappingInNewRoom.guest.name})`,
+          error: `Pokój ${newRoomNumber} jest zajęty w terminie ${formatDate(effectiveCheckIn)} - ${formatDate(effectiveCheckOut)} (gość: ${overlappingInNewRoom.guest.name})`,
         };
       }
 
@@ -2159,24 +2163,28 @@ export async function moveReservation(
           roomId: newRoom.id,
           id: { not: reservationId },
           status: { notIn: ["CANCELLED", "NO_SHOW"] },
-          checkIn: { lt: reservation.checkOut },
-          checkOut: { gt: reservation.checkIn },
+          checkIn: { lt: effectiveCheckOut },
+          checkOut: { gt: effectiveCheckIn },
         },
       });
       const maxReservations = Math.ceil(1 * (1 + limitPercent / 100)); // 1 rezerwacja + limit %
       if (overlappingCount + 1 > maxReservations) {
         return {
           success: false,
-          error: `Pokój ${newRoomNumber} przekracza limit overbookingu w terminie ${formatDate(reservation.checkIn)} - ${formatDate(reservation.checkOut)}`,
+          error: `Pokój ${newRoomNumber} przekracza limit overbookingu w terminie ${formatDate(effectiveCheckIn)} - ${formatDate(effectiveCheckOut)}`,
         };
       }
     }
 
     const oldUi = toUiReservation(reservation);
 
+    const updateData: { roomId: string; checkIn?: Date; checkOut?: Date } = { roomId: newRoom.id };
+    if (newCheckIn) updateData.checkIn = effectiveCheckIn;
+    if (newCheckOut) updateData.checkOut = effectiveCheckOut;
+
     const updated = await prisma.reservation.update({
       where: { id: reservationId },
-      data: { roomId: newRoom.id },
+      data: updateData,
       include: { guest: true, room: true, rateCode: true },
     });
     const newUi = toUiReservation(updated);
