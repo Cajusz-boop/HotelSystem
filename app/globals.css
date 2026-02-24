@@ -251,6 +251,13 @@
   border-left: 2px solid hsl(var(--kw-today-border));
 }
 
+/* Tape chart: zapobiega zaznaczaniu tekstu podczas drag-and-drop */
+[data-reservation-id],
+[data-reservation-id] * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 /* ── Tryb sprzątania: strona bez sidebaru ─────────── */
 body.sprzatanie-standalone .no-print:has(.kw-sidebar),
 body.sprzatanie-standalone .no-print:has(header.fixed) {

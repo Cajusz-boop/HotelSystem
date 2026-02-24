@@ -216,9 +216,11 @@ export function ReservationBar({
   if (reservation.notes) tooltipLines.push(`Uwagi: ${reservation.notes}`);
   const tooltipText = tooltipLines.join("\n");
 
+  const canDrag = reservation.status === "CONFIRMED" || reservation.status === "CHECKED_IN";
   const { attributes, listeners, setNodeRef } = useDraggable({
     id: reservation.id,
     data: { type: "reservation", reservation },
+    disabled: !canDrag,
   });
 
   const [tooltipVisible, setTooltipVisible] = useState(false);

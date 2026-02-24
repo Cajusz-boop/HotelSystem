@@ -210,7 +210,17 @@ async function main() {
     createdGuests.push(guest);
   }
 
-  await prisma.reservation.deleteMany({});
+  // Ochrona produkcji: NIGDY nie usuwaj rezerwacji, chyba że jawnie SEED_RESET_RESERVATIONS=1
+  const allowReset = process.env.SEED_RESET_RESERVATIONS === "1";
+  const reservationCount = await prisma.reservation.count();
+
+  if (reservationCount > 0 && !allowReset) {
+    console.log(`Pomijam rezerwacje: w bazie jest ${reservationCount} rezerwacji (ochrona produkcji). Aby zresetować: SEED_RESET_RESERVATIONS=1 npm run db:seed`);
+  } else if (allowReset || reservationCount === 0) {
+    if (allowReset && reservationCount > 0) {
+      await prisma.reservation.deleteMany({});
+      console.log(`Usunięto ${reservationCount} rezerwacji (SEED_RESET_RESERVATIONS=1)`);
+    }
 
   const rooms = await prisma.room.findMany();
   const roomByNumber = new Map(rooms.map((r) => [r.number, r]));
@@ -238,6 +248,7 @@ async function main() {
         pax: r.pax,
       },
     });
+  }
   }
 
   await importConfigSnapshot();

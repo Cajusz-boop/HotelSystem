@@ -55,7 +55,7 @@ import { ReservationBarWithMenu } from "./reservation-bar-with-menu";
 import { RoomStatusIcon } from "./room-status-icon";
 import { getDateRange } from "@/lib/tape-chart-data";
 import { useTapeChartStore } from "@/lib/store/tape-chart-store";
-import { moveReservation, updateReservationStatus } from "@/app/actions/reservations";
+import { moveReservation, updateReservation, updateReservationStatus } from "@/app/actions/reservations";
 import { getEffectivePricesBatch, updateRoomStatus } from "@/app/actions/rooms";
 import { useRoomsSync, broadcastRoomStatusChange } from "@/hooks/useRoomsSync";
 import {
@@ -94,6 +94,83 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+
+/** Parsuje id komórki droppable: cell-roomNumber__dateStr → { roomNumber, dateStr } */
+function parseCellId(id: string): { roomNumber: string; dateStr: string } | null {
+  if (!id.startsWith("cell-")) return null;
+  const rest = id.slice(5);
+  const sep = rest.indexOf("__");
+  if (sep < 0) return null;
+  return { roomNumber: rest.slice(0, sep), dateStr: rest.slice(sep + 2) };
+}
+
+/** Komórka (pokój+data) jako strefa upuszczenia – pozwala na zmianę pokoju i daty. */
+const CellDroppable = memo(function CellDroppable({
+  roomNumber,
+  dateStr,
+  rowIdx,
+  colIdx,
+  columnWidthPx,
+  rowHeightPx,
+  saturday,
+  sunday,
+  isBlocked,
+  isFocused,
+  isDirty,
+  blockedRanges,
+  onCellClick,
+}: {
+  roomNumber: string;
+  dateStr: string;
+  rowIdx: number;
+  colIdx: number;
+  columnWidthPx: number;
+  rowHeightPx: number;
+  saturday: boolean;
+  sunday: boolean;
+  isBlocked: boolean;
+  isFocused: boolean;
+  isDirty: boolean;
+  blockedRanges?: Array<{ startDate: string; endDate: string; reason?: string }>;
+  onCellClick?: (roomNumber: string, dateStr: string) => void;
+}) {
+  const { setNodeRef } = useDroppable({ id: `cell-${roomNumber}__${dateStr}` });
+  return (
+    <div
+      ref={setNodeRef}
+      key={`cell-${roomNumber}-${colIdx}`}
+      data-testid={`cell-${roomNumber}-${dateStr}`}
+      data-cell
+      data-date={dateStr}
+      data-room={roomNumber}
+      className={cn(
+        "cursor-grab active:cursor-grabbing border-b border-r border-[hsl(var(--kw-grid-border))] select-none",
+        rowIdx % 2 === 1 ? "bg-slate-100 dark:bg-slate-800" : "bg-card",
+        saturday && "kw-cell-saturday",
+        sunday && "kw-cell-sunday",
+        isBlocked && "bg-destructive/20 cursor-not-allowed opacity-70",
+        isFocused && "ring-2 ring-inset ring-primary bg-primary/10",
+        isDirty && "bg-amber-50/80 dark:bg-amber-950/30"
+      )}
+      style={{
+        gridColumn: colIdx + 2,
+        gridRow: rowIdx + 2,
+        minWidth: columnWidthPx,
+        minHeight: rowHeightPx,
+      }}
+      onClick={() => {
+        if (isBlocked) {
+          toast.info("Pokój zablokowany w tym terminie (Room Block).");
+          return;
+        }
+        onCellClick?.(roomNumber, dateStr);
+      }}
+      title={isBlocked ? (blockedRanges?.find(
+        (range) => dateStr >= range.startDate && dateStr <= range.endDate
+      )?.reason ?? undefined) : undefined}
+    />
+  );
+});
 
 const RoomRowDroppable = memo(function RoomRowDroppable({
   room,
@@ -220,38 +297,22 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
         );
         const isFocused = focusedDateIdx === colIdx;
         return (
-        <div
-          key={`cell-${room.number}-${colIdx}`}
-          data-testid={`cell-${room.number}-${dateStr}`}
-          data-cell
-          data-date={dateStr}
-          data-room={room.number}
-          className={cn(
-            "cursor-grab active:cursor-grabbing border-b border-r border-[hsl(var(--kw-grid-border))] select-none",
-            rowIdx % 2 === 1 ? "bg-slate-100 dark:bg-slate-800" : "bg-card",
-            saturday && "kw-cell-saturday",
-            sunday && "kw-cell-sunday",
-            isBlocked && "bg-destructive/20 cursor-not-allowed opacity-70",
-            isFocused && "ring-2 ring-inset ring-primary bg-primary/10",
-            isDirty && "bg-amber-50/80 dark:bg-amber-950/30"
-          )}
-          style={{
-            gridColumn: colIdx + 2,
-            gridRow: rowIdx + 2,
-            minWidth: columnWidthPx,
-            minHeight: rowHeightPx,
-          }}
-          onClick={() => {
-            if (isBlocked) {
-              toast.info("Pokój zablokowany w tym terminie (Room Block).");
-              return;
-            }
-            onCellClick?.(room.number, dateStr);
-          }}
-          title={isBlocked ? (blockedRanges?.find(
-            (range) => dateStr >= range.startDate && dateStr <= range.endDate
-          )?.reason ?? undefined) : undefined}
-        />
+          <CellDroppable
+            key={`cell-${room.number}-${colIdx}`}
+            roomNumber={room.number}
+            dateStr={dateStr}
+            rowIdx={rowIdx}
+            colIdx={colIdx}
+            columnWidthPx={columnWidthPx}
+            rowHeightPx={rowHeightPx}
+            saturday={saturday}
+            sunday={sunday}
+            isBlocked={isBlocked}
+            isFocused={isFocused}
+            isDirty={isDirty}
+            blockedRanges={blockedRanges}
+            onCellClick={onCellClick}
+          />
         );
       })}
     </>
@@ -472,7 +533,7 @@ export function TapeChart({
     const hasColorsFromServer = initialStatusBg && Object.keys(initialStatusBg).length > 0;
     if (hasColorsFromServer) return;
     getPropertyReservationColors(propertyId).then((res) => {
-      if (res.success && res.data && Object.keys(res.data).length > 0)
+      if (res?.success && res?.data && Object.keys(res.data).length > 0)
         setStatusBg(res.data as Record<string, string>);
     });
   }, [propertyId, initialStatusBg]);
@@ -755,12 +816,12 @@ export function TapeChart({
     async (reservationId: string, payload: { checkIn?: string; checkOut?: string }) => {
       const { updateReservation } = await import("@/app/actions/reservations");
       const result = await updateReservation(reservationId, payload);
-      if (result.success && result.data) {
+      if (result?.success && result?.data) {
         setReservations((prev) =>
           prev.map((r) => (r.id === reservationId ? { ...r, ...result.data } : r)) as Reservation[]
         );
         toast.success("Datę rezerwacji zaktualizowano");
-      } else if (!result.success) {
+      } else if (!result?.success) {
         toast.error("error" in result ? (result.error ?? "Błąd aktualizacji") : "Błąd aktualizacji");
       }
     },
@@ -1095,6 +1156,13 @@ export function TapeChart({
     return map;
   }, [reservations, todayStr]);
 
+  /** Dodaje dni do daty YYYY-MM-DD (dla drag-drop cell) */
+  const addDaysToDateStr = useCallback((dateStr: string, days: number): string => {
+    const d = new Date(dateStr + "T12:00:00Z");
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  }, []);
+
   const handleDragMove = useCallback(
     (event: DragMoveEvent) => {
       const { active, over } = event;
@@ -1103,24 +1171,48 @@ export function TapeChart({
         return;
       }
       const overId = over.id as string;
-      if (!overId.startsWith("room-")) {
-        setGhostPreview(null);
-        return;
-      }
-      const targetRoomNumber = overId.replace("room-", "");
       const resId = active.id as string;
       const reservation = reservations.find((r) => r.id === resId);
-      if (!reservation || reservation.room === targetRoomNumber) {
+      if (!reservation) {
         setGhostPreview(null);
         return;
       }
-      setGhostPreview({
-        roomNumber: targetRoomNumber,
-        checkIn: reservation.checkIn,
-        checkOut: reservation.checkOut,
-      });
+      if (overId.startsWith("cell-")) {
+        const parsed = parseCellId(overId);
+        if (!parsed || parsed.roomNumber === reservation.room) {
+          setGhostPreview(null);
+          return;
+        }
+        const nights = Math.max(1, Math.ceil(
+          (new Date(reservation.checkOut + "T12:00:00Z").getTime() -
+            new Date(reservation.checkIn + "T12:00:00Z").getTime()) /
+            (24 * 60 * 60 * 1000)
+        ));
+        const newCheckIn = parsed.dateStr;
+        const newCheckOut = addDaysToDateStr(newCheckIn, nights);
+        setGhostPreview({
+          roomNumber: parsed.roomNumber,
+          checkIn: newCheckIn,
+          checkOut: newCheckOut,
+        });
+        return;
+      }
+      if (overId.startsWith("room-")) {
+        const targetRoomNumber = overId.replace("room-", "");
+        if (reservation.room === targetRoomNumber) {
+          setGhostPreview(null);
+          return;
+        }
+        setGhostPreview({
+          roomNumber: targetRoomNumber,
+          checkIn: reservation.checkIn,
+          checkOut: reservation.checkOut,
+        });
+      } else {
+        setGhostPreview(null);
+      }
     },
-    [reservations]
+    [reservations, addDaysToDateStr]
   );
 
   const handleDragEnd = useCallback(
@@ -1131,12 +1223,62 @@ export function TapeChart({
       if (!over) return;
       const resId = active.id as string;
       const overId = over.id as string;
+      const reservation = reservations.find((r) => r.id === resId);
+      if (!reservation) return;
+
+      if (overId.startsWith("cell-")) {
+        const parsed = parseCellId(overId);
+        if (!parsed) return;
+        const { roomNumber: newRoomNumber, dateStr: targetDateStr } = parsed;
+        const targetRoom = roomByNumber.get(newRoomNumber);
+        if (!targetRoom) return;
+
+        if (targetRoom.status === "DIRTY" || targetRoom.status === "OOO" || targetRoom.status === "INSPECTION") {
+          toast.error(
+            `Nie można przenieść rezerwacji na pokój ${targetRoom.number}. Status: ${targetRoom.status}${targetRoom.reason ? ` (${targetRoom.reason})` : ""}. Zmień status pokoju lub wybierz inny pokój.`
+          );
+          return;
+        }
+
+        const nights = Math.max(1, Math.ceil(
+          (new Date(reservation.checkOut + "T12:00:00Z").getTime() -
+            new Date(reservation.checkIn + "T12:00:00Z").getTime()) /
+            (24 * 60 * 60 * 1000)
+        ));
+        const newCheckIn = targetDateStr;
+        const newCheckOut = addDaysToDateStr(newCheckIn, nights);
+
+        if (newCheckOut <= newCheckIn) {
+          toast.error("Data wyjazdu musi być po dacie przyjazdu");
+          return;
+        }
+
+        const blockOverlap = targetRoom.blocks?.some(
+          (b) => newCheckIn < b.endDate && newCheckOut > b.startDate
+        );
+        if (blockOverlap) {
+          toast.error("Pokój jest zablokowany (Room Block) w tym terminie.");
+          return;
+        }
+
+        const result = await updateReservation(resId, { room: newRoomNumber, checkIn: newCheckIn, checkOut: newCheckOut });
+        if (result?.success && result?.data) {
+          const updated = result.data;
+          setReservations((prev) =>
+            prev.map((r) => (r.id === resId ? { ...r, room: updated.room, checkIn: updated.checkIn, checkOut: updated.checkOut } : r))
+          );
+          toast.success(`Rezerwacja przeniesiona: pokój ${newRoomNumber}, ${newCheckIn} – ${newCheckOut}`);
+        } else if (!result?.success) {
+          toast.error("error" in result ? result.error : "Nie można przenieść rezerwacji");
+        }
+        return;
+      }
+
       if (!overId.startsWith("room-")) return;
       const newRoomNumber = overId.replace("room-", "");
       const targetRoom = roomByNumber.get(newRoomNumber);
       if (!targetRoom) return;
 
-      // Room Guard: blokuj DIRTY, OOO i INSPECTION (do sprawdzenia) – Toast
       if (targetRoom.status === "DIRTY" || targetRoom.status === "OOO" || targetRoom.status === "INSPECTION") {
         toast.error(
           `Nie można przenieść rezerwacji na pokój ${targetRoom.number}. Status: ${targetRoom.status}${targetRoom.reason ? ` (${targetRoom.reason})` : ""}. Zmień status pokoju lub wybierz inny pokój.`
@@ -1144,26 +1286,34 @@ export function TapeChart({
         return;
       }
 
-      const reservation = reservations.find((r) => r.id === resId);
-      if (!reservation || reservation.room === newRoomNumber) return;
+      const roomBlockOverlap = targetRoom.blocks?.some(
+        (b) => reservation.checkIn < b.endDate && reservation.checkOut > b.startDate
+      );
+      if (roomBlockOverlap) {
+        toast.error("Pokój jest zablokowany (Room Block) w tym terminie.");
+        return;
+      }
+
+      if (reservation.room === newRoomNumber) return;
 
       const result = await moveReservation({ reservationId: resId, newRoomNumber });
-      if (result.success && result.data) {
+      if (result?.success && result?.data) {
         const updated = result.data;
         setReservations((prev) =>
           prev.map((r) => (r.id === resId ? { ...r, room: updated.room } : r))
         );
-      } else if (!result.success) {
+        toast.success(`Rezerwacja przeniesiona do pokoju ${newRoomNumber}`);
+      } else if (!result?.success) {
         toast.error("error" in result ? result.error : "Nie można przenieść rezerwacji");
       }
     },
-    [setReservations, roomByNumber, reservations]
+    [setReservations, roomByNumber, reservations, addDaysToDateStr]
   );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dnd-kit sensor activator signature mismatch
   const pointerSensor = useSensor(ConditionalPointerSensor as any, {
     requireShift: !dragWithoutShift,
-    activationConstraint: { distance: 8 },
+    activationConstraint: { distance: 5, delay: 0, tolerance: 5 },
   });
   const sensors = useSensors(pointerSensor);
 
@@ -1265,7 +1415,7 @@ export function TapeChart({
             );
             if (res) {
               updateReservationStatus(res.id, "CHECKED_IN").then((result) => {
-                if (result.success && result.data) {
+                if (result?.success && result?.data) {
                   setReservations((prev) =>
                     prev.map((r) => (r.id === res.id ? { ...r, status: "CHECKED_IN" } : r))
                   );
@@ -1290,7 +1440,7 @@ export function TapeChart({
             );
             if (res) {
               updateReservationStatus(res.id, "CHECKED_OUT").then((result) => {
-                if (result.success && result.data) {
+                if (result?.success && result?.data) {
                   setReservations((prev) =>
                     prev.map((r) => (r.id === res.id ? { ...r, status: "CHECKED_OUT" } : r))
                   );
@@ -1334,7 +1484,7 @@ export function TapeChart({
       return;
     }
     const result = await updateRoomStatus({ roomId: room.id, status });
-    if (result.success) {
+    if (result?.success) {
       const effectiveStatus: RoomStatus = status === "INSPECTED" ? "CLEAN" : status;
       setAllRooms((prev) => {
         const updated = prev.map((r) => (r.number === room.number ? { ...r, status: effectiveStatus } : r));
@@ -1836,7 +1986,10 @@ export function TapeChart({
         ) : (
         <DndContext
           sensors={sensors}
-          onDragStart={({ active }) => setActiveId(active.id as string)}
+          onDragStart={({ active }) => {
+            console.log("DRAG START", active.id);
+            setActiveId(active.id as string);
+          }}
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
           onDragCancel={() => { setActiveId(null); setGhostPreview(null); }}
@@ -2098,7 +2251,7 @@ export function TapeChart({
                       onExtendStay={async (r, newCheckOut) => {
                         const { updateReservation } = await import("@/app/actions/reservations");
                         const result = await updateReservation(r.id, { checkOut: newCheckOut });
-                        if (result.success && result.data) {
+                        if (result?.success && result?.data) {
                           setReservations((prev) =>
                             prev.map((res) => (res.id === r.id ? { ...res, checkOut: newCheckOut } : res))
                           );
