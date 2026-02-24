@@ -2092,7 +2092,7 @@ export async function moveReservation(
   if (!parsed.success) {
     return { success: false, error: parsed.error.errors[0]?.message ?? "Błąd walidacji" };
   }
-  const { reservationId, newRoomNumber, newCheckIn, newCheckOut } = parsed.data;
+  const { reservationId, newRoomNumber, newCheckIn, newCheckOut, skipRevalidate } = parsed.data;
 
   const headersList = await headers();
   const ip = getClientIp(headersList);
@@ -2153,7 +2153,7 @@ export async function moveReservation(
       if (limitPercent === 0) {
         return {
           success: false,
-          error: `Pokój ${newRoomNumber} jest zajęty w terminie ${formatDate(effectiveCheckIn)} - ${formatDate(effectiveCheckOut)} (gość: ${overlappingInNewRoom.guest.name})`,
+          error: `Pokój ${newRoomNumber} jest zajęty w podanym terminie. Odśwież grafik, jeśli nie widzisz rezerwacji.`,
         };
       }
 
@@ -2198,7 +2198,7 @@ export async function moveReservation(
       ipAddress: ip,
     });
 
-    revalidatePath("/front-office");
+    if (!skipRevalidate) revalidatePath("/front-office");
     return { success: true, data: newUi };
   } catch (e) {
     return {
@@ -2407,7 +2407,7 @@ export async function updateReservation(
         if (limitPercent === 0) {
           return {
             success: false,
-            error: `Pokój ${roomMeta?.number ?? "?"} jest zajęty w terminie ${formatDate(effCheckIn)} - ${formatDate(effCheckOut)} (gość: ${overlapping.guest.name})`,
+            error: `Pokój ${roomMeta?.number ?? "?"} jest zajęty w wybranym terminie.`,
           };
         }
 
@@ -4525,7 +4525,7 @@ export async function createWalkIn(
     if (conflictingReservation) {
       return {
         success: false,
-        error: `Pokój ${input.roomNumber} jest zajęty od ${conflictingReservation.checkIn.toISOString().split("T")[0]} do ${conflictingReservation.checkOut.toISOString().split("T")[0]} (${conflictingReservation.guest.name})`,
+        error: `Pokój ${input.roomNumber} jest zajęty w podanym terminie.`,
       };
     }
 

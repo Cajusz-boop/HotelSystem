@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -9,6 +9,7 @@ import {
   DragOverlay,
   type DragEndEvent,
   type DragMoveEvent,
+  type DragStartEvent,
   PointerSensor,
   type PointerSensorOptions,
   useSensor,
@@ -458,14 +459,20 @@ export function TapeChart({
   /** E2E: otwórz formularz nowej rezerwacji od razu (?e2eOpenCreate=1) */
   initialOpenCreate?: boolean;
 }) {
-  const today = useMemo(() => new Date(), []);
-  const clientTodayStr = useMemo(() => {
-    const y = today.getFullYear();
-    const m = String(today.getMonth() + 1).padStart(2, "0");
-    const d = String(today.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }, [today]);
-  const todayStr = initialTodayStr ?? clientTodayStr;
+  // Pierwszy render: tylko data z serwera (initialTodayStr). Klienckie "dziś" po mount – unika hydration mismatch.
+  const [todayStr, setTodayStr] = useState<string>(() => initialTodayStr ?? "2026-01-01");
+  useEffect(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    const clientToday = `${y}-${m}-${d}`;
+    setTodayStr((prev) => (prev !== clientToday ? clientToday : prev));
+  }, []);
+  const todayDate = useMemo(() => {
+    const [y, m, d] = todayStr.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }, [todayStr]);
 
   const [allRooms, setAllRooms] = useState<Room[]>(rooms);
   useEffect(() => setAllRooms(rooms), [rooms]);
@@ -565,11 +572,14 @@ export function TapeChart({
   ] as const;
 
   const [viewStartDate, setViewStartDate] = useState<Date>(() => {
+    const baseStr = initialTodayStr ?? "2026-01-01";
+    const [y, m, d] = baseStr.split("-").map(Number);
+    const base = new Date(y, m - 1, d);
     if (DEFAULT_VIEW_SCALE === "day" || DEFAULT_VIEW_SCALE === "week" || DEFAULT_VIEW_SCALE === "month") {
-      return new Date(today);
+      return base;
     }
     const days = VIEW_SCALE_CONFIG[DEFAULT_VIEW_SCALE].days;
-    return addDays(new Date(today), -Math.floor(days / 2));
+    return addDays(base, -Math.floor(days / 2));
   });
   const [viewScale, setViewScale] = useState<ViewScale>(DEFAULT_VIEW_SCALE);
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
@@ -798,13 +808,13 @@ export function TapeChart({
   };
   const handleGoToToday = useCallback(() => {
     if (viewScale === "day" || viewScale === "week" || viewScale === "month") {
-      setViewStartDate(new Date(today));
+      setViewStartDate(todayDate);
     } else {
       const days = VIEW_SCALE_CONFIG[viewScale].days;
-      setViewStartDate(addDays(new Date(today), -Math.floor(days / 2)));
+      setViewStartDate(addDays(todayDate, -Math.floor(days / 2)));
     }
     didScrollToTodayRef.current = false;
-  }, [today, viewScale]);
+  }, [todayDate, viewScale]);
 
   const handleOpenExportDialog = () => {
     // Initialize with current view range
@@ -840,11 +850,19 @@ export function TapeChart({
   const pointerPosRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
-    const onMove = (e: PointerEvent) => {
+    const onPointerUpdate = (e: PointerEvent) => {
       pointerPosRef.current = { x: e.clientX, y: e.clientY };
     };
-    document.addEventListener("pointermove", onMove, { passive: true });
-    return () => document.removeEventListener("pointermove", onMove);
+    document.addEventListener("pointermove", onPointerUpdate, { passive: true });
+    document.addEventListener("pointerdown", onPointerUpdate as EventListener, { passive: true });
+    document.addEventListener("pointerup", onPointerUpdate as EventListener, { passive: true });
+    document.addEventListener("pointercancel", onPointerUpdate as EventListener, { passive: true });
+    return () => {
+      document.removeEventListener("pointermove", onPointerUpdate);
+      document.removeEventListener("pointerdown", onPointerUpdate as EventListener);
+      document.removeEventListener("pointerup", onPointerUpdate as EventListener);
+      document.removeEventListener("pointercancel", onPointerUpdate as EventListener);
+    };
   }, []);
 
   /** Szerokość kolumny = stała COLUMN_WIDTH_PX – siatka szersza niż kontener, przewijanie myszką w każdym widoku */
@@ -880,30 +898,6 @@ export function TapeChart({
       return dates[col] ?? null;
     },
     [dates]
-  );
-
-  const getDropTarget = useCallback(
-    (clientX: number, clientY: number): { room: Room; date: string } | null => {
-      const gridEl = gridWrapperRef.current;
-      if (!gridEl || displayRooms.length === 0 || dates.length === 0) return null;
-      const rect = gridEl.getBoundingClientRect();
-      const localX = clientX - rect.left;
-      const localY = clientY - rect.top;
-      const firstRow = gridEl.querySelector("[data-room-row]");
-      const headerHeight = firstRow
-        ? firstRow.getBoundingClientRect().top - rect.top
-        : HEADER_ROW_PX;
-      if (localY < headerHeight) return null;
-      const rowIndex = Math.floor((localY - headerHeight) / effectiveRowHeightPx);
-      if (rowIndex < 0 || rowIndex >= displayRooms.length) return null;
-      const colIndex = Math.floor((localX - ROOM_LABEL_WIDTH_PX) / effectiveColumnWidthPx);
-      if (colIndex < 0 || colIndex >= dates.length) return null;
-      const room = displayRooms[rowIndex];
-      const date = dates[colIndex];
-      if (!room || !date) return null;
-      return { room, date };
-    },
-    [displayRooms, dates, effectiveRowHeightPx, effectiveColumnWidthPx]
   );
 
   const handleResize = useCallback(
@@ -963,6 +957,7 @@ export function TapeChart({
   const filteredReservations = useMemo(() => {
     const term = clientSearchTerm.trim().toLowerCase();
     return reservations.filter((reservation) => {
+      if (reservation.status === "CANCELLED" || reservation.status === "NO_SHOW") return false;
       if (!visibleRoomNumbers.has(reservation.room)) return false;
       if (showGroupOnly && !reservation.groupId) return false;
       if (selectedGroupId && reservation.groupId !== selectedGroupId) return false;
@@ -1080,6 +1075,7 @@ export function TapeChart({
 
   const [privacyMode, setPrivacyMode] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [isDragPending, startDragTransition] = useTransition();
   const [ghostPreview, setGhostPreview] = useState<{
     roomNumber: string;
     checkIn: string;
@@ -1250,45 +1246,61 @@ export function TapeChart({
     return map;
   }, [reservations, todayStr]);
 
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+    const ev = (event as unknown as { activatorEvent?: { clientX: number; clientY: number } }).activatorEvent;
+    if (ev && typeof ev.clientX === "number" && typeof ev.clientY === "number") {
+      pointerPosRef.current = { x: ev.clientX, y: ev.clientY };
+    }
+  }, []);
+
   const handleDragMove = useCallback(() => {
     // Ghost wyłączony – używamy tylko DragOverlay
   }, []);
 
   const handleDragEnd = useCallback(
-    async (event: DragEndEvent) => {
-      const { active, over } = event;
+    (event: DragEndEvent) => {
+      const { active } = event;
       setActiveId(null);
       setGhostPreview(null);
       const resId = active.id as string;
       const reservation = reservations.find((r) => r.id === resId);
       if (!reservation) return;
 
-      const pos = pointerPosRef.current;
-      let target: { room: Room; date: string } | null = null;
+      let { x, y } = pointerPosRef.current;
+      const overlayEl = document.querySelector("[data-dnd-overlay]") as HTMLElement | null;
+      if (overlayEl) overlayEl.style.pointerEvents = "none";
 
-      if (pos.x !== 0 || pos.y !== 0) {
-        target = getDropTarget(pos.x, pos.y);
-      }
-      if (!target && over) {
-        const overId = over.id as string;
-        if (overId.startsWith("room-")) {
-          const newRoomNumber = overId.replace("room-", "");
-          const targetRoom = roomByNumber.get(newRoomNumber);
-          if (targetRoom) {
-            target = { room: targetRoom, date: reservation.checkIn };
-          }
+      if (x === 0 && y === 0) {
+        const ev = (event as unknown as { activatorEvent?: { clientX: number; clientY: number }; delta?: { x: number; y: number } });
+        const delta = ev.delta;
+        if (ev.activatorEvent && typeof ev.activatorEvent.clientX === "number") {
+          x = ev.activatorEvent.clientX + (delta?.x ?? 0);
+          y = ev.activatorEvent.clientY + (delta?.y ?? 0);
+        } else if (overlayEl) {
+          const rect = overlayEl.getBoundingClientRect();
+          x = rect.left + rect.width / 2;
+          y = rect.top + rect.height / 2;
         }
       }
-      if (!target) {
+
+      const cellEl = document.elementsFromPoint(x, y).find(
+        (el): el is HTMLElement =>
+          el instanceof HTMLElement && el.dataset.room !== undefined && el.dataset.date !== undefined
+      );
+      if (overlayEl) overlayEl.style.pointerEvents = "";
+
+      if (!cellEl) {
         toast.error("Upuszczono poza siatką");
         return;
       }
 
-      const targetRoom = target.room;
-      if (targetRoom.status === "DIRTY" || targetRoom.status === "OOO" || targetRoom.status === "INSPECTION") {
-        toast.error(
-          `Nie można przenieść rezerwacji na pokój ${targetRoom.number}. Status: ${targetRoom.status}${targetRoom.reason ? ` (${targetRoom.reason})` : ""}. Zmień status pokoju lub wybierz inny pokój.`
-        );
+      const newRoomNumber = cellEl.dataset.room!;
+      const targetDate = cellEl.dataset.date!;
+
+      const targetRoom = roomByNumber.get(newRoomNumber);
+      if (!targetRoom) {
+        toast.error("Nieznany pokój");
         return;
       }
 
@@ -1313,44 +1325,50 @@ export function TapeChart({
         typeof reservation.checkOut === "string"
           ? reservation.checkOut.slice(0, 10)
           : new Date(reservation.checkOut).toISOString().slice(0, 10);
-      const oldCheckInDate = new Date(oldCheckInStr);
-      const targetDateObj = new Date(target.date);
+
+      const parseUtc = (s: string) => new Date(s + "T12:00:00.000Z");
+      const addDaysUtc = (dateStr: string, days: number) => {
+        const d = parseUtc(dateStr);
+        d.setUTCDate(d.getUTCDate() + days);
+        return d.toISOString().slice(0, 10);
+      };
+      const targetDateObj = parseUtc(targetDate);
+      const oldCheckInDate = parseUtc(oldCheckInStr);
       const daysDiff = Math.round(
         (targetDateObj.getTime() - oldCheckInDate.getTime()) / (1000 * 60 * 60 * 24)
       );
-      const newCheckInDate = new Date(oldCheckInDate);
-      newCheckInDate.setDate(newCheckInDate.getDate() + daysDiff);
-      const newCheckInStr = newCheckInDate.toISOString().slice(0, 10);
-      const newCheckOutDate = new Date(oldCheckOutStr);
-      newCheckOutDate.setDate(newCheckOutDate.getDate() + daysDiff);
-      const newCheckOutStr = newCheckOutDate.toISOString().slice(0, 10);
+      const newCheckInStr = addDaysUtc(oldCheckInStr, daysDiff);
+      const newCheckOutStr = addDaysUtc(oldCheckOutStr, daysDiff);
       const roomChanged = newRoomNumber !== reservation.room;
       const dateChanged = daysDiff !== 0;
       if (!roomChanged && !dateChanged) return;
 
-      const result = await moveReservation({
-        reservationId: resId,
-        newRoomNumber,
-        newCheckIn: dateChanged ? newCheckInStr : undefined,
-        newCheckOut: dateChanged ? newCheckOutStr : undefined,
+      startDragTransition(async () => {
+        const result = await moveReservation({
+          reservationId: resId,
+          newRoomNumber,
+          newCheckIn: dateChanged ? newCheckInStr : undefined,
+          newCheckOut: dateChanged ? newCheckOutStr : undefined,
+          skipRevalidate: true,
+        });
+        if (result.success && result.data) {
+          const updated = result.data;
+          setReservations((prev) =>
+            prev.map((r) => (r.id === resId ? { ...r, room: updated.room, checkIn: updated.checkIn, checkOut: updated.checkOut } : r)) as Reservation[]
+          );
+          const msg = [
+            roomChanged && `pokój ${newRoomNumber}`,
+            dateChanged && `${newCheckInStr}–${newCheckOutStr}`,
+          ]
+            .filter(Boolean)
+            .join(", ");
+          toast.success(msg ? `Przeniesiono rezerwację → ${msg}` : "Przeniesiono rezerwację");
+        } else if (!result.success) {
+          toast.error("error" in result ? result.error : "Nie można przenieść rezerwacji");
+        }
       });
-      if (result.success && result.data) {
-        const updated = result.data;
-        setReservations((prev) =>
-          prev.map((r) => (r.id === resId ? { ...r, room: updated.room, checkIn: updated.checkIn, checkOut: updated.checkOut } : r)) as Reservation[]
-        );
-        const msg = [
-          roomChanged && `pokój ${newRoomNumber}`,
-          dateChanged && `${newCheckInStr}–${newCheckOutStr}`,
-        ]
-          .filter(Boolean)
-          .join(", ");
-        toast.success(msg ? `Przeniesiono rezerwację → ${msg}` : "Przeniesiono rezerwację");
-      } else if (!result.success) {
-        toast.error("error" in result ? result.error : "Nie można przenieść rezerwacji");
-      }
     },
-    [setReservations, roomByNumber, reservations, getDropTarget]
+    [setReservations, roomByNumber, reservations, startDragTransition]
   );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dnd-kit sensor activator signature mismatch
@@ -1437,7 +1455,7 @@ export function TapeChart({
           const defaultRoom = displayRooms[0];
           setNewReservationContext({
             roomNumber: defaultRoom?.number ?? "",
-            checkIn: dates[0] ?? new Date().toISOString().slice(0, 10),
+            checkIn: dates[0] ?? todayStr,
           });
           setCreateSheetOpen(true);
         }
@@ -1666,10 +1684,10 @@ export function TapeChart({
                     e.stopPropagation();
                     setViewScale(scale);
                     if (scale === "day" || scale === "week" || scale === "month") {
-                      setViewStartDate(new Date(today));
+                      setViewStartDate(todayDate);
                     } else {
                       const days = VIEW_SCALE_CONFIG[scale].days;
-                      setViewStartDate(addDays(new Date(today), -Math.floor(days / 2)));
+                      setViewStartDate(addDays(todayDate, -Math.floor(days / 2)));
                     }
                     didScrollToTodayRef.current = false;
                   }}
@@ -2049,16 +2067,19 @@ export function TapeChart({
             </p>
           </div>
         ) : (
+        <div className="relative">
         <DndContext
           sensors={sensors}
-          onDragStart={({ active }) => {
-            console.log("DRAG START", active.id);
-            setActiveId(active.id as string);
-          }}
+          onDragStart={handleDragStart}
           onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
           onDragCancel={() => { setActiveId(null); setGhostPreview(null); }}
         >
+          {isDragPending && (
+            <div className="absolute top-2 right-4 z-[70] rounded-md bg-primary/90 px-3 py-1.5 text-xs font-medium text-primary-foreground shadow">
+              Zapisywanie…
+            </div>
+          )}
           <div
             ref={gridWrapperRef}
             data-grid-draggable
@@ -2068,16 +2089,16 @@ export function TapeChart({
           >
             {/* Sticky header: corner + date columns */}
             <div
-              className="sticky top-0 z-[60] grid w-full min-w-max border-b border-[hsl(var(--kw-grid-border))]"
+              className="kw-date-header-row sticky top-0 z-[60] grid w-full min-w-max border-b-2 border-[hsl(var(--kw-grid-border))]"
               style={{
                 gridTemplateColumns: gridColumns,
                 gridTemplateRows: `${HEADER_ROW_PX}px`,
                 minHeight: HEADER_ROW_PX,
                 maxHeight: HEADER_ROW_PX,
-                background: "hsl(var(--kw-room-label-bg))",
+                background: "hsl(var(--kw-date-header-bg))",
               }}
             >
-              <div className="flex items-center px-3 py-2 text-sm font-semibold border-r border-[hsl(var(--kw-grid-border))]">
+              <div className="flex items-center px-3 py-2.5 text-sm font-bold border-r border-[hsl(var(--kw-grid-border))]">
                 Pokój
               </div>
               {dates.map((dateStr, i) => {
@@ -2089,8 +2110,8 @@ export function TapeChart({
                     key={dateStr}
                     data-date-header
                     className={cn(
-                      "flex items-center justify-center border-r border-[hsl(var(--kw-grid-border))] px-2 py-2 text-center text-xs font-medium cursor-grab active:cursor-grabbing",
-                      isToday ? "kw-header-today text-[13px]" : saturday ? "kw-header-saturday" : sunday ? "kw-header-sunday" : "kw-header-default"
+                      "flex items-center justify-center border-r border-[hsl(var(--kw-grid-border))] px-2 py-2.5 text-center text-[13px] cursor-grab active:cursor-grabbing",
+                      isToday ? "kw-header-today" : saturday ? "kw-header-saturday" : sunday ? "kw-header-sunday" : "kw-header-default"
                     )}
                     style={{ minWidth: effectiveColumnWidthPx }}
                   >
@@ -2375,6 +2396,7 @@ export function TapeChart({
                   RESERVATION_STATUS_BG.CONFIRMED;
                 return (
                   <div
+                    data-dnd-overlay
                     className="flex items-center justify-center rounded border border-black text-white font-semibold text-xs overflow-hidden whitespace-nowrap cursor-grabbing"
                     style={{
                       width: w,
@@ -2393,6 +2415,7 @@ export function TapeChart({
               })() : null}
             </DragOverlay>
         </DndContext>
+        </div>
         )}
         </div>
         {displayRooms.length > 0 && (
@@ -2542,6 +2565,7 @@ export function TapeChart({
         reservations={reservations}
         rooms={allRooms}
         onSelectDate={handleMonthlyDateSelect}
+        initialTodayStr={todayStr}
       />
       <FloorPlanDialog
         open={floorPlanDialogOpen}
@@ -2636,9 +2660,13 @@ export function TapeChart({
             : undefined
         }
         onSaved={(updated) => {
-          setReservations((prev) =>
-            prev.map((r) => (r.id === updated.id ? updated : r))
-          );
+          if (updated.status === "CANCELLED" || updated.status === "NO_SHOW") {
+            setReservations((prev) => prev.filter((r) => r.id !== updated.id));
+          } else {
+            setReservations((prev) =>
+              prev.map((r) => (r.id === updated.id ? updated : r))
+            );
+          }
         }}
       />
       <UnifiedReservationDialog

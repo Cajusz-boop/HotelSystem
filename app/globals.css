@@ -40,6 +40,7 @@
     --kw-past: 210 10% 93%;
     --kw-grid-border: 214 18% 86%;
     --kw-room-label-bg: 210 20% 97%;
+    --kw-date-header-bg: 210 18% 88%;
   }
   .dark {
     --background: 220 20% 10%;
@@ -75,6 +76,7 @@
     --kw-past: 220 15% 12%;
     --kw-grid-border: 217 20% 22%;
     --kw-room-label-bg: 220 20% 12%;
+    --kw-date-header-bg: 220 18% 8%;
   }
 }
 
@@ -227,22 +229,43 @@
 .kw-cell-past {
   background-color: hsl(var(--kw-past));
 }
+/* Pasek z dniami i datami – ciemniejsze tło, spójne z resztą */
+.kw-date-header-row {
+  background: hsl(var(--kw-date-header-bg)) !important;
+  box-shadow: 0 2px 6px hsl(var(--kw-grid-border) / 0.4);
+  border-bottom: 2px solid hsl(var(--kw-grid-border)) !important;
+}
 .kw-header-today {
-  background-color: hsl(var(--kw-today-bg));
-  border-bottom: 2px solid hsl(var(--kw-today-border));
-  font-weight: 700;
-  color: hsl(215 25% 17%);
+  background: linear-gradient(to bottom, hsl(48 95% 85%), hsl(var(--kw-today-bg)));
+  border-bottom: 3px solid hsl(var(--kw-today-border));
+  font-weight: 800;
+  color: hsl(215 30% 12%);
 }
 .kw-header-saturday {
-  background-color: hsl(var(--kw-saturday));
-  color: hsl(213 72% 37%);
+  background-color: hsl(213 50% 82%);
+  color: hsl(213 75% 28%);
+  font-weight: 600;
 }
 .kw-header-sunday {
-  background-color: hsl(var(--kw-sunday));
-  color: hsl(0 72% 45%);
+  background-color: hsl(0 50% 88%);
+  color: hsl(0 75% 35%);
+  font-weight: 600;
 }
 .kw-header-default {
-  background-color: hsl(var(--kw-room-label-bg));
+  background-color: hsl(var(--kw-date-header-bg));
+  color: hsl(var(--foreground) / 0.92);
+  font-weight: 500;
+}
+.dark .kw-header-today {
+  background: hsl(var(--kw-today-bg));
+}
+.dark .kw-header-saturday {
+  background-color: hsl(var(--kw-saturday));
+  color: hsl(213 70% 55%);
+}
+.dark .kw-header-sunday {
+  background-color: hsl(var(--kw-sunday));
+  color: hsl(0 70% 55%);
 }
 .kw-today-column {
   background-color: hsl(var(--kw-today-bg) / 0.4);

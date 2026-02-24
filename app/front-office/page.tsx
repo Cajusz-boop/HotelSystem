@@ -1,20 +1,24 @@
 import { Suspense } from "react";
+import { unstable_noStore } from "next/cache";
 import { getTapeChartData } from "@/app/actions/tape-chart";
 import { FrontOfficeClient } from "./front-office-client";
 import { FrontOfficeError } from "./front-office-error";
 import FrontOfficeLoading from "./loading";
 import type { Reservation, ReservationGroupSummary, Room } from "@/lib/tape-chart-types";
 
-// Cache 15s – kolejne wejścia w ciągu 15 s będą z cache. revalidatePath z akcji (rezerwacja, pokój itd.) wymusi odświeżenie po zmianach.
-export const revalidate = 15;
+/** Brak cache HTML – przy F5 zawsze świeży server render (fix: F5 vs Ctrl+Shift+R, anulacje, loading przy dragu). */
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-const INITIAL_DAYS_FORWARD = 15;
+/** Zgodne z widokiem "Tydzień" w TapeChart (42 dni) – mniej DOM, szybszy load */
+const INITIAL_DAYS_VIEW = 42;
 
 async function FrontOfficeData() {
+  unstable_noStore();
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
   const future = new Date(now);
-  future.setDate(future.getDate() + INITIAL_DAYS_FORWARD);
+  future.setDate(future.getDate() + INITIAL_DAYS_VIEW);
   const dateToInitial = future.toISOString().slice(0, 10);
 
   let data: { reservations: Reservation[]; rooms: Room[]; reservationGroups: ReservationGroupSummary[]; reservationStatusColors?: Partial<Record<string, string>> | null; propertyId?: string | null };
@@ -54,6 +58,7 @@ async function FrontOfficeData() {
         reservationStatusColors: data.reservationStatusColors,
         propertyId: data.propertyId,
         reservations: data.reservations,
+        today,
       }}
     />
   );

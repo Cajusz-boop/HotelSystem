@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { TapeChart } from "@/components/tape-chart";
 import { TapeChartStoreProvider } from "@/lib/store/tape-chart-store";
@@ -13,7 +13,10 @@ interface FrontOfficeInitialData {
   reservationStatusColors?: Partial<Record<string, string>> | null;
   propertyId?: string | null;
   reservations: Reservation[];
+  today?: string;
 }
+
+const LOADING_MSG = "Ładowanie recepcji…";
 
 export function FrontOfficeClient({ initialData }: { initialData: FrontOfficeInitialData }) {
   const [data, setData] = useState(() => ({
@@ -24,38 +27,78 @@ export function FrontOfficeClient({ initialData }: { initialData: FrontOfficeIni
     reservations: initialData?.reservations ?? [],
   }));
   const searchParams = useSearchParams();
-  const raw = searchParams.get("reservationId");
-  const reservationId = raw?.trim() || undefined;
-  const e2eOpenCreate = searchParams.get("e2eOpenCreate") === "1";
+  const [reservationId, setReservationId] = useState<string | undefined>(undefined);
+  const [e2eOpenCreate, setE2eOpenCreate] = useState(false);
+  /** Tape Chart tylko po mount – serwer i klient renderują ten sam placeholder, zero hydratacji tego fragmentu. */
+  const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
-    getTapeChartData()
-      .then((full) => {
-        const next = full && typeof full === "object" ? full : null;
-        if (!next) return;
-        setData({
-          rooms: (full?.rooms ?? []) as Room[],
-          reservationGroups: (next.reservationGroups ?? []).map((g) => ({
-            id: g?.id,
-            name: g?.name ?? undefined,
-            reservationCount: g?.reservationCount ?? 0,
-          })),
-          reservationStatusColors: next.reservationStatusColors ?? null,
-          propertyId: next.propertyId ?? null,
-          reservations: (full?.reservations ?? []) as Reservation[],
-        });
-      })
-      .catch((err) => console.error("[FrontOffice] getTapeChartData failed:", err));
+    setHasMounted(true);
   }, []);
+
+  useEffect(() => {
+    const raw = searchParams.get("reservationId");
+    setReservationId(raw?.trim() || undefined);
+    setE2eOpenCreate(searchParams.get("e2eOpenCreate") === "1");
+  }, [searchParams]);
+
+  useEffect(() => {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const to = new Date(now);
+    to.setDate(to.getDate() + 42);
+    const dateTo = to.toISOString().slice(0, 10);
+    getTapeChartData({ dateFrom: today, dateTo }).then((full) => {
+      setData((prev) => ({
+        rooms: Array.isArray(full.rooms) ? (full.rooms as Room[]) : [],
+        reservationGroups: Array.isArray(full.reservationGroups)
+          ? full.reservationGroups.map((g) => ({
+              id: g.id,
+              name: g.name ?? undefined,
+              reservationCount: g.reservationCount,
+            }))
+          : [],
+        reservationStatusColors: full.reservationStatusColors ?? null,
+        propertyId: full.propertyId ?? null,
+        reservations: Array.isArray(full.reservations) ? (full.reservations as Reservation[]) : [],
+        today: prev.today,
+      }));
+    }).catch(() => {
+      // Zachowaj initialData przy błędzie
+    });
+  }, []);
+
+  const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+  const reservationGroups = Array.isArray(data.reservationGroups) ? data.reservationGroups : [];
+  const reservations = Array.isArray(data.reservations) ? data.reservations : [];
+
+  const hadDataRef = useRef(false);
+  if (rooms.length > 0) hadDataRef.current = true;
+
+  console.log("[FrontOfficeClient render]", {
+    hasMounted,
+    roomsLength: rooms.length,
+    dataRoomsLength: data?.rooms?.length,
+  });
+
+  if (!hasMounted || (rooms.length === 0 && !hadDataRef.current)) {
+    console.log("[FrontOfficeClient] SHOWING LOADING - reason:", !hasMounted ? "not mounted" : "rooms empty");
+    return (
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden items-center justify-center p-8 text-muted-foreground">
+        {LOADING_MSG}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-      <TapeChartStoreProvider reservations={data.reservations}>
+      <TapeChartStoreProvider reservations={reservations}>
         <TapeChart
-          rooms={data.rooms}
-          reservationGroups={data.reservationGroups}
+          rooms={rooms}
+          reservationGroups={reservationGroups}
           initialStatusBg={data.reservationStatusColors ?? undefined}
           initialPropertyId={data.propertyId ?? undefined}
+          initialTodayStr={data.today}
           initialHighlightReservationId={reservationId}
           initialOpenCreate={e2eOpenCreate}
         />

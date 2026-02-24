@@ -20,6 +20,8 @@ interface MonthlyOverviewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelectDate?: (dateStr: string) => void;
+  /** YYYY-MM-DD z rodzica – unika new Date() w pierwszym renderze (hydratacja). */
+  initialTodayStr?: string;
 }
 
 interface DaySummary {
@@ -39,6 +41,11 @@ function isBetween(dateStr: string, checkIn: string, checkOut: string): boolean 
   return dateStr >= checkIn && dateStr < checkOut;
 }
 
+function parseYearMonth(dateStr: string): { y: number; m: number } {
+  const [y, m] = dateStr.split("-").map(Number);
+  return { y: y || 2026, m: (m || 1) - 1 };
+}
+
 export function MonthlyOverviewDialog({
   trigger,
   reservations,
@@ -46,20 +53,21 @@ export function MonthlyOverviewDialog({
   open,
   onOpenChange,
   onSelectDate,
+  initialTodayStr = "2026-01-01",
 }: MonthlyOverviewDialogProps) {
-  const today = useMemo(() => new Date(), []);
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth());
+  const { y: initialYear, m: initialMonth } = parseYearMonth(initialTodayStr);
+  const [year, setYear] = useState(initialYear);
+  const [month, setMonth] = useState(initialMonth);
   const [selectedType, setSelectedType] = useState<string>("__all__");
 
   useEffect(() => {
     if (open) {
-      const now = new Date();
-      setYear(now.getFullYear());
-      setMonth(now.getMonth());
+      const { y, m } = parseYearMonth(initialTodayStr);
+      setYear(y);
+      setMonth(m);
       setSelectedType("__all__");
     }
-  }, [open]);
+  }, [open, initialTodayStr]);
 
   const types = useMemo(() => {
     const arr = Array.from(new Set(rooms.map((room) => room.type)));
@@ -182,8 +190,7 @@ export function MonthlyOverviewDialog({
           {summaries.map((summary) => {
             const date = toDate(summary.date);
             const isWeekend = [0, 6].includes(date.getUTCDay());
-            const isToday =
-              summary.date === today.toISOString().slice(0, 10);
+            const isToday = summary.date === initialTodayStr;
             return (
               <button
                 key={summary.date}
