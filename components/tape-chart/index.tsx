@@ -2256,8 +2256,16 @@ export function TapeChart({
                       e.stopPropagation();
                       if (previewMode) return; // No actions in preview mode
                       if (activeId !== reservation.id) {
-                        // Multi-select with Ctrl/Cmd
-                        if (e.ctrlKey || e.metaKey) {
+                        if (e.detail === 2) {
+                          setSelectedReservationIds(new Set());
+                          setSelectedReservation(reservation);
+                          setEditInitialTab("rozliczenie");
+                          setSheetOpen(true);
+                          setHighlightedReservationId(null);
+                          return;
+                        }
+                        if (e.detail === 1) {
+                          if (e.ctrlKey || e.metaKey) {
                           setSelectedReservationIds((prev) => {
                             const next = new Set(prev);
                             if (next.has(reservation.id)) {
@@ -2273,13 +2281,8 @@ export function TapeChart({
                             setNewReservationContext({ roomNumber: reservation.room, checkIn: reservation.checkOut });
                             setCreateSheetOpen(true);
                             setSelectedReservationIds(new Set());
-                          } else {
-                            setSelectedReservationIds(new Set());
-                            setSelectedReservation(reservation);
-                            setEditInitialTab("rozliczenie");
-                            setSheetOpen(true);
-                            setHighlightedReservationId(null);
                           }
+                        }
                         }
                       }
                     }}
