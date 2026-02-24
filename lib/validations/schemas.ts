@@ -492,6 +492,8 @@ export type RoomBlockInput = z.infer<typeof roomBlockSchema>;
 export const moveReservationSchema = z.object({
   reservationId: z.string().min(1, "ID rezerwacji wymagane"),
   newRoomNumber: z.string().min(1, "Numer pokoju wymagany").max(20),
+  newCheckIn: z.string().optional(), // YYYY-MM-DD
+  newCheckOut: z.string().optional(), // YYYY-MM-DD
 });
 
 export type MoveReservationInput = z.infer<typeof moveReservationSchema>;
