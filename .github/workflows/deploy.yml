@@ -1,0 +1,26 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          timeout: 300s
+          script: |
+            cd /var/www/hotel
+            git pull origin master
+            npm ci --production=false
+            npx prisma generate
+            npm run build
+            pm2 restart hotel-pms
+            curl -f http://127.0.0.1:3000/api/health || exit 1
