@@ -1,11 +1,11 @@
 ---
-description: Jak naprawic lokalny serwer dev (Next.js) gdy zwraca bledy 500 lub nie odpowiada
+description: Jak naprawic lokalny serwer dev (Next.js) gdy zwraca bledy 500, EADDRINUSE lub runtime error w przegladarce
 alwaysApply: true
 ---
 
 # Naprawa lokalnego serwera deweloperskiego
 
-Gdy uzytkownik zglasza bledy 500, biala strone lub brak odpowiedzi na `localhost:3011`:
+Gdy uzytkownik zglasza bledy 500, biala strone, brak odpowiedzi na `localhost:3011`, **EADDRINUSE (port zajety)** lub **runtime error w przegladarce** (np. `reading 'cell'`, `reading 'call'`):
 
 ## 1. Sprawdz czy serwer zyje
 
@@ -16,15 +16,38 @@ netstat -ano | Select-String ":3011 " | Select-String "LISTENING"
 - Jesli port zajety — sprawdz logi terminala, w ktorym uruchomiono `npm run dev`. Szukaj `uncaughtException`, `ECONNRESET`, `MODULE_NOT_FOUND`.
 - Jesli port wolny — serwer nie dziala, przejdz do kroku 3.
 
-## 2. Zabij stary proces jesli serwer jest martwy ale port zajety
+## 2. EADDRINUSE (port 3011 zajety) — zabij proces
+
+**Wazne:** Uruchamiaj tylko **jeden** `npm run dev`. Drugi start konczy sie EADDRINUSE.
+
+Zabij proces zajmujacy port 3011 (PowerShell):
+
+```powershell
+$conn = Get-NetTCPConnection -LocalPort 3011 -State Listen -ErrorAction SilentlyContinue
+if ($conn) { $conn | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }
+```
+
+Alternatywnie, jesli znasz PID z `netstat` (ostatnia kolumna):
 
 ```powershell
 Stop-Process -Id <PID> -Force -ErrorAction SilentlyContinue
 ```
 
-PID odczytaj z `netstat` (ostatnia kolumna).
+## 3. Runtime error w przegladarce (np. "reading 'cell'" / "reading 'call'")
 
-## 3. Uruchom serwer z czystym .next
+Te bledy (Call Stack z `options.factory`, webpack.js) czesto wynikaja ze **starego lub uszkodzonego cache** (.next). Naprawa:
+
+1. **Zatrzymac** wszystko na porcie 3011 (krok 2).
+2. **Czysty start** — w jednym terminalu:
+   ```powershell
+   cd c:\HotelSystem
+   npm run dev:clean
+   ```
+3. Poczekac na "Ready" / kompilacje (ok. 10–20 s).
+4. Otworzyc **http://localhost:3011/front-office** (uzyc **http**, nie https).
+5. **Twarde odswiezenie** w przegladarce (Ctrl+Shift+R lub Ctrl+F5), zeby nie ladowac starych chunkow.
+
+## 4. Uruchom serwer z czystym .next (gdy 500 / biala strona)
 
 ```powershell
 npm run dev:clean
@@ -32,7 +55,7 @@ npm run dev:clean
 
 To usuwa `.next` i startuje `next dev -p 3011`. Stary `.next` to najczestsza przyczyna bledow 500 — stale pliki webpack/vendor-chunks powoduja `MODULE_NOT_FOUND` lub niezgodnosc modulow.
 
-## 4. Poczekaj na kompilacje
+## 5. Poczekaj na kompilacje
 
 Pierwsza kompilacja po czystym starcie trwa 10-20 sekund. Nie panikuj jesli przegladarka nie odpowiada od razu — sprawdz logi terminala, czy widac `Compiled /front-office` i zapytania `prisma:query`.
 

@@ -494,6 +494,8 @@ export const moveReservationSchema = z.object({
   newRoomNumber: z.string().min(1, "Numer pokoju wymagany").max(20),
   newCheckIn: z.string().optional(), // YYYY-MM-DD
   newCheckOut: z.string().optional(), // YYYY-MM-DD
+  /** Pomija revalidatePath – używane z Tape Chart, żeby uniknąć białego flashu przy pierwszym dragu */
+  skipRevalidate: z.boolean().optional(),
 });
 
 export type MoveReservationInput = z.infer<typeof moveReservationSchema>;

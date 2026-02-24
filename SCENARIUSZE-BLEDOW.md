@@ -498,7 +498,7 @@ Błąd (jeśli): [komunikat / stack]
 - **[D1]** Scenariusz: **Przeciągnij rezerwację na zajęty pokój**
   Kroki: Drag & drop na komórkę z inną rezerwacją
   Wynik: ✓ OK
-  Błąd (jeśli): moveReservation na serwerze odrzuca przeniesienie do zajętego pokoju (overlappingInNewRoom) z komunikatem „Pokój X jest zajęty w terminie … (gość: …)”. W tape-chart index.tsx dodano toast.error przy niepowodzeniu moveReservation.
+  Błąd (jeśli): moveReservation na serwerze odrzuca przeniesienie do zajętego pokoju (overlappingInNewRoom) z komunikatem „Pokój X jest zajęty w podanym terminie” (bez podawania gościa). W tape-chart index.tsx dodano toast.error przy niepowodzeniu moveReservation.
 - **[D2]** Scenariusz: **Resize – check-out przed check-in**
   Kroki: Skróć pasek tak, że end < start
   Wynik: ✓ OK
