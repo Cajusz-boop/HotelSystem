@@ -315,7 +315,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
             rowHeightPx={rowHeightPx}
             saturday={saturday}
             sunday={sunday}
-            isBlocked={isBlocked}
+            isBlocked={isBlocked ?? false}
             isFocused={isFocused}
             isDirty={isDirty}
             blockedRanges={blockedRanges}
@@ -1312,15 +1312,13 @@ export function TapeChart({
         return;
       }
 
-      const newRoomNumber = targetRoom.number;
-      if (reservation.room === newRoomNumber && target.date === reservation.checkIn) {
-        return;
-      }
-
       const oldCheckInStr =
         typeof reservation.checkIn === "string"
           ? reservation.checkIn.slice(0, 10)
           : new Date(reservation.checkIn).toISOString().slice(0, 10);
+      if (reservation.room === newRoomNumber && targetDate === oldCheckInStr) {
+        return;
+      }
       const oldCheckOutStr =
         typeof reservation.checkOut === "string"
           ? reservation.checkOut.slice(0, 10)
