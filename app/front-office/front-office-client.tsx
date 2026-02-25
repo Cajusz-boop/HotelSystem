@@ -25,6 +25,7 @@ export function FrontOfficeClient({ initialData }: { initialData: FrontOfficeIni
     reservationStatusColors: initialData?.reservationStatusColors ?? null,
     propertyId: initialData?.propertyId ?? null,
     reservations: initialData?.reservations ?? [],
+    today: initialData?.today ?? undefined,
   }));
   const searchParams = useSearchParams();
   const [reservationId, setReservationId] = useState<string | undefined>(undefined);
@@ -61,7 +62,7 @@ export function FrontOfficeClient({ initialData }: { initialData: FrontOfficeIni
         reservationStatusColors: full.reservationStatusColors ?? null,
         propertyId: full.propertyId ?? null,
         reservations: Array.isArray(full.reservations) ? (full.reservations as Reservation[]) : [],
-        today: prev.today,
+        today: prev.today ?? today,
       }));
     }).catch(() => {
       // Zachowaj initialData przy błędzie
