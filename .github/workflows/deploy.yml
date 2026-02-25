@@ -19,8 +19,9 @@ jobs:
           script: |
             cd /var/www/hotel
             git fetch origin && git reset --hard origin/master
+            pm2 stop hotel-pms
             npm ci --production=false
             npx prisma generate
             NODE_OPTIONS=--max-old-space-size=2048 npm run build
-            pm2 restart hotel-pms
+            pm2 start hotel-pms
             sleep 10 && curl -f http://127.0.0.1:3000/api/health || exit 1
