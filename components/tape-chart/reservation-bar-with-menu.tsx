@@ -28,7 +28,7 @@ import { PreauthDialog } from "@/components/preauth-dialog";
 import { ReceiptDialog } from "@/components/receipt-dialog";
 import { toast } from "sonner";
 import type { Reservation } from "@/lib/tape-chart-types";
-import { FileText, Receipt, CreditCard } from "lucide-react";
+import { FileText, Receipt, CreditCard, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const LONG_PRESS_MS = 500;
@@ -61,6 +61,8 @@ interface ReservationBarWithMenuProps {
   onDuplicate?: (reservation: Reservation) => void;
   /** Callback do przedłużenia pobytu */
   onExtendStay?: (reservation: Reservation, newCheckOut: string) => void;
+  /** Callback do edycji całej rezerwacji grupowej (gdy reservation.groupId) */
+  onEditGroup?: (groupId: string) => void;
   /** Szerokość paska w px – do wyliczenia stałego clipPath */
   barWidthPx?: number;
   /** Wysokość paska w px – do skalowania czcionki */
@@ -90,6 +92,7 @@ export function ReservationBarWithMenu({
   isCheckInToday = false,
   onDuplicate,
   onExtendStay,
+  onEditGroup,
   barWidthPx,
   barHeightPx,
   showFullInfo,
@@ -434,7 +437,7 @@ export function ReservationBarWithMenu({
     }
   }, [reservation.id]);
 
-  const handleBarClick = useCallback(
+  const handleBarDoubleClick = useCallback(
     (e: React.MouseEvent) => {
       if (e.ctrlKey || e.metaKey) return;
       e.stopPropagation();
@@ -452,7 +455,7 @@ export function ReservationBarWithMenu({
           onTouchEnd={handleTouchEnd}
           onTouchMove={handleTouchMove}
           onTouchCancel={handleTouchEnd}
-          onClick={handleBarClick}
+          onDoubleClick={handleBarDoubleClick}
         >
           <ReservationBar
             reservation={reservation}
@@ -508,6 +511,12 @@ export function ReservationBarWithMenu({
         <ContextMenuItem onSelect={() => onEdit(reservation)}>
           Edytuj rezerwację
         </ContextMenuItem>
+        {reservation.groupId && onEditGroup && (
+          <ContextMenuItem onSelect={() => onEditGroup(reservation.groupId!)}>
+            <Users className="mr-2 h-4 w-4" />
+            Edytuj całą rezerwację grupową
+          </ContextMenuItem>
+        )}
         {onDuplicate && (
           <ContextMenuItem onSelect={() => onDuplicate(reservation)}>
             Duplikuj rezerwację

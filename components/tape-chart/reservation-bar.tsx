@@ -180,12 +180,21 @@ export function ReservationBar({
             ? [shortName, nightsShort].filter(Boolean).join(" · ")
             : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ")
         : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ");
-  const hasCustomColor = Boolean(statusBg?.[reservation.status]);
-  const colorClass = hasCustomColor ? "" : RESERVATION_STATUS_COLORS[reservation.status];
-  const defaultBg = RESERVATION_STATUS_BG[reservation.status as keyof typeof RESERVATION_STATUS_BG] ?? RESERVATION_STATUS_BG.CONFIRMED;
-  const bgColor = ensureOpaque(statusBg?.[reservation.status] ?? defaultBg);
+  // Tło karty = status płatności; pasek z lewej = status rezerwacji
+  const defaultPaymentBg =
+    reservation.paymentStatus === "PAID"
+      ? "rgb(20 184 166)"
+      : reservation.paymentStatus === "PARTIAL"
+        ? "rgb(234 179 8)"
+        : reservation.paymentStatus === "UNPAID"
+          ? "rgb(139 92 246)"
+          : "rgb(148 163 184)"; // brak statusu płatności – neutralny szary
+  const bgColor = ensureOpaque(defaultPaymentBg);
   const bgGradient = `linear-gradient(to bottom, ${lightenColor(bgColor)} 0%, ${bgColor} 100%)`;
   const barShadow = "0 1px 3px rgba(0,0,0,0.1), inset 0 0 0 1px rgba(255,255,255,0.15)";
+
+  const defaultReservationBg = RESERVATION_STATUS_BG[reservation.status as keyof typeof RESERVATION_STATUS_BG] ?? RESERVATION_STATUS_BG.CONFIRMED;
+  const reservationEdgeColor = ensureOpaque(statusBg?.[reservation.status] ?? defaultReservationBg);
   const isGroupReservation = Boolean(reservation.groupId);
 
   const STATUS_PL: Record<string, string> = {
@@ -249,15 +258,6 @@ export function ReservationBar({
     if (tooltipTimerRef.current) clearTimeout(tooltipTimerRef.current);
   }, []);
 
-  const paymentEdgeColor =
-    reservation.paymentStatus === "PAID"
-      ? "rgb(20 184 166)"
-      : reservation.paymentStatus === "PARTIAL"
-        ? "rgb(234 179 8)"
-        : reservation.paymentStatus === "UNPAID"
-          ? "rgb(139 92 246)"
-          : undefined;
-
   const POINT_DEPTH_PX = 10;
   const pct = barWidthPx && barWidthPx > 0 ? Math.min(12, (POINT_DEPTH_PX / barWidthPx) * 100) : 6;
   const r = (100 - pct).toFixed(1);
@@ -302,7 +302,7 @@ export function ReservationBar({
         data-reservation-id={reservation.id}
         className={cn(
           "relative z-10 flex h-full w-full min-h-0 flex-col justify-center gap-0 text-xs leading-snug font-semibold text-white overflow-hidden antialiased transition-[filter] duration-150 hover:brightness-105",
-          colorClass,
+          RESERVATION_STATUS_COLORS[reservation.status],
           isPlaceholder && "border-2 border-dashed opacity-80",
           isDragging && "z-50 cursor-grabbing opacity-30",
           hasConflict && "ring-2 ring-red-500 ring-offset-1",
@@ -325,15 +325,13 @@ export function ReservationBar({
         {...listeners}
         {...attributes}
       >
-        {/* Payment status edge indicator */}
-        {paymentEdgeColor && (
-          <div
-            className="absolute left-0 top-0 bottom-0 w-[4px]"
-            style={{ backgroundColor: paymentEdgeColor }}
-            aria-hidden
-          />
-        )}
-        <div className={cn("flex items-center justify-center min-h-0 min-w-0 overflow-hidden text-center", paymentEdgeColor ? "pl-2.5 pr-1.5 py-0.5" : "px-1.5 py-0.5")}>
+        {/* Reservation status – pasek z lewej */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-[4px]"
+          style={{ backgroundColor: reservationEdgeColor }}
+          aria-hidden
+        />
+        <div className="flex items-center justify-center min-h-0 min-w-0 overflow-hidden text-center pl-2.5 pr-1.5 py-0.5">
           <span
             className={cn(
               "leading-snug font-semibold tabular-nums antialiased",
