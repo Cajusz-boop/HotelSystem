@@ -8,14 +8,14 @@ import {
   DndContext,
   DragOverlay,
   type DragEndEvent,
-  type DragMoveEvent,
+  type DragOverEvent,
   type DragStartEvent,
   PointerSensor,
   type PointerSensorOptions,
   useSensor,
   useSensors,
-  useDroppable,
 } from "@dnd-kit/core";
+import { CellDroppable } from "./cell-droppable";
 import {
   Undo2,
   Redo2,
@@ -99,82 +99,28 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 
-/** Parsuje id komórki droppable: cell-roomNumber__dateStr → { roomNumber, dateStr } */
-function parseCellId(id: string): { roomNumber: string; dateStr: string } | null {
+/**
+ * Parsuje ID droppable komórki.
+ * Format: "cell-{roomNumber}-{YYYY-MM-DD}"
+ * Przykład: "cell-008-2026-03-06" → { roomNumber: "008", dateStr: "2026-03-06" }
+ *
+ * UWAGA: roomNumber może zawierać spacje i myślniki (np. "SI 022"),
+ * dlatego parsujemy od KOŃCA – ostatnie 10 znaków to data (YYYY-MM-DD).
+ */
+function parseCellDroppableId(id: string): { roomNumber: string; dateStr: string } | null {
   if (!id.startsWith("cell-")) return null;
-  const rest = id.slice(5);
-  const sep = rest.indexOf("__");
-  if (sep < 0) return null;
-  return { roomNumber: rest.slice(0, sep), dateStr: rest.slice(sep + 2) };
-}
 
-/** Komórka (pokój+data) jako strefa upuszczenia – pozwala na zmianę pokoju i daty. */
-const CellDroppable = memo(function CellDroppable({
-  roomNumber,
-  dateStr,
-  rowIdx,
-  colIdx,
-  columnWidthPx,
-  rowHeightPx,
-  saturday,
-  sunday,
-  isBlocked,
-  isFocused,
-  isDirty,
-  blockedRanges,
-  onCellClick,
-}: {
-  roomNumber: string;
-  dateStr: string;
-  rowIdx: number;
-  colIdx: number;
-  columnWidthPx: number;
-  rowHeightPx: number;
-  saturday: boolean;
-  sunday: boolean;
-  isBlocked: boolean;
-  isFocused: boolean;
-  isDirty: boolean;
-  blockedRanges?: Array<{ startDate: string; endDate: string; reason?: string }>;
-  onCellClick?: (roomNumber: string, dateStr: string) => void;
-}) {
-  const { setNodeRef } = useDroppable({ id: `cell-${roomNumber}__${dateStr}` });
-  return (
-    <div
-      ref={setNodeRef}
-      key={`cell-${roomNumber}-${colIdx}`}
-      data-testid={`cell-${roomNumber}-${dateStr}`}
-      data-cell
-      data-date={dateStr}
-      data-room={roomNumber}
-      className={cn(
-        "cursor-grab active:cursor-grabbing border-b border-r border-[hsl(var(--kw-grid-border))] select-none",
-        rowIdx % 2 === 1 ? "bg-slate-100 dark:bg-slate-800" : "bg-card",
-        saturday && "kw-cell-saturday",
-        sunday && "kw-cell-sunday",
-        isBlocked && "bg-destructive/20 cursor-not-allowed opacity-70",
-        isFocused && "ring-2 ring-inset ring-primary bg-primary/10",
-        isDirty && "bg-amber-50/80 dark:bg-amber-950/30"
-      )}
-      style={{
-        gridColumn: colIdx + 2,
-        gridRow: rowIdx + 2,
-        minWidth: columnWidthPx,
-        minHeight: rowHeightPx,
-      }}
-      onClick={() => {
-        if (isBlocked) {
-          toast.info("Pokój zablokowany w tym terminie (Room Block).");
-          return;
-        }
-        onCellClick?.(roomNumber, dateStr);
-      }}
-      title={isBlocked ? (blockedRanges?.find(
-        (range) => dateStr >= range.startDate && dateStr <= range.endDate
-      )?.reason ?? undefined) : undefined}
-    />
-  );
-});
+  const withoutPrefix = id.slice(5); // usuń "cell-"
+  if (withoutPrefix.length < 12) return null; // minimum: "X-YYYY-MM-DD"
+
+  const dateStr = withoutPrefix.slice(-10); // ostatnie 10 znaków
+  const roomNumber = withoutPrefix.slice(0, -11); // wszystko przed "-YYYY-MM-DD"
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+  if (!roomNumber) return null;
+
+  return { roomNumber, dateStr };
+}
 
 const RoomRowDroppable = memo(function RoomRowDroppable({
   room,
@@ -182,6 +128,9 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   dates,
   children,
   onCellClick,
+  hasReservation,
+  isCellSelected,
+  selectionKey,
   onRoomLabelClick,
   onRoomBlock,
   onRoomStatusChange,
@@ -194,12 +143,21 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   columnWidthPx,
   rowHeightPx,
   virtualizedRow,
+  todayStr,
+  dragOverTarget,
+  dragNights,
 }: {
   room: Room;
   rowIdx: number;
   dates: string[];
   children: React.ReactNode;
+  /** Single click → zaznacz/odznacz komórkę w grupie */
+  /** Zwykły klik w pustą komórkę → otwórz formularz nowej pojedynczej rezerwacji */
   onCellClick?: (roomNumber: string, dateStr: string) => void;
+  hasReservation?: (roomNumber: string, dateStr: string) => boolean;
+  isCellSelected?: (roomNumber: string, dateStr: string) => boolean;
+  /** Klucz zmienia się przy zmianie zaznaczenia – wymusza re-render dla podświetlenia */
+  selectionKey?: string;
   onRoomLabelClick?: (room: Room) => void;
   onRoomBlock?: (room: Room) => void;
   onRoomStatusChange?: (room: Room, status: RoomStatus) => void;
@@ -213,19 +171,20 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   rowHeightPx: number;
   /** W trybie wirtualizacji: jedna linia siatki (gridRow: 1) */
   virtualizedRow?: boolean;
+  todayStr?: string;
+  dragOverTarget?: { roomNumber: string; dateStr: string } | null;
+  dragNights?: number;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: `room-${room.number}` });
   const isDirty = room.status === "DIRTY";
   const isFilteredToThis = showOnlyRoomNumber === room.number;
   const gridRow = virtualizedRow ? 1 : rowIdx + 2;
 
   const labelContent = (
     <div
-      ref={setNodeRef}
       data-testid={`room-row-${room.number}`}
       className={cn(
-        "sticky left-0 z-[60] flex items-center gap-1 border-b border-r border-[hsl(var(--kw-grid-border))] px-1.5 py-0.5",
-        isOver ? "bg-primary/10 ring-1 ring-primary" : rowIdx % 2 === 1 ? "bg-slate-100 dark:bg-slate-800" : "bg-card",
+        "sticky left-0 z-[60] flex items-center gap-1 border-b border-r border-[hsl(var(--kw-grid-border))] px-1.5 py-0.5 bg-card transition-colors duration-150",
+        "group-hover:bg-blue-100 dark:group-hover:bg-blue-900/50",
         isDirty && "bg-amber-50/80 dark:bg-amber-950/30",
         !previewMode && (onRoomLabelClick || onRoomBlock) && "cursor-pointer hover:bg-muted/50"
       )}
@@ -300,26 +259,68 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
       {dates.map((dateStr, colIdx) => {
         const saturday = isSaturdayDate(dateStr);
         const sunday = isSundayDate(dateStr);
+        const isToday = dateStr === todayStr;
+        const wd = getWeekdayIndex(dateStr);
+        const isWeekdayA = wd >= 0 && wd <= 4 && wd % 2 === 0; // Pon=0, Śr=2, Pt=4
         const isBlocked = blockedRanges?.some(
           (range) => dateStr >= range.startDate && dateStr <= range.endDate
         );
         const isFocused = focusedDateIdx === colIdx;
+
+        // Oblicz czy ta komórka jest w zakresie podświetlenia (zgodnie z paskiem rezerwacji:
+        // od połowy dnia check-in do połowy dnia check-out)
+        let isInDragRange = false;
+        let dragRangePosition: "start" | "middle" | "end" | "single" | null = null;
+        if (dragOverTarget && dragOverTarget.roomNumber === room.number && (dragNights ?? 0) > 0) {
+          const targetIdx = dates.indexOf(dragOverTarget.dateStr);
+          const rangeEndIdx = targetIdx + (dragNights ?? 0); // dzień check-out
+          if (targetIdx >= 0 && colIdx >= targetIdx && colIdx <= rangeEndIdx) {
+            isInDragRange = true;
+            if ((dragNights ?? 0) === 1) {
+              // 1 noc: check-in (prawa połowa) + check-out (lewa połowa)
+              if (colIdx === targetIdx) dragRangePosition = "single";
+              else if (colIdx === rangeEndIdx) dragRangePosition = "end";
+            } else {
+              if (colIdx === targetIdx) dragRangePosition = "start";
+              else if (colIdx === rangeEndIdx) dragRangePosition = "end";
+              else dragRangePosition = "middle";
+            }
+          }
+        }
+
         return (
           <CellDroppable
             key={`cell-${room.number}-${colIdx}`}
             roomNumber={room.number}
             dateStr={dateStr}
-            rowIdx={rowIdx}
-            colIdx={colIdx}
-            columnWidthPx={columnWidthPx}
-            rowHeightPx={rowHeightPx}
-            saturday={saturday}
-            sunday={sunday}
-            isBlocked={isBlocked ?? false}
-            isFocused={isFocused}
-            isDirty={isDirty}
-            blockedRanges={blockedRanges}
-            onCellClick={onCellClick}
+            isInDragRange={isInDragRange}
+            dragRangePosition={dragRangePosition}
+            style={{
+              gridColumn: colIdx + 2,
+              gridRow: virtualizedRow ? 1 : rowIdx + 2,
+              minWidth: columnWidthPx,
+              minHeight: rowHeightPx,
+            }}
+            className={cn(
+              "cursor-grab active:cursor-grabbing border-b border-[hsl(var(--kw-grid-border))] select-none",
+              isToday && "kw-cell-today",
+              !isToday && saturday && "kw-cell-saturday",
+              !isToday && sunday && "kw-cell-sunday",
+              !isToday && !saturday && !sunday && (isWeekdayA ? "kw-cell-weekday-a" : "kw-cell-weekday-b"),
+              isBlocked && "bg-destructive/20 cursor-not-allowed opacity-70",
+              isFocused && "ring-2 ring-inset ring-primary bg-primary/10",
+              isDirty && "bg-amber-50/80 dark:bg-amber-950/30"
+            )}
+            isSelected={isCellSelected?.(room.number, dateStr)}
+            hasReservation={hasReservation?.(room.number, dateStr)}
+            onCellClick={
+              isBlocked
+                ? () => toast.info("Pokój zablokowany w tym terminie (Room Block).")
+                : () => onCellClick?.(room.number, dateStr)
+            }
+            title={isBlocked ? (blockedRanges?.find(
+              (range) => dateStr >= range.startDate && dateStr <= range.endDate
+            )?.reason ?? undefined) : undefined}
           />
         );
       })}
@@ -336,6 +337,11 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   if (prevProps.columnWidthPx !== nextProps.columnWidthPx) return false;
   if (prevProps.rowHeightPx !== nextProps.rowHeightPx) return false;
   if (prevProps.dates.length !== nextProps.dates.length) return false;
+  if (prevProps.todayStr !== nextProps.todayStr) return false;
+  if (prevProps.dragNights !== nextProps.dragNights) return false;
+  if (prevProps.dragOverTarget?.roomNumber !== nextProps.dragOverTarget?.roomNumber) return false;
+  if (prevProps.dragOverTarget?.dateStr !== nextProps.dragOverTarget?.dateStr) return false;
+  if (prevProps.selectionKey !== nextProps.selectionKey) return false;
   return true;
 });
 
@@ -380,6 +386,12 @@ function isSaturdayDate(dateStr: string): boolean {
 
 function isSundayDate(dateStr: string): boolean {
   return new Date(dateStr + "Z").getUTCDay() === 0;
+}
+
+/** Pon=0, Wt=1, Śr=2, Cz=3, Pt=4 – dla naprzemiennych kolorów Pon–Pt */
+function getWeekdayIndex(dateStr: string): number {
+  const d = new Date(dateStr + "Z").getUTCDay();
+  return d === 0 ? 6 : d - 1; // Nd=6 (nie używamy), Pn=0..Pt=4
 }
 
 function _isPastDate(dateStr: string, todayStr: string): boolean {
@@ -516,6 +528,18 @@ export function TapeChart({
   const [exportEndDate, setExportEndDate] = useState("");
   const [exportRooms, setExportRooms] = useState<string[]>([]);
   const [groupReservationSheetOpen, setGroupReservationSheetOpen] = useState(false);
+  const [groupReservationInitialData, setGroupReservationInitialData] = useState<
+    { roomNumber: string; checkIn: string; checkOut: string; nights: number }[] | null
+  >(null);
+  const [editGroupId, setEditGroupId] = useState<string | null>(null);
+  const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionStart, setSelectionStart] = useState<{ roomIndex: number; dateIndex: number } | null>(null);
+  const [selectionEnd, setSelectionEnd] = useState<{ roomIndex: number; dateIndex: number } | null>(null);
+  const selectionRef = useRef<{
+    start: { roomIndex: number; dateIndex: number };
+    end: { roomIndex: number; dateIndex: number };
+  } | null>(null);
   const [roomBlockSheetOpen, setRoomBlockSheetOpen] = useState(false);
   const [roomBlockInitialRoom, setRoomBlockInitialRoom] = useState<string | null>(null);
   const [showOnlyRoomNumber, setShowOnlyRoomNumber] = useState<string | null>(null);
@@ -572,10 +596,11 @@ export function TapeChart({
   ] as const;
 
   const [viewStartDate, setViewStartDate] = useState<Date>(() => {
-    const baseStr = initialTodayStr ?? "2026-01-01";
+    const baseStr = initialTodayStr ?? todayStr ?? "2026-01-01";
     const [y, m, d] = baseStr.split("-").map(Number);
     const base = new Date(y, m - 1, d);
     if (DEFAULT_VIEW_SCALE === "day" || DEFAULT_VIEW_SCALE === "week" || DEFAULT_VIEW_SCALE === "month") {
+      base.setDate(base.getDate() - 1); // wczoraj – druga kolumna = dziś
       return base;
     }
     const days = VIEW_SCALE_CONFIG[DEFAULT_VIEW_SCALE].days;
@@ -780,7 +805,9 @@ export function TapeChart({
       const d = new Date(goToDateValue + "T12:00:00");
       if (!Number.isNaN(d.getTime())) {
         if (viewScale === "day" || viewScale === "week" || viewScale === "month") {
-          setViewStartDate(d);
+          const yesterday = new Date(d);
+          yesterday.setDate(yesterday.getDate() - 1);
+          setViewStartDate(yesterday);
         } else {
           const days = VIEW_SCALE_CONFIG[viewScale].days;
           setViewStartDate(addDays(d, -Math.floor(days / 2)));
@@ -808,12 +835,15 @@ export function TapeChart({
   };
   const handleGoToToday = useCallback(() => {
     if (viewScale === "day" || viewScale === "week" || viewScale === "month") {
-      setViewStartDate(todayDate);
+      const yesterday = new Date(todayDate);
+      yesterday.setDate(yesterday.getDate() - 1);
+      setViewStartDate(yesterday);
     } else {
       const days = VIEW_SCALE_CONFIG[viewScale].days;
       setViewStartDate(addDays(todayDate, -Math.floor(days / 2)));
     }
     didScrollToTodayRef.current = false;
+    userRequestedGoToTodayRef.current = true;
   }, [todayDate, viewScale]);
 
   const handleOpenExportDialog = () => {
@@ -847,23 +877,7 @@ export function TapeChart({
   const gridWrapperRef = useRef<HTMLDivElement>(null);
   const didPanRef = useRef(false);
   const didScrollToTodayRef = useRef(false);
-  const pointerPosRef = useRef({ x: 0, y: 0 });
-
-  useEffect(() => {
-    const onPointerUpdate = (e: PointerEvent) => {
-      pointerPosRef.current = { x: e.clientX, y: e.clientY };
-    };
-    document.addEventListener("pointermove", onPointerUpdate, { passive: true });
-    document.addEventListener("pointerdown", onPointerUpdate as EventListener, { passive: true });
-    document.addEventListener("pointerup", onPointerUpdate as EventListener, { passive: true });
-    document.addEventListener("pointercancel", onPointerUpdate as EventListener, { passive: true });
-    return () => {
-      document.removeEventListener("pointermove", onPointerUpdate);
-      document.removeEventListener("pointerdown", onPointerUpdate as EventListener);
-      document.removeEventListener("pointerup", onPointerUpdate as EventListener);
-      document.removeEventListener("pointercancel", onPointerUpdate as EventListener);
-    };
-  }, []);
+  const userRequestedGoToTodayRef = useRef(false);
 
   /** Szerokość kolumny = stała COLUMN_WIDTH_PX – siatka szersza niż kontener, przewijanie myszką w każdym widoku */
   const effectiveColumnWidthPx = COLUMN_WIDTH_PX;
@@ -919,10 +933,9 @@ export function TapeChart({
   const handleGridPointerDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
     const target = e.target;
-    // Przeciąganie siatki (komórka, nagłówek lub tło) = przewijanie – nie gdy klik na pasek rezerwacji (DnD)
     if (!(target instanceof HTMLElement)) return;
     if (target.closest("[data-reservation-id]")) return;
-    if (!target.closest("[data-cell], [data-date-header], [data-grid-draggable]")) return;
+    if (!target.closest("[data-date-header], [data-grid-draggable]")) return;
     const ref = scrollContainerRef.current;
     if (!ref) return;
     const startX = e.clientX;
@@ -1045,18 +1058,17 @@ export function TapeChart({
     return () => clearTimeout(t);
   }, [initialHighlightReservationId, reservations]);
 
-  // Scroll to "today" column on mount (and when handleGoToToday resets the flag)
+  // Po kliknięciu "Dziś"/"Tydzień"/"Miesiąc" lub "Wróć do dziś": scroll na 0.
+  // viewStartDate = wczoraj, więc scrollLeft = 0 → wczoraj jest pierwszą widoczną kolumną.
   useEffect(() => {
-    if (didScrollToTodayRef.current || initialHighlightReservationId) return;
+    if (!userRequestedGoToTodayRef.current || didScrollToTodayRef.current || initialHighlightReservationId) return;
     const container = scrollContainerRef.current;
     if (!container) return;
-    const todayIdx = dates.indexOf(todayStr);
-    if (todayIdx < 0) return;
     const t = setTimeout(() => {
       if (didScrollToTodayRef.current) return;
       didScrollToTodayRef.current = true;
-      const scrollTarget = Math.max(0, todayIdx * COLUMN_WIDTH_PX - 20);
-      container.scrollLeft = scrollTarget;
+      userRequestedGoToTodayRef.current = false;
+      container.scrollLeft = 0;
     }, 100);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1074,12 +1086,11 @@ export function TapeChart({
   }, [moreMenuOpen]);
 
   const [privacyMode, setPrivacyMode] = useState(false);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeDragReservation, setActiveDragReservation] = useState<Reservation | null>(null);
   const [isDragPending, startDragTransition] = useTransition();
-  const [ghostPreview, setGhostPreview] = useState<{
+  const [dragOverTarget, setDragOverTarget] = useState<{
     roomNumber: string;
-    checkIn: string;
-    checkOut: string;
+    dateStr: string;
   } | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editInitialTab, setEditInitialTab] = useState<UnifiedReservationTab | undefined>(undefined);
@@ -1151,39 +1162,34 @@ export function TapeChart({
       .filter((p): p is NonNullable<typeof p> => p != null);
   }, [filteredReservations, roomRowIndex, dateIndex, dates]);
 
+  /** Zbiór komórek faktycznie pokrytych paskiem – zgodnie z logiką placementu (bar spans checkIn..checkOut inclusive) */
+  const occupiedCellsSet = useMemo(() => {
+    const set = new Set<string>();
+    reservationPlacements.forEach(({ reservation, gridColumnStart, gridColumnEnd }) => {
+      const startIdx = gridColumnStart - 2;
+      const endIdx = gridColumnEnd - 3;
+      for (let i = startIdx; i <= endIdx && i < dates.length; i++) {
+        const d = dates[i];
+        if (d) set.add(`${reservation.room}-${d}`);
+      }
+    });
+    return set;
+  }, [reservationPlacements, dates]);
+
   const roomByNumber = useMemo(() => new Map(allRooms.map((r) => [r.number, r])), [allRooms]);
 
-  const ghostPlacement = useMemo(() => {
-    if (!ghostPreview || !activeId) return null;
-    const row = roomRowIndex.get(ghostPreview.roomNumber);
-    if (row == null) return null;
-    const startIdx = dateIndex.get(ghostPreview.checkIn);
-    let endIdx = dateIndex.get(ghostPreview.checkOut);
-    if (endIdx == null) endIdx = dates.findIndex((d) => d >= ghostPreview.checkOut);
-    if (endIdx === -1) endIdx = dates.length;
-    if (startIdx == null || startIdx >= endIdx) return null;
-    const numDays = endIdx - startIdx;
-    const numColumns = numDays + 1;
-    const barLeftPercent = 0.5 / numColumns;
-    const barWidthPercent = numDays / numColumns;
-    const gridColumnEnd = Math.min(endIdx + 3, dates.length + 2);
-    const activeReservation = reservations.find((r) => r.id === activeId);
-    if (!activeReservation) return null;
-    return {
-      reservation: { ...activeReservation, room: ghostPreview.roomNumber },
-      gridColumnStart: startIdx + 2,
-      gridColumnEnd,
-      gridRow: row + 1,
-      barLeftPercent,
-      barWidthPercent,
-    };
-  }, [ghostPreview, activeId, roomRowIndex, dateIndex, dates, reservations]);
+  const dragNights = useMemo(() => {
+    if (!activeDragReservation) return 0;
+    const checkIn = new Date(activeDragReservation.checkIn);
+    const checkOut = new Date(activeDragReservation.checkOut);
+    return Math.max(1, Math.ceil((checkOut.getTime() - checkIn.getTime()) / 86_400_000));
+  }, [activeDragReservation]);
 
   // Anuluj drag przy zmianie zoomu/skali – unikamy błędnego collision (stale recty) i niespójnego layoutu (D10)
   useEffect(() => {
-    if (activeId != null) {
-      setActiveId(null);
-      setGhostPreview(null);
+    if (activeDragReservation != null) {
+      setActiveDragReservation(null);
+      setDragOverTarget(null);
     }
   }, [zoomIndex, viewScale]); // eslint-disable-line react-hooks/exhaustive-deps -- clear selection on zoom/scale change only
 
@@ -1247,56 +1253,51 @@ export function TapeChart({
   }, [reservations, todayStr]);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
-    const ev = (event as unknown as { activatorEvent?: { clientX: number; clientY: number } }).activatorEvent;
-    if (ev && typeof ev.clientX === "number" && typeof ev.clientY === "number") {
-      pointerPosRef.current = { x: ev.clientX, y: ev.clientY };
+    const reservation = event.active.data.current?.reservation as Reservation | undefined;
+    if (reservation) {
+      setActiveDragReservation(reservation);
     }
   }, []);
 
-  const handleDragMove = useCallback(() => {
-    // Ghost wyłączony – używamy tylko DragOverlay
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const overData = event.over?.data?.current;
+    if (overData?.type === "cell") {
+      setDragOverTarget({
+        roomNumber: overData.roomNumber as string,
+        dateStr: overData.dateStr as string,
+      });
+    } else {
+      setDragOverTarget(null);
+    }
   }, []);
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
-      const { active } = event;
-      setActiveId(null);
-      setGhostPreview(null);
-      const resId = active.id as string;
-      const reservation = reservations.find((r) => r.id === resId);
+      const reservation = event.active.data.current?.reservation as Reservation | undefined;
+      setActiveDragReservation(null);
+      setDragOverTarget(null);
+
       if (!reservation) return;
 
-      let { x, y } = pointerPosRef.current;
-      const overlayEl = document.querySelector("[data-dnd-overlay]") as HTMLElement | null;
-      if (overlayEl) overlayEl.style.pointerEvents = "none";
+      // Cel dropu z event.over (droppable)
+      const overData = event.over?.data?.current;
+      let newRoomNumber: string | null = null;
+      let targetDate: string | null = null;
 
-      if (x === 0 && y === 0) {
-        const ev = (event as unknown as { activatorEvent?: { clientX: number; clientY: number }; delta?: { x: number; y: number } });
-        const delta = ev.delta;
-        if (ev.activatorEvent && typeof ev.activatorEvent.clientX === "number") {
-          x = ev.activatorEvent.clientX + (delta?.x ?? 0);
-          y = ev.activatorEvent.clientY + (delta?.y ?? 0);
-        } else if (overlayEl) {
-          const rect = overlayEl.getBoundingClientRect();
-          x = rect.left + rect.width / 2;
-          y = rect.top + rect.height / 2;
+      if (overData?.type === "cell") {
+        newRoomNumber = overData.roomNumber as string;
+        targetDate = overData.dateStr as string;
+      } else if (event.over?.id) {
+        const parsed = parseCellDroppableId(String(event.over.id));
+        if (parsed) {
+          newRoomNumber = parsed.roomNumber;
+          targetDate = parsed.dateStr;
         }
       }
 
-      const cellEl = document.elementsFromPoint(x, y).find(
-        (el): el is HTMLElement =>
-          el instanceof HTMLElement && el.dataset.room !== undefined && el.dataset.date !== undefined
-      );
-      if (overlayEl) overlayEl.style.pointerEvents = "";
-
-      if (!cellEl) {
-        toast.error("Upuszczono poza siatką");
-        return;
+      if (!newRoomNumber || !targetDate) {
+        return; // Drop poza siatką – kafelek wraca na miejsce (cichy powrót)
       }
-
-      const newRoomNumber = cellEl.dataset.room!;
-      const targetDate = cellEl.dataset.date!;
 
       const targetRoom = roomByNumber.get(newRoomNumber);
       if (!targetRoom) {
@@ -1316,65 +1317,73 @@ export function TapeChart({
         typeof reservation.checkIn === "string"
           ? reservation.checkIn.slice(0, 10)
           : new Date(reservation.checkIn).toISOString().slice(0, 10);
-      if (reservation.room === newRoomNumber && targetDate === oldCheckInStr) {
-        return;
-      }
       const oldCheckOutStr =
         typeof reservation.checkOut === "string"
           ? reservation.checkOut.slice(0, 10)
           : new Date(reservation.checkOut).toISOString().slice(0, 10);
 
-      const parseUtc = (s: string) => new Date(s + "T12:00:00.000Z");
-      const addDaysUtc = (dateStr: string, days: number) => {
-        const d = parseUtc(dateStr);
+      const addDaysToStr = (dateStr: string, days: number): string => {
+        const d = new Date(dateStr + "T12:00:00.000Z");
         d.setUTCDate(d.getUTCDate() + days);
         return d.toISOString().slice(0, 10);
       };
-      const targetDateObj = parseUtc(targetDate);
-      const oldCheckInDate = parseUtc(oldCheckInStr);
-      const daysDiff = Math.round(
-        (targetDateObj.getTime() - oldCheckInDate.getTime()) / (1000 * 60 * 60 * 24)
-      );
-      const newCheckInStr = addDaysUtc(oldCheckInStr, daysDiff);
-      const newCheckOutStr = addDaysUtc(oldCheckOutStr, daysDiff);
+
+      const oldCheckInMs = new Date(oldCheckInStr).getTime();
+      const targetMs = new Date(targetDate).getTime();
+      const daysDiff = Math.round((targetMs - oldCheckInMs) / 86_400_000);
+
+      const newCheckIn = addDaysToStr(oldCheckInStr, daysDiff);
+      const newCheckOut = addDaysToStr(oldCheckOutStr, daysDiff);
+
       const roomChanged = newRoomNumber !== reservation.room;
       const dateChanged = daysDiff !== 0;
+
       if (!roomChanged && !dateChanged) return;
 
       startDragTransition(async () => {
-        const result = await moveReservation({
-          reservationId: resId,
-          newRoomNumber,
-          newCheckIn: dateChanged ? newCheckInStr : undefined,
-          newCheckOut: dateChanged ? newCheckOutStr : undefined,
-          skipRevalidate: true,
-        });
-        if (result.success && result.data) {
-          const updated = result.data;
-          setReservations((prev) =>
-            prev.map((r) => (r.id === resId ? { ...r, room: updated.room, checkIn: updated.checkIn, checkOut: updated.checkOut } : r)) as Reservation[]
-          );
-          const msg = [
-            roomChanged && `pokój ${newRoomNumber}`,
-            dateChanged && `${newCheckInStr}–${newCheckOutStr}`,
-          ]
-            .filter(Boolean)
-            .join(", ");
-          toast.success(msg ? `Przeniesiono rezerwację → ${msg}` : "Przeniesiono rezerwację");
-        } else if (!result.success) {
-          toast.error("error" in result ? result.error : "Nie można przenieść rezerwacji");
+        try {
+          const result = await moveReservation({
+            reservationId: reservation.id,
+            newRoomNumber,
+            newCheckIn: dateChanged ? newCheckIn : undefined,
+            newCheckOut: dateChanged ? newCheckOut : undefined,
+            skipRevalidate: true,
+          });
+          if (result.success && result.data) {
+            const updated = result.data;
+            setReservations((prev) =>
+              prev.map((r) => (r.id === reservation.id ? { ...r, room: updated.room, checkIn: updated.checkIn, checkOut: updated.checkOut } : r)) as Reservation[]
+            );
+            const msg = [
+              roomChanged && `pokój ${newRoomNumber}`,
+              dateChanged && `${newCheckIn}–${newCheckOut}`,
+            ]
+              .filter(Boolean)
+              .join(", ");
+            toast.success(msg ? `Przeniesiono rezerwację → ${msg}` : "Przeniesiono rezerwację");
+          } else if (!result.success) {
+            toast.error("error" in result ? result.error : "Nie można przenieść rezerwacji");
+          }
+        } catch (error) {
+          toast.error(`Błąd: ${String(error)}`);
         }
       });
     },
-    [setReservations, roomByNumber, reservations, startDragTransition]
+    [setReservations, roomByNumber, startDragTransition]
   );
 
+  const handleDragCancel = useCallback(() => {
+    setActiveDragReservation(null);
+    setDragOverTarget(null);
+  }, []);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dnd-kit sensor activator signature mismatch
-  const pointerSensor = useSensor(ConditionalPointerSensor as any, {
-    requireShift: !dragWithoutShift,
-    activationConstraint: { distance: 5, delay: 0, tolerance: 5 },
-  });
-  const sensors = useSensors(pointerSensor);
+  const sensors = useSensors(
+    useSensor(ConditionalPointerSensor as any, {
+      requireShift: !dragWithoutShift,
+      activationConstraint: { distance: 8 },
+    })
+  );
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1524,6 +1533,207 @@ export function TapeChart({
     setCreateSheetOpen(true);
   }, [displayRooms, allRooms, viewStartDateStr]);
 
+  const addDaysToStr = useCallback((dateStr: string, days: number): string => {
+    const d = new Date(dateStr + "T12:00:00Z");
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  }, []);
+
+  const hasReservationAt = useCallback(
+    (roomNumber: string, dateStr: string) => {
+      return occupiedCellsSet.has(`${roomNumber}-${dateStr}`);
+    },
+    [occupiedCellsSet]
+  );
+
+  const getCellIndices = useCallback(
+    (
+      clientX: number,
+      clientY: number,
+      rooms: Room[],
+      dateStrings: string[]
+    ): { roomIndex: number; dateIndex: number } | null => {
+      const elements = document.elementsFromPoint(clientX, clientY);
+      const cellEl = elements.find(
+        (el) => el instanceof HTMLElement && el.dataset.cellRoom
+      ) as HTMLElement | undefined;
+      if (!cellEl) return null;
+      const roomNumber = cellEl.dataset.cellRoom;
+      const dateStr = cellEl.dataset.cellDate;
+      if (!roomNumber || !dateStr) return null;
+      const roomIndex = rooms.findIndex((r) => r.number === roomNumber);
+      const dateIndex = dateStrings.indexOf(dateStr);
+      if (roomIndex < 0 || dateIndex < 0) return null;
+      return { roomIndex, dateIndex };
+    },
+    []
+  );
+
+  const previewCells = useMemo(() => {
+    if (!selectionStart || !selectionEnd) return new Set<string>();
+    const minRow = Math.min(selectionStart.roomIndex, selectionEnd.roomIndex);
+    const maxRow = Math.max(selectionStart.roomIndex, selectionEnd.roomIndex);
+    const minCol = Math.min(selectionStart.dateIndex, selectionEnd.dateIndex);
+    const maxCol = Math.max(selectionStart.dateIndex, selectionEnd.dateIndex);
+    const cells = new Set<string>();
+    for (let r = minRow; r <= maxRow; r++) {
+      for (let c = minCol; c <= maxCol; c++) {
+        if (r < displayRooms.length && c < dates.length) {
+          const room = displayRooms[r];
+          const dateStr = dates[c];
+          if (room && dateStr && !hasReservationAt(room.number, dateStr)) {
+            cells.add(`${room.number}|${dateStr}`);
+          }
+        }
+      }
+    }
+    return cells;
+  }, [selectionStart, selectionEnd, displayRooms, dates, hasReservationAt]);
+
+  const handleOpenGroupReservation = useCallback(
+    (selections: Set<string>) => {
+      const byRoom = new Map<string, string[]>();
+      for (const key of selections) {
+        const [roomNumber, dateStr] = key.split("|");
+        if (!roomNumber || !dateStr) continue;
+        const arr = byRoom.get(roomNumber) ?? [];
+        if (!arr.includes(dateStr)) arr.push(dateStr);
+        byRoom.set(roomNumber, arr);
+      }
+      const groupData = Array.from(byRoom.entries())
+        .map(([roomNumber, dateStrings]) => {
+          if (dateStrings.length === 0) return null;
+          const sorted = [...dateStrings].sort();
+          const checkIn = sorted[0];
+          const checkOut = addDaysToStr(sorted[sorted.length - 1], 1);
+          return { roomNumber, checkIn, checkOut, nights: sorted.length };
+        })
+        .filter((r): r is NonNullable<typeof r> => r != null);
+      if (groupData.length >= 2) {
+        setGroupReservationInitialData(groupData);
+      } else {
+        setGroupReservationInitialData(null);
+      }
+      setGroupReservationSheetOpen(true);
+      setSelectedCells(new Set());
+    },
+    [addDaysToStr]
+  );
+
+  const isCellSelected = useCallback(
+    (roomNumber: string, dateStr: string) => {
+      const key = `${roomNumber}|${dateStr}`;
+      return selectedCells.has(key) || previewCells.has(key);
+    },
+    [selectedCells, previewCells]
+  );
+
+  const handleGridPointerDownCtrlRect = useCallback(
+    (e: React.MouseEvent): boolean => {
+      if (e.button !== 0) return false;
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return false;
+      if (target.closest("[data-reservation-id]")) return false;
+
+      if (e.ctrlKey || e.metaKey) {
+        const indices = getCellIndices(e.clientX, e.clientY, displayRooms, dates);
+        if (!indices) return false;
+        const room = displayRooms[indices.roomIndex];
+        const dateStr = dates[indices.dateIndex];
+        if (!room || !dateStr || hasReservationAt(room.number, dateStr)) return false;
+        e.preventDefault();
+        e.stopPropagation();
+        selectionRef.current = { start: indices, end: indices };
+        setIsSelecting(true);
+        setSelectionStart(indices);
+        setSelectionEnd(indices);
+        return true;
+      }
+      return false;
+    },
+    [displayRooms, dates, hasReservationAt, getCellIndices]
+  );
+
+  const handleGridMouseDownMerged = useCallback(
+    (e: React.MouseEvent) => {
+      if (handleGridPointerDownCtrlRect(e)) return;
+      handleGridPointerDown(e);
+    },
+    [handleGridPointerDownCtrlRect, handleGridPointerDown]
+  );
+
+  useEffect(() => {
+    if (!isSelecting) return;
+    const onPointerMove = (e: PointerEvent) => {
+      if (!e.ctrlKey && !e.metaKey) {
+        setIsSelecting(false);
+        selectionRef.current = null;
+        setSelectionStart(null);
+        setSelectionEnd(null);
+        return;
+      }
+      const indices = getCellIndices(e.clientX, e.clientY, displayRooms, dates);
+      if (indices && selectionRef.current) {
+        selectionRef.current.end = indices;
+        setSelectionEnd(indices);
+      }
+    };
+    const onPointerUp = () => {
+      if (!isSelecting) return;
+      const sel = selectionRef.current;
+      selectionRef.current = null;
+      setIsSelecting(false);
+      setSelectionStart(null);
+      setSelectionEnd(null);
+      if (sel && displayRooms.length > 0 && dates.length > 0) {
+        const minRow = Math.min(sel.start.roomIndex, sel.end.roomIndex);
+        const maxRow = Math.max(sel.start.roomIndex, sel.end.roomIndex);
+        const minCol = Math.min(sel.start.dateIndex, sel.end.dateIndex);
+        const maxCol = Math.max(sel.start.dateIndex, sel.end.dateIndex);
+        const cells = new Set<string>();
+        for (let r = minRow; r <= maxRow; r++) {
+          for (let c = minCol; c <= maxCol; c++) {
+            if (r < displayRooms.length && c < dates.length) {
+              const room = displayRooms[r];
+              const dateStr = dates[c];
+              if (room && dateStr && !occupiedCellsSet.has(`${room.number}-${dateStr}`)) {
+                cells.add(`${room.number}|${dateStr}`);
+              }
+            }
+          }
+        }
+        if (cells.size === 1) {
+          const key = Array.from(cells)[0];
+          setSelectedCells((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+          });
+        } else if (cells.size > 1) {
+          setSelectedCells((prev) => {
+            const next = new Set(prev);
+            cells.forEach((key) => next.add(key));
+            return next;
+          });
+        }
+      }
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [isSelecting, displayRooms, dates, getCellIndices, occupiedCellsSet]);
+
+  const handleEditGroup = useCallback((groupId: string) => {
+    // Załaduj dane grupy i otwórz GroupReservationSheet w trybie edycji (tryb edycji w przygotowaniu)
+    setEditGroupId(groupId);
+    setGroupReservationInitialData(null);
+    setGroupReservationSheetOpen(true);
+  }, []);
+
   const handleRoomLabelClick = useCallback((room: Room) => {
     setNewReservationContext({
       roomNumber: room.number,
@@ -1564,7 +1774,9 @@ export function TapeChart({
     (dateStr: string) => {
       const next = new Date(dateStr + "T12:00:00");
       if (!Number.isNaN(next.getTime())) {
-        setViewStartDate(next);
+        const yesterday = new Date(next);
+        yesterday.setDate(yesterday.getDate() - 1);
+        setViewStartDate(yesterday);
       }
       setMonthlyDialogOpen(false);
     },
@@ -1599,10 +1811,8 @@ export function TapeChart({
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const visibleRowSet = useMemo(() => {
-    const set = new Set(virtualRows.map((v) => v.index + 2));
-    if (ghostPlacement) set.add(ghostPlacement.gridRow);
-    return set;
-  }, [virtualRows, ghostPlacement?.gridRow]);
+    return new Set(virtualRows.map((v) => v.index + 2));
+  }, [virtualRows]);
   const visiblePlacements = useMemo(
     () => reservationPlacements.filter((p) => visibleRowSet.has(p.gridRow)),
     [reservationPlacements, visibleRowSet]
@@ -1682,12 +1892,15 @@ export function TapeChart({
                     e.stopPropagation();
                     setViewScale(scale);
                     if (scale === "day" || scale === "week" || scale === "month") {
-                      setViewStartDate(todayDate);
+                      const yesterday = new Date(todayDate);
+                      yesterday.setDate(yesterday.getDate() - 1);
+                      setViewStartDate(yesterday);
                     } else {
                       const days = VIEW_SCALE_CONFIG[scale].days;
                       setViewStartDate(addDays(todayDate, -Math.floor(days / 2)));
                     }
                     didScrollToTodayRef.current = false;
+                    userRequestedGoToTodayRef.current = true;
                   }}
                   title={`Widok: ${VIEW_SCALE_CONFIG[scale].label} (${VIEW_SCALE_CONFIG[scale].days} dni)`}
                 >
@@ -1770,6 +1983,35 @@ export function TapeChart({
                 </Button>
               </div>
             )}
+            {selectedCells.size > 0 && (() => {
+              const uniqueRooms = new Set([...selectedCells].map((k) => k.split("|")[0]));
+              return (
+                <div className="flex items-center gap-1.5 rounded-md border border-blue-500 bg-blue-500/10 px-2.5 py-1">
+                  <span className="text-xs font-medium text-blue-700">
+                    Zaznaczono: {selectedCells.size} komórek ({uniqueRooms.size} pokoi)
+                  </span>
+                  {uniqueRooms.size >= 2 ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-6 px-2 text-[10px] gap-1"
+                      onClick={() => handleOpenGroupReservation(selectedCells)}
+                    >
+                      <Users className="h-3 w-3" />
+                      Dodaj rezerwację grupową
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 px-1.5 text-[10px]"
+                    onClick={() => setSelectedCells(new Set())}
+                  >
+                    Wyczyść
+                  </Button>
+                </div>
+              );
+            })()}
             <Button
               type="button"
               variant="ghost"
@@ -1827,7 +2069,7 @@ export function TapeChart({
               </Button>
               {moreMenuOpen && (
                 <div className="absolute right-0 top-full mt-1 z-[200] w-56 rounded-md border border-[hsl(var(--kw-grid-border))] bg-card shadow-lg py-1">
-                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { setGroupReservationSheetOpen(true); setMoreMenuOpen(false); }}>
+                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { setGroupReservationInitialData(null); setEditGroupId(null); setGroupReservationSheetOpen(true); setMoreMenuOpen(false); }}>
                     <Users className="h-4 w-4 text-muted-foreground" /> Rezerwacja grupowa
                   </button>
                   <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { setRoomBlockSheetOpen(true); setMoreMenuOpen(false); }}>
@@ -2069,9 +2311,9 @@ export function TapeChart({
         <DndContext
           sensors={sensors}
           onDragStart={handleDragStart}
-          onDragMove={handleDragMove}
+          onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
-          onDragCancel={() => { setActiveId(null); setGhostPreview(null); }}
+          onDragCancel={handleDragCancel}
         >
           {isDragPending && (
             <div className="absolute top-2 right-4 z-[70] rounded-md bg-primary/90 px-3 py-1.5 text-xs font-medium text-primary-foreground shadow">
@@ -2083,7 +2325,7 @@ export function TapeChart({
             data-grid-draggable
             className="relative w-full min-w-max cursor-grab active:cursor-grabbing"
             style={{ height: rowVirtualizer.getTotalSize(), minWidth: totalGridWidthPx }}
-            onMouseDown={handleGridPointerDown}
+            onMouseDown={handleGridMouseDownMerged}
           >
             {/* Sticky header: corner + date columns */}
             <div
@@ -2103,13 +2345,15 @@ export function TapeChart({
                 const isToday = dateStr === todayStr;
                 const saturday = isSaturdayDate(dateStr);
                 const sunday = isSundayDate(dateStr);
+                const wd = getWeekdayIndex(dateStr);
+                const headerWeekdayClass = wd >= 0 && wd <= 4 ? (wd % 2 === 0 ? "kw-header-weekday-a" : "kw-header-weekday-b") : undefined;
                 return (
                   <div
                     key={dateStr}
                     data-date-header
                     className={cn(
-                      "flex items-center justify-center border-r border-[hsl(var(--kw-grid-border))] px-2 py-2.5 text-center text-[13px] cursor-grab active:cursor-grabbing",
-                      isToday ? "kw-header-today" : saturday ? "kw-header-saturday" : sunday ? "kw-header-sunday" : "kw-header-default"
+                      "flex items-center justify-center border-[hsl(var(--kw-grid-border))] px-2 py-2.5 text-center text-[13px] cursor-grab active:cursor-grabbing",
+                      isToday ? "kw-header-today" : saturday ? "kw-header-saturday" : sunday ? "kw-header-sunday" : headerWeekdayClass ?? "kw-header-default"
                     )}
                     style={{ minWidth: effectiveColumnWidthPx }}
                   >
@@ -2133,7 +2377,7 @@ export function TapeChart({
                     data-index={virtualRow.index}
                     data-room-row
                     ref={rowVirtualizer.measureElement}
-                    className="absolute left-0 grid w-full min-w-max"
+                    className="group absolute left-0 grid w-full min-w-max"
                     style={{
                       top: virtualRow.start - HEADER_ROW_PX,
                       height: virtualRow.size,
@@ -2155,20 +2399,26 @@ export function TapeChart({
                       }))}
                       focusedDateIdx={focusedCell?.roomIdx === virtualRow.index ? focusedCell.dateIdx : undefined}
                       previewMode={previewMode}
-                      onCellClick={previewMode ? undefined : (roomNumber, dateStr) => {
-                        if (didPanRef.current) {
-                          didPanRef.current = false;
-                          return;
-                        }
-                        setNewReservationContext({ roomNumber, checkIn: dateStr });
-                        setCreateSheetOpen(true);
-                      }}
+                      dragOverTarget={dragOverTarget}
+                      dragNights={dragNights}
+                      onCellClick={
+                        previewMode
+                          ? undefined
+                          : (roomNumber, dateStr) => {
+                              setNewReservationContext({ roomNumber, checkIn: dateStr });
+                              setCreateSheetOpen(true);
+                            }
+                      }
+                      hasReservation={previewMode ? undefined : hasReservationAt}
+                      isCellSelected={previewMode ? undefined : isCellSelected}
+                      selectionKey={previewMode ? undefined : `${selectedCells.size}-${previewCells.size}-${selectionEnd?.roomIndex ?? ""}-${selectionEnd?.dateIndex ?? ""}`}
                       onRoomLabelClick={previewMode ? undefined : handleRoomLabelClick}
                       onRoomBlock={previewMode ? undefined : handleRoomBlock}
                       onRoomStatusChange={previewMode ? undefined : handleRoomStatusChange}
                       onShowOnlyRoom={previewMode ? undefined : (r) => setShowOnlyRoomNumber(r.number)}
                       onShowAllRooms={showOnlyRoomNumber ? () => setShowOnlyRoomNumber(null) : undefined}
                       showOnlyRoomNumber={showOnlyRoomNumber}
+                      todayStr={todayStr}
                     >
                       <div
                         className="flex items-center gap-1.5 min-w-0 flex-1"
@@ -2191,6 +2441,23 @@ export function TapeChart({
                   </div>
                 );
               })}
+            </div>
+
+            {/* KWHotel: pionowe linie siatki na ŚRODKU każdej kolumny dnia (południe = granica doby). Linia widoczna w przerwach między kafelkami, zasłaniana przez kafelki (z-index niższy). */}
+            <div
+              className="pointer-events-none absolute inset-0 z-[4]"
+              aria-hidden="true"
+            >
+              {dates.map((_, i) => (
+                <div
+                  key={i}
+                  className="absolute top-0 bottom-0 w-px bg-[#d5d5d5] dark:bg-[#4a4a4a]"
+                  style={{
+                    left: ROOM_LABEL_WIDTH_PX + (i + 0.5) * effectiveColumnWidthPx,
+                    height: "100%",
+                  }}
+                />
+              ))}
             </div>
 
             {/* Today column highlight – KWHotel yellow (overlay) */}
@@ -2219,7 +2486,9 @@ export function TapeChart({
               </>
             )}
 
-            {/* Reservation bars – overlay, tylko widoczne wiersze (po mount, unika hydratacji) */}
+            {/* Reservation bars – overlay, tylko widoczne wiersze (po mount, unika hydratacji).
+                Kontener ma pointer-events-none, paski pointer-events-auto. Podczas prostokątnego zaznaczania
+                (isSelecting) paski dostają pointer-events-none, żeby elementsFromPoint trafił w CellDroppable. */}
             <div
               className="absolute inset-0 pointer-events-none overflow-visible"
               style={{ zIndex: 50, gridTemplateColumns: gridColumns, gridTemplateRows: gridRows, display: "grid" }}
@@ -2252,7 +2521,8 @@ export function TapeChart({
                   <div
                     key={reservation.id}
                     className={cn(
-                      "pointer-events-auto overflow-hidden flex items-center relative",
+                      "overflow-hidden flex items-center relative",
+                      isSelecting ? "pointer-events-none" : "pointer-events-auto",
                       previewMode ? "cursor-default" : "cursor-grab active:cursor-grabbing",
                       highlightedReservationId === reservation.id &&
                         "ring-2 ring-primary rounded-md z-10",
@@ -2274,7 +2544,7 @@ export function TapeChart({
                     onClick={(e) => {
                       e.stopPropagation();
                       if (previewMode) return; // No actions in preview mode
-                      if (activeId !== reservation.id) {
+                      if (activeDragReservation?.id !== reservation.id) {
                         if (e.detail === 2) {
                           setSelectedReservationIds(new Set());
                           setSelectedReservation(reservation);
@@ -2313,7 +2583,7 @@ export function TapeChart({
                       gridColumnStart={0}
                       gridColumnEnd={0}
                       privacyMode={privacyMode}
-                      isDragging={activeId === reservation.id}
+                      isDragging={activeDragReservation?.id === reservation.id}
                       pricePerNight={pricePerNight}
                       totalAmount={totalAmount}
                       dates={dates}
@@ -2349,6 +2619,7 @@ export function TapeChart({
                         });
                         setCreateSheetOpen(true);
                       }}
+                      onEditGroup={handleEditGroup}
                       onExtendStay={async (r, newCheckOut) => {
                         const { updateReservation } = await import("@/app/actions/reservations");
                         const result = await updateReservation(r.id, { checkOut: newCheckOut });
@@ -2379,8 +2650,8 @@ export function TapeChart({
               }}
             />
             <DragOverlay dropAnimation={null}>
-              {activeId ? (() => {
-                const res = reservations.find((r) => r.id === activeId);
+              {activeDragReservation ? (() => {
+                const res = activeDragReservation;
                 if (!res) return null;
                 const nights =
                   Math.ceil(
@@ -2394,7 +2665,6 @@ export function TapeChart({
                   RESERVATION_STATUS_BG.CONFIRMED;
                 return (
                   <div
-                    data-dnd-overlay
                     className="flex items-center justify-center rounded border border-black text-white font-semibold text-xs overflow-hidden whitespace-nowrap cursor-grabbing"
                     style={{
                       width: w,
@@ -2460,30 +2730,30 @@ export function TapeChart({
             <div className="flex flex-wrap items-center gap-4 text-sm">
               {statusTab === "statuses" && (
                 <>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block h-3 w-6 rounded-sm border border-border bg-[rgb(20_184_166)]" aria-hidden title="Opłacona" />
+                    <span className="text-xs">Opłacona</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block h-3 w-6 rounded-sm border border-border bg-[rgb(234_179_8)]" aria-hidden title="Częściowo opłacona" />
+                    <span className="text-xs">Częściowo opłacona</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block h-3 w-6 rounded-sm border border-border bg-[rgb(139_92_246)]" aria-hidden title="Nieopłacona" />
+                    <span className="text-xs">Nieopłacona</span>
+                  </div>
+                  <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+                  <span className="text-[10px] text-muted-foreground mr-1">Pasek z lewej:</span>
                   {statusLegendItems.map((item) => (
                     <div key={item.status} className="flex items-center gap-2">
                       <span
-                        className="inline-block h-3 w-6 rounded-sm border border-border"
+                        className="inline-block h-3 w-1 rounded-full"
                         style={{ backgroundColor: statusBg?.[item.status] ?? item.color }}
                         aria-hidden="true"
                       />
                       <span className="text-xs">{item.label}</span>
                     </div>
                   ))}
-                  <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-                  <span className="text-[10px] text-muted-foreground mr-1">Pasek z lewej:</span>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-block h-3 w-1 rounded-full bg-[rgb(20_184_166)]" aria-hidden title="Opłacona" />
-                    <span className="text-xs">Opłacona</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-block h-3 w-1 rounded-full bg-[rgb(234_179_8)]" aria-hidden title="Częściowo opłacona" />
-                    <span className="text-xs">Częściowo opłacona</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-block h-3 w-1 rounded-full bg-[rgb(139_92_246)]" aria-hidden title="Nieopłacona" />
-                    <span className="text-xs">Nieopłacona</span>
-                  </div>
                   <span className="mx-1 h-4 w-px bg-border" aria-hidden />
                   <div className="flex items-center gap-2">
                     <StickyNote className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
@@ -2589,9 +2859,17 @@ export function TapeChart({
       />
       <GroupReservationSheet
         open={groupReservationSheetOpen}
-        onOpenChange={setGroupReservationSheetOpen}
+        onOpenChange={(open) => {
+          setGroupReservationSheetOpen(open);
+          if (!open) {
+            setGroupReservationInitialData(null);
+            setEditGroupId(null);
+          }
+        }}
         rooms={allRooms}
         defaultDate={viewStartDateStr}
+        initialRooms={groupReservationInitialData ?? undefined}
+        editGroupId={editGroupId}
         onCreated={(createdReservations, group) => {
           setReservations((prev) => [...prev, ...createdReservations]);
           setGroups((prev) => {
@@ -2705,37 +2983,40 @@ export function TapeChart({
             <DialogTitle>Legenda statusów rezerwacji</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            {statusLegendItems.map((item) => {
-              const color = statusBg?.[item.status] ?? item.color;
-              return (
-                <div key={item.status} className="flex items-start gap-3">
-                  <span
-                    className="mt-0.5 inline-block h-5 w-10 flex-shrink-0 rounded border border-border"
-                    style={{ backgroundColor: color }}
-                    aria-hidden
-                  />
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">{item.label}</span>
-                    <span className="text-xs text-muted-foreground">{item.description}</span>
-                  </div>
-                </div>
-              );
-            })}
+            <p className="text-xs font-medium text-muted-foreground mb-2">Tło karty – status płatności</p>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="inline-block h-5 w-10 flex-shrink-0 rounded border border-border" style={{ backgroundColor: "rgb(20 184 166)" }} aria-hidden />
+                <span className="text-sm">Opłacona</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block h-5 w-10 flex-shrink-0 rounded border border-border" style={{ backgroundColor: "rgb(234 179 8)" }} aria-hidden />
+                <span className="text-sm">Częściowo opłacona</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-block h-5 w-10 flex-shrink-0 rounded border border-border" style={{ backgroundColor: "rgb(139 92 246)" }} aria-hidden />
+                <span className="text-sm">Nieopłacona</span>
+              </div>
+            </div>
             <div className="border-t pt-4 mt-4">
-              <p className="text-xs font-medium text-muted-foreground mb-2">Pasek z lewej – status płatności</p>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Pasek z lewej – status rezerwacji</p>
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block h-4 w-1 flex-shrink-0 rounded-full" style={{ backgroundColor: "rgb(20 184 166)" }} aria-hidden />
-                  <span className="text-sm">Opłacona</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="inline-block h-4 w-1 flex-shrink-0 rounded-full" style={{ backgroundColor: "rgb(234 179 8)" }} aria-hidden />
-                  <span className="text-sm">Częściowo opłacona</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="inline-block h-4 w-1 flex-shrink-0 rounded-full" style={{ backgroundColor: "rgb(139 92 246)" }} aria-hidden />
-                  <span className="text-sm">Nieopłacona</span>
-                </div>
+                {statusLegendItems.map((item) => {
+                  const color = statusBg?.[item.status] ?? item.color;
+                  return (
+                    <div key={item.status} className="flex items-start gap-3">
+                      <span
+                        className="mt-0.5 inline-block h-4 w-1 flex-shrink-0 rounded-full"
+                        style={{ backgroundColor: color }}
+                        aria-hidden
+                      />
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm font-medium">{item.label}</span>
+                        <span className="text-xs text-muted-foreground">{item.description}</span>
+                      </div>
+                    </div>
+                  );
+                })}
                 <p className="text-xs font-medium text-muted-foreground mb-2 mt-4">Ikona na pasku</p>
                 <div className="flex items-center gap-2">
                   <StickyNote className="h-4 w-4 text-muted-foreground" aria-hidden />

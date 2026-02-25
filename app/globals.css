@@ -35,6 +35,8 @@
     --kw-header-border: 213 72% 37%;
     --kw-saturday: 213 60% 94%;
     --kw-sunday: 0 60% 95%;
+    --kw-weekday-a: 210 25% 99%;
+    --kw-weekday-b: 210 20% 96%;
     --kw-today-bg: 48 96% 89%;
     --kw-today-border: 45 93% 47%;
     --kw-past: 210 10% 93%;
@@ -71,6 +73,8 @@
     --kw-header-border: 213 72% 50%;
     --kw-saturday: 213 30% 15%;
     --kw-sunday: 0 30% 16%;
+    --kw-weekday-a: 220 18% 14%;
+    --kw-weekday-b: 220 15% 12%;
     --kw-today-bg: 48 50% 18%;
     --kw-today-border: 45 70% 40%;
     --kw-past: 220 15% 12%;
@@ -217,6 +221,12 @@
 }
 
 /* ── KWHotel Tape Chart grid cells ────────────────── */
+.kw-cell-weekday-a {
+  background-color: hsl(var(--kw-weekday-a));
+}
+.kw-cell-weekday-b {
+  background-color: hsl(var(--kw-weekday-b));
+}
 .kw-cell-saturday {
   background-color: hsl(var(--kw-saturday));
 }
@@ -250,6 +260,16 @@
   background-color: hsl(0 50% 88%);
   color: hsl(0 75% 35%);
   font-weight: 600;
+}
+.kw-header-weekday-a {
+  background-color: hsl(var(--kw-weekday-a));
+  color: hsl(var(--foreground) / 0.92);
+  font-weight: 500;
+}
+.kw-header-weekday-b {
+  background-color: hsl(var(--kw-weekday-b));
+  color: hsl(var(--foreground) / 0.92);
+  font-weight: 500;
 }
 .kw-header-default {
   background-color: hsl(var(--kw-date-header-bg));

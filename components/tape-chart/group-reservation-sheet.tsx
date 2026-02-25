@@ -55,11 +55,22 @@ function makeRow(roomNumber: string, date: string): GroupReservationRow {
   };
 }
 
+export interface InitialRoomData {
+  roomNumber: string;
+  checkIn: string;
+  checkOut: string;
+  nights: number;
+}
+
 export interface GroupReservationSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   rooms: Room[];
   defaultDate: string;
+  /** Pre-wypełnione pokoje i daty (np. z zaznaczenia komórek na Tape Chart) */
+  initialRooms?: InitialRoomData[];
+  /** Tryb edycji – załaduj grupę o podanym id (w przygotowaniu) */
+  editGroupId?: string | null;
   onCreated?: (reservations: Reservation[], group: { id: string; name?: string }) => void;
 }
 
@@ -68,6 +79,8 @@ export function GroupReservationSheet({
   onOpenChange,
   rooms,
   defaultDate,
+  initialRooms,
+  editGroupId,
   onCreated,
 }: GroupReservationSheetProps) {
   const [groupName, setGroupName] = useState("");
@@ -88,17 +101,24 @@ export function GroupReservationSheet({
 
   useEffect(() => {
     if (open) {
-      const initial =
-        defaultRooms.length > 0
-          ? defaultRooms.map((r) => makeRow(r.number, defaultDate))
-          : [makeRow(rooms[0]?.number ?? "", defaultDate)];
-      setRows(initial);
+      if (initialRooms && initialRooms.length >= 2) {
+        const rowsFromInitial = initialRooms.map((ir) => ({
+          ...makeRow(ir.roomNumber, ir.checkIn),
+          checkIn: ir.checkIn,
+          checkOut: ir.checkOut,
+        }));
+        setRows(rowsFromInitial);
+      } else if (defaultRooms.length > 0) {
+        setRows(defaultRooms.map((r) => makeRow(r.number, defaultDate)));
+      } else {
+        setRows([makeRow(rooms[0]?.number ?? "", defaultDate)]);
+      }
       setGroupName("");
       setNote("");
       setSelectedGroupId("");
       setError(null);
     }
-  }, [open, defaultRooms, defaultDate, rooms]);
+  }, [open, defaultRooms, defaultDate, rooms, initialRooms]);
 
   const applyRoomGroup = (group: { id: string; name: string; roomNumbers: string[] }) => {
     setGroupName(group.name);
