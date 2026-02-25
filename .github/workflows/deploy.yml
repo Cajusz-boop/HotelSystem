@@ -18,7 +18,7 @@ jobs:
           timeout: 300s
           script: |
             cd /var/www/hotel
-            git pull origin master
+            git fetch origin && git reset --hard origin/master
             npm ci --production=false
             npx prisma generate
             npm run build
