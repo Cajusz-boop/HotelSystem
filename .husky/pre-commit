@@ -1,0 +1,9 @@
+#!/bin/sh
+echo "Sprawdzanie błędów TypeScript..."
+npm run build 2>&1 | grep "Type error"
+if [ $? -eq 0 ]; then
+  echo "BŁĄD: Znaleziono błędy TypeScript - commit zablokowany"
+  exit 1
+fi
+echo "OK - brak błędów TypeScript"
+exit 0

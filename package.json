@@ -6,6 +6,7 @@
   },
   "private": true,
   "scripts": {
+    "prepare": "husky",
     "predev": "prisma generate && prisma db push --skip-generate && npx tsx scripts/sync-config-on-start.ts",
     "dev": "next dev -p 3011",
     "dev:3011": "npx next dev -p 3011",
@@ -50,7 +51,8 @@
     "db:cleanup:e2e": "npx tsx scripts/cleanup-e2e-data.ts",
     "test:reception-flow": "npx tsx scripts/test-full-reception-flow.ts",
     "db:push:staging": "dotenv -e .env.staging -- prisma db push",
-    "db:migrate:staging": "dotenv -e .env.staging -- prisma migrate deploy"
+    "db:migrate:staging": "dotenv -e .env.staging -- prisma migrate deploy",
+    "prepare": "husky"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
@@ -103,6 +105,7 @@
     "dotenv-cli": "^7.4.4",
     "eslint": "^8.57.1",
     "eslint-config-next": "14.2.35",
+    "husky": "^9.1.7",
     "mysql2": "^3.17.1",
     "postcss": "^8.4.47",
     "prisma": "^6.16.0",

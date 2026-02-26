@@ -38,6 +38,7 @@
   "exclude": [
     "node_modules",
     "Test",
+    "scripts",
     "**/*.spec.ts",
     "**/*.spec.tsx",
     "prisma/migrate-kwhotel.ts",
