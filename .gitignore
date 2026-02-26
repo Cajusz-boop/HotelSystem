@@ -52,6 +52,7 @@ __pycache__
 
 # Test / build artifacts
 test-results
+.auth
 playwright-report
 _next_out.txt
 tsconfig.tsbuildinfo

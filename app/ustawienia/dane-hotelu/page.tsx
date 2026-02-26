@@ -26,6 +26,9 @@ const empty: HotelConfigData = {
   defaultCheckOutTime: null,
   floors: [],
   authDisabled: false,
+  bankAccount: null,
+  bankName: null,
+  bookingNotificationEmail: null,
 };
 
 export default function DaneHoteluPage() {
@@ -168,6 +171,44 @@ export default function DaneHoteluPage() {
             className="mt-1"
           />
         </div>
+
+        <div className="pt-4 border-t space-y-4">
+          <h3 className="text-sm font-semibold">Rezerwacje online i przelew</h3>
+          <div>
+            <Label htmlFor="bankAccount">Nr konta (do przelewu, np. IBAN)</Label>
+            <Input
+              id="bankAccount"
+              value={data.bankAccount ?? ""}
+              onChange={(e) => setData((d) => ({ ...d, bankAccount: e.target.value || null }))}
+              placeholder="PL 12 3456 7890 1234 5678 9012 3456"
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="bankName">Nazwa banku (opcjonalnie)</Label>
+            <Input
+              id="bankName"
+              value={data.bankName ?? ""}
+              onChange={(e) => setData((d) => ({ ...d, bankName: e.target.value || null }))}
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label htmlFor="bookingNotificationEmail">E-mail na powiadomienia o zapytaniach (Booking)</Label>
+            <Input
+              id="bookingNotificationEmail"
+              type="email"
+              value={data.bookingNotificationEmail ?? ""}
+              onChange={(e) => setData((d) => ({ ...d, bookingNotificationEmail: e.target.value || null }))}
+              placeholder="recepcja@hotel.pl — jeśli puste, używany jest Email powyżej"
+              className="mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Na ten adres trafiają powiadomienia o „Zapytaj o dostępność” z formularza rezerwacji.
+            </p>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-4 pt-2 border-t">
           <div>
             <Label htmlFor="checkIn">Godzina check-in (HH:mm)</Label>

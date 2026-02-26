@@ -21,7 +21,7 @@ async function FrontOfficeData() {
   future.setDate(future.getDate() + INITIAL_DAYS_VIEW);
   const dateToInitial = future.toISOString().slice(0, 10);
 
-  let data: { reservations: Reservation[]; rooms: Room[]; reservationGroups: ReservationGroupSummary[]; reservationStatusColors?: Partial<Record<string, string>> | null; propertyId?: string | null };
+  let data: { reservations: Reservation[]; rooms: Room[]; reservationGroups: ReservationGroupSummary[]; reservationStatusColors?: Partial<Record<string, string>> | null; propertyId?: string | null; events?: Array<{ id: string; name: string; dateFrom: string; dateTo: string; color: string | null; description?: string | null }> };
   try {
     const result = await getTapeChartData({ dateFrom: today, dateTo: dateToInitial });
     if (!result?.rooms || !result?.reservations) {
@@ -37,6 +37,7 @@ async function FrontOfficeData() {
       })),
       reservationStatusColors: result.reservationStatusColors ?? null,
       propertyId: result.propertyId ?? null,
+      events: result.events ?? [],
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : "Nie udało się załadować danych.";
@@ -59,6 +60,7 @@ async function FrontOfficeData() {
         propertyId: data.propertyId,
         reservations: data.reservations,
         today,
+        events: data.events,
       }}
     />
   );

@@ -15,6 +15,16 @@ export type HotelConfigData = {
   defaultCheckOutTime: string | null;
   floors: string[];
   authDisabled: boolean;
+  bankAccount: string | null;
+  bankName: string | null;
+  bookingNotificationEmail: string | null;
+};
+
+/** Dane do przelewu i powiadomień – publiczne (Booking Engine). */
+export type BookingTransferInfo = {
+  name: string;
+  bankAccount: string | null;
+  bankName: string | null;
 };
 
 export type CustomFormFieldType = "text" | "number" | "date" | "select" | "checkbox";

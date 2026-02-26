@@ -7,6 +7,7 @@ import { setAuthDisabledCache, invalidateAuthDisabledCache } from "@/lib/auth-di
 import { autoExportConfigSnapshot } from "@/lib/config-snapshot";
 import type {
   HotelConfigData,
+  BookingTransferInfo,
   FormType,
   FormFieldsConfig,
   CustomFormField,
@@ -44,6 +45,9 @@ export async function getHotelConfig(): Promise<
       defaultCheckOutTime: row.defaultCheckOutTime,
       floors: Array.isArray(row.floors) ? (row.floors as string[]) : [],
       authDisabled: row.authDisabled ?? false,
+      bankAccount: row.bankAccount ?? null,
+      bankName: row.bankName ?? null,
+      bookingNotificationEmail: row.bookingNotificationEmail ?? null,
     },
   };
 }
@@ -74,6 +78,9 @@ export async function updateHotelConfig(data: Partial<HotelConfigData>): Promise
       defaultCheckOutTime: data.defaultCheckOutTime ?? null,
       floors: data.floors ?? [],
       authDisabled: data.authDisabled ?? false,
+      bankAccount: data.bankAccount ?? null,
+      bankName: data.bankName ?? null,
+      bookingNotificationEmail: data.bookingNotificationEmail ?? null,
     },
     update: {
       ...(data.name !== undefined && { name: data.name }),
@@ -90,6 +97,9 @@ export async function updateHotelConfig(data: Partial<HotelConfigData>): Promise
       ...(data.defaultCheckOutTime !== undefined && { defaultCheckOutTime: data.defaultCheckOutTime }),
       ...(data.floors !== undefined && { floors: data.floors }),
       ...(data.authDisabled !== undefined && { authDisabled: data.authDisabled }),
+      ...(data.bankAccount !== undefined && { bankAccount: data.bankAccount ?? null }),
+      ...(data.bankName !== undefined && { bankName: data.bankName ?? null }),
+      ...(data.bookingNotificationEmail !== undefined && { bookingNotificationEmail: data.bookingNotificationEmail ?? null }),
     },
   });
   autoExportConfigSnapshot();
@@ -228,5 +238,42 @@ export async function getAuthDisabledStatus(): Promise<boolean> {
     return row?.authDisabled ?? false;
   } catch {
     return false;
+  }
+}
+
+/**
+ * E-mail na powiadomienia o zapytaniach rezerwacyjnych (Booking Engine).
+ * Używane tylko po stronie serwera (mailing). Preferowany: bookingNotificationEmail, fallback: email.
+ */
+export async function getReceptionEmailForBooking(): Promise<string | null> {
+  try {
+    const row = await prisma.hotelConfig.findUnique({
+      where: { id: "default" },
+      select: { bookingNotificationEmail: true, email: true },
+    });
+    const email = (row?.bookingNotificationEmail ?? row?.email)?.trim();
+    return email && /^[^@]+@[^@]+\./.test(email) ? email : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Dane do przelewu tradycyjnego – publiczne (strona /booking, krok płatności).
+ * Bez wymagania logowania.
+ */
+export async function getBookingTransferInfo(): Promise<BookingTransferInfo> {
+  try {
+    const row = await prisma.hotelConfig.findUnique({
+      where: { id: "default" },
+      select: { name: true, bankAccount: true, bankName: true },
+    });
+    return {
+      name: row?.name?.trim() ?? "Karczma Łabędź",
+      bankAccount: (row?.bankAccount ?? null)?.trim() || null,
+      bankName: (row?.bankName ?? null)?.trim() || null,
+    };
+  } catch {
+    return { name: "Karczma Łabędź", bankAccount: null, bankName: null };
   }
 }

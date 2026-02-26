@@ -19,6 +19,7 @@ export interface Room {
 
 export interface Reservation {
   id: string;
+  confirmationNumber?: string | null;
   guestId?: string;
   guestName: string;
   guestBlacklisted?: boolean;
@@ -38,6 +39,10 @@ export interface Reservation {
   parkingSpotId?: string;
   parkingSpotNumber?: string;
   notes?: string;
+  /** Czy pierwsza linia uwag ma być na pasku rezerwacji */
+  notesVisibleOnChart?: boolean;
+  /** Termin wpłaty zaliczki (YYYY-MM-DD) – po przekroczeniu bez wpłaty: ostrzeżenie na grafiku */
+  advanceDueDate?: string | null;
   bedsBooked?: number; // rezerwacja zasobowa: ile łóżek (gdy room.beds > 1)
   vip?: boolean; // gość VIP
   paymentStatus?: "UNPAID" | "PARTIAL" | "PAID"; // status płatności

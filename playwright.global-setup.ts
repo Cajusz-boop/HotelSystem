@@ -2,7 +2,7 @@ import { chromium, type FullConfig } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 
-const AUTH_FILE = "test-results/.auth/user.json";
+const AUTH_FILE = ".auth/user.json";
 
 async function globalSetup(config: FullConfig) {
   const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? config.projects[0]?.use?.baseURL ?? "http://localhost:3011";

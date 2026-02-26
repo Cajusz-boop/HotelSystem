@@ -298,7 +298,7 @@ export async function getOwnerSettlements(
   }
 }
 
-/** Obłożenie obiektu: liczba pokoi, zajęte dziś, % obłożenia. */
+/** Obłożenie obiektu: liczba pokoi, zajęte dziś, % obłożenia. Uwzględnia tylko typy z visibleInStats. */
 export async function getOccupancyForProperty(
   propertyId: string
 ): Promise<ActionResult<{ totalRooms: number; occupiedToday: number; occupancyPercent: number }>> {
@@ -307,11 +307,19 @@ export async function getOccupancyForProperty(
     today.setUTCHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const visibleTypeNames = await prisma.roomType
+      .findMany({ where: { visibleInStats: true }, select: { name: true } })
+      .then((rows) => rows.map((r) => r.name));
+    const roomWhere = {
+      propertyId,
+      isDeleted: false,
+      ...(visibleTypeNames.length > 0 ? { type: { in: visibleTypeNames } } : {}),
+    };
     const [totalRooms, occupied] = await Promise.all([
-      prisma.room.count({ where: { propertyId } }),
+      prisma.room.count({ where: roomWhere }),
       prisma.reservation.count({
         where: {
-          room: { propertyId },
+          room: roomWhere,
           status: { in: ["CONFIRMED", "CHECKED_IN"] },
           checkIn: { lt: tomorrow },
           checkOut: { gt: today },

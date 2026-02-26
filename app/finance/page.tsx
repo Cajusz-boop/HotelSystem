@@ -148,7 +148,7 @@ export default function FinancePage() {
 
   const queryClient = useQueryClient();
 
-  const { data: _financeData } = useQuery({
+  const { data: _financeData, isError: isFinanceQueryError, error: financeQueryError } = useQuery({
     queryKey: ["finance-initial"],
     queryFn: async () => {
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -177,6 +177,11 @@ export default function FinancePage() {
   });
 
   useEffect(() => {
+    if (isFinanceQueryError && financeQueryError) {
+      setLoadError(financeQueryError instanceof Error ? financeQueryError.message : String(financeQueryError));
+      setLoading(false);
+      return;
+    }
     if (!_financeData) return;
     const [cashRes, txRes, fiscalRes, cennikRes, receiptsRes, notesRes, shiftRes, blindRes, histRes] = _financeData;
     if (cashRes.success && cashRes.data) setExpectedCash(cashRes.data.expectedCash);
@@ -190,7 +195,7 @@ export default function FinancePage() {
     if (histRes.success && histRes.data) setCashShiftHistory(histRes.data);
     setLoadError(null);
     setLoading(false);
-  }, [_financeData]);
+  }, [_financeData, isFinanceQueryError, financeQueryError]);
 
   const load = useCallback(() => {
     setLoading(true);

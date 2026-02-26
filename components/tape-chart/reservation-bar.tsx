@@ -160,6 +160,15 @@ export function ReservationBar({
           : "";
 
   const groupShort = reservation.groupName ? `[${reservation.groupName}]` : "";
+  const firstLineNotes =
+    reservation.notesVisibleOnChart && reservation.notes
+      ? reservation.notes.split(/\r?\n/)[0]?.trim().slice(0, 60) ?? ""
+      : "";
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const advanceOverdue =
+    reservation.advanceDueDate &&
+    reservation.advanceDueDate < todayStr &&
+    reservation.paymentStatus !== "PAID";
   const barLabel =
     showFullInfo
       ? [
@@ -180,7 +189,6 @@ export function ReservationBar({
             ? [shortName, nightsShort].filter(Boolean).join(" · ")
             : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ")
         : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ");
-  // Tło karty = status płatności; pasek z lewej = status rezerwacji
   const defaultPaymentBg =
     reservation.paymentStatus === "PAID"
       ? "rgb(20 184 166)"
@@ -223,6 +231,7 @@ export function ReservationBar({
     tooltipLines.push(`Płatność: ${paymentLabels[reservation.paymentStatus]}`);
   }
   if (reservation.notes) tooltipLines.push(`Uwagi: ${reservation.notes}`);
+  if (advanceOverdue) tooltipLines.push("⚠️ Zaliczka po terminie");
   const tooltipText = tooltipLines.join("\n");
 
   const canDrag = reservation.status === "CONFIRMED" || reservation.status === "CHECKED_IN";
@@ -307,7 +316,8 @@ export function ReservationBar({
           isDragging && "z-50 cursor-grabbing opacity-30",
           hasConflict && "ring-2 ring-red-500 ring-offset-1",
           isGroupReservation && "border-l-4 border-l-amber-400",
-          isCheckInToday && "ring-2 ring-white/90 ring-offset-1"
+          isCheckInToday && "ring-2 ring-white/90 ring-offset-1",
+          advanceOverdue && "ring-2 ring-red-400 ring-offset-1"
         )}
         style={{
           gridRow,
@@ -348,9 +358,14 @@ export function ReservationBar({
             {reservation.vip && <Star className="inline h-2.5 w-2.5 mr-0.5 text-yellow-300 fill-yellow-300 align-middle shrink-0" aria-label="VIP" />}
             {barLabel}
           </span>
+          {firstLineNotes && (
+            <span className="block text-[10px] font-normal opacity-90 truncate px-1" title={reservation.notes ?? ""}>
+              {firstLineNotes}{firstLineNotes.length >= 60 ? "…" : ""}
+            </span>
+          )}
         </div>
-        {/* Notes indicator */}
-        {reservation.notes && (
+        {/* Notes indicator – ikona gdy są uwagi ale nie pokazane na pasku */}
+        {reservation.notes && !reservation.notesVisibleOnChart && (
           <span title={`Uwagi: ${reservation.notes}`}>
             <StickyNote
               className="absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-white/90 shrink-0"

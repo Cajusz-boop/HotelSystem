@@ -43,6 +43,9 @@ export function ReceiptDialog({
   const [buyerPostalCode, setBuyerPostalCode] = useState("");
   const [buyerNip, setBuyerNip] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
+  const [payment2Type, setPayment2Type] = useState("CARD");
+  const [payment1Amount, setPayment1Amount] = useState("");
+  const [payment2Amount, setPayment2Amount] = useState("");
   const [notes, setNotes] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -53,6 +56,12 @@ export function ReceiptDialog({
     }
     setLoading(true);
     try {
+      const amt1 = payment1Amount.trim() ? parseFloat(payment1Amount) : 0;
+      const amt2 = payment2Amount.trim() ? parseFloat(payment2Amount) : 0;
+      const paymentBreakdown: Array<{ type: string; amount: number }> = [];
+      if (amt1 > 0) paymentBreakdown.push({ type: paymentMethod, amount: amt1 });
+      if (amt2 > 0) paymentBreakdown.push({ type: payment2Type, amount: amt2 });
+
       const result = await createReceipt({
         reservationId,
         buyerName: buyerName.trim(),
@@ -60,7 +69,8 @@ export function ReceiptDialog({
         buyerCity: buyerCity.trim() || undefined,
         buyerPostalCode: buyerPostalCode.trim() || undefined,
         buyerNip: buyerNip.trim() || undefined,
-        paymentMethod,
+        paymentMethod: paymentBreakdown.length > 0 ? undefined : paymentMethod,
+        paymentBreakdown: paymentBreakdown.length > 0 ? paymentBreakdown : undefined,
         notes: notes.trim() || undefined,
       });
 
@@ -128,6 +138,42 @@ export function ReceiptDialog({
                   <SelectItem value="CARD">Karta płatnicza</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+          <div className="rounded border bg-muted/30 p-3 space-y-2">
+            <Label className="text-sm">Dwa sposoby płatności (opcjonalnie)</Label>
+            <p className="text-xs text-muted-foreground">Jeśli wpiszesz kwoty, rachunek będzie miał rozbicie płatności.</p>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <Label className="text-xs">1. Typ</Label>
+                <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CASH">Gotówka</SelectItem>
+                    <SelectItem value="TRANSFER">Przelew</SelectItem>
+                    <SelectItem value="CARD">Karta</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Kwota (PLN)</Label>
+                <Input type="number" min={0} step={0.01} className="h-8" value={payment1Amount} onChange={(e) => setPayment1Amount(e.target.value)} placeholder="0" />
+              </div>
+              <div>
+                <Label className="text-xs">2. Typ</Label>
+                <Select value={payment2Type} onValueChange={setPayment2Type}>
+                  <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CASH">Gotówka</SelectItem>
+                    <SelectItem value="TRANSFER">Przelew</SelectItem>
+                    <SelectItem value="CARD">Karta</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Kwota (PLN)</Label>
+                <Input type="number" min={0} step={0.01} className="h-8" value={payment2Amount} onChange={(e) => setPayment2Amount(e.target.value)} placeholder="0" />
+              </div>
             </div>
           </div>
 

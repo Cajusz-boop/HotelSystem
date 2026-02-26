@@ -17,6 +17,9 @@ export interface TapeChartReservation {
   pax?: number;
   bedsBooked?: number;
   notes?: string;
+  notesVisibleOnChart?: boolean;
+  advanceDueDate?: string | null;
+  paymentStatus?: "UNPAID" | "PARTIAL" | "PAID";
   rateCodeId?: string;
   rateCode?: string;
   rateCodeName?: string;
@@ -40,6 +43,15 @@ export interface TapeChartRoom {
   blocks?: Array<{ id: string; startDate: string; endDate: string; reason?: string }>;
 }
 
+export interface TapeChartEvent {
+  id: string;
+  name: string;
+  dateFrom: string;
+  dateTo: string;
+  color: string | null;
+  description?: string | null;
+}
+
 export interface TapeChartData {
   reservations: TapeChartReservation[];
   rooms: TapeChartRoom[];
@@ -48,6 +60,8 @@ export interface TapeChartData {
   reservationStatusColors?: Partial<Record<string, string>> | null;
   /** Id obiektu – do przekazania do TapeChart (unika dodatkowego wywołania getEffectivePropertyId) */
   propertyId?: string | null;
+  /** Wydarzenia specjalne w zakresie dat grafiku (nad siatką) */
+  events?: TapeChartEvent[];
 }
 
 /** Format daty YYYY-MM-DD w UTC – spójnie z MySQL DATE */
@@ -107,6 +121,9 @@ function mapReservationToTapeChart(r: {
   pax: number | null;
   bedsBooked?: number | null;
   notes?: string | null;
+  notesVisibleOnChart?: boolean;
+  advanceDueDate?: Date | null;
+  paymentStatus?: string | null;
   rateCode?: { id: string; code: string; name: string; price: unknown } | null;
   group?: { id: string; name: string | null } | null;
   parkingBookings?: Array<{ parkingSpotId: string; parkingSpot: { number: string } }>;
@@ -126,6 +143,9 @@ function mapReservationToTapeChart(r: {
     pax: r.pax ?? undefined,
     bedsBooked: r.bedsBooked ?? undefined,
     notes: r.notes ?? undefined,
+    notesVisibleOnChart: r.notesVisibleOnChart ?? false,
+    advanceDueDate: r.advanceDueDate ? formatDate(r.advanceDueDate) : undefined,
+    paymentStatus: (r.paymentStatus as "UNPAID" | "PARTIAL" | "PAID") ?? undefined,
     rateCodeId: r.rateCode?.id ?? undefined,
     rateCode: r.rateCode?.code ?? undefined,
     rateCodeName: r.rateCode?.name ?? undefined,
@@ -197,6 +217,7 @@ async function fetchTapeChartDataUncached(
 
   const roomWhere = {
     activeForSale: true,
+    isDeleted: false,
     ...(propertyId ? { propertyId } : {}),
     ...(filterByRoomIds ? { id: { in: roomIds! } } : {}),
   };
@@ -268,7 +289,7 @@ async function fetchTapeChartDataUncached(
           orderBy: { checkIn: "asc" },
         }),
         prisma.room.findMany({
-          where: { ...(propertyId ? { propertyId } : {}), ...(filterByRoomIds ? { id: { in: roomIds! } } : {}) },
+          where: { activeForSale: true, isDeleted: false, ...(propertyId ? { propertyId } : {}), ...(filterByRoomIds ? { id: { in: roomIds! } } : {}) },
           orderBy: { number: "asc" },
           select: {
             id: true,
@@ -302,7 +323,7 @@ async function fetchTapeChartDataUncached(
 
   if (rooms.length === 0 && propertyId && !filterByRoomIds) {
     const fallbackRooms = await prisma.room.findMany({
-      where: { activeForSale: true },
+      where: { activeForSale: true, isDeleted: false },
       orderBy: { number: "asc" },
         select: {
           id: true,
@@ -345,9 +366,22 @@ async function fetchTapeChartDataUncached(
       )
     : null;
 
-  const [colorsRes, roomTypes] = await Promise.all([
+  const [colorsRes, roomTypes, eventsRaw] = await Promise.all([
     getPropertyReservationColors(propertyId),
     prisma.roomType.findMany({ select: { name: true, basePrice: true } }).catch(() => [] as { name: string; basePrice: unknown }[]),
+    prisma.hotelEvent.findMany({
+      where: {
+        ...(propertyId ? { propertyId } : {}),
+        isPublic: true,
+        startDate: { lte: dateTo },
+        OR: [
+          { endDate: { gte: dateFrom } },
+          { endDate: null, startDate: { gte: dateFrom } },
+        ],
+      },
+      orderBy: { startDate: "asc" },
+      select: { id: true, title: true, startDate: true, endDate: true, color: true, description: true },
+    }).catch(() => []),
   ]);
   const reservationStatusColors = colorsRes.success && colorsRes.data && Object.keys(colorsRes.data).length > 0
     ? colorsRes.data
@@ -357,9 +391,18 @@ async function fetchTapeChartDataUncached(
       .filter((t) => t.basePrice != null)
       .map((t) => [t.name, Number(t.basePrice)])
   );
+  const events: TapeChartEvent[] = eventsRaw.map((e) => ({
+    id: e.id,
+    name: e.title,
+    dateFrom: formatDate(e.startDate),
+    dateTo: e.endDate ? formatDate(e.endDate) : formatDate(e.startDate),
+    color: e.color,
+    description: e.description ?? undefined,
+  }));
 
   return {
     propertyId,
+    events,
     reservations: reservations.map(mapReservationToTapeChart),
     rooms: rooms.map((r) => {
       const roomPrice = r.price != null ? Number(r.price) : typePriceMap.get(r.type);
