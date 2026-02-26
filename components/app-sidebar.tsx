@@ -32,6 +32,7 @@ import {
   Bike,
   ChevronDown,
   MoreHorizontal,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -97,6 +98,7 @@ const navSections: NavSection[] = [
       },
       { href: "/check-in", labelKey: "sidebar.checkIn", icon: UserPlus, permission: "module.check_in" },
       { href: "/zmiana", labelKey: "sidebar.shiftHandover", icon: ClipboardList },
+      { href: "/ksiega-meldunkowa", labelKey: "sidebar.logbook", icon: BookOpen },
     ],
   },
   {
@@ -227,6 +229,8 @@ const navSections: NavSection[] = [
           { href: "/ustawienia/dane-hotelu", labelKey: "sidebar.hotelData" },
           { href: "/ustawienia/pietra", labelKey: "sidebar.floors" },
           { href: "/ustawienia/uzytkownicy", labelKey: "sidebar.users" },
+          { href: "/ustawienia/numeracja", label: "Numeracja dokumentów" },
+          { href: "/ustawienia/asortyment", label: "Asortyment" },
           { href: "/ustawienia/kasa-fiskalna", labelKey: "sidebar.fiscalPrinter" },
           { href: "/ustawienia/2fa", labelKey: "sidebar.twoFa" },
         ],

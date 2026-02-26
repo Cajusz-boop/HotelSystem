@@ -71,12 +71,14 @@ export async function exportJpk(
       const date = t.createdAt.toISOString().slice(0, 10);
       const nip = t.reservation.company?.nip ?? "";
       const name = t.reservation.company?.name ?? "";
+      const gtu = (t as { gtuCode?: string | null }).gtuCode ?? "";
       lines.push("    <Wiersz>");
       lines.push(`      <Data>${date}</Data>`);
       lines.push(`      <KontrahentNIP>${escape(nip)}</KontrahentNIP>`);
       lines.push(`      <KontrahentNazwa>${escape(name)}</KontrahentNazwa>`);
       lines.push(`      <Kwota>${amount.toFixed(2)}</Kwota>`);
       lines.push(`      <Typ>${escape(t.type)}</Typ>`);
+      if (gtu) lines.push(`      <GTU>${escape(gtu)}</GTU>`);
       lines.push("    </Wiersz>");
     }
 
@@ -146,6 +148,20 @@ export async function exportJpkFa(
       where: { issuedAt: { gte: start, lte: end } },
       orderBy: { issuedAt: "asc" },
     });
+    // Pozycje faktur (transakcje z invoiceId) – do GTU per wiersz
+    const invoiceIds = invoices.map((i) => i.id);
+    const invoiceTransactions = await prisma.transaction.findMany({
+      where: { invoiceId: { in: invoiceIds }, type: { not: "VOID" }, status: "ACTIVE" },
+      orderBy: { postedAt: "asc" },
+    });
+    const txByInvoice = new Map<string, typeof invoiceTransactions>();
+    for (const t of invoiceTransactions) {
+      if (t.invoiceId) {
+        const list = txByInvoice.get(t.invoiceId) ?? [];
+        list.push(t);
+        txByInvoice.set(t.invoiceId, list);
+      }
+    }
 
     const ns = "http://crd.gov.pl/wzor/2023/06/29/12648/";
     const nowStr = new Date().toISOString().slice(0, 19).replace("T", " ");
@@ -168,17 +184,36 @@ export async function exportJpkFa(
     for (const i of invoices) {
       const dataWystawienia = i.issuedAt.toISOString().slice(0, 10);
       const nip = (i.buyerNip ?? "").replace(/\s/g, "");
-      lines.push("    <FakturaWiersz>");
-      lines.push(`      <P_1>${dataWystawienia}</P_1>`);
-      lines.push(`      <P_2A>${escapeXml(i.number)}</P_2A>`);
-      lines.push(`      <P_6>${dataWystawienia}</P_6>`);
-      lines.push(`      <P_13_1>${escapeXml(nip)}</P_13_1>`);
-      lines.push(`      <P_14_1>${escapeXml(i.buyerName ?? "")}</P_14_1>`);
-      lines.push(`      <P_15>${escapeXml([i.buyerAddress, i.buyerPostalCode, i.buyerCity].filter(Boolean).join(", "))}</P_15>`);
-      lines.push(`      <P_16>${Number(i.amountNet).toFixed(2)}</P_16>`);
-      lines.push(`      <P_17>${Number(i.amountVat).toFixed(2)}</P_17>`);
-      lines.push(`      <P_18>${Number(i.amountGross).toFixed(2)}</P_18>`);
-      lines.push("    </FakturaWiersz>");
+      const rows = txByInvoice.get(i.id);
+      if (rows && rows.length > 0) {
+        for (const row of rows) {
+          const gtu = (row as { gtuCode?: string | null }).gtuCode ?? "";
+          lines.push("    <FakturaWiersz>");
+          lines.push(`      <P_1>${dataWystawienia}</P_1>`);
+          lines.push(`      <P_2A>${escapeXml(i.number)}</P_2A>`);
+          lines.push(`      <P_6>${dataWystawienia}</P_6>`);
+          lines.push(`      <P_13_1>${escapeXml(nip)}</P_13_1>`);
+          lines.push(`      <P_14_1>${escapeXml(i.buyerName ?? "")}</P_14_1>`);
+          lines.push(`      <P_15>${escapeXml([i.buyerAddress, i.buyerPostalCode, i.buyerCity].filter(Boolean).join(", "))}</P_15>`);
+          lines.push(`      <P_16>${Number(row.netAmount ?? row.amount).toFixed(2)}</P_16>`);
+          lines.push(`      <P_17>${Number(row.vatAmount ?? 0).toFixed(2)}</P_17>`);
+          lines.push(`      <P_18>${Number(row.amount).toFixed(2)}</P_18>`);
+          if (gtu) lines.push(`      <P_12>${escapeXml(gtu)}</P_12>`);
+          lines.push("    </FakturaWiersz>");
+        }
+      } else {
+        lines.push("    <FakturaWiersz>");
+        lines.push(`      <P_1>${dataWystawienia}</P_1>`);
+        lines.push(`      <P_2A>${escapeXml(i.number)}</P_2A>`);
+        lines.push(`      <P_6>${dataWystawienia}</P_6>`);
+        lines.push(`      <P_13_1>${escapeXml(nip)}</P_13_1>`);
+        lines.push(`      <P_14_1>${escapeXml(i.buyerName ?? "")}</P_14_1>`);
+        lines.push(`      <P_15>${escapeXml([i.buyerAddress, i.buyerPostalCode, i.buyerCity].filter(Boolean).join(", "))}</P_15>`);
+        lines.push(`      <P_16>${Number(i.amountNet).toFixed(2)}</P_16>`);
+        lines.push(`      <P_17>${Number(i.amountVat).toFixed(2)}</P_17>`);
+        lines.push(`      <P_18>${Number(i.amountGross).toFixed(2)}</P_18>`);
+        lines.push("    </FakturaWiersz>");
+      }
     }
 
     lines.push("  </Faktura>");
@@ -245,21 +280,55 @@ export async function exportJpkVat(
       "  <Sprzedaz>",
     ];
 
+    const invoiceIds = invoices.map((i) => i.id);
+    const invoiceTransactions = await prisma.transaction.findMany({
+      where: { invoiceId: { in: invoiceIds }, type: { not: "VOID" }, status: "ACTIVE" },
+      orderBy: { postedAt: "asc" },
+    });
+    const txByInvoiceVat = new Map<string, typeof invoiceTransactions>();
+    for (const t of invoiceTransactions) {
+      if (t.invoiceId) {
+        const list = txByInvoiceVat.get(t.invoiceId) ?? [];
+        list.push(t);
+        txByInvoiceVat.set(t.invoiceId, list);
+      }
+    }
+
     for (const i of invoices) {
       const dataWystawienia = i.issuedAt.toISOString().slice(0, 10);
       const nip = (i.buyerNip ?? "").replace(/\s/g, "");
-      lines.push("    <SprzedazWiersz>");
-      lines.push(`      <P_1>${dataWystawienia}</P_1>`);
-      lines.push(`      <P_2A>${escapeXml(i.number)}</P_2A>`);
-      lines.push(`      <P_6>${dataWystawienia}</P_6>`);
-      lines.push(`      <P_13_1>${escapeXml(nip)}</P_13_1>`);
-      lines.push(`      <P_14_1>${escapeXml(i.buyerName ?? "")}</P_14_1>`);
-      lines.push(`      <P_15>${escapeXml([i.buyerAddress, i.buyerPostalCode, i.buyerCity].filter(Boolean).join(", "))}</P_15>`);
-      lines.push(`      <K_19>${Number(i.vatRate).toFixed(2)}</K_19>`);
-      lines.push(`      <P_16>${Number(i.amountNet).toFixed(2)}</P_16>`);
-      lines.push(`      <P_17>${Number(i.amountVat).toFixed(2)}</P_17>`);
-      lines.push(`      <P_18>${Number(i.amountGross).toFixed(2)}</P_18>`);
-      lines.push("    </SprzedazWiersz>");
+      const rows = txByInvoiceVat.get(i.id);
+      if (rows && rows.length > 0) {
+        for (const row of rows) {
+          const gtu = (row as { gtuCode?: string | null }).gtuCode ?? "";
+          lines.push("    <SprzedazWiersz>");
+          lines.push(`      <P_1>${dataWystawienia}</P_1>`);
+          lines.push(`      <P_2A>${escapeXml(i.number)}</P_2A>`);
+          lines.push(`      <P_6>${dataWystawienia}</P_6>`);
+          lines.push(`      <P_13_1>${escapeXml(nip)}</P_13_1>`);
+          lines.push(`      <P_14_1>${escapeXml(i.buyerName ?? "")}</P_14_1>`);
+          lines.push(`      <P_15>${escapeXml([i.buyerAddress, i.buyerPostalCode, i.buyerCity].filter(Boolean).join(", "))}</P_15>`);
+          lines.push(`      <K_19>${Number(row.vatRate).toFixed(2)}</K_19>`);
+          lines.push(`      <P_16>${Number(row.netAmount ?? row.amount).toFixed(2)}</P_16>`);
+          lines.push(`      <P_17>${Number(row.vatAmount ?? 0).toFixed(2)}</P_17>`);
+          lines.push(`      <P_18>${Number(row.amount).toFixed(2)}</P_18>`);
+          if (gtu) lines.push(`      <P_12>${escapeXml(gtu)}</P_12>`);
+          lines.push("    </SprzedazWiersz>");
+        }
+      } else {
+        lines.push("    <SprzedazWiersz>");
+        lines.push(`      <P_1>${dataWystawienia}</P_1>`);
+        lines.push(`      <P_2A>${escapeXml(i.number)}</P_2A>`);
+        lines.push(`      <P_6>${dataWystawienia}</P_6>`);
+        lines.push(`      <P_13_1>${escapeXml(nip)}</P_13_1>`);
+        lines.push(`      <P_14_1>${escapeXml(i.buyerName ?? "")}</P_14_1>`);
+        lines.push(`      <P_15>${escapeXml([i.buyerAddress, i.buyerPostalCode, i.buyerCity].filter(Boolean).join(", "))}</P_15>`);
+        lines.push(`      <K_19>${Number(i.vatRate).toFixed(2)}</K_19>`);
+        lines.push(`      <P_16>${Number(i.amountNet).toFixed(2)}</P_16>`);
+        lines.push(`      <P_17>${Number(i.amountVat).toFixed(2)}</P_17>`);
+        lines.push(`      <P_18>${Number(i.amountGross).toFixed(2)}</P_18>`);
+        lines.push("    </SprzedazWiersz>");
+      }
     }
 
     lines.push("  </Sprzedaz>");

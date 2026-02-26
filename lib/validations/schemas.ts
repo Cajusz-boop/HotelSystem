@@ -5,7 +5,8 @@ const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Format daty: YYYY-MM
 
 const roomStatus = z.enum(["CLEAN", "DIRTY", "OOO", "INSPECTION", "INSPECTED", "CHECKOUT_PENDING", "MAINTENANCE"]);
 const reservationStatus = z.enum([
-  "REQUEST",      // oczekuje na potwierdzenie (wstępna rezerwacja)
+  "PENDING",      // zapytanie / oczekuje na potwierdzenie (Booking Engine)
+  "REQUEST",      // alias dla PENDING (legacy)
   "CONFIRMED",    // potwierdzona
   "GUARANTEED",   // gwarantowana kartą kredytową
   "WAITLIST",     // lista oczekujących
@@ -382,6 +383,12 @@ const reservationBaseSchema = z.object({
   bedsBooked: z.number().int().min(1).max(100).optional().nullable(), // rezerwacja zasobowa: ile łóżek (gdy room.beds > 1)
   notes: z.string().max(2000).optional().nullable(), // uwagi widoczne dla gościa (drukowane na potwierdzeniu)
   internalNotes: z.string().max(10000).optional().nullable(), // uwagi wewnętrzne (widoczne tylko dla personelu)
+  notesVisibleOnChart: z.boolean().optional(), // pierwsza linia uwag na pasku rezerwacji w TapeChart
+  reminderAt: z.string().datetime().optional().nullable(), // przypomnienie do rezerwacji (ISO datetime)
+  advanceDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(), // termin wpłaty zaliczki (YYYY-MM-DD)
+  externalReservationNumber: z.string().max(100).optional().nullable(), // nr rezerwacji w OTA/Booking
+  currency: z.string().max(3).optional().nullable(), // waluta (PLN, EUR, USD)
+  extraStatus: z.string().max(50).optional().nullable(), // dodatkowy status: VIP, AWAITING_PAYMENT, COMPLAINT, itp.
   specialRequests: z.string().max(5000).optional().nullable(), // specjalne życzenia (łóżeczko dziecięce, dieta, itp.)
   mrz: z.string().max(90).optional(), // kod MRZ z dowodu (formularz meldunkowy)
   customFormData: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(), // wartości dodatkowych pól z konfiguracji (zapis w reservation.metadata)

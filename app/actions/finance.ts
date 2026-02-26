@@ -480,6 +480,38 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
   }
 }
 
+/** Generuje następny numer dokumentu kasowego KP lub KW (np. KP/2026/001). */
+export async function generateNextCashDocumentNumber(
+  type: "KP" | "KW"
+): Promise<ActionResult<string>> {
+  try {
+    const year = new Date().getFullYear();
+    const counter = await prisma.$transaction(async (tx) => {
+      let c = await tx.documentNumberCounter.findUnique({
+        where: { documentType_year: { documentType: type, year } },
+      });
+      if (!c) {
+        c = await tx.documentNumberCounter.create({
+          data: { documentType: type, year, lastSequence: 0 },
+        });
+      }
+      const nextSeq = c.lastSequence + 1;
+      await tx.documentNumberCounter.update({
+        where: { id: c.id },
+        data: { lastSequence: nextSeq },
+      });
+      return { ...c, lastSequence: nextSeq };
+    });
+    const seqStr = String(counter.lastSequence).padStart(4, "0");
+    return { success: true, data: `${type}/${year}/${seqStr}` };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd generowania numeru KP/KW",
+    };
+  }
+}
+
 /**
  * Pobiera aktualny stan liczników numeracji dla wszystkich typów dokumentów i lat.
  * @returns ActionResult z tablicą { documentType, year, lastSequence } lub komunikatem błędu
@@ -3626,6 +3658,7 @@ export async function postRoomChargeOnCheckout(
         vatRate: 8,
         folioNumber: 1,
         status: "ACTIVE",
+        gtuCode: "GTU_11", // B2: nocleg – Grupa Towarów i Usług do JPK
       },
     });
     revalidatePath("/finance");
@@ -3676,6 +3709,20 @@ export async function voidTransaction(
     });
     if (!tx) return { success: false, error: "Transakcja nie istnieje" };
     if (tx.isReadOnly) return { success: false, error: "Transakcja zamknięta (Night Audit)" };
+
+    // Blokada void po czasie (maxVoidHours z HotelConfig)
+    const config = await prisma.hotelConfig.findUnique({ where: { id: "default" } });
+    const maxVoidHours = config?.maxVoidHours ?? null;
+    if (maxVoidHours != null && maxVoidHours > 0) {
+      const postedAt = tx.postedAt ?? tx.createdAt;
+      const ageHours = (Date.now() - postedAt.getTime()) / (60 * 60 * 1000);
+      if (ageHours > maxVoidHours) {
+        return {
+          success: false,
+          error: `Anulowanie transakcji możliwe tylko do ${maxVoidHours} h od jej utworzenia. Minęło ${Math.floor(ageHours)} h.`,
+        };
+      }
+    }
 
     await prisma.transaction.delete({ where: { id: transactionId } });
 
@@ -3955,6 +4002,60 @@ export async function getProformasForReservation(
   }
 }
 
+/** Pobiera ceny za poszczególne dni rezerwacji (ReservationDayRate). */
+export async function getReservationDayRates(
+  reservationId: string,
+  checkIn: string,
+  checkOut: string
+): Promise<ActionResult<Array<{ date: string; rate: number }>>> {
+  try {
+    const start = new Date(checkIn);
+    const end = new Date(checkOut);
+    const days: Array<{ date: string; rate: number }> = [];
+    for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+      const dateStr = d.toISOString().slice(0, 10);
+      days.push({ date: dateStr, rate: 0 });
+    }
+    const existing = await prisma.reservationDayRate.findMany({
+      where: { reservationId },
+    });
+    const byDate = new Map(existing.map((r) => [r.date.toISOString().slice(0, 10), Number(r.rate)]));
+    const result = days.map(({ date }) => ({ date, rate: byDate.get(date) ?? 0 }));
+    return { success: true, data: result };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd odczytu cen za dni",
+    };
+  }
+}
+
+/** Zapisuje ceny za poszczególne dni (upsert). */
+export async function saveReservationDayRates(
+  reservationId: string,
+  dayRates: Array<{ date: string; rate: number }>
+): Promise<ActionResult<void>> {
+  try {
+    for (const { date, rate } of dayRates) {
+      if (rate <= 0) continue;
+      await prisma.reservationDayRate.upsert({
+        where: {
+          reservationId_date: { reservationId, date: new Date(date + "T12:00:00Z") },
+        },
+        create: { reservationId, date: new Date(date + "T12:00:00Z"), rate },
+        update: { rate },
+      });
+    }
+    revalidatePath("/front-office");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd zapisu cen za dni",
+    };
+  }
+}
+
 /** Lista transakcji dla rezerwacji (KP/KW – do zakładki Dokumenty). */
 export async function getTransactionsForReservation(
   reservationId: string
@@ -3989,7 +4090,8 @@ export async function getTransactionsForReservation(
 /** Wystawia fakturę VAT dla rezerwacji (numeracja FV/YYYY/SEQ, marża opcjonalnie). */
 export async function createVatInvoice(
   reservationId: string,
-  marginMode?: boolean
+  marginMode?: boolean,
+  options?: { invoiceType?: "NORMAL" | "ADVANCE" | "FINAL"; advanceInvoiceId?: string }
 ): Promise<
   ActionResult<{
     id: string;
@@ -4000,6 +4102,8 @@ export async function createVatInvoice(
     issuedAt: string;
   }>
 > {
+  const invoiceType = options?.invoiceType ?? "NORMAL";
+  const advanceInvoiceId = options?.advanceInvoiceId ?? null;
   try {
     let reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
@@ -4081,6 +4185,8 @@ export async function createVatInvoice(
       data: {
         reservationId,
         number,
+        invoiceType: invoiceType as "NORMAL" | "ADVANCE" | "FINAL",
+        advanceInvoiceId,
         amountNet,
         amountVat,
         amountGross,
@@ -4114,6 +4220,277 @@ export async function createVatInvoice(
   }
 }
 
+/** Wystawia fakturę zaliczkową (invoiceType = ADVANCE). */
+export async function createAdvanceInvoice(
+  reservationId: string,
+  amountGross: number,
+  marginMode?: boolean
+): Promise<
+  ActionResult<{
+    id: string;
+    number: string;
+    amountNet: number;
+    amountVat: number;
+    amountGross: number;
+    issuedAt: string;
+  }>
+> {
+  if (amountGross <= 0) return { success: false, error: "Kwota zaliczki musi być większa od zera" };
+  try {
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: { company: true },
+    });
+    if (!reservation) return { success: false, error: "Rezerwacja nie istnieje" };
+    if (!reservation.company) return { success: false, error: "Brak firmy przy rezerwacji – wpisz NIP i zapisz." };
+    const buyerNip = reservation.company.nip?.trim();
+    if (!buyerNip) return { success: false, error: "NIP nabywcy jest wymagany do faktury VAT." };
+
+    const configResult = await getCennikConfig();
+    if (!configResult.success || !configResult.data) return { success: false, error: "Błąd odczytu VAT" };
+    const { vatPercent } = configResult.data;
+    amountGross = Math.round(amountGross * 100) / 100;
+    const amountNet = Math.round((amountGross / (1 + vatPercent / 100)) * 100) / 100;
+    const amountVat = amountGross - amountNet;
+    const numberResult = await generateNextDocumentNumber("INVOICE");
+    if (!numberResult.success) return { success: false, error: numberResult.error };
+    const buyerCompany = reservation.company;
+    const invoice = await prisma.invoice.create({
+      data: {
+        reservationId,
+        number: numberResult.data,
+        invoiceType: "ADVANCE",
+        amountNet,
+        amountVat,
+        amountGross,
+        vatRate: vatPercent,
+        marginMode: marginMode ?? false,
+        buyerNip,
+        buyerName: buyerCompany.name,
+        buyerAddress: buyerCompany.address ?? null,
+        buyerPostalCode: buyerCompany.postalCode ?? null,
+        buyerCity: buyerCompany.city ?? null,
+      },
+    });
+    revalidatePath("/finance");
+    revalidatePath("/reports");
+    return {
+      success: true,
+      data: {
+        id: invoice.id,
+        number: invoice.number,
+        amountNet: Number(invoice.amountNet),
+        amountVat: Number(invoice.amountVat),
+        amountGross: Number(invoice.amountGross),
+        issuedAt: invoice.issuedAt.toISOString(),
+      },
+    };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd wystawiania faktury zaliczkowej" };
+  }
+}
+
+/** Wystawia fakturę końcową rozliczającą zaliczkę (invoiceType = FINAL, advanceInvoiceId). */
+export async function createFinalInvoiceFromAdvance(
+  reservationId: string,
+  advanceInvoiceId: string,
+  marginMode?: boolean
+): Promise<
+  ActionResult<{
+    id: string;
+    number: string;
+    amountNet: number;
+    amountVat: number;
+    amountGross: number;
+    issuedAt: string;
+  }>
+> {
+  try {
+    const [reservation, advanceInvoice] = await Promise.all([
+      prisma.reservation.findUnique({
+        where: { id: reservationId },
+        include: { company: true, transactions: true },
+      }),
+      prisma.invoice.findUnique({
+        where: { id: advanceInvoiceId },
+      }),
+    ]);
+    if (!reservation) return { success: false, error: "Rezerwacja nie istnieje" };
+    if (!advanceInvoice || advanceInvoice.invoiceType !== "ADVANCE") return { success: false, error: "Nieprawidłowa faktura zaliczkowa" };
+    if (advanceInvoice.reservationId !== reservationId) return { success: false, error: "Faktura zaliczkowa nie dotyczy tej rezerwacji" };
+    if (!reservation.company) return { success: false, error: "Brak firmy przy rezerwacji." };
+
+    const chargeTypes = ["ROOM", "LOCAL_TAX", "MINIBAR", "GASTRONOMY", "SPA", "PARKING", "RENTAL", "PHONE", "LAUNDRY", "TRANSPORT", "ATTRACTION", "OTHER"];
+    const totalCharges = reservation.transactions
+      .filter((t) => chargeTypes.includes(t.type) && Number(t.amount) > 0)
+      .reduce((s, t) => s + Number(t.amount), 0);
+    const totalDiscounts = reservation.transactions
+      .filter((t) => t.type === "DISCOUNT")
+      .reduce((s, t) => s + Math.abs(Number(t.amount)), 0);
+    const advanceAmount = Number(advanceInvoice.amountGross);
+    const totalGross = Math.round((totalCharges - totalDiscounts - advanceAmount) * 100) / 100;
+    if (totalGross <= 0) return { success: false, error: "Suma do faktury końcowej (obciążenia minus zaliczka) musi być większa od zera." };
+
+    const configResult = await getCennikConfig();
+    if (!configResult.success || !configResult.data) return { success: false, error: "Błąd odczytu VAT" };
+    const { vatPercent, pricesAreNetto } = configResult.data;
+    let amountNet: number;
+    let amountVat: number;
+    if (pricesAreNetto) {
+      amountNet = totalGross;
+      amountVat = Math.round((amountNet * vatPercent) / 100 * 100) / 100;
+    } else {
+      amountNet = Math.round((totalGross / (1 + vatPercent / 100)) * 100) / 100;
+      amountVat = totalGross - amountNet;
+    }
+    const numberResult = await generateNextDocumentNumber("INVOICE");
+    if (!numberResult.success) return { success: false, error: numberResult.error };
+    const buyerCompany = reservation.company!;
+    const invoice = await prisma.invoice.create({
+      data: {
+        reservationId,
+        number: numberResult.data,
+        invoiceType: "FINAL",
+        advanceInvoiceId,
+        amountNet,
+        amountVat,
+        amountGross: totalGross,
+        vatRate: vatPercent,
+        marginMode: marginMode ?? false,
+        buyerNip: buyerCompany.nip!,
+        buyerName: buyerCompany.name,
+        buyerAddress: buyerCompany.address ?? null,
+        buyerPostalCode: buyerCompany.postalCode ?? null,
+        buyerCity: buyerCompany.city ?? null,
+      },
+    });
+    revalidatePath("/finance");
+    revalidatePath("/reports");
+    return {
+      success: true,
+      data: {
+        id: invoice.id,
+        number: invoice.number,
+        amountNet: Number(invoice.amountNet),
+        amountVat: Number(invoice.amountVat),
+        amountGross: Number(invoice.amountGross),
+        issuedAt: invoice.issuedAt.toISOString(),
+      },
+    };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd wystawiania faktury końcowej" };
+  }
+}
+
+/** Tworzy dokument kasowy KP (Kasa przyjmie) lub KW (Kasa wyda). */
+export async function createCashDocument(params: {
+  type: "KP" | "KW";
+  amount: number;
+  description?: string;
+  cashShiftId?: string;
+  reservationId?: string;
+  invoiceId?: string;
+  receiptId?: string;
+}): Promise<ActionResult<{ id: string; number: string }>> {
+  const { type, amount, description, cashShiftId, reservationId, invoiceId, receiptId } = params;
+  if (amount <= 0) return { success: false, error: "Kwota musi być większa od zera" };
+  try {
+    const numberResult = await generateNextCashDocumentNumber(type);
+    if (!numberResult.success) return { success: false, error: numberResult.error };
+    const doc = await prisma.cashDocument.create({
+      data: {
+        type,
+        number: numberResult.data,
+        amount,
+        description: description ?? null,
+        cashShiftId: cashShiftId ?? null,
+        reservationId: reservationId ?? null,
+        invoiceId: invoiceId ?? null,
+        receiptId: receiptId ?? null,
+      },
+    });
+    revalidatePath("/finance");
+    return { success: true, data: { id: doc.id, number: doc.number } };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd tworzenia dokumentu KP/KW" };
+  }
+}
+
+/** Lista dokumentów kasowych dla zmiany. */
+export async function getCashDocumentsForShift(
+  cashShiftId: string
+): Promise<ActionResult<Array<{ id: string; type: string; number: string; amount: number; issuedAt: string; description: string | null }>>> {
+  try {
+    const list = await prisma.cashDocument.findMany({
+      where: { cashShiftId },
+      orderBy: { issuedAt: "asc" },
+    });
+    return {
+      success: true,
+      data: list.map((d) => ({
+        id: d.id,
+        type: d.type,
+        number: d.number,
+        amount: Number(d.amount),
+        issuedAt: d.issuedAt.toISOString(),
+        description: d.description,
+      })),
+    };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd odczytu dokumentów KP/KW" };
+  }
+}
+
+/** Lista dokumentów kasowych dla rezerwacji. */
+export async function getCashDocumentsForReservation(
+  reservationId: string
+): Promise<ActionResult<Array<{ id: string; type: string; number: string; amount: number; issuedAt: string; description: string | null }>>> {
+  try {
+    const list = await prisma.cashDocument.findMany({
+      where: { reservationId },
+      orderBy: { issuedAt: "desc" },
+    });
+    return {
+      success: true,
+      data: list.map((d) => ({
+        id: d.id,
+        type: d.type,
+        number: d.number,
+        amount: Number(d.amount),
+        issuedAt: d.issuedAt.toISOString(),
+        description: d.description,
+      })),
+    };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd odczytu dokumentów KP/KW" };
+  }
+}
+
+/** Lista dokumentów kasowych powiązanych z fakturą. */
+export async function getCashDocumentsForInvoice(
+  invoiceId: string
+): Promise<ActionResult<Array<{ id: string; type: string; number: string; amount: number; issuedAt: string; description: string | null }>>> {
+  try {
+    const list = await prisma.cashDocument.findMany({
+      where: { invoiceId },
+      orderBy: { issuedAt: "asc" },
+    });
+    return {
+      success: true,
+      data: list.map((d) => ({
+        id: d.id,
+        type: d.type,
+        number: d.number,
+        amount: Number(d.amount),
+        issuedAt: d.issuedAt.toISOString(),
+        description: d.description,
+      })),
+    };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd odczytu dokumentów KP/KW" };
+  }
+}
+
 /** Lista faktur VAT dla rezerwacji. */
 export async function getInvoicesForReservation(
   reservationId: string
@@ -4124,6 +4501,8 @@ export async function getInvoicesForReservation(
       number: string;
       amountGross: number;
       issuedAt: string;
+      invoiceType: string;
+      advanceInvoiceId: string | null;
     }>
   >
 > {
@@ -4139,6 +4518,8 @@ export async function getInvoicesForReservation(
         number: i.number,
         amountGross: Number(i.amountGross),
         issuedAt: i.issuedAt.toISOString(),
+        invoiceType: i.invoiceType,
+        advanceInvoiceId: i.advanceInvoiceId,
       })),
     };
   } catch (e) {
@@ -4264,6 +4645,10 @@ export async function updateInvoice(
     buyerPostalCode?: string | null;
     buyerCity?: string | null;
     issuedAt?: Date;
+    /** A1: dwa typy płatności [{ type: "CASH", amount: 100 }, { type: "CARD", amount: 50 }] */
+    paymentBreakdown?: Array<{ type: string; amount: number }> | null;
+    /** B3: pola własne na fakturze { "orderNo": "Z-123", "project": "Projekt X" } */
+    customFieldValues?: Record<string, string> | null;
   }
 ): Promise<ActionResult<{ id: string; number: string }>> {
   const editable = await ensureInvoiceEditable(invoiceId);
@@ -4282,6 +4667,8 @@ export async function updateInvoice(
     if (data.buyerPostalCode !== undefined) updatePayload.buyerPostalCode = data.buyerPostalCode;
     if (data.buyerCity !== undefined) updatePayload.buyerCity = data.buyerCity;
     if (data.issuedAt != null) updatePayload.issuedAt = data.issuedAt;
+    if (data.paymentBreakdown !== undefined) updatePayload.paymentBreakdown = data.paymentBreakdown === null ? Prisma.JsonNull : (data.paymentBreakdown as Prisma.InputJsonValue);
+    if (data.customFieldValues !== undefined) updatePayload.customFieldValues = data.customFieldValues === null ? Prisma.JsonNull : (data.customFieldValues as Prisma.InputJsonValue);
     if (Object.keys(updatePayload).length === 0) {
       const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: { id: true, number: true } });
       return inv ? { success: true, data: { id: inv.id, number: inv.number } } : { success: false, error: "Faktura nie istnieje" };
@@ -4318,6 +4705,12 @@ export async function getInvoiceById(
     buyerCity: string | null;
     issuedAt: string;
     isEditable: boolean;
+    invoiceType: string;
+    advanceInvoiceId: string | null;
+    /** A1: dwa typy płatności na dokumencie */
+    paymentBreakdown: Array<{ type: string; amount: number }> | null;
+    /** B3: pola własne na fakturze */
+    customFieldValues: Record<string, string> | null;
   }>
 > {
   try {
@@ -4327,6 +4720,8 @@ export async function getInvoiceById(
     if (!invoice) return { success: false, error: "Faktura nie istnieje" };
     const status = invoice.ksefStatus?.toUpperCase();
     const isEditable = !status || status === "DRAFT";
+    const paymentBreakdown = invoice.paymentBreakdown as Array<{ type: string; amount: number }> | null;
+    const customFieldValues = invoice.customFieldValues as Record<string, string> | null;
     return {
       success: true,
       data: {
@@ -4342,6 +4737,10 @@ export async function getInvoiceById(
         buyerCity: invoice.buyerCity,
         issuedAt: invoice.issuedAt.toISOString(),
         isEditable,
+        invoiceType: invoice.invoiceType,
+        advanceInvoiceId: invoice.advanceInvoiceId,
+        paymentBreakdown: paymentBreakdown ?? null,
+        customFieldValues: customFieldValues ?? null,
       },
     };
   } catch (e) {
@@ -4471,6 +4870,21 @@ export async function registerPaymentFromLink(
     await updateReservationPaymentStatus(link.reservationId).catch((err) =>
       console.error("[updateReservationPaymentStatus]", err)
     );
+    // Powiadomienie e-mail do gościa po opłaceniu linku (D2)
+    const { sendMailViaResend } = await import("@/app/actions/mailing");
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: link.reservationId },
+      include: { guest: true },
+    });
+    const guestEmail = reservation?.guest?.email?.trim();
+    if (guestEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+      const guestName = reservation?.guest?.name ?? "Gość";
+      const subject = `Potwierdzenie wpłaty – ${amount.toFixed(2)} PLN`;
+      const html = `<p>Dzień dobry ${guestName},</p><p>Otrzymaliśmy wpłatę w kwocie <strong>${amount.toFixed(2)} PLN</strong> do rezerwacji.</p><p>Dziękujemy i do zobaczenia!</p>`;
+      await sendMailViaResend(guestEmail, subject, html).catch((err) =>
+        console.error("[registerPaymentFromLink] Błąd wysyłki e-mail:", err)
+      );
+    }
     if (process.env.NODE_ENV === "development" && provider) {
       console.log("[PAYMENT] Wpłata zarejestrowana:", { transactionId: tx.id, amount });
     }
@@ -4661,6 +5075,8 @@ export interface CreateReceiptInput {
   sellerNip?: string;
   vatExemptionBasis?: string;
   paymentMethod?: string;
+  /** A1: dwa typy płatności na dokumencie [{ type: "CASH", amount: 100 }, { type: "CARD", amount: 50 }] */
+  paymentBreakdown?: Array<{ type: string; amount: number }>;
   paymentDueDays?: number;
   serviceDate?: string;
   notes?: string;
@@ -4798,6 +5214,7 @@ export async function createReceipt(
         sellerNip,
         vatExemptionBasis,
         paymentMethod: input.paymentMethod || null,
+        paymentBreakdown: input.paymentBreakdown && input.paymentBreakdown.length > 0 ? (input.paymentBreakdown as unknown as Prisma.InputJsonValue) : undefined,
         paymentDueDate,
         isPaid: false,
         serviceDate,
@@ -5042,6 +5459,137 @@ export async function markReceiptAsUnpaid(
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd cofania statusu płatności",
+    };
+  }
+}
+
+/** Hurtowe oznaczanie rachunków jako opłacone (data zapłaty opcjonalna). */
+export async function markDocumentsAsPaid(params: {
+  receiptIds: string[];
+  paidAt?: string; // ISO date string; domyślnie teraz
+}): Promise<ActionResult<{ updated: number }>> {
+  const { receiptIds, paidAt: paidAtStr } = params;
+  if (!receiptIds?.length) {
+    return { success: false, error: "Brak wybranych rachunków" };
+  }
+  const paidAt = paidAtStr ? new Date(paidAtStr) : new Date();
+  if (Number.isNaN(paidAt.getTime())) {
+    return { success: false, error: "Nieprawidłowa data płatności" };
+  }
+  try {
+    const updated = await prisma.receipt.updateMany({
+      where: { id: { in: receiptIds }, isPaid: false },
+      data: { isPaid: true, paidAt },
+    });
+    revalidatePath("/finance");
+    return { success: true, data: { updated: updated.count } };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd oznaczania dokumentów jako opłacone",
+    };
+  }
+}
+
+/** Historia zmian dokumentu (faktura/rachunek) – z AuditLog. */
+export async function getDocumentHistory(
+  entityType: "Invoice" | "Receipt",
+  entityId: string
+): Promise<
+  ActionResult<
+    Array<{
+      id: string;
+      timestamp: string;
+      actionType: string;
+      userId: string | null;
+      oldValue: Record<string, unknown> | null;
+      newValue: Record<string, unknown> | null;
+    }>
+  >
+> {
+  try {
+    const logs = await prisma.auditLog.findMany({
+      where: { entityType, entityId },
+      orderBy: { timestamp: "desc" },
+      take: 50,
+    });
+    return {
+      success: true,
+      data: logs.map((l) => ({
+        id: l.id,
+        timestamp: l.timestamp.toISOString(),
+        actionType: l.actionType,
+        userId: l.userId,
+        oldValue: (l.oldValue as Record<string, unknown>) ?? null,
+        newValue: (l.newValue as Record<string, unknown>) ?? null,
+      })),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd odczytu historii dokumentu",
+    };
+  }
+}
+
+/** Eksport faktur VAT do CSV (zakres dat). */
+export async function exportInvoicesToCsv(
+  dateFrom: string,
+  dateTo: string
+): Promise<ActionResult<{ csv: string; filename: string }>> {
+  try {
+    const from = new Date(dateFrom + "T00:00:00.000Z");
+    const to = new Date(dateTo + "T23:59:59.999Z");
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      return { success: false, error: "Nieprawidłowy format dat (YYYY-MM-DD)" };
+    }
+    const list = await prisma.invoice.findMany({
+      where: { issuedAt: { gte: from, lte: to } },
+      orderBy: { issuedAt: "asc" },
+    });
+    const header = "Numer;Data wystawienia;NIP;Nabywca;Netto;VAT;Brutto";
+    const rows = list.map(
+      (i) =>
+        `${i.number};${i.issuedAt.toISOString().slice(0, 10)};${(i.buyerNip ?? "").replace(/;/g, ",")};${(i.buyerName ?? "").replace(/;/g, ",")};${Number(i.amountNet).toFixed(2)};${Number(i.amountVat).toFixed(2)};${Number(i.amountGross).toFixed(2)}`
+    );
+    const csv = [header, ...rows].join("\n");
+    const filename = `faktury_${dateFrom}_${dateTo}.csv`;
+    return { success: true, data: { csv, filename } };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd eksportu faktur",
+    };
+  }
+}
+
+/** Eksport rachunków do CSV (zakres dat). */
+export async function exportReceiptsToCsv(
+  dateFrom: string,
+  dateTo: string
+): Promise<ActionResult<{ csv: string; filename: string }>> {
+  try {
+    const from = new Date(dateFrom + "T00:00:00.000Z");
+    const to = new Date(dateTo + "T23:59:59.999Z");
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      return { success: false, error: "Nieprawidłowy format dat (YYYY-MM-DD)" };
+    }
+    const list = await prisma.receipt.findMany({
+      where: { issuedAt: { gte: from, lte: to } },
+      orderBy: { issuedAt: "asc" },
+    });
+    const header = "Numer;Data;Nabywca;Kwota;Opłacono;Data płatności";
+    const rows = list.map(
+      (r) =>
+        `${r.number};${r.issuedAt.toISOString().slice(0, 10)};${(r.buyerName ?? "").replace(/;/g, ",")};${Number(r.amount).toFixed(2)};${r.isPaid ? "Tak" : "Nie"};${r.paidAt ? r.paidAt.toISOString().slice(0, 10) : ""}`
+    );
+    const csv = [header, ...rows].join("\n");
+    const filename = `rachunki_${dateFrom}_${dateTo}.csv`;
+    return { success: true, data: { csv, filename } };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd eksportu rachunków",
     };
   }
 }

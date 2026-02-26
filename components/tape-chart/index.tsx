@@ -82,6 +82,7 @@ const MonthlyOverviewDialog = dynamic(() => import("./monthly-overview-dialog").
 const FloorPlanDialog = dynamic(() => import("./floor-plan-dialog").then((m) => m.FloorPlanDialog), { ssr: false });
 const DailyMovementsDialog = dynamic(() => import("./daily-movements-dialog").then((m) => m.DailyMovementsDialog), { ssr: false });
 const QuickStatsDialog = dynamic(() => import("./quick-stats-dialog").then((m) => m.QuickStatsDialog), { ssr: false });
+const RoomSearchDialog = dynamic(() => import("./room-search-dialog").then((m) => m.RoomSearchDialog), { ssr: false });
 import {
   Dialog,
   DialogContent,
@@ -349,6 +350,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
 const ROW_HEIGHT_PX = 24; // ~25 − 2%
 const ROOM_LABEL_WIDTH_PX = 140;
 const HEADER_ROW_PX = 40;
+const EVENTS_ROW_PX = 24;
 const _BAR_PADDING_PX = 2;
 
 /** Skale widoku grafiku – liczba dni (kolumn). Ograniczone dla wydajności DOM (Faza 1 PRD). */
@@ -458,6 +460,7 @@ export function TapeChart({
   initialTodayStr,
   reservationGroups,
   initialOpenCreate = false,
+  initialEvents = [],
 }: {
   rooms: Room[];
   initialHighlightReservationId?: string;
@@ -470,6 +473,8 @@ export function TapeChart({
   reservationGroups: ReservationGroupSummary[];
   /** E2E: otwórz formularz nowej rezerwacji od razu (?e2eOpenCreate=1) */
   initialOpenCreate?: boolean;
+  /** Wydarzenia specjalne na grafiku (nad siatką) */
+  initialEvents?: Array<{ id: string; name: string; dateFrom: string; dateTo: string; color: string | null; description?: string | null }>;
 }) {
   // Pierwszy render: tylko data z serwera (initialTodayStr). Klienckie "dziś" po mount – unika hydration mismatch.
   const [todayStr, setTodayStr] = useState<string>(() => initialTodayStr ?? "2026-01-01");
@@ -508,6 +513,7 @@ export function TapeChart({
     }, []),
   });
 
+  const [roomSearchOpen, setRoomSearchOpen] = useState(false);
   const [roomFilter, setRoomFilter] = useState("");
   // Room/client search fields are always visible in the filters panel
   const [clientSearchTerm, setClientSearchTerm] = useState("");
@@ -846,6 +852,22 @@ export function TapeChart({
     userRequestedGoToTodayRef.current = true;
   }, [todayDate, viewScale]);
 
+  const handleMinimapDateClick = useCallback(
+    (dateStr: string) => {
+      const d = new Date(dateStr + "T12:00:00");
+      if (Number.isNaN(d.getTime())) return;
+      if (viewScale === "day" || viewScale === "week" || viewScale === "month") {
+        const yesterday = new Date(d);
+        yesterday.setDate(yesterday.getDate() - 1);
+        setViewStartDate(yesterday);
+      } else {
+        const days = VIEW_SCALE_CONFIG[viewScale].days;
+        setViewStartDate(addDays(d, -Math.floor(days / 2)));
+      }
+    },
+    [viewScale]
+  );
+
   const handleOpenExportDialog = () => {
     // Initialize with current view range
     setExportStartDate(dates[0] ?? viewStartDateStr);
@@ -875,7 +897,7 @@ export function TapeChart({
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const gridWrapperRef = useRef<HTMLDivElement>(null);
-  const didPanRef = useRef(false);
+  const wasPanningRef = useRef(false);
   const didScrollToTodayRef = useRef(false);
   const userRequestedGoToTodayRef = useRef(false);
 
@@ -942,16 +964,15 @@ export function TapeChart({
     const startY = e.clientY;
     const startScrollLeft = ref.scrollLeft;
     const startScrollTop = ref.scrollTop;
-    didPanRef.current = false;
+    wasPanningRef.current = false;
 
     const onMove = (moveEv: MouseEvent) => {
       ref.scrollLeft = startScrollLeft + (startX - moveEv.clientX);
       ref.scrollTop = startScrollTop + (startY - moveEv.clientY);
-      if (
-        Math.abs(moveEv.clientX - startX) > 5 ||
-        Math.abs(moveEv.clientY - startY) > 5
-      ) {
-        didPanRef.current = true;
+      const dx = Math.abs(moveEv.clientX - startX);
+      const dy = Math.abs(moveEv.clientY - startY);
+      if (dx > 5 || dy > 5) {
+        wasPanningRef.current = true;
       }
     };
     const onUp = () => {
@@ -959,6 +980,10 @@ export function TapeChart({
       document.removeEventListener("mouseup", onUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      // Reset dopiero po 100ms — click event zdąży się odpalić i sprawdzić flagę
+      setTimeout(() => {
+        wasPanningRef.current = false;
+      }, 100);
     };
     document.body.style.cursor = "grabbing";
     document.body.style.userSelect = "none";
@@ -1296,7 +1321,10 @@ export function TapeChart({
       }
 
       if (!newRoomNumber || !targetDate) {
-        return; // Drop poza siatką – kafelek wraca na miejsce (cichy powrót)
+        // Drop poza siatką – otwórz okno rezerwacji (bez przenoszenia)
+        setSelectedReservation(reservation);
+        setSheetOpen(true);
+        return;
       }
 
       const targetRoom = roomByNumber.get(newRoomNumber);
@@ -1338,7 +1366,12 @@ export function TapeChart({
       const roomChanged = newRoomNumber !== reservation.room;
       const dateChanged = daysDiff !== 0;
 
-      if (!roomChanged && !dateChanged) return;
+      if (!roomChanged && !dateChanged) {
+        // Puścił w tym samym miejscu – otwórz okno rezerwacji
+        setSelectedReservation(reservation);
+        setSheetOpen(true);
+        return;
+      }
 
       startDragTransition(async () => {
         try {
@@ -1361,6 +1394,8 @@ export function TapeChart({
               .filter(Boolean)
               .join(", ");
             toast.success(msg ? `Przeniesiono rezerwację → ${msg}` : "Przeniesiono rezerwację");
+            setSelectedReservation(updated);
+            setSheetOpen(true);
           } else if (!result.success) {
             toast.error("error" in result ? result.error : "Nie można przenieść rezerwacji");
           }
@@ -1369,7 +1404,7 @@ export function TapeChart({
         }
       });
     },
-    [setReservations, roomByNumber, startDragTransition]
+    [setReservations, roomByNumber, startDragTransition, setSelectedReservation, setSheetOpen]
   );
 
   const handleDragCancel = useCallback(() => {
@@ -1735,6 +1770,7 @@ export function TapeChart({
   }, []);
 
   const handleRoomLabelClick = useCallback((room: Room) => {
+    if (wasPanningRef.current) return;
     setNewReservationContext({
       roomNumber: room.number,
       checkIn: viewStartDateStr,
@@ -1799,19 +1835,20 @@ export function TapeChart({
 
   /* Kolumny o stałej szerokości – siatka zawsze szersza niż kontener → przewijanie myszką we wszystkich widokach */
   const gridColumns = `${ROOM_LABEL_WIDTH_PX}px repeat(${dates.length}, ${effectiveColumnWidthPx}px)`;
-  const gridRows = `${HEADER_ROW_PX}px repeat(${displayRooms.length}, ${effectiveRowHeightPx}px)`;
+  const totalHeaderPx = EVENTS_ROW_PX + HEADER_ROW_PX;
+  const gridRows = `${EVENTS_ROW_PX}px ${HEADER_ROW_PX}px repeat(${displayRooms.length}, ${effectiveRowHeightPx}px)`;
 
   const rowVirtualizer = useVirtualizer({
     count: displayRooms.length,
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => effectiveRowHeightPx,
     overscan: 12,
-    paddingStart: HEADER_ROW_PX,
+    paddingStart: totalHeaderPx,
   });
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const visibleRowSet = useMemo(() => {
-    return new Set(virtualRows.map((v) => v.index + 2));
+    return new Set(virtualRows.map((v) => v.index + 3));
   }, [virtualRows]);
   const visiblePlacements = useMemo(
     () => reservationPlacements.filter((p) => visibleRowSet.has(p.gridRow)),
@@ -2045,6 +2082,17 @@ export function TapeChart({
             </Button>
 
             <Button
+              variant="outline"
+              size="sm"
+              className="gap-1 h-8"
+              onClick={() => setRoomSearchOpen(true)}
+              title="Szukaj pokoju po kryteriach (daty, osoby, wyposażenie)"
+            >
+              <Search className="h-3.5 w-3.5" />
+              Szukaj pokoju
+            </Button>
+
+            <Button
               variant={filtersOpen ? "secondary" : "outline"}
               size="sm"
               className="gap-1 h-8"
@@ -2167,6 +2215,10 @@ export function TapeChart({
         {/* Collapsible Filters Row */}
         {filtersOpen && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-[hsl(var(--kw-grid-border))] bg-card px-3 py-2 md:px-4">
+            <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => setRoomSearchOpen(true)} title="Znajdź pokój po kryteriach (daty, osoby, wyposażenie)">
+              <Search className="h-3.5 w-3.5" />
+              Szukaj pokoju
+            </Button>
             <div className="flex items-center gap-1.5">
               <Search className="h-3.5 w-3.5 text-muted-foreground" />
               <input
@@ -2327,10 +2379,47 @@ export function TapeChart({
             style={{ height: rowVirtualizer.getTotalSize(), minWidth: totalGridWidthPx }}
             onMouseDown={handleGridMouseDownMerged}
           >
+            {/* Wiersz wydarzeń – nad nagłówkiem dat */}
+            {initialEvents && initialEvents.length > 0 && (
+              <div
+                className="sticky top-0 z-[61] flex h-6 border-b bg-muted/50"
+                style={{ minWidth: totalGridWidthPx }}
+              >
+                <div className="flex-shrink-0 text-xs text-muted-foreground px-2 flex items-center border-r border-[hsl(var(--kw-grid-border))]" style={{ width: ROOM_LABEL_WIDTH_PX }}>
+                  Wydarzenia
+                </div>
+                <div className="flex-1 relative min-w-0">
+                  {initialEvents.map((event) => {
+                    const chartStart = dates[0];
+                    if (!chartStart) return null;
+                    const startOffset = Math.max(0, Math.floor((new Date(event.dateFrom).getTime() - new Date(chartStart + "T12:00:00Z").getTime()) / (1000 * 60 * 60 * 24)));
+                    const endOffset = Math.floor((new Date(event.dateTo).getTime() - new Date(chartStart + "T12:00:00Z").getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    const duration = Math.max(1, endOffset - startOffset);
+                    const leftPx = startOffset * effectiveColumnWidthPx;
+                    const widthPx = duration * effectiveColumnWidthPx;
+                    return (
+                      <div
+                        key={event.id}
+                        className="absolute top-0.5 h-5 rounded text-[10px] text-white flex items-center px-1 truncate"
+                        style={{
+                          left: leftPx,
+                          width: Math.max(20, widthPx),
+                          backgroundColor: event.color || "#3B82F6",
+                        }}
+                        title={`${event.name}: ${event.dateFrom} — ${event.dateTo}${event.description ? `\n${event.description}` : ""}`}
+                      >
+                        {event.name}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {/* Sticky header: corner + date columns */}
             <div
-              className="kw-date-header-row sticky top-0 z-[60] grid w-full min-w-max border-b-2 border-[hsl(var(--kw-grid-border))]"
+              className="kw-date-header-row sticky z-[60] grid w-full min-w-max border-b-2 border-[hsl(var(--kw-grid-border))]"
               style={{
+                top: initialEvents?.length ? EVENTS_ROW_PX : 0,
                 gridTemplateColumns: gridColumns,
                 gridTemplateRows: `${HEADER_ROW_PX}px`,
                 minHeight: HEADER_ROW_PX,
@@ -2379,7 +2468,7 @@ export function TapeChart({
                     ref={rowVirtualizer.measureElement}
                     className="group absolute left-0 grid w-full min-w-max"
                     style={{
-                      top: virtualRow.start - HEADER_ROW_PX,
+                      top: virtualRow.start - totalHeaderPx,
                       height: virtualRow.size,
                       gridTemplateColumns: gridColumns,
                       gridTemplateRows: "1fr",
@@ -2405,6 +2494,7 @@ export function TapeChart({
                         previewMode
                           ? undefined
                           : (roomNumber, dateStr) => {
+                              if (wasPanningRef.current) return;
                               setNewReservationContext({ roomNumber, checkIn: dateStr });
                               setCreateSheetOpen(true);
                             }
@@ -2467,7 +2557,7 @@ export function TapeChart({
                   className="pointer-events-none absolute z-[5] kw-today-column"
                   style={{
                     left: ROOM_LABEL_WIDTH_PX + dates.indexOf(todayStr) * effectiveColumnWidthPx,
-                    top: HEADER_ROW_PX,
+                    top: totalHeaderPx,
                     width: effectiveColumnWidthPx,
                     height: totalRowHeightPx,
                   }}
@@ -2477,7 +2567,7 @@ export function TapeChart({
                   className="pointer-events-none absolute z-[6] kw-today-column-line"
                   style={{
                     left: ROOM_LABEL_WIDTH_PX + dates.indexOf(todayStr) * effectiveColumnWidthPx,
-                    top: HEADER_ROW_PX,
+                    top: totalHeaderPx,
                     width: effectiveColumnWidthPx,
                     height: totalRowHeightPx,
                   }}
@@ -2543,6 +2633,7 @@ export function TapeChart({
                     }}
                     onClick={(e) => {
                       e.stopPropagation();
+                      if (wasPanningRef.current) return; // Nie otwieraj po przesunięciu siatki (pan)
                       if (previewMode) return; // No actions in preview mode
                       if (activeDragReservation?.id !== reservation.id) {
                         if (e.detail === 2) {
@@ -2695,6 +2786,7 @@ export function TapeChart({
               todayStr={todayStr}
               columnWidthPx={effectiveColumnWidthPx}
               scrollContainerRef={scrollContainerRef}
+              onDateClick={handleMinimapDateClick}
             />
           </div>
         )}
@@ -2935,6 +3027,10 @@ export function TapeChart({
               roomByNumber.get(selectedReservation.room)?.price
             : undefined
         }
+        onDeleted={(reservationId) => {
+          setReservations((prev) => prev.filter((r) => r.id !== reservationId));
+          setSheetOpen(false);
+        }}
         onSaved={(updated) => {
           if (updated.status === "CANCELLED" || updated.status === "NO_SHOW") {
             setReservations((prev) => prev.filter((r) => r.id !== updated.id));
@@ -2944,6 +3040,24 @@ export function TapeChart({
             );
           }
         }}
+      />
+      <RoomSearchDialog
+        open={roomSearchOpen}
+        onOpenChange={setRoomSearchOpen}
+        propertyId={propertyId}
+        defaultCheckIn={viewStartDateStr}
+        defaultCheckOut={addDaysToStr(viewStartDateStr, 3)}
+        onCreateReservation={(ctx) => {
+          setNewReservationContext({
+            roomNumber: ctx.roomNumber,
+            checkIn: ctx.checkIn,
+            checkOut: ctx.checkOut,
+            guestName: undefined,
+            pax: ctx.adults + ctx.children,
+          });
+          setCreateSheetOpen(true);
+        }}
+        onShowOnChart={(roomNumber) => setShowOnlyRoomNumber(roomNumber)}
       />
       <UnifiedReservationDialog
         mode="create"

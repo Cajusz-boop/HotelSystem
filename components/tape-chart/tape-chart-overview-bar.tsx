@@ -3,9 +3,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Reservation } from "@/lib/tape-chart-types";
+import { getDateRange } from "@/lib/tape-chart-data";
 
 const OVERVIEW_BAR_WIDTH = 44;
-const ROW_HEIGHT_PX = 4;
 
 interface TapeChartOverviewBarProps {
   dates: string[];
@@ -14,6 +14,8 @@ interface TapeChartOverviewBarProps {
   todayStr: string;
   columnWidthPx: number;
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
+  /** Callback gdy użytkownik kliknie datę spoza bieżącego widoku – przewiń TapeChart */
+  onDateClick?: (dateStr: string) => void;
 }
 
 const MONTH_SHORT_PL = ["STY", "LUT", "MAR", "KWI", "MAJ", "CZE", "LIP", "SIE", "WRZ", "PAŹ", "LIS", "GRU"];
@@ -44,6 +46,14 @@ function getOccupancyColor(occupancy: number): string {
   return "rgba(37,99,235,0.92)";
 }
 
+/** Zawsze 12 miesięcy (365 dni) od pierwszego dnia bieżącego miesiąca */
+function getMinimapDates(todayStr: string): string[] {
+  const [y, m] = todayStr.split("-").map(Number);
+  const start = new Date(y, m - 1, 1);
+  const end = new Date(y, m - 1 + 12, 0);
+  return getDateRange(start, end);
+}
+
 export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
   dates,
   reservations,
@@ -51,23 +61,27 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
   todayStr,
   columnWidthPx,
   scrollContainerRef,
+  onDateClick,
 }: TapeChartOverviewBarProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
   const [viewportRange, setViewportRange] = useState<{ start: number; end: number } | null>(null);
 
+  /** Zmiana A: zawsze 12 miesięcy, niezależnie od widoku TapeChart */
+  const displayDates = useMemo(() => getMinimapDates(todayStr), [todayStr]);
+
   const occupancyByDate = useMemo(() => {
     const active = reservations.filter(
       (r) => r.status !== "CANCELLED" && r.status !== "NO_SHOW"
     );
-    return dates.map((dateStr) => {
+    return displayDates.map((dateStr) => {
       const count = active.filter(
         (r) => dateStr >= r.checkIn && dateStr < r.checkOut
       ).length;
       return roomsCount > 0 ? Math.min(100, Math.round((count / roomsCount) * 100)) : 0;
     });
-  }, [dates, reservations, roomsCount]);
+  }, [displayDates, reservations, roomsCount]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -96,21 +110,52 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
     };
   }, [scrollContainerRef, dates.length, columnWidthPx]);
 
+  /** Mapowanie widocznego zakresu TapeChart (dates) na indeksy displayDates (12 miesięcy) */
+  const viewportOnMinimap = useMemo(() => {
+    if (!viewportRange || dates.length === 0 || displayDates.length === 0) return null;
+    const startIdx = Math.floor((viewportRange.start / 100) * dates.length);
+    const endIdx = Math.min(dates.length - 1, Math.ceil((viewportRange.end / 100) * dates.length));
+    const visibleStart = dates[startIdx] ?? null;
+    const visibleEnd = dates[endIdx] ?? null;
+    if (!visibleStart || !visibleEnd) return null;
+    const first = displayDates.findIndex((d) => d >= visibleStart);
+    let last = -1;
+    for (let i = displayDates.length - 1; i >= 0; i--) {
+      if (displayDates[i]! <= visibleEnd) {
+        last = i;
+        break;
+      }
+    }
+    if (first < 0 || last < 0 || first > last) return null;
+    return { start: first / displayDates.length, end: (last + 1) / displayDates.length };
+  }, [viewportRange, dates, displayDates]);
+
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      const container = scrollContainerRef.current;
       const barEl = barRef.current;
-      if (!container || !barEl) return;
+      if (!barEl) return;
       const rect = barEl.getBoundingClientRect();
-      const y = e.clientY - rect.top + barEl.scrollTop;
-      const totalHeight = dates.length * ROW_HEIGHT_PX;
-      const ratio = totalHeight > 0 ? y / totalHeight : 0;
-      const idx = Math.floor(ratio * dates.length);
-      const safeIdx = Math.max(0, Math.min(idx, dates.length - 1));
-      const scrollLeft = safeIdx * columnWidthPx - container.clientWidth / 2;
-      container.scrollTo({ left: Math.max(0, scrollLeft), behavior: "smooth" });
+      const y = e.clientY - rect.top;
+      const ratio = rect.height > 0 ? y / rect.height : 0;
+      const idx = Math.floor(ratio * displayDates.length);
+      const safeIdx = Math.max(0, Math.min(idx, displayDates.length - 1));
+      const clickedDate = displayDates[safeIdx];
+      if (!clickedDate) return;
+
+      const container = scrollContainerRef.current;
+      if (!container || dates.length === 0 || columnWidthPx <= 0) {
+        onDateClick?.(clickedDate);
+        return;
+      }
+      const tapeIdx = dates.findIndex((d) => d >= clickedDate);
+      if (tapeIdx >= 0) {
+        const scrollLeft = tapeIdx * columnWidthPx - container.clientWidth / 2;
+        container.scrollTo({ left: Math.max(0, scrollLeft), behavior: "smooth" });
+      } else {
+        onDateClick?.(clickedDate);
+      }
     },
-    [scrollContainerRef, dates.length, columnWidthPx]
+    [scrollContainerRef, dates, displayDates, columnWidthPx, onDateClick]
   );
 
   const handleMouseMove = useCallback(
@@ -118,41 +163,41 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
       const barEl = barRef.current;
       if (!barEl) return;
       const rect = barEl.getBoundingClientRect();
-      const y = e.clientY - rect.top + barEl.scrollTop;
-      const totalHeight = dates.length * ROW_HEIGHT_PX;
-      const ratio = totalHeight > 0 ? y / totalHeight : 0;
-      const idx = Math.max(0, Math.min(Math.floor(ratio * dates.length), dates.length - 1));
+      const y = e.clientY - rect.top;
+      const ratio = rect.height > 0 ? y / rect.height : 0;
+      const idx = Math.max(0, Math.min(Math.floor(ratio * displayDates.length), displayDates.length - 1));
       setHoveredIdx(idx);
-      const rowCenterY = rect.top + (idx * ROW_HEIGHT_PX - barEl.scrollTop) + ROW_HEIGHT_PX / 2;
+      const segmentHeight = rect.height / displayDates.length;
+      const rowCenterY = rect.top + idx * segmentHeight + segmentHeight / 2;
       setTooltipPos({ left: rect.left - 12, top: rowCenterY });
     },
-    [dates.length]
+    [displayDates.length]
   );
 
   const monthBoundaries = useMemo(() => {
     const boundaries: Array<{ idx: number; label: string }> = [];
-    for (let i = 0; i < dates.length; i++) {
-      const month = getMonthFromDateStr(dates[i]);
-      const prevMonth = i > 0 ? getMonthFromDateStr(dates[i - 1]) : -1;
+    for (let i = 0; i < displayDates.length; i++) {
+      const month = getMonthFromDateStr(displayDates[i]);
+      const prevMonth = i > 0 ? getMonthFromDateStr(displayDates[i - 1]) : -1;
       if (month !== prevMonth) {
         boundaries.push({ idx: i, label: MONTH_SHORT_PL[month] });
       }
     }
     return boundaries;
-  }, [dates]);
+  }, [displayDates]);
 
   const weekendIndices = useMemo(() => {
     const set = new Set<number>();
-    for (let i = 0; i < dates.length; i++) {
-      const dow = getDayOfWeek(dates[i]);
+    for (let i = 0; i < displayDates.length; i++) {
+      const dow = getDayOfWeek(displayDates[i]);
       if (dow === 0 || dow === 6) set.add(i);
     }
     return set;
-  }, [dates]);
+  }, [displayDates]);
 
-  if (dates.length === 0) return null;
+  if (displayDates.length === 0) return null;
 
-  const hoveredDate = hoveredIdx !== null ? dates[hoveredIdx] : null;
+  const hoveredDate = hoveredIdx !== null ? displayDates[hoveredIdx] : null;
   const hoveredOccupancy = hoveredIdx !== null ? occupancyByDate[hoveredIdx] : null;
   const hoveredDayNameFull = hoveredDate ? DAY_NAMES_FULL_PL[getDayOfWeek(hoveredDate)] : null;
 
@@ -192,24 +237,20 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
     >
       <div
         ref={barRef}
-        className="relative w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
+        className="relative w-full flex-1 min-h-0 flex flex-col overflow-hidden"
         onClick={handleClick}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => { setHoveredIdx(null); setTooltipPos(null); }}
         role="region"
       >
-        {/* Zawartość – pełna wysokość; etykiety miesięcy i viewport wewnątrz = przewijają się razem */}
-        <div
-          className="relative flex flex-col shrink-0"
-          style={{ height: dates.length * ROW_HEIGHT_PX, minHeight: dates.length * ROW_HEIGHT_PX }}
-        >
-          {/* Warstwa etykiet miesięcy i viewport – absolute względem pełnej wysokości contentu */}
-          {viewportRange && (
+        {/* Zmiana B: flex fill 100% – brak overflow-y-auto, segmenty wypełniają całą wysokość */}
+        <div className="relative flex flex-col flex-1 min-h-0 w-full">
+          {viewportOnMinimap && (
             <div
               className="absolute left-0 right-0 z-20 pointer-events-none border-y-2 border-primary/70"
               style={{
-                top: `${(viewportRange.start / 100) * dates.length * ROW_HEIGHT_PX}px`,
-                height: `${Math.max(2, ((viewportRange.end - viewportRange.start) / 100) * dates.length * ROW_HEIGHT_PX)}px`,
+                top: `${viewportOnMinimap.start * 100}%`,
+                height: `${(viewportOnMinimap.end - viewportOnMinimap.start) * 100}%`,
                 background: "rgba(var(--primary-rgb, 37,99,235), 0.08)",
                 boxShadow: "0 0 0 1px hsl(var(--primary) / 0.3)",
               }}
@@ -219,7 +260,7 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
             <div
               key={`month-${idx}`}
               className="absolute left-0 right-0 z-10 pointer-events-none"
-              style={{ top: `${idx * ROW_HEIGHT_PX}px` }}
+              style={{ top: `${(idx / displayDates.length) * 100}%` }}
             >
               <div className="w-full border-t border-foreground/25" />
               <span className="absolute left-0 right-0 text-[8px] leading-tight text-center text-foreground/70 font-bold bg-muted/90 py-px -translate-y-px">
@@ -227,7 +268,7 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
               </span>
             </div>
           ))}
-          {dates.map((dateStr, i) => {
+          {displayDates.map((dateStr, i) => {
             const occupancy = occupancyByDate[i] ?? 0;
             const isToday = dateStr === todayStr;
             const isWeekend = weekendIndices.has(i);
@@ -236,10 +277,8 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
             return (
               <div
                 key={dateStr}
-                className="relative flex items-stretch shrink-0"
-                style={{ height: ROW_HEIGHT_PX, minHeight: ROW_HEIGHT_PX }}
+                className="relative flex items-stretch flex-1 min-h-0"
               >
-                {/* Occupancy fill bar — horizontal from left */}
                 <div
                   className="absolute inset-y-0 left-0 transition-all duration-100"
                   style={{
@@ -250,22 +289,18 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
                     opacity: isHovered ? 1 : 0.9,
                   }}
                 />
-                {/* Weekend subtle marker */}
                 {isWeekend && !isToday && (
                   <div className="absolute inset-0 bg-foreground/[0.04]" />
                 )}
-                {/* Today highlight border */}
                 {isToday && (
                   <div className="absolute inset-0 ring-1 ring-inset ring-amber-500/60 z-[5]" />
                 )}
-                {/* Hover highlight */}
                 {isHovered && (
                   <div className="absolute inset-0 bg-foreground/10 z-[3]" />
                 )}
               </div>
             );
           })}
-          {/* Tooltip w portalu – nie obcinany przez overflow */}
         </div>
       </div>
     </div>

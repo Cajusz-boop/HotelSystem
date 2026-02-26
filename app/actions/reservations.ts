@@ -113,6 +113,7 @@ function toUiReservation(r: {
   petInfo?: unknown;
   paymentStatus?: string | null;
   securityDeposit?: unknown;
+  isCreditCardGuaranteed?: boolean;
   cardGuarantee?: unknown;
   advancePayment?: unknown;
   cancellationReason?: string | null;
@@ -159,7 +160,7 @@ function toUiReservation(r: {
     petInfo: r.petInfo as Record<string, unknown> | undefined,
     paymentStatus: r.paymentStatus ?? undefined,
     securityDeposit: r.securityDeposit as Record<string, unknown> | undefined,
-    cardGuarantee: r.cardGuarantee as Record<string, unknown> | undefined,
+    cardGuarantee: r.isCreditCardGuaranteed ? ({} as Record<string, unknown>) : undefined,
     advancePayment: r.advancePayment as Record<string, unknown> | undefined,
     cancellationReason: r.cancellationReason ?? undefined,
     cancellationCode: r.cancellationCode ?? undefined,
@@ -246,6 +247,7 @@ export async function getGuestById(
     gdprConsentWithdrawnAt: string | null;
     gdprAnonymizedAt: string | null;
     gdprNotes: string | null;
+    customFields: Record<string, unknown> | null;
   }>
 > {
   if (!guestId || typeof guestId !== "string" || !guestId.trim()) {
@@ -324,6 +326,7 @@ export async function getGuestById(
         gdprConsentWithdrawnAt: guest.gdprConsentWithdrawnAt?.toISOString() ?? null,
         gdprAnonymizedAt: guest.gdprAnonymizedAt?.toISOString() ?? null,
         gdprNotes: guest.gdprNotes ?? null,
+        customFields: guest.customFields as Record<string, unknown> | null,
       },
     };
   } catch (e) {
@@ -474,6 +477,78 @@ export async function getReservationsByGuestId(
       success: false,
       error: e instanceof Error ? e.message : "Błąd pobierania historii rezerwacji",
     };
+  }
+}
+
+/**
+ * Pobiera dane rezerwacji do edycji (email, telefon, źródło, kanał, wyżywienie, dorośli, dzieci, eta, uwagi wewnętrzne).
+ */
+export async function getReservationEditData(
+  reservationId: string
+): Promise<ActionResult<{
+  guestEmail: string | null;
+  guestPhone: string | null;
+  source: string | null;
+  channel: string | null;
+  mealPlan: string | null;
+  adults: number | null;
+  children: number | null;
+  eta: string | null;
+  internalNotes: string | null;
+  marketSegment: string | null;
+  externalReservationNumber: string | null;
+  currency: string | null;
+  reminderAt: Date | null;
+  notesVisibleOnChart: boolean;
+  extraStatus: string | null;
+  advanceDueDate: string | null;
+}>> {
+  if (!reservationId?.trim()) return { success: false, error: "ID rezerwacji wymagane" };
+  try {
+    const res = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      select: {
+        source: true,
+        channel: true,
+        mealPlan: true,
+        adults: true,
+        children: true,
+        eta: true,
+        internalNotes: true,
+        marketSegment: true,
+        externalReservationNumber: true,
+        currency: true,
+        reminderAt: true,
+        notesVisibleOnChart: true,
+        extraStatus: true,
+        advanceDueDate: true,
+        guest: { select: { email: true, phone: true } },
+      },
+    });
+    if (!res) return { success: false, error: "Rezerwacja nie istnieje" };
+    return {
+      success: true,
+      data: {
+        guestEmail: res.guest?.email ?? null,
+        guestPhone: res.guest?.phone ?? null,
+        source: res.source,
+        channel: res.channel,
+        mealPlan: res.mealPlan,
+        adults: res.adults,
+        children: res.children,
+        eta: res.eta,
+        internalNotes: res.internalNotes,
+        marketSegment: res.marketSegment ?? null,
+        externalReservationNumber: res.externalReservationNumber ?? null,
+        currency: res.currency ?? null,
+        reminderAt: res.reminderAt ?? null,
+        notesVisibleOnChart: res.notesVisibleOnChart ?? false,
+        extraStatus: res.extraStatus ?? null,
+        advanceDueDate: res.advanceDueDate ? res.advanceDueDate.toISOString().slice(0, 10) : null,
+      },
+    };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd" };
   }
 }
 
@@ -702,7 +777,7 @@ export async function createReservation(
         checkOutTime: data.checkOutTime?.trim() || null,
         eta: data.eta?.trim() || null,
         etd: data.etd?.trim() || null,
-        status: data.status as ReservationStatus,
+        status: (data.status === "REQUEST" ? "PENDING" : data.status) as ReservationStatus,
         source: data.source ?? null,
         channel: data.channel ?? null,
         marketSegment: data.marketSegment ?? null,
@@ -716,7 +791,7 @@ export async function createReservation(
         ...(data.petInfo ? { petInfo: data.petInfo } : {}),
         ...(data.paymentStatus ? { paymentStatus: data.paymentStatus } : {}),
         ...(data.securityDeposit ? { securityDeposit: data.securityDeposit } : {}),
-        ...(data.cardGuarantee ? { cardGuarantee: data.cardGuarantee } : {}),
+        ...(data.cardGuarantee !== undefined ? { isCreditCardGuaranteed: Boolean(data.cardGuarantee) } : {}),
         ...(data.advancePayment ? { advancePayment: data.advancePayment } : {}),
         ...(data.alerts ? { alerts: data.alerts } : {}),
         ...(data.agentId ? { agentId: data.agentId } : {}),
@@ -866,6 +941,7 @@ export async function updateGuest(
     gdprMarketingConsent?: boolean;
     gdprThirdPartyConsent?: boolean;
     gdprNotes?: string | null;
+    customFields?: Record<string, unknown> | null;
   }
 ): Promise<ActionResult<void>> {
   try {
@@ -931,6 +1007,7 @@ export async function updateGuest(
         ...(data.healthNotes !== undefined && { healthNotes: data.healthNotes?.trim() ?? null }),
         ...(data.favoriteMinibarItems !== undefined && { favoriteMinibarItems: data.favoriteMinibarItems as object ?? null }),
         ...(data.staffNotes !== undefined && { staffNotes: data.staffNotes?.trim() ?? null }),
+        ...(data.customFields !== undefined && { customFields: data.customFields as object ?? null }),
         ...gdprUpdates,
       },
     });
@@ -1923,6 +2000,382 @@ export async function searchGuests(
   }
 }
 
+/** Parametry zaawansowanego filtrowania gości (CRM). */
+export type FilteredGuestsParams = {
+  search?: string;
+  segment?: string;
+  country?: string;
+  nationality?: string;
+  isVip?: boolean;
+  isBlacklisted?: boolean;
+  lastStayFrom?: string;
+  lastStayTo?: string;
+  minStays?: number;
+  maxStays?: number;
+  minAge?: number;
+  maxAge?: number;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
+  page?: number;
+  pageSize?: number;
+};
+
+/** Lista gości z zaawansowanym filtrowaniem (CRM). */
+export type GuestListEntry = GuestSearchResult;
+
+function buildGuestFilterWhere(params: FilteredGuestsParams): Prisma.GuestWhereInput {
+  const where: Prisma.GuestWhereInput = {};
+  if (params.search?.trim()) {
+    const q = params.search.trim();
+    where.OR = [
+      { name: { contains: q } },
+      { email: { contains: q } },
+      { phone: { contains: q } },
+      { documentNumber: { contains: q } },
+      { loyaltyCardNumber: { contains: q } },
+    ];
+  }
+  if (params.segment) where.segment = params.segment;
+  if (params.country) where.country = params.country;
+  if (params.nationality) where.nationality = params.nationality;
+  if (params.isVip !== undefined) where.isVip = params.isVip;
+  if (params.isBlacklisted !== undefined) where.isBlacklisted = params.isBlacklisted;
+  if (params.lastStayFrom || params.lastStayTo) {
+    where.lastStayDate = {};
+    if (params.lastStayFrom) where.lastStayDate.gte = new Date(params.lastStayFrom);
+    if (params.lastStayTo) where.lastStayDate.lte = new Date(params.lastStayTo);
+  }
+  if (params.minStays != null || params.maxStays != null) {
+    where.totalStays = {};
+    if (params.minStays != null) where.totalStays.gte = params.minStays;
+    if (params.maxStays != null) where.totalStays.lte = params.maxStays;
+  }
+  if (params.minAge != null || params.maxAge != null) {
+    const now = new Date();
+    where.dateOfBirth = {};
+    if (params.maxAge != null) {
+      where.dateOfBirth.gte = new Date(now.getFullYear() - params.maxAge, now.getMonth(), now.getDate());
+    }
+    if (params.minAge != null) {
+      where.dateOfBirth.lte = new Date(now.getFullYear() - params.minAge, now.getMonth(), now.getDate());
+    }
+  }
+  return where;
+}
+
+export async function getFilteredGuests(
+  params: FilteredGuestsParams
+): Promise<ActionResult<{ data: GuestListEntry[]; total: number }>> {
+  try {
+    const where = buildGuestFilterWhere(params);
+    const sortBy = params.sortBy || "name";
+    const sortDir = params.sortDir || "asc";
+    const page = params.page ?? 1;
+    const pageSize = params.pageSize ?? 25;
+    const orderBy = sortBy === "lastStayDate" ? { lastStayDate: sortDir } : sortBy === "totalStays" ? { totalStays: sortDir } : sortBy === "createdAt" ? { createdAt: sortDir } : sortBy === "email" ? { email: sortDir } : { name: sortDir };
+
+    const [data, total] = await Promise.all([
+      prisma.guest.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          documentNumber: true,
+          isVip: true,
+          isBlacklisted: true,
+          totalStays: true,
+          lastStayDate: true,
+          guestType: true,
+          segment: true,
+        },
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.guest.count({ where }),
+    ]);
+
+    return {
+      success: true,
+      data: {
+        data: data.map((g) => ({
+          ...g,
+          lastStayDate: g.lastStayDate?.toISOString().split("T")[0] ?? null,
+        })),
+        total,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd filtrowania gości",
+    };
+  }
+}
+
+/** Wiersz gościa do eksportu CSV/Excel. */
+export type GuestExportEntry = {
+  name: string;
+  email: string | null;
+  phone: string | null;
+  country: string | null;
+  nationality: string | null;
+  segment: string | null;
+  isVip: boolean;
+  isBlacklisted: boolean;
+  totalStays: number;
+  lastStayDate: string | null;
+  dateOfBirth: string | null;
+  street: string | null;
+  city: string | null;
+  postalCode: string | null;
+  documentType: string | null;
+  documentNumber: string | null;
+};
+
+export async function getGuestsForExport(
+  params: FilteredGuestsParams
+): Promise<ActionResult<GuestExportEntry[]>> {
+  try {
+    const where = buildGuestFilterWhere(params);
+    const guests = await prisma.guest.findMany({
+      where,
+      orderBy: { name: "asc" },
+      select: {
+        name: true,
+        email: true,
+        phone: true,
+        country: true,
+        nationality: true,
+        segment: true,
+        isVip: true,
+        isBlacklisted: true,
+        totalStays: true,
+        lastStayDate: true,
+        dateOfBirth: true,
+        street: true,
+        city: true,
+        postalCode: true,
+        documentType: true,
+        documentNumber: true,
+      },
+    });
+    return {
+      success: true,
+      data: guests.map((g) => ({
+        name: g.name,
+        email: g.email ?? null,
+        phone: g.phone ?? null,
+        country: g.country ?? null,
+        nationality: g.nationality ?? null,
+        segment: g.segment ?? null,
+        isVip: g.isVip,
+        isBlacklisted: g.isBlacklisted,
+        totalStays: g.totalStays,
+        lastStayDate: g.lastStayDate?.toISOString().split("T")[0] ?? null,
+        dateOfBirth: g.dateOfBirth?.toISOString().split("T")[0] ?? null,
+        street: g.street ?? null,
+        city: g.city ?? null,
+        postalCode: g.postalCode ?? null,
+        documentType: g.documentType ?? null,
+        documentNumber: g.documentNumber ?? null,
+      })),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd eksportu gości",
+    };
+  }
+}
+
+/** Rabat gościa na okres. */
+export type GuestDiscountData = {
+  id: string;
+  guestId: string;
+  percentage: number;
+  dateFrom: string;
+  dateTo: string;
+  reason: string | null;
+  isActive: boolean;
+  createdAt: string;
+};
+
+export async function getGuestDiscounts(guestId: string): Promise<ActionResult<GuestDiscountData[]>> {
+  try {
+    const list = await prisma.guestDiscount.findMany({
+      where: { guestId },
+      orderBy: [{ dateFrom: "desc" }, { createdAt: "desc" }],
+    });
+    return {
+      success: true,
+      data: list.map((d) => ({
+        id: d.id,
+        guestId: d.guestId,
+        percentage: Number(d.percentage),
+        dateFrom: d.dateFrom.toISOString().split("T")[0],
+        dateTo: d.dateTo.toISOString().split("T")[0],
+        reason: d.reason ?? null,
+        isActive: d.isActive,
+        createdAt: d.createdAt.toISOString(),
+      })),
+    };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd pobierania rabatów" };
+  }
+}
+
+export async function createGuestDiscount(params: {
+  guestId: string;
+  percentage: number;
+  dateFrom: string;
+  dateTo: string;
+  reason?: string;
+}): Promise<ActionResult<GuestDiscountData>> {
+  try {
+    const d = await prisma.guestDiscount.create({
+      data: {
+        guestId: params.guestId,
+        percentage: params.percentage,
+        dateFrom: new Date(params.dateFrom),
+        dateTo: new Date(params.dateTo),
+        reason: params.reason?.trim() || null,
+        isActive: true,
+      },
+    });
+    return {
+      success: true,
+      data: {
+        id: d.id,
+        guestId: d.guestId,
+        percentage: Number(d.percentage),
+        dateFrom: d.dateFrom.toISOString().split("T")[0],
+        dateTo: d.dateTo.toISOString().split("T")[0],
+        reason: d.reason ?? null,
+        isActive: d.isActive,
+        createdAt: d.createdAt.toISOString(),
+      },
+    };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd tworzenia rabatu" };
+  }
+}
+
+export async function deleteGuestDiscount(id: string): Promise<ActionResult<void>> {
+  try {
+    await prisma.guestDiscount.delete({ where: { id } });
+    return { success: true, data: undefined };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd usuwania rabatu" };
+  }
+}
+
+export async function getActiveGuestDiscount(
+  guestId: string,
+  date: string
+): Promise<ActionResult<GuestDiscountData | null>> {
+  try {
+    const d = await prisma.guestDiscount.findFirst({
+      where: {
+        guestId,
+        isActive: true,
+        dateFrom: { lte: new Date(date) },
+        dateTo: { gte: new Date(date) },
+      },
+      orderBy: { percentage: "desc" },
+    });
+    if (!d)
+      return { success: true, data: null };
+    return {
+      success: true,
+      data: {
+        id: d.id,
+        guestId: d.guestId,
+        percentage: Number(d.percentage),
+        dateFrom: d.dateFrom.toISOString().split("T")[0],
+        dateTo: d.dateTo.toISOString().split("T")[0],
+        reason: d.reason ?? null,
+        isActive: d.isActive,
+        createdAt: d.createdAt.toISOString(),
+      },
+    };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd sprawdzania rabatu" };
+  }
+}
+
+/** Dokument gościa (faktura / rachunek / proforma). */
+export type GuestDocumentEntry = {
+  type: "invoice" | "receipt" | "proforma";
+  id: string;
+  number: string;
+  amount: number;
+  issuedAt: string;
+  status?: string;
+};
+
+export async function getGuestDocuments(guestId: string): Promise<ActionResult<GuestDocumentEntry[]>> {
+  try {
+    const reservationIds = await prisma.reservation.findMany({
+      where: { guestId },
+      select: { id: true },
+    });
+    const resIds = reservationIds.map((r) => r.id);
+    if (resIds.length === 0) return { success: true, data: [] };
+
+    const [invoices, receipts, proformas] = await Promise.all([
+      prisma.invoice.findMany({
+        where: { reservationId: { in: resIds } },
+        orderBy: { issuedAt: "desc" },
+        select: { id: true, number: true, amountGross: true, issuedAt: true },
+      }),
+      prisma.receipt.findMany({
+        where: { reservationId: { in: resIds } },
+        orderBy: { issuedAt: "desc" },
+        select: { id: true, number: true, amount: true, issuedAt: true, isPaid: true },
+      }),
+      prisma.proforma.findMany({
+        where: { reservationId: { in: resIds } },
+        orderBy: { issuedAt: "desc" },
+        select: { id: true, number: true, amount: true, issuedAt: true },
+      }),
+    ]);
+
+    const entries: GuestDocumentEntry[] = [
+      ...invoices.map((i) => ({
+        type: "invoice" as const,
+        id: i.id,
+        number: i.number,
+        amount: Number(i.amountGross),
+        issuedAt: i.issuedAt.toISOString().split("T")[0],
+        status: "Zapłacona",
+      })),
+      ...receipts.map((r) => ({
+        type: "receipt" as const,
+        id: r.id,
+        number: r.number,
+        amount: Number(r.amount),
+        issuedAt: r.issuedAt.toISOString().split("T")[0],
+        status: r.isPaid ? "Zapłacona" : "—",
+      })),
+      ...proformas.map((p) => ({
+        type: "proforma" as const,
+        id: p.id,
+        number: p.number,
+        amount: Number(p.amount),
+        issuedAt: p.issuedAt.toISOString().split("T")[0],
+        status: "—",
+      })),
+    ];
+    entries.sort((a, b) => b.issuedAt.localeCompare(a.issuedAt));
+    return { success: true, data: entries };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd pobierania dokumentów" };
+  }
+}
+
 export async function createGroupReservation(
   input: GroupReservationInput
 ): Promise<
@@ -2025,7 +2478,7 @@ export async function createGroupReservation(
             mealPlan: res.mealPlan ?? null,
             paymentStatus: res.paymentStatus ?? null,
             ...(res.securityDeposit ? { securityDeposit: res.securityDeposit } : {}),
-            ...(res.cardGuarantee ? { cardGuarantee: res.cardGuarantee } : {}),
+            ...((res as { isCreditCardGuaranteed?: boolean }).isCreditCardGuaranteed ? { isCreditCardGuaranteed: true } : {}),
             ...(res.advancePayment ? { advancePayment: res.advancePayment } : {}),
             ...(res.alerts ? { alerts: res.alerts } : {}),
             ...(res.agentId ? { agentId: res.agentId } : {}),
@@ -2255,6 +2708,7 @@ export async function updateReservation(
       paymentStatus: string | null;
       securityDeposit: object | null;
       cardGuarantee: object | null;
+      isCreditCardGuaranteed: boolean;
       advancePayment: object | null;
       cancellationReason: string | null;
       cancellationCode: string | null;
@@ -2267,6 +2721,13 @@ export async function updateReservation(
       notes: string | null;
       internalNotes: string | null;
       specialRequests: string | null;
+      rateCodePrice: number | null;
+      externalReservationNumber: string | null;
+      currency: string | null;
+      reminderAt: Date | null;
+      notesVisibleOnChart: boolean;
+      extraStatus: string | null;
+      advanceDueDate: Date | null;
     }> = {};
 
     if (input.guestName !== undefined) {
@@ -2319,7 +2780,7 @@ export async function updateReservation(
       }
       data.securityDeposit = input.securityDeposit ?? null;
     }
-    if (input.cardGuarantee !== undefined) data.cardGuarantee = input.cardGuarantee ?? null;
+    if (input.cardGuarantee !== undefined) data.isCreditCardGuaranteed = Boolean(input.cardGuarantee);
     if (input.advancePayment !== undefined) {
       const ap = input.advancePayment as { amount?: unknown } | null;
       if (ap && typeof ap === "object" && typeof ap.amount === "number" && (ap.amount < 0 || !Number.isFinite(ap.amount))) {
@@ -2340,6 +2801,14 @@ export async function updateReservation(
     if (input.internalNotes !== undefined) data.internalNotes = (input.internalNotes === "" || input.internalNotes == null) ? null : input.internalNotes;
     if (input.specialRequests !== undefined) data.specialRequests = (input.specialRequests === "" || input.specialRequests == null) ? null : input.specialRequests;
     if (input.bedsBooked !== undefined) data.bedsBooked = input.bedsBooked == null ? null : Number(input.bedsBooked);
+    if (input.marketSegment !== undefined) (data as Record<string, unknown>).marketSegment = (input.marketSegment == null || String(input.marketSegment).trim() === "") ? null : input.marketSegment;
+    if (input.externalReservationNumber !== undefined) (data as Record<string, unknown>).externalReservationNumber = (input.externalReservationNumber === "" || input.externalReservationNumber == null) ? null : input.externalReservationNumber;
+    if (input.currency !== undefined) (data as Record<string, unknown>).currency = (input.currency === "" || input.currency == null) ? null : input.currency;
+    if (input.reminderAt !== undefined) (data as Record<string, unknown>).reminderAt = input.reminderAt ? new Date(input.reminderAt) : null;
+    if (input.notesVisibleOnChart !== undefined) data.notesVisibleOnChart = Boolean(input.notesVisibleOnChart);
+    if ((input as { showNotesOnChart?: boolean }).showNotesOnChart !== undefined) data.notesVisibleOnChart = Boolean((input as { showNotesOnChart?: boolean }).showNotesOnChart);
+    if (input.extraStatus !== undefined) (data as Record<string, unknown>).extraStatus = (input.extraStatus === "" || input.extraStatus == null) ? null : input.extraStatus;
+    if (input.advanceDueDate !== undefined) (data as Record<string, unknown>).advanceDueDate = input.advanceDueDate ? new Date(input.advanceDueDate) : null;
 
     // Firma / NIP (dla faktury VAT)
     if (input.companyId !== undefined) {
@@ -2526,6 +2995,24 @@ export async function updateReservation(
         success: false,
         error: "Rezerwacja została zmieniona w międzyczasie (np. w innej karcie). Odśwież i zapisz ponownie.",
       };
+    }
+
+    // Aktualizacja email/telefon na gościu (gdy przekazane w input)
+    const guestIdToUpdate = data.guestId ?? prev.guestId;
+    if (guestIdToUpdate && (input.guestEmail !== undefined || input.guestPhone !== undefined)) {
+      const guestData: { email?: string | null; phone?: string | null } = {};
+      if (input.guestEmail !== undefined) {
+        const emailVal = input.guestEmail?.trim() || null;
+        if (emailVal && !validateOptionalEmail(emailVal).ok) {
+          return { success: false, error: "Nieprawidłowy format adresu email" };
+        }
+        guestData.email = emailVal;
+      }
+      if (input.guestPhone !== undefined) guestData.phone = input.guestPhone?.trim() || null;
+      await prisma.guest.update({
+        where: { id: guestIdToUpdate },
+        data: guestData,
+      });
     }
 
     const updated = await prisma.reservation.update({
@@ -2908,9 +3395,10 @@ async function updateGuestStayStats(guestId: string, checkOutDate: Date): Promis
 /**
  * Usuwa rezerwację. Gdy rezerwacja należała do grupy i była ostatnia – usuwa pustą grupę.
  * @param reservationId - ID rezerwacji
+ * @param cancellationReason - opcjonalny powód usunięcia (zapisany w audit log)
  * @returns ActionResult
  */
-export async function deleteReservation(reservationId: string): Promise<ActionResult> {
+export async function deleteReservation(reservationId: string, cancellationReason?: string | null): Promise<ActionResult> {
   if (!reservationId || typeof reservationId !== "string" || !reservationId.trim()) {
     return { success: false, error: "ID rezerwacji jest wymagane" };
   }
@@ -2926,6 +3414,10 @@ export async function deleteReservation(reservationId: string): Promise<ActionRe
     if (!prev) return { success: false, error: "Rezerwacja nie istnieje" };
 
     const oldUi = toUiReservation(prev);
+    const oldValueForAudit = {
+      ...(oldUi as unknown as Record<string, unknown>),
+      ...(cancellationReason != null && cancellationReason.trim() !== "" ? { cancellationReason: cancellationReason.trim(), deletionReason: cancellationReason.trim() } : {}),
+    };
     const groupIdToCheck = prev.groupId;
 
     await prisma.reservation.delete({ where: { id } });
@@ -2948,7 +3440,7 @@ export async function deleteReservation(reservationId: string): Promise<ActionRe
       actionType: "DELETE",
       entityType: "Reservation",
       entityId: id,
-      oldValue: oldUi as unknown as Record<string, unknown>,
+      oldValue: oldValueForAudit,
       newValue: null,
       ipAddress: ip,
     });
@@ -3412,7 +3904,7 @@ export async function generateReservationVoucher(
 
     // Pobierz dane przedpłaty
     const advancePayment = reservation.advancePayment as Record<string, unknown> | null;
-    const cardGuarantee = reservation.cardGuarantee as Record<string, unknown> | null;
+    const cardGuarantee = reservation.isCreditCardGuaranteed ? ({} as Record<string, unknown>) : null;
 
     // Mapuj plan wyżywienia na czytelny opis
     const mealPlanDescriptions: Record<string, string> = {
@@ -3481,7 +3973,7 @@ export async function generateReservationVoucher(
                   paid: Boolean(advancePayment.paid),
                 }
               : undefined,
-            cardGuarantee: cardGuarantee ? Boolean(cardGuarantee.status) : false,
+            cardGuarantee: reservation.isCreditCardGuaranteed ?? false,
           }
         : {
             currency: "PLN",

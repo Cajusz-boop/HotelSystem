@@ -7,14 +7,18 @@ export const metadata = {
 
 export default function BookingPage() {
   return (
-    <div className="min-h-screen flex flex-col items-center p-6 bg-muted/30">
-      <div className="w-full max-w-lg mb-6 text-center">
-        <h1 className="text-2xl font-semibold">Rezerwacja online</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Sprawdź dostępność i zarezerwuj pokój
-        </p>
-      </div>
-      <BookingForm />
+    <div className="min-h-screen flex flex-col bg-muted/30">
+      <header className="bg-slate-800 text-white py-4 px-4 sm:px-6">
+        <div className="max-w-2xl mx-auto text-center">
+          <h1 className="text-xl sm:text-2xl font-semibold">Karczma Łabędź — Rezerwacja online</h1>
+          <p className="text-slate-300 text-sm mt-0.5">
+            Sprawdź dostępność i zarezerwuj pokój
+          </p>
+        </div>
+      </header>
+      <main className="flex-1 flex flex-col items-center p-4 sm:p-6">
+        <BookingForm />
+      </main>
     </div>
   );
 }

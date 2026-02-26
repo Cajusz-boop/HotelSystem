@@ -2,55 +2,75 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  getBookingAvailability,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   getRoomTypesForBooking,
+  getRoomTypesForBookingWithPrices,
   submitBookingFromEngine,
+  submitBookingRequest,
+  type BookingRoomType,
 } from "@/app/actions/booking-engine";
-import { createPaymentLink } from "@/app/actions/finance";
-
-type Step = "search" | "results" | "guest" | "payment" | "done";
+import { getBookingTransferInfo } from "@/app/actions/hotel-config";
+import type { BookingTransferInfo } from "@/lib/hotel-config-types";
+import { BookingStepper, type BookingStepKey } from "./booking-stepper";
+import { RoomSelection } from "./room-selection";
+import { GuestForm } from "./guest-form";
+import { PaymentStep } from "./payment-step";
+import { BookingConfirmation } from "./confirmation";
 
 export function BookingForm() {
-  const [step, setStep] = useState<Step>("search");
+  const [step, setStep] = useState<BookingStepKey>("search");
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
-  const [roomType, setRoomType] = useState("");
-  const [roomTypes, setRoomTypes] = useState<{ type: string }[]>([]);
-  const [options, setOptions] = useState<Array<{
-    roomNumber: string;
-    type: string;
-    pricePerNight: number;
-    totalNights: number;
-    totalAmount: number;
-  }>>([]);
-  const [selectedRoom, setSelectedRoom] = useState<typeof options[0] | null>(null);
-  const [guestName, setGuestName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [adults, setAdults] = useState(2);
+  const [children0_6, setChildren0_6] = useState(0);
+  const [children7_12, setChildren7_12] = useState(0);
+  const [children13_17, setChildren13_17] = useState(0);
+  const [promoCode, setPromoCode] = useState("");
+  const [roomTypesLegacy, setRoomTypesLegacy] = useState<{ type: string }[]>([]);
+  const [roomsWithPrices, setRoomsWithPrices] = useState<BookingRoomType[]>([]);
+  const [selectedRoom, setSelectedRoom] = useState<BookingRoomType | null>(null);
+  const [selectedMealPlan, setSelectedMealPlan] = useState("RO");
+  const [totalAmount, setTotalAmount] = useState(0);
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [loadingRoomTypes, setLoadingRoomTypes] = useState(true);
   const [loadingSubmit, setLoadingSubmit] = useState(false);
-  const [loadingPaymentLink, setLoadingPaymentLink] = useState(false);
+  const [loadingRequest, setLoadingRequest] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [doneMessage, setDoneMessage] = useState("");
-  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
-  const [_reservationId, setReservationId] = useState<string | null>(null);
+  const [requestRoom, setRequestRoom] = useState<BookingRoomType | null>(null);
+  const [requestName, setRequestName] = useState("");
+  const [requestEmail, setRequestEmail] = useState("");
+  const [requestPhone, setRequestPhone] = useState("");
+  const [requestMessage, setRequestMessage] = useState("");
+  const [transferInfo, setTransferInfo] = useState<BookingTransferInfo | null>(null);
+  const [doneData, setDoneData] = useState<{
+    confirmationNumber: string;
+    reservationId: string;
+    totalAmount: number;
+    paymentStatus: string;
+    guestEmail: string;
+    paymentLinkUrl?: string | null;
+    checkInLink?: string | null;
+    message: string;
+  } | null>(null);
 
   const loadRoomTypes = async () => {
     setLoadingRoomTypes(true);
     setError(null);
     const r = await getRoomTypesForBooking();
     setLoadingRoomTypes(false);
-    if (r.success && r.data) setRoomTypes(r.data);
+    if (r.success && r.data) setRoomTypesLegacy(r.data);
     else if (!r.success) {
-      const msg = r.error ?? "Błąd ładowania typów pokoi";
-      setError(msg);
-      toast.error(msg);
+      setError(r.error ?? "Błąd ładowania typów pokoi");
+      toast.error(r.error);
     }
   };
 
@@ -58,86 +78,184 @@ export function BookingForm() {
     e.preventDefault();
     setError(null);
     setLoadingSearch(true);
-    const r = await getBookingAvailability(
+    const childAges: number[] = [];
+    for (let i = 0; i < children0_6; i++) childAges.push(3);
+    for (let i = 0; i < children7_12; i++) childAges.push(9);
+    for (let i = 0; i < children13_17; i++) childAges.push(15);
+    const childrenCount = children0_6 + children7_12 + children13_17;
+    const r = await getRoomTypesForBookingWithPrices({
       checkIn,
       checkOut,
-      roomType || undefined
-    );
+      adults,
+      children: childrenCount,
+      childAges: childAges.length ? childAges : undefined,
+      promoCode: promoCode.trim() || undefined,
+    });
     setLoadingSearch(false);
     if (r.success) {
-      setOptions(r.data);
-      setStep(r.data.length > 0 ? "results" : "search");
+      setRoomsWithPrices(r.data);
+      setStep(r.data.length > 0 ? "rooms" : "search");
       if (r.data.length === 0) {
-        const msg = "Brak dostępnych pokoi w podanym okresie.";
-        setError(msg);
-        toast.error(msg);
+        setError("Brak dostępnych pokoi w podanym okresie.");
+        toast.error("Brak dostępnych pokoi w podanym okresie.");
       } else {
-        toast.success(`Znaleziono ${r.data.length} dostępnych pokoi.`);
+        toast.success("Znaleziono " + r.data.length + " typ(y) pokoi.");
       }
     } else {
-      const msg = r.error ?? "Błąd wyszukiwania";
-      setError(msg);
-      toast.error(msg);
+      setError(r.error ?? "Błąd wyszukiwania");
+      toast.error(r.error);
     }
   };
 
-  const handleSelectRoom = (opt: typeof options[0]) => {
-    setSelectedRoom(opt);
+  const handleSelectRoom = (room: BookingRoomType, mealPlan: string, amount: number) => {
+    setSelectedRoom(room);
+    setSelectedMealPlan(mealPlan);
+    setTotalAmount(amount);
     setStep("guest");
     setError(null);
   };
 
-  const handleSubmitGuest = async (e: React.FormEvent) => {
+  const handleOpenRequest = (room: BookingRoomType) => {
+    setRequestRoom(room);
+    setError(null);
+  };
+
+  const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requestRoom) return;
+    if (!requestName?.trim() || !requestEmail?.trim() || !requestPhone?.trim()) {
+      toast.error("Wypełnij imię, e-mail i telefon.");
+      return;
+    }
+    setLoadingRequest(true);
+    const childrenCount = children0_6 + children7_12 + children13_17;
+    const r = await submitBookingRequest({
+      roomTypeId: requestRoom.id,
+      checkIn,
+      checkOut,
+      adults,
+      children: childrenCount || undefined,
+      guestName: requestName.trim(),
+      guestEmail: requestEmail.trim(),
+      guestPhone: requestPhone.trim(),
+      message: requestMessage.trim() || "Zapytanie o dostępność.",
+    });
+    setLoadingRequest(false);
+    if (r.success) {
+      setRequestRoom(null);
+      setDoneData({
+        confirmationNumber: "",
+        reservationId: r.data.requestId,
+        totalAmount: 0,
+        paymentStatus: "—",
+        guestEmail: requestEmail.trim(),
+        message: r.data.message,
+      });
+      setStep("done");
+      toast.success(r.data.message);
+    } else {
+      setError(r.error ?? "Błąd wysyłania zapytania");
+      toast.error(r.error);
+    }
+  };
+
+  const handleSubmitGuest = (data: {
+    guestName: string;
+    guestEmail: string;
+    guestPhone: string;
+    guestCountry: string;
+    notes: string;
+    acceptRegulamin: boolean;
+    acceptRodo: boolean;
+    marketingConsent: boolean;
+    paymentIntent: "FULL" | "NONE";
+  }) => {
     if (!selectedRoom) return;
     setError(null);
     setLoadingSubmit(true);
-    const r = await submitBookingFromEngine(
-      guestName,
-      email,
-      phone,
-      selectedRoom.roomNumber,
+    const childrenCount = children0_6 + children7_12 + children13_17;
+    const childAges: number[] = [];
+    for (let i = 0; i < children0_6; i++) childAges.push(3);
+    for (let i = 0; i < children7_12; i++) childAges.push(9);
+    for (let i = 0; i < children13_17; i++) childAges.push(15);
+    submitBookingFromEngine({
+      roomTypeId: selectedRoom.id,
       checkIn,
-      checkOut
-    );
-    setLoadingSubmit(false);
-    if (r.success) {
-      setReservationId(r.data.reservationId);
-      setDoneMessage(r.data.message);
-      toast.success("Rezerwacja złożona pomyślnie!");
-
-      if (selectedRoom.totalAmount > 0) {
-        setLoadingPaymentLink(true);
-        const linkRes = await createPaymentLink(
-          r.data.reservationId,
-          selectedRoom.totalAmount,
-          14
-        );
-        setLoadingPaymentLink(false);
-        if (linkRes.success && linkRes.data?.url) {
-          setPaymentUrl(linkRes.data.url);
-          setStep("payment");
+      checkOut,
+      adults,
+      children: childrenCount || undefined,
+      childAges: childAges.length ? childAges : undefined,
+      mealPlan: selectedMealPlan,
+      guestName: data.guestName,
+      guestEmail: data.guestEmail,
+      guestPhone: data.guestPhone,
+      guestCountry: data.guestCountry || undefined,
+      notes: data.notes || undefined,
+      marketingConsent: data.marketingConsent,
+      bookingType: "INSTANT",
+      paymentIntent: data.paymentIntent === "FULL" ? "FULL" : "NONE",
+      totalAmount,
+    })
+      .then((res) => {
+        setLoadingSubmit(false);
+        if (res.success) {
+          setDoneData({
+            confirmationNumber: res.data.confirmationNumber,
+            reservationId: res.data.reservationId,
+            totalAmount: res.data.totalAmount,
+            paymentStatus: res.data.paymentLink ? "Oczekuje na wpłatę" : "Zapłacę w obiekcie",
+            guestEmail: data.guestEmail,
+            paymentLinkUrl: res.data.paymentLink,
+            checkInLink: res.data.checkInLink,
+            message: res.data.message,
+          });
+          if (res.data.paymentLink && data.paymentIntent === "FULL") {
+            setStep("payment");
+          } else {
+            setStep("done");
+          }
+          toast.success("Rezerwacja złożona!");
         } else {
-          setStep("done");
+          setError(res.error ?? "Błąd rezerwacji");
+          toast.error(res.error);
         }
-      } else {
-        setStep("done");
-      }
-    } else {
-      const msg = r.error ?? "Błąd rezerwacji";
-      setError(msg);
-      toast.error(msg);
-    }
+      })
+      .catch(() => {
+        setLoadingSubmit(false);
+        setError("Błąd rezerwacji.");
+        toast.error("Błąd rezerwacji.");
+      });
+  };
+
+  const handleSkipPayment = () => {
+    setStep("done");
+  };
+
+  const handleNewBooking = () => {
+    setStep("search");
+    setSelectedRoom(null);
+    setDoneData(null);
+    setError(null);
   };
 
   useEffect(() => {
     loadRoomTypes();
   }, []);
 
+  useEffect(() => {
+    if (step === "payment" || step === "done") {
+      getBookingTransferInfo().then(setTransferInfo);
+    }
+  }, [step]);
+
+  const childrenCount = children0_6 + children7_12 + children13_17;
+
   return (
-    <div className="max-w-lg mx-auto space-y-6">
+    <div className="w-full max-w-2xl mx-auto space-y-6">
+      <BookingStepper currentStep={step} className="mb-6" />
+
       {step === "search" && (
-        <form onSubmit={handleSearch} className="space-y-4 rounded-lg border bg-card p-6">
+        <form onSubmit={handleSearch} className="space-y-4 rounded-xl border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-semibold">Sprawdź dostępność</h2>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -148,6 +266,7 @@ export function BookingForm() {
                 value={checkIn}
                 onChange={(e) => setCheckIn(e.target.value)}
                 required
+                className="mt-1"
               />
             </div>
             <div>
@@ -158,182 +277,182 @@ export function BookingForm() {
                 value={checkOut}
                 onChange={(e) => setCheckOut(e.target.value)}
                 required
+                className="mt-1"
               />
             </div>
           </div>
-          {roomTypes.length > 0 && (
+          <div>
+            <Label>Dorośli</Label>
+            <select
+              value={adults}
+              onChange={(e) => setAdults(Number(e.target.value))}
+              className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
             <div>
-              <Label htmlFor="roomType">Typ pokoju (opcjonalnie)</Label>
+              <Label className="text-xs">Dzieci 0-6</Label>
               <select
-                id="roomType"
-                value={roomType}
-                onChange={(e) => setRoomType(e.target.value)}
-                className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={children0_6}
+                onChange={(e) => setChildren0_6(Number(e.target.value))}
+                className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
               >
-                <option value="">Dowolny</option>
-                {roomTypes.map((t) => (
-                  <option key={t.type} value={t.type}>{t.type}</option>
+                {[0, 1, 2, 3, 4].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
                 ))}
               </select>
             </div>
-          )}
-          {loadingRoomTypes && (
-            <p className="text-sm text-muted-foreground">Ładowanie typów pokoi…</p>
-          )}
+            <div>
+              <Label className="text-xs">Dzieci 7-12</Label>
+              <select
+                value={children7_12}
+                onChange={(e) => setChildren7_12(Number(e.target.value))}
+                className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
+              >
+                {[0, 1, 2, 3, 4].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs">Dzieci 13-17</Label>
+              <select
+                value={children13_17}
+                onChange={(e) => setChildren13_17(Number(e.target.value))}
+                className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
+              >
+                {[0, 1, 2, 3, 4].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="promoCode">Kod promocyjny (opcjonalnie)</Label>
+            <Input
+              id="promoCode"
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value)}
+              placeholder="Kod"
+              className="mt-1"
+            />
+          </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" disabled={loadingSearch || loadingRoomTypes}>
-            {loadingSearch ? "Szukam…" : "Szukaj"}
+          <Button type="submit" disabled={loadingSearch || loadingRoomTypes} className="w-full py-3 bg-blue-600 hover:bg-blue-700">
+            {loadingSearch ? "Szukam…" : "Szukaj dostępnych pokoi"}
           </Button>
         </form>
       )}
 
-      {step === "results" && (
-        <div className="rounded-lg border bg-card p-6">
-          <h2 className="text-lg font-semibold mb-4">Dostępne pokoje</h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            {checkIn} – {checkOut}
-          </p>
-          <ul className="space-y-2">
-            {options.map((opt) => (
-              <li
-                key={opt.roomNumber}
-                className="flex justify-between items-center rounded border px-4 py-3"
-              >
-                <div>
-                  <span className="font-medium">Pokój {opt.roomNumber}</span>
-                  <span className="text-muted-foreground ml-2">({opt.type})</span>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium">{opt.totalAmount.toFixed(0)} PLN</p>
-                  <p className="text-xs text-muted-foreground">
-                    {opt.pricePerNight} PLN / noc · {opt.totalNights} nocy
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="ml-2"
-                  onClick={() => handleSelectRoom(opt)}
-                >
-                  Wybierz
-                </Button>
-              </li>
-            ))}
-          </ul>
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-4"
-            onClick={() => { setStep("search"); setError(null); }}
-          >
-            Inne daty
-          </Button>
+      {step === "rooms" && (
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Wybór pokoju</h2>
+          <RoomSelection
+            rooms={roomsWithPrices}
+            checkIn={checkIn}
+            checkOut={checkOut}
+            adults={adults}
+            childrenCount={childrenCount}
+            onSelectRoom={handleSelectRoom}
+            onRequestRoom={handleOpenRequest}
+            onBack={() => setStep("search")}
+          />
         </div>
       )}
 
       {step === "guest" && selectedRoom && (
-        <form onSubmit={handleSubmitGuest} className="space-y-4 rounded-lg border bg-card p-6">
-          <h2 className="text-lg font-semibold">Dane rezerwującego</h2>
-          <p className="text-sm text-muted-foreground">
-            Pokój {selectedRoom.roomNumber} · {selectedRoom.totalAmount.toFixed(0)} PLN
-          </p>
-          <div>
-            <Label htmlFor="guestName">Imię i nazwisko *</Label>
-            <Input
-              id="guestName"
-              value={guestName}
-              onChange={(e) => setGuestName(e.target.value)}
-              required
-              placeholder="Jan Kowalski"
-            />
-          </div>
-          <div>
-            <Label htmlFor="email">E-mail</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="jan@example.com"
-            />
-          </div>
-          <div>
-            <Label htmlFor="phone">Telefon</Label>
-            <Input
-              id="phone"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+48 123 456 789"
-            />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <div className="flex gap-2">
-            <Button type="submit" disabled={loadingSubmit}>
-              {loadingSubmit ? "Zapisuję…" : "Złóż rezerwację"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setStep("results")}
-            >
-              Wstecz
-            </Button>
-          </div>
-        </form>
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Dane rezerwującego</h2>
+          <GuestForm
+            roomName={selectedRoom.name}
+            totalAmount={totalAmount}
+            onSubmit={handleSubmitGuest}
+            onBack={() => setStep("rooms")}
+            loading={loadingSubmit}
+            error={error}
+          />
+        </div>
       )}
 
-      {step === "payment" && paymentUrl && (
-        <div className="space-y-4 rounded-lg border bg-card p-6">
-          <h2 className="text-lg font-semibold">Płatność</h2>
-          <p className="text-sm text-muted-foreground">
-            Możesz zapłacić teraz lub później. Link do płatności jest ważny 14 dni.
-          </p>
-          {loadingPaymentLink ? (
-            <p className="text-sm text-muted-foreground">Generowanie linku…</p>
-          ) : (
-            <>
-              <Button asChild className="w-full">
-                <Link href={paymentUrl} target="_blank" rel="noopener noreferrer">
-                  Zapłać teraz ({selectedRoom?.totalAmount.toFixed(0)} PLN)
-                </Link>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  setStep("done");
-                }}
-              >
-                Zapłacę później
-              </Button>
-            </>
+      {step === "payment" && doneData && (
+        <div className="rounded-xl border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Płatność</h2>
+          <PaymentStep
+            summary={selectedRoom ? `${selectedRoom.name} · ${doneData.totalAmount.toFixed(0)} PLN` : ""}
+            totalAmount={doneData.totalAmount}
+            reservationId={doneData.reservationId}
+            confirmationNumber={doneData.confirmationNumber}
+            transferInfo={transferInfo}
+            onSkipPayment={handleSkipPayment}
+          />
+        </div>
+      )}
+
+      <Dialog open={!!requestRoom} onOpenChange={(open) => !open && setRequestRoom(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Zapytaj o dostępność</DialogTitle>
+          </DialogHeader>
+          {requestRoom && (
+            <form onSubmit={handleSubmitRequest} className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {requestRoom.name} · {checkIn} – {checkOut}
+              </p>
+              <div>
+                <Label htmlFor="reqName">Imię i nazwisko *</Label>
+                <Input id="reqName" value={requestName} onChange={(e) => setRequestName(e.target.value)} required />
+              </div>
+              <div>
+                <Label htmlFor="reqEmail">E-mail *</Label>
+                <Input id="reqEmail" type="email" value={requestEmail} onChange={(e) => setRequestEmail(e.target.value)} required />
+              </div>
+              <div>
+                <Label htmlFor="reqPhone">Telefon *</Label>
+                <Input id="reqPhone" value={requestPhone} onChange={(e) => setRequestPhone(e.target.value)} required />
+              </div>
+              <div>
+                <Label htmlFor="reqMessage">Wiadomość</Label>
+                <Input id="reqMessage" value={requestMessage} onChange={(e) => setRequestMessage(e.target.value)} placeholder="Np. preferowany piętro" />
+              </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <div className="flex gap-2">
+                <Button type="submit" disabled={loadingRequest}>
+                  {loadingRequest ? "Wysyłanie…" : "Wyślij zapytanie"}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setRequestRoom(null)}>
+                  Anuluj
+                </Button>
+              </div>
+            </form>
           )}
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
-      {step === "done" && (
-        <div className="rounded-lg border border-green-500/50 bg-green-500/10 p-6">
-          <h2 className="text-lg font-semibold text-green-800 dark:text-green-400">Rezerwacja złożona</h2>
-          <p className="mt-2 text-sm">{doneMessage}</p>
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-4"
-            onClick={() => {
-              setStep("search");
-              setGuestName("");
-              setEmail("");
-              setPhone("");
-              setSelectedRoom(null);
-              setDoneMessage("");
-              setPaymentUrl(null);
-              setReservationId(null);
-            }}
-          >
-            Nowa rezerwacja
-          </Button>
-        </div>
+      {step === "done" && doneData && (
+        <BookingConfirmation
+          confirmationNumber={doneData.confirmationNumber}
+          summary={selectedRoom ? `${selectedRoom.name} · ${doneData.totalAmount.toFixed(0)} PLN` : ""}
+          totalAmount={doneData.totalAmount}
+          paymentStatus={doneData.paymentStatus}
+          guestEmail={doneData.guestEmail}
+          reservationId={doneData.reservationId}
+          paymentLinkUrl={doneData.paymentLinkUrl}
+          checkInLink={doneData.checkInLink}
+          transferInfo={transferInfo}
+          onNewBooking={handleNewBooking}
+        />
       )}
     </div>
   );

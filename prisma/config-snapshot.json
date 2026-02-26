@@ -1,5 +1,5 @@
 {
-  "_exportedAt": "2026-02-21T04:44:07.972Z",
+  "_exportedAt": "2026-02-26T20:06:10.487Z",
   "_description": "Snapshot konfiguracji bazy. Generowany przez: npm run db:config:export",
   "hotelConfig": {
     "id": "default",
@@ -20,18 +20,18 @@
     "reservationDictionaries": null,
     "seasons": null,
     "cancellationPolicyTemplates": null,
-    "authDisabled": true,
-    "updatedAt": "2026-02-20T21:01:45.685Z"
+    "authDisabled": false,
+    "updatedAt": "2026-02-26T20:00:56.811Z"
   },
   "cennikConfig": {
     "id": "default",
     "currency": "PLN",
     "vatPercent": "8",
     "pricesAreNetto": false,
-    "updatedAt": "2026-02-20T21:01:45.747Z"
+    "updatedAt": "2026-02-21T04:44:09.823Z"
   },
   "property": {
-    "name": "Karczma Łabędź",
+    "name": "Karczma ?ab?d?",
     "code": "default",
     "reservationStatusColors": null,
     "overbookingLimitPercent": 0,
@@ -41,19 +41,6 @@
     "housekeepingFloorAssignments": null
   },
   "documentNumbering": [
-    {
-      "id": "cmlqddum70001jsvz6knacn0t",
-      "documentType": "INVOICE",
-      "prefix": "FV",
-      "separator": "/",
-      "yearFormat": "YYYY",
-      "sequencePadding": 4,
-      "resetYearly": true,
-      "description": "Faktura VAT",
-      "exampleNumber": "FV/2026/0001",
-      "createdAt": "2026-02-17T08:57:20.959Z",
-      "updatedAt": "2026-02-20T21:01:45.772Z"
-    },
     {
       "id": "cmlqdklqu0005jsvzgmqg812m",
       "documentType": "CORRECTION",
@@ -65,7 +52,7 @@
       "description": "Korekta faktury",
       "exampleNumber": "KOR/2026/0001",
       "createdAt": "2026-02-17T09:02:36.046Z",
-      "updatedAt": "2026-02-20T21:01:45.783Z"
+      "updatedAt": "2026-02-21T04:44:09.972Z"
     },
     {
       "id": "cmlqdklvy0006jsvzqcvnb11h",
@@ -78,7 +65,7 @@
       "description": "Faktura zbiorcza",
       "exampleNumber": "FVZ/2026/0001",
       "createdAt": "2026-02-17T09:02:36.236Z",
-      "updatedAt": "2026-02-20T21:01:45.795Z"
+      "updatedAt": "2026-02-21T04:44:10.007Z"
     },
     {
       "id": "cmlqdklwc0007jsvz6wn3bo94",
@@ -91,7 +78,7 @@
       "description": "Rachunek (nie-VAT)",
       "exampleNumber": "R/2026/0001",
       "createdAt": "2026-02-17T09:02:36.250Z",
-      "updatedAt": "2026-02-20T21:01:45.803Z"
+      "updatedAt": "2026-02-21T04:44:10.041Z"
     },
     {
       "id": "cmlqdklx50008jsvzj8hlu16w",
@@ -101,10 +88,10 @@
       "yearFormat": "YYYY",
       "sequencePadding": 4,
       "resetYearly": true,
-      "description": "Nota księgowa",
+      "description": "Nota ksi?gowa",
       "exampleNumber": "NK/2026/0001",
       "createdAt": "2026-02-17T09:02:36.279Z",
-      "updatedAt": "2026-02-20T21:01:45.813Z"
+      "updatedAt": "2026-02-21T04:44:10.088Z"
     },
     {
       "id": "cmlqdklxu0009jsvz8xjm2tcp",
@@ -117,21 +104,34 @@
       "description": "Proforma",
       "exampleNumber": "PRO/2026/0001",
       "createdAt": "2026-02-17T09:02:36.303Z",
-      "updatedAt": "2026-02-20T21:01:45.825Z"
+      "updatedAt": "2026-02-21T04:44:10.126Z"
+    },
+    {
+      "id": "cmls1qicj0009aj2vsvq95yjx",
+      "documentType": "INVOICE",
+      "prefix": "FV",
+      "separator": "/",
+      "yearFormat": "YYYY",
+      "sequencePadding": 4,
+      "resetYearly": true,
+      "description": "Faktura VAT",
+      "exampleNumber": "FV/2026/0001",
+      "createdAt": "2026-02-18T13:06:48.546Z",
+      "updatedAt": "2026-02-21T04:44:09.935Z"
     }
   ],
   "invoiceTemplates": [
     {
-      "id": "cmlqdfude0004jsvzpbqda6ia",
+      "id": "cmlql22if0001ah2vvcvq91lt",
       "templateType": "DEFAULT",
       "logoBase64": null,
       "logoUrl": null,
       "logoWidth": 150,
       "logoPosition": "left",
-      "sellerName": "Karczma Łabędź Łukasz Wojenkowski",
+      "sellerName": "Karczma ?ab?d? ?ukasz Wojenkowski",
       "sellerAddress": "ul. Marsa 2",
       "sellerPostalCode": "14-200",
-      "sellerCity": "Nowa Wieś",
+      "sellerCity": "Nowa Wie?",
       "sellerNip": "5711640854",
       "sellerPhone": "604 070 908",
       "sellerEmail": "recepcja@labedzhotel.pl",
@@ -139,7 +139,7 @@
       "sellerBankName": "Alior Bank",
       "sellerBankAccount": "64 2490 0005 0000 4530 3746 8866",
       "headerText": null,
-      "footerText": "Dziękujemy za skorzystanie z naszych usług.",
+      "footerText": "Dzi?kujemy za skorzystanie z naszych us?ug.",
       "paperSize": "A4",
       "fontSize": 16,
       "fontFamily": "system-ui, sans-serif",
@@ -148,44 +148,13 @@
       "paymentTermsText": null,
       "thanksText": "Zapraszamy ponownie!",
       "roomProductName": null,
-      "createdAt": "2026-02-17T08:58:53.952Z",
-      "updatedAt": "2026-02-20T21:01:45.837Z"
+      "createdAt": "2026-02-17T12:32:08.246Z",
+      "updatedAt": "2026-02-21T04:44:10.167Z"
     }
   ],
   "documentTemplates": [
     {
-      "id": "cmls9ibtt000238vz5kmuuqia",
-      "templateType": "CONFIRMATION",
-      "useInvoiceLogo": true,
-      "logoBase64": null,
-      "logoUrl": null,
-      "logoWidth": 150,
-      "logoPosition": "left",
-      "useInvoiceSeller": true,
-      "hotelName": "Hotel",
-      "hotelAddress": null,
-      "hotelPostalCode": null,
-      "hotelCity": null,
-      "hotelPhone": null,
-      "hotelEmail": null,
-      "hotelWebsite": null,
-      "title": "POTWIERDZENIE REZERWACJI",
-      "headerText": null,
-      "footerText": "W razie pytań prosimy o kontakt. Do zobaczenia!",
-      "termsText": null,
-      "welcomeText": "Dziękujemy za dokonanie rezerwacji w naszym hotelu.",
-      "fontSize": 14,
-      "fontFamily": "system-ui, sans-serif",
-      "primaryColor": "#111111",
-      "accentColor": "#2563eb",
-      "showIdField": true,
-      "showSignatureField": true,
-      "showVehicleField": false,
-      "createdAt": "2026-02-18T16:44:23.734Z",
-      "updatedAt": "2026-02-20T21:01:45.849Z"
-    },
-    {
-      "id": "cmls9ic94000338vztihdypdo",
+      "id": "cmlt8avy10006m82vguo2v5s6",
       "templateType": "REGISTRATION_CARD",
       "useInvoiceLogo": true,
       "logoBase64": null,
@@ -202,7 +171,7 @@
       "hotelWebsite": null,
       "title": "KARTA MELDUNKOWA",
       "headerText": null,
-      "footerText": "Podpis gościa jest wymagany. Dane przetwarzane zgodnie z RODO.",
+      "footerText": "Podpis go?cia jest wymagany. Dane przetwarzane zgodnie z RODO.",
       "termsText": null,
       "welcomeText": null,
       "fontSize": 14,
@@ -212,114 +181,191 @@
       "showIdField": true,
       "showSignatureField": true,
       "showVehicleField": true,
-      "createdAt": "2026-02-18T16:44:24.055Z",
-      "updatedAt": "2026-02-20T21:01:45.860Z"
+      "createdAt": "2026-02-19T08:58:23.161Z",
+      "updatedAt": "2026-02-21T04:44:10.259Z"
+    },
+    {
+      "id": "cmlusd9po00074q2v9kj9mu34",
+      "templateType": "CONFIRMATION",
+      "useInvoiceLogo": true,
+      "logoBase64": null,
+      "logoUrl": null,
+      "logoWidth": 150,
+      "logoPosition": "left",
+      "useInvoiceSeller": true,
+      "hotelName": "Hotel",
+      "hotelAddress": null,
+      "hotelPostalCode": null,
+      "hotelCity": null,
+      "hotelPhone": null,
+      "hotelEmail": null,
+      "hotelWebsite": null,
+      "title": "POTWIERDZENIE REZERWACJI",
+      "headerText": null,
+      "footerText": "W razie pyta? prosimy o kontakt. Do zobaczenia!",
+      "termsText": null,
+      "welcomeText": "Dzi?kujemy za dokonanie rezerwacji w naszym hotelu.",
+      "fontSize": 14,
+      "fontFamily": "system-ui, sans-serif",
+      "primaryColor": "#111111",
+      "accentColor": "#2563eb",
+      "showIdField": true,
+      "showSignatureField": true,
+      "showVehicleField": false,
+      "createdAt": "2026-02-20T11:07:52.809Z",
+      "updatedAt": "2026-02-21T04:44:10.217Z"
     }
   ],
   "fiscalReceiptTemplate": [
     {
       "id": "cmlql1x6o0000ah2v9h4d2s0n",
-      "headerLine1": "Karczma Łabędź Łukasz Wojenkowski",
-      "headerLine2": "14-200 Nowa Wieś ul. Marsa 2 ",
+      "headerLine1": "Karczma ?ab?d? ?ukasz Wojenkowski",
+      "headerLine2": "14-200 Nowa Wie? ul. Marsa 2 ",
       "headerLine3": "5711640854",
-      "footerLine1": "Dziękujemy za wizytę!",
+      "footerLine1": "Dzi?kujemy za wizyt?!",
       "footerLine2": "Zapraszamy ponownie",
       "footerLine3": "www.karczma-labedz.pl",
-      "itemNameRoom": "Usługa hotelowa",
+      "itemNameRoom": "Us?uga hotelowa",
       "itemNameDeposit": "Zaliczka",
       "itemNameMinibar": "Minibar",
-      "itemNameService": "Usługa",
-      "itemNameLocalTax": "Opłata miejscowa",
+      "itemNameService": "Us?uga",
+      "itemNameLocalTax": "Op?ata miejscowa",
       "itemNameParking": "Parking",
       "defaultVatRate": 8,
       "includeRoomNumber": false,
       "includeStayDates": false,
       "roomNumberFormat": "pok. {roomNumber}",
       "createdAt": "2026-02-17T12:32:01.341Z",
-      "updatedAt": "2026-02-20T21:01:45.870Z"
+      "updatedAt": "2026-02-21T04:44:10.310Z"
     }
   ],
   "emailTemplates": [],
   "roomTypes": [
     {
-      "id": "cmlmcybvo0006bsvzgd0zp2cv",
+      "id": "cmlgd4cf80000135k1fwu39t6",
       "name": "Queen",
       "basePrice": "300",
       "sortOrder": 0,
-      "createdAt": "2026-02-14T13:34:12.130Z",
-      "updatedAt": "2026-02-20T21:01:45.878Z"
+      "visibleInStats": true,
+      "createdAt": "2026-02-10T08:52:15.716Z",
+      "updatedAt": "2026-02-21T04:44:10.354Z"
     },
     {
-      "id": "cmlmcybvt0007bsvzq4pz4vle",
+      "id": "cmlgd4cfc0001135kwiyhlma3",
       "name": "Twin",
       "basePrice": "300",
       "sortOrder": 0,
-      "createdAt": "2026-02-14T13:34:12.137Z",
-      "updatedAt": "2026-02-20T21:01:45.887Z"
+      "visibleInStats": true,
+      "createdAt": "2026-02-10T08:52:15.721Z",
+      "updatedAt": "2026-02-21T04:44:10.398Z"
     },
     {
-      "id": "cmlmcybvz0008bsvzryohpg95",
+      "id": "cmlgd4cfi0002135ks42epdl7",
       "name": "Suite",
       "basePrice": "300",
       "sortOrder": 0,
-      "createdAt": "2026-02-14T13:34:12.141Z",
-      "updatedAt": "2026-02-20T21:01:45.896Z"
+      "visibleInStats": true,
+      "createdAt": "2026-02-10T08:52:15.727Z",
+      "updatedAt": "2026-02-21T04:44:10.433Z"
     },
     {
       "id": "cmlp2od3z0000kgvz80hqopxy",
       "name": "Standard",
       "basePrice": "300",
       "sortOrder": 0,
+      "visibleInStats": true,
       "createdAt": "2026-02-16T11:09:49.534Z",
-      "updatedAt": "2026-02-20T21:01:45.903Z"
+      "updatedAt": "2026-02-21T04:44:10.472Z"
     },
     {
-      "id": "cmlpd3t420000n4vzeya1jahi",
+      "id": "cmlpdj95y0000v0vz6c1o87ei",
       "name": "Comfort",
       "basePrice": "300",
       "sortOrder": 2,
-      "createdAt": "2026-02-16T16:01:46.271Z",
-      "updatedAt": "2026-02-20T21:01:45.910Z"
+      "visibleInStats": true,
+      "createdAt": "2026-02-16T16:13:46.901Z",
+      "updatedAt": "2026-02-21T04:44:10.510Z"
     },
     {
-      "id": "cmlpd3t4i0001n4vzp0w39g0z",
+      "id": "cmlpdj9700001v0vz0bt25805",
       "name": "COMFORT - z widokiem na jezioro",
       "basePrice": "300",
       "sortOrder": 3,
-      "createdAt": "2026-02-16T16:01:46.286Z",
-      "updatedAt": "2026-02-20T21:01:45.917Z"
+      "visibleInStats": true,
+      "createdAt": "2026-02-16T16:13:46.942Z",
+      "updatedAt": "2026-02-21T04:44:10.554Z"
     },
     {
-      "id": "cmlpd3t4w0002n4vzmcoibyob",
+      "id": "cmlpdj9850002v0vzmt3w8lgx",
       "name": "SIELSKI- z widokiem na jezioro",
       "basePrice": "300",
       "sortOrder": 4,
-      "createdAt": "2026-02-16T16:01:46.302Z",
-      "updatedAt": "2026-02-20T21:01:45.942Z"
+      "visibleInStats": true,
+      "createdAt": "2026-02-16T16:13:46.982Z",
+      "updatedAt": "2026-02-21T04:44:10.589Z"
     },
     {
-      "id": "cmlpd3t5c0003n4vzohquut8p",
+      "id": "cmlpdj9950003v0vzxdjmghzl",
       "name": "Biuro",
       "basePrice": "300",
       "sortOrder": 7,
-      "createdAt": "2026-02-16T16:01:46.317Z",
-      "updatedAt": "2026-02-20T21:01:45.948Z"
+      "visibleInStats": true,
+      "createdAt": "2026-02-16T16:13:47.019Z",
+      "updatedAt": "2026-02-21T04:44:10.624Z"
     },
     {
-      "id": "cmlpd3t5m0004n4vz5j9pricb",
+      "id": "cmlpdj9a60004v0vzu9y1jg7n",
       "name": "SIELSKI",
       "basePrice": "300",
       "sortOrder": 8,
-      "createdAt": "2026-02-16T16:01:46.328Z",
-      "updatedAt": "2026-02-20T21:01:45.955Z"
+      "visibleInStats": true,
+      "createdAt": "2026-02-16T16:13:47.056Z",
+      "updatedAt": "2026-02-21T04:44:10.660Z"
     },
     {
-      "id": "cmlpd3t5t0005n4vzh8d4j154",
+      "id": "cmlpdj9b80005v0vzos6joo6c",
       "name": "COMFORT -5 os z widokiem na jezioro",
       "basePrice": "300",
       "sortOrder": 9,
-      "createdAt": "2026-02-16T16:01:46.336Z",
-      "updatedAt": "2026-02-20T21:01:45.961Z"
+      "visibleInStats": true,
+      "createdAt": "2026-02-16T16:13:47.094Z",
+      "updatedAt": "2026-02-21T04:44:10.696Z"
+    },
+    {
+      "id": "cmluytah30000mcapnax6wv17",
+      "name": "Standard 2P",
+      "basePrice": null,
+      "sortOrder": 0,
+      "visibleInStats": true,
+      "createdAt": "2026-02-20T14:08:17.981Z",
+      "updatedAt": "2026-02-20T15:02:42.669Z"
+    },
+    {
+      "id": "cmluytaht0001mcapoczrrrna",
+      "name": "Deluxe",
+      "basePrice": null,
+      "sortOrder": 0,
+      "visibleInStats": true,
+      "createdAt": "2026-02-20T14:08:18.011Z",
+      "updatedAt": "2026-02-20T15:02:42.906Z"
+    },
+    {
+      "id": "cmluytaiy0002mcapb855xnyk",
+      "name": "Apartament",
+      "basePrice": null,
+      "sortOrder": 0,
+      "visibleInStats": true,
+      "createdAt": "2026-02-20T14:08:18.045Z",
+      "updatedAt": "2026-02-20T15:02:43.303Z"
+    },
+    {
+      "id": "cmluytaji0003mcapw3ttpglt",
+      "name": "Studio 3P",
+      "basePrice": null,
+      "sortOrder": 0,
+      "visibleInStats": true,
+      "createdAt": "2026-02-20T14:08:18.074Z",
+      "updatedAt": "2026-02-20T15:02:43.541Z"
     }
   ],
   "rateCode": [],
@@ -329,510 +375,510 @@
   "minibarItems": [],
   "permissions": [
     {
-      "id": "cmlp5bynx0000asvzxkuzihlj",
+      "id": "5bb1b1ac-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "reservation.create",
       "name": "reservation.create",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.782Z",
-      "updatedAt": "2026-02-20T21:01:45.968Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:10.733Z"
     },
     {
-      "id": "cmlp5byop0002asvze0xx178k",
+      "id": "5bb1ba3d-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "reservation.edit",
       "name": "reservation.edit",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.814Z",
-      "updatedAt": "2026-02-20T21:01:45.975Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:10.772Z"
     },
     {
-      "id": "cmlp5byp50004asvzq892p86u",
+      "id": "5bb1bc2b-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "reservation.cancel",
       "name": "reservation.cancel",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.830Z",
-      "updatedAt": "2026-02-20T21:01:45.982Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:10.811Z"
     },
     {
-      "id": "cmlp5bypf0006asvzb1nccekl",
+      "id": "5bb1bd93-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "reservation.check_in",
       "name": "reservation.check_in",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.842Z",
-      "updatedAt": "2026-02-20T21:01:45.988Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:10.849Z"
     },
     {
-      "id": "cmlp5bypr0008asvzvcm74jd8",
+      "id": "5bb1bf11-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "reservation.check_out",
       "name": "reservation.check_out",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.854Z",
-      "updatedAt": "2026-02-20T21:01:45.995Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:10.884Z"
     },
     {
-      "id": "cmlp5byq3000aasvzfzb90sgg",
+      "id": "5bb1c065-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "finance.view",
       "name": "finance.view",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.867Z",
-      "updatedAt": "2026-02-20T21:01:46.003Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:10.922Z"
     },
     {
-      "id": "cmlp5byqe000casvzgbqw8lzp",
+      "id": "5bb1c22b-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "finance.post",
       "name": "finance.post",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.878Z",
-      "updatedAt": "2026-02-20T21:01:46.010Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:10.959Z"
     },
     {
-      "id": "cmlp5byqp000easvz48pgg57d",
+      "id": "5bb1c3f8-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "finance.void",
       "name": "finance.void",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.888Z",
-      "updatedAt": "2026-02-20T21:01:46.018Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.000Z"
     },
     {
-      "id": "cmlp5byqy000gasvz4l3xk7j7",
+      "id": "5bb1c55c-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "finance.refund",
       "name": "finance.refund",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.897Z",
-      "updatedAt": "2026-02-20T21:01:46.026Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.036Z"
     },
     {
-      "id": "cmlp5byr8000iasvzvhek2aik",
+      "id": "5bb1c69f-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "rates.view",
       "name": "rates.view",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.907Z",
-      "updatedAt": "2026-02-20T21:01:46.034Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.071Z"
     },
     {
-      "id": "cmlp5byri000kasvztj3l543u",
+      "id": "5bb1c7df-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "rates.edit",
       "name": "rates.edit",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.917Z",
-      "updatedAt": "2026-02-20T21:01:46.041Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.107Z"
     },
     {
-      "id": "cmlp5byrr000masvzb4fed9cx",
+      "id": "5bb1c945-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "reports.view",
       "name": "reports.view",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.926Z",
-      "updatedAt": "2026-02-20T21:01:46.048Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.145Z"
     },
     {
-      "id": "cmlp5bys4000oasvzgs29s3cl",
+      "id": "5bb1ca93-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "reports.export",
       "name": "reports.export",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.939Z",
-      "updatedAt": "2026-02-20T21:01:46.056Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.181Z"
     },
     {
-      "id": "cmlp5bysf000qasvzk0rm3o6r",
+      "id": "5bb1cbdd-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "reports.management",
       "name": "reports.management",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.950Z",
-      "updatedAt": "2026-02-20T21:01:46.064Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.220Z"
     },
     {
-      "id": "cmlp5bysn000sasvz6z1kxzeq",
+      "id": "5bb1cd25-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "reports.kpi",
       "name": "reports.kpi",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.959Z",
-      "updatedAt": "2026-02-20T21:01:46.071Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.257Z"
     },
     {
-      "id": "cmlp5bysw000uasvzh7yqdxrk",
+      "id": "5bb1ce96-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "reports.meals",
       "name": "reports.meals",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.967Z",
-      "updatedAt": "2026-02-20T21:01:46.080Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.294Z"
     },
     {
-      "id": "cmlp5byt5000wasvzzwkez3e2",
+      "id": "5bb1d025-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "reports.official",
       "name": "reports.official",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.976Z",
-      "updatedAt": "2026-02-20T21:01:46.087Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.331Z"
     },
     {
-      "id": "cmlp5bytf000yasvz8qj47qid",
+      "id": "5bb1d18a-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "housekeeping.view",
       "name": "housekeeping.view",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.986Z",
-      "updatedAt": "2026-02-20T21:01:46.094Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.367Z"
     },
     {
-      "id": "cmlp5byts0010asvzg6nl4cqc",
+      "id": "5bb1d32b-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "housekeeping.update_status",
       "name": "housekeeping.update_status",
       "description": null,
-      "createdAt": "2026-02-16T12:24:09.999Z",
-      "updatedAt": "2026-02-20T21:01:46.100Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.403Z"
     },
     {
-      "id": "cmlp5byu40012asvzjauimjvq",
+      "id": "5bb1d4c2-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "admin.users",
       "name": "admin.users",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.011Z",
-      "updatedAt": "2026-02-20T21:01:46.107Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.438Z"
     },
     {
-      "id": "cmlp5byue0014asvztsiw69ib",
+      "id": "5bb1d699-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "admin.settings",
       "name": "admin.settings",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.021Z",
-      "updatedAt": "2026-02-20T21:01:46.115Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.473Z"
     },
     {
-      "id": "cmlp5byup0016asvzk60zmmqk",
+      "id": "5bb1d86e-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "owner.portal",
       "name": "owner.portal",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.032Z",
-      "updatedAt": "2026-02-20T21:01:46.121Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.511Z"
     },
     {
-      "id": "cmlp5byuz0018asvzvvuu3tay",
+      "id": "5bb1d9c7-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "module.dashboard",
       "name": "module.dashboard",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.043Z",
-      "updatedAt": "2026-02-20T21:01:46.129Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.548Z"
     },
     {
-      "id": "cmlp5byvc001aasvzub4e5xz3",
+      "id": "5bb1db3a-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "module.front_office",
       "name": "module.front_office",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.055Z",
-      "updatedAt": "2026-02-20T21:01:46.135Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.586Z"
     },
     {
-      "id": "cmlp5byvl001casvzodqnja94",
+      "id": "5bb1dc96-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "module.check_in",
       "name": "module.check_in",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.064Z",
-      "updatedAt": "2026-02-20T21:01:46.156Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.623Z"
     },
     {
-      "id": "cmlp5byvu001easvzwzzei7sh",
+      "id": "5bb1ddeb-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "module.guests",
       "name": "module.guests",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.073Z",
-      "updatedAt": "2026-02-20T21:01:46.163Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.661Z"
     },
     {
-      "id": "cmlp5byw4001gasvz3rdysvlk",
+      "id": "5bb1df2d-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "module.companies",
       "name": "module.companies",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.083Z",
-      "updatedAt": "2026-02-20T21:01:46.170Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.698Z"
     },
     {
-      "id": "cmlp5bywd001iasvzco84h8wy",
+      "id": "5bb1e0f2-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "module.travel_agents",
       "name": "module.travel_agents",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.092Z",
-      "updatedAt": "2026-02-20T21:01:46.178Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.737Z"
     },
     {
-      "id": "cmlp5bywm001kasvz4fkv197d",
+      "id": "5bb1e2ba-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "module.rooms",
       "name": "module.rooms",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.101Z",
-      "updatedAt": "2026-02-20T21:01:46.190Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.772Z"
     },
     {
-      "id": "cmlp5bywv001masvzyylbocs9",
+      "id": "5bb1e40a-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "module.rates",
       "name": "module.rates",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.110Z",
-      "updatedAt": "2026-02-20T21:01:46.198Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.810Z"
     },
     {
-      "id": "cmlp5byx7001oasvzad0ci3kt",
+      "id": "5bb1e551-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "module.housekeeping",
       "name": "module.housekeeping",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.122Z",
-      "updatedAt": "2026-02-20T21:01:46.204Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.853Z"
     },
     {
-      "id": "cmlp5byxf001qasvz97o5q7yt",
+      "id": "5bb1e69a-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "module.finance",
       "name": "module.finance",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.131Z",
-      "updatedAt": "2026-02-20T21:01:46.211Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.892Z"
     },
     {
-      "id": "cmlp5byxp001sasvz7meftx4e",
+      "id": "5bb1e7e8-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "module.reports",
       "name": "module.reports",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.140Z",
-      "updatedAt": "2026-02-20T21:01:46.219Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.928Z"
     },
     {
-      "id": "cmlp5byxy001uasvzsqwuhn0d",
+      "id": "5bb1e92e-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "module.channel_manager",
       "name": "module.channel_manager",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.149Z",
-      "updatedAt": "2026-02-20T21:01:46.227Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.962Z"
     },
     {
-      "id": "cmlp5byy8001wasvzdbxhwib9",
+      "id": "5bb1ea7e-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "module.parking",
       "name": "module.parking",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.160Z",
-      "updatedAt": "2026-02-20T21:01:46.235Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:11.997Z"
     },
     {
-      "id": "cmlp5byyh001yasvz5hwuwtlz",
+      "id": "5bb1ebca-0d9b-11f1-9f3f-3cecef0f5b38",
       "code": "module.mice",
       "name": "module.mice",
       "description": null,
-      "createdAt": "2026-02-16T12:24:10.168Z",
-      "updatedAt": "2026-02-20T21:01:46.244Z"
+      "createdAt": "2026-02-19T15:00:33.465Z",
+      "updatedAt": "2026-02-21T04:44:12.031Z"
     }
   ],
   "rolePermissions": [
     {
-      "id": "cmlp5byod0001asvzqr2ozna0",
+      "id": "5bb452b1-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5bynx0000asvzxkuzihlj",
-      "createdAt": "2026-02-16T12:24:09.803Z"
+      "permissionId": "5bb1d699-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byow0003asvznaxl9t5x",
+      "id": "5bb4739b-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byop0002asvze0xx178k",
-      "createdAt": "2026-02-16T12:24:09.823Z"
+      "permissionId": "5bb1d4c2-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5bypa0005asvzddyzj0fd",
+      "id": "5bb47725-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byp50004asvzq892p86u",
-      "createdAt": "2026-02-16T12:24:09.837Z"
+      "permissionId": "5bb1c22b-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5bypl0007asvzkdhfqg7c",
+      "id": "5bb479cc-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5bypf0006asvzb1nccekl",
-      "createdAt": "2026-02-16T12:24:09.848Z"
+      "permissionId": "5bb1c55c-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5bypy0009asvzvo9hr83n",
+      "id": "5bb47c3a-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5bypr0008asvzvcm74jd8",
-      "createdAt": "2026-02-16T12:24:09.862Z"
+      "permissionId": "5bb1c065-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byq9000basvz4ly1hzrz",
+      "id": "5bb47e8e-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byq3000aasvzfzb90sgg",
-      "createdAt": "2026-02-16T12:24:09.872Z"
+      "permissionId": "5bb1c3f8-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byqj000dasvzghsafybg",
+      "id": "5bb48126-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byqe000casvzgbqw8lzp",
-      "createdAt": "2026-02-16T12:24:09.883Z"
+      "permissionId": "5bb1d32b-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byqt000fasvzlx9wn6nw",
+      "id": "5bb48345-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byqp000easvz48pgg57d",
-      "createdAt": "2026-02-16T12:24:09.892Z"
+      "permissionId": "5bb1d18a-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byr2000hasvzalkgctvp",
+      "id": "5bb48574-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byqy000gasvz4l3xk7j7",
-      "createdAt": "2026-02-16T12:24:09.901Z"
+      "permissionId": "5bb1e92e-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byre000jasvzyc905xz7",
+      "id": "5bb4879e-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byr8000iasvzvhek2aik",
-      "createdAt": "2026-02-16T12:24:09.913Z"
+      "permissionId": "5bb1dc96-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byrm000lasvzkefjd509",
+      "id": "5bb48a26-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byri000kasvztj3l543u",
-      "createdAt": "2026-02-16T12:24:09.921Z"
+      "permissionId": "5bb1df2d-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byrz000nasvzlgbpzr14",
+      "id": "5bb48cca-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byrr000masvzb4fed9cx",
-      "createdAt": "2026-02-16T12:24:09.932Z"
+      "permissionId": "5bb1d9c7-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5bys9000pasvzog3iwjbw",
+      "id": "5bb49057-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5bys4000oasvzgs29s3cl",
-      "createdAt": "2026-02-16T12:24:09.944Z"
+      "permissionId": "5bb1e69a-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5bysj000rasvz56eev5r2",
+      "id": "5bb49418-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5bysf000qasvzk0rm3o6r",
-      "createdAt": "2026-02-16T12:24:09.954Z"
+      "permissionId": "5bb1db3a-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byss000tasvzx2qgnhc3",
+      "id": "5bb497d1-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5bysn000sasvz6z1kxzeq",
-      "createdAt": "2026-02-16T12:24:09.963Z"
+      "permissionId": "5bb1ddeb-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byt1000vasvzajv876k3",
+      "id": "5bb49a6f-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5bysw000uasvzh7yqdxrk",
-      "createdAt": "2026-02-16T12:24:09.972Z"
+      "permissionId": "5bb1e551-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byta000xasvzab37tkye",
+      "id": "5bb49cb1-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byt5000wasvzzwkez3e2",
-      "createdAt": "2026-02-16T12:24:09.981Z"
+      "permissionId": "5bb1ebca-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5bytl000zasvzkr76lrhn",
+      "id": "5bb49f87-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5bytf000yasvz8qj47qid",
-      "createdAt": "2026-02-16T12:24:09.993Z"
+      "permissionId": "5bb1ea7e-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5bytz0011asvz3p4dhhye",
+      "id": "5bb4a2a1-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byts0010asvzg6nl4cqc",
-      "createdAt": "2026-02-16T12:24:10.005Z"
+      "permissionId": "5bb1e40a-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byu90013asvzfmyggmc7",
+      "id": "5bb4a5cc-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byu40012asvzjauimjvq",
-      "createdAt": "2026-02-16T12:24:10.016Z"
+      "permissionId": "5bb1e7e8-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byuj0015asvzhlv2ig33",
+      "id": "5bb4a923-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byue0014asvztsiw69ib",
-      "createdAt": "2026-02-16T12:24:10.027Z"
+      "permissionId": "5bb1e2ba-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byuv0017asvz84n2lb2h",
+      "id": "5bb4ac60-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byup0016asvzk60zmmqk",
-      "createdAt": "2026-02-16T12:24:10.038Z"
+      "permissionId": "5bb1e0f2-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byv70019asvz0l9qbv1q",
+      "id": "5bb4afad-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byuz0018asvzvvuu3tay",
-      "createdAt": "2026-02-16T12:24:10.048Z"
+      "permissionId": "5bb1d86e-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byvg001basvzofuct952",
+      "id": "5bb4b2cb-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byvc001aasvzub4e5xz3",
-      "createdAt": "2026-02-16T12:24:10.060Z"
+      "permissionId": "5bb1c7df-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byvp001dasvzp2ob4l7s",
+      "id": "5bb4b619-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byvl001casvzodqnja94",
-      "createdAt": "2026-02-16T12:24:10.068Z"
+      "permissionId": "5bb1c69f-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byvy001fasvzeqrc6x4y",
+      "id": "5bb4b967-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byvu001easvzwzzei7sh",
-      "createdAt": "2026-02-16T12:24:10.077Z"
+      "permissionId": "5bb1ca93-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byw8001hasvzh9ockltf",
+      "id": "5bb4bd22-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byw4001gasvz3rdysvlk",
-      "createdAt": "2026-02-16T12:24:10.087Z"
+      "permissionId": "5bb1cd25-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5bywh001jasvzwq5s2pwt",
+      "id": "5bb4c0a2-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5bywd001iasvzco84h8wy",
-      "createdAt": "2026-02-16T12:24:10.096Z"
+      "permissionId": "5bb1cbdd-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5bywr001lasvz3wndbp0y",
+      "id": "5bb4c414-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5bywm001kasvz4fkv197d",
-      "createdAt": "2026-02-16T12:24:10.106Z"
+      "permissionId": "5bb1ce96-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byx2001nasvzgdykmgbv",
+      "id": "5bb4c76c-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5bywv001masvzyylbocs9",
-      "createdAt": "2026-02-16T12:24:10.117Z"
+      "permissionId": "5bb1d025-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byxb001pasvzrhkvx1ir",
+      "id": "5bb4caad-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byx7001oasvzad0ci3kt",
-      "createdAt": "2026-02-16T12:24:10.126Z"
+      "permissionId": "5bb1c945-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byxk001rasvz7d9js5r3",
+      "id": "5bb4ce27-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byxf001qasvz97o5q7yt",
-      "createdAt": "2026-02-16T12:24:10.135Z"
+      "permissionId": "5bb1bc2b-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byxt001tasvz0qn9h7cu",
+      "id": "5bb4d0e5-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byxp001sasvz7meftx4e",
-      "createdAt": "2026-02-16T12:24:10.145Z"
+      "permissionId": "5bb1bd93-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byy3001vasvzfb7ip8x4",
+      "id": "5bb4d340-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byxy001uasvzsqwuhn0d",
-      "createdAt": "2026-02-16T12:24:10.154Z"
+      "permissionId": "5bb1bf11-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byyd001xasvzjx82mkzl",
+      "id": "5bb4d58a-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byy8001wasvzdbxhwib9",
-      "createdAt": "2026-02-16T12:24:10.164Z"
+      "permissionId": "5bb1b1ac-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     },
     {
-      "id": "cmlp5byym001zasvz53olyadk",
+      "id": "5bb4d7e5-0d9b-11f1-9f3f-3cecef0f5b38",
       "role": "MANAGER",
-      "permissionId": "cmlp5byyh001yasvz5hwuwtlz",
-      "createdAt": "2026-02-16T12:24:10.173Z"
+      "permissionId": "5bb1ba3d-0d9b-11f1-9f3f-3cecef0f5b38",
+      "createdAt": "2026-02-19T15:00:33.483Z"
     }
   ],
   "roleGroups": [],

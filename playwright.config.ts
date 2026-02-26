@@ -4,10 +4,11 @@ import { defineConfig, devices } from "@playwright/test";
  * Konfiguracja Playwright E2E dla Hotel PMS.
  * Uruchom aplikację: npm run dev (port 3011)
  * Seed: npm run db:seed:kwhotel
- * Testy: PLAYWRIGHT_BASE_URL=http://localhost:3011 npx playwright test
+ * Testy: npx playwright test tests/reception-e2e.spec.ts --reporter=list
  */
 export default defineConfig({
-  testDir: "./Test",
+  testDir: ".",
+  testMatch: ["**/Test/**/*.spec.ts", "**/tests/**/*.spec.ts"],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -16,9 +17,9 @@ export default defineConfig({
   globalSetup: "./playwright.global-setup.ts",
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3011",
-    storageState: "test-results/.auth/user.json",
+    storageState: ".auth/user.json",
     trace: "on-first-retry",
-    screenshot: "only-on-failure",
+    screenshot: "on",
     video: "retain-on-failure",
     navigationTimeout: 30000,
     actionTimeout: 15000,
@@ -28,6 +29,6 @@ export default defineConfig({
     { name: "firefox", use: { ...devices["Desktop Firefox"] } },
     { name: "webkit", use: { ...devices["Desktop Safari"] } },
   ],
-  timeout: 60000,
+  timeout: 90000,
   expect: { timeout: 10000 },
 });

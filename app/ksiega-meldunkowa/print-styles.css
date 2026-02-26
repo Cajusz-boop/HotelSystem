@@ -1,0 +1,38 @@
+@media print {
+  .no-print,
+  nav,
+  aside,
+  [data-sidebar],
+  .app-sidebar,
+  [data-logbook-filters],
+  [data-logbook-toolbar],
+  [data-logbook-pagination] {
+    display: none !important;
+  }
+
+  [data-print-header] {
+    display: block !important;
+  }
+
+  [data-logbook-table] {
+    width: 100% !important;
+    font-size: 10pt !important;
+  }
+
+  * {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+  tfoot {
+    display: table-footer-group;
+  }
+
+  @page {
+    margin: 1cm;
+    size: A4 landscape;
+  }
+}

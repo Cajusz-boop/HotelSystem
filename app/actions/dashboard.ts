@@ -304,7 +304,16 @@ async function _getOccupancyReportInternal(
     }
     const rangeErr = checkReportDateRange(from, to);
     if (rangeErr) return { success: false, error: rangeErr };
-    const roomWhere = { activeForSale: true, ...(propertyId ? { propertyId } : {}) };
+    // Tylko typy pokoi z visibleInStats (raporty obłożenia)
+    const visibleTypeNames = await prisma.roomType
+      .findMany({ where: { visibleInStats: true }, select: { name: true } })
+      .then((rows) => rows.map((r) => r.name));
+    const roomWhere = {
+      activeForSale: true,
+      isDeleted: false,
+      ...(propertyId ? { propertyId } : {}),
+      ...(visibleTypeNames.length > 0 ? { type: { in: visibleTypeNames } } : {}),
+    };
     const rooms = await prisma.room.findMany({
       where: roomWhere,
       select: { id: true, number: true },
@@ -2405,4 +2414,300 @@ export async function getBankReconciliationReport(
       error: e instanceof Error ? e.message : "Błąd raportu bankowego",
     };
   }
+}
+
+// ============================================================
+// KSIĘGA MELDUNKOWA (Logbook)
+// ============================================================
+
+export interface LogbookParams {
+  propertyId: string | null;
+  mode: "all" | "arrivals" | "departures" | "inhouse" | "noshow" | "cancelled";
+  dateFrom: string;
+  dateTo: string;
+  roomId?: string;
+  roomType?: string;
+  status?: string;
+  source?: string;
+  segment?: string;
+  channel?: string;
+  mealPlan?: string;
+  guestSearch?: string;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
+  page?: number;
+  pageSize?: number;
+}
+
+export interface LogbookEntry {
+  reservationId: string;
+  confirmationNumber: string | null;
+  guestName: string;
+  guestEmail: string | null;
+  guestPhone: string | null;
+  guestCountry: string | null;
+  guestNationality: string | null;
+  guestDateOfBirth: string | null;
+  guestGender: string | null;
+  guestDocumentType: string | null;
+  guestDocumentNumber: string | null;
+  guestIsVip: boolean;
+  guestIsBlacklisted: boolean;
+  companyName: string | null;
+  companyNip: string | null;
+  roomNumber: string;
+  roomTypeName: string;
+  checkIn: string;
+  checkOut: string;
+  nights: number;
+  adults: number;
+  children: number;
+  status: string;
+  source: string | null;
+  channel: string | null;
+  marketSegment: string | null;
+  mealPlan: string | null;
+  rateCode: string | null;
+  totalPrice: number;
+  totalPaid: number;
+  remaining: number;
+  notes: string | null;
+  internalNotes: string | null;
+  createdAt: string;
+}
+
+export interface LogbookResponse {
+  data: LogbookEntry[];
+  total: number;
+  summary: {
+    arrivals: number;
+    departures: number;
+    inhouse: number;
+    noshow: number;
+    cancelled: number;
+  };
+}
+
+/** Księga meldunkowa — pobiera rezerwacje z filtrami, sortowaniem i paginacją. */
+export async function getLogbookData(
+  params: LogbookParams
+): Promise<LogbookResponse | { success: false; error: string }> {
+  const session = await getSession();
+  if (!session) return { success: false, error: "Brak sesji" };
+  const allowed = await can(session.role, "reports.view");
+  if (!allowed) return { success: false, error: "Brak uprawnień do księgi meldunkowej" };
+
+  const propertyId = params.propertyId;
+  const dateFrom = new Date(params.dateFrom + "T00:00:00Z");
+  const dateTo = new Date(params.dateTo + "T23:59:59.999Z");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(today);
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const roomWhere = propertyId ? { propertyId } : {};
+  const baseWhere: Record<string, unknown> = {
+    room: roomWhere,
+  };
+
+  switch (params.mode) {
+    case "all":
+      baseWhere.checkIn = { lte: dateTo };
+      baseWhere.checkOut = { gte: dateFrom };
+      break;
+    case "arrivals":
+      baseWhere.checkIn = { gte: dateFrom, lte: dateTo };
+      break;
+    case "departures":
+      baseWhere.checkOut = { gte: dateFrom, lte: dateTo };
+      break;
+    case "inhouse":
+      baseWhere.status = "CHECKED_IN";
+      baseWhere.checkIn = { lte: todayEnd };
+      baseWhere.checkOut = { gte: today };
+      break;
+    case "noshow":
+      baseWhere.status = "NO_SHOW";
+      baseWhere.checkIn = { gte: dateFrom, lte: dateTo };
+      break;
+    case "cancelled":
+      baseWhere.status = "CANCELLED";
+      baseWhere.checkIn = { gte: dateFrom, lte: dateTo };
+      break;
+  }
+
+  if (params.roomId) baseWhere.roomId = params.roomId;
+  else if (params.roomType) baseWhere.room = { ...roomWhere, type: params.roomType };
+  if (params.status) baseWhere.status = params.status;
+  if (params.source) baseWhere.source = params.source;
+  if (params.segment) baseWhere.marketSegment = params.segment;
+  if (params.channel) baseWhere.channel = params.channel;
+  if (params.mealPlan) baseWhere.mealPlan = params.mealPlan;
+
+  if (params.guestSearch?.trim()) {
+    const search = params.guestSearch.trim();
+    baseWhere.OR = [
+      { guest: { name: { contains: search } } },
+      { guest: { email: { contains: search } } },
+      { guest: { phone: { contains: search } } },
+    ];
+  }
+
+  const sortBy = params.sortBy || "checkIn";
+  const sortDir = params.sortDir || "desc";
+  const page = Math.max(1, params.page ?? 1);
+  const pageSize = Math.min(100, Math.max(10, params.pageSize ?? 25));
+
+  const orderByMap: Record<string, unknown> = {
+    guest: { guest: { name: sortDir } },
+    room: { room: { number: sortDir } },
+    roomType: { room: { type: sortDir } },
+  };
+  const orderBy = orderByMap[sortBy] ?? { [sortBy]: sortDir };
+
+  const optionalWhere: Record<string, unknown> = { room: roomWhere };
+  if (params.roomId) optionalWhere.roomId = params.roomId;
+  else if (params.roomType) (optionalWhere.room as Record<string, unknown>) = { ...roomWhere, type: params.roomType };
+  if (params.status) optionalWhere.status = params.status;
+  if (params.source) optionalWhere.source = params.source;
+  if (params.segment) optionalWhere.marketSegment = params.segment;
+  if (params.channel) optionalWhere.channel = params.channel;
+  if (params.mealPlan) optionalWhere.mealPlan = params.mealPlan;
+  if (params.guestSearch?.trim()) {
+    const search = params.guestSearch.trim();
+    optionalWhere.OR = [
+      { guest: { name: { contains: search } } },
+      { guest: { email: { contains: search } } },
+      { guest: { phone: { contains: search } } },
+    ];
+  }
+
+  const [reservations, totalCount, summary] = await Promise.all([
+    prisma.reservation.findMany({
+      where: baseWhere,
+      include: {
+        guest: true,
+        room: { select: { id: true, number: true, type: true } },
+        company: { select: { name: true, nip: true } },
+        rateCode: { select: { code: true } },
+        transactions: {
+          where: { status: "ACTIVE" },
+          select: { amount: true, type: true },
+        },
+      },
+      orderBy,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.reservation.count({ where: baseWhere }),
+    getLogbookSummary(dateFrom, dateTo, today, optionalWhere),
+  ]);
+
+  const entries: LogbookEntry[] = reservations.map((r) => {
+    let charges = 0;
+    let discounts = 0;
+    let payments = 0;
+    for (const tx of r.transactions) {
+      const amt = Number(tx.amount);
+      if (amt > 0) charges += amt;
+      else if (tx.type === "DISCOUNT") discounts += Math.abs(amt);
+      else payments += Math.abs(amt);
+    }
+    const totalPrice = Math.round((charges - discounts) * 100) / 100;
+    const totalPaid = Math.round(payments * 100) / 100;
+    const remaining = Math.round((totalPrice - totalPaid) * 100) / 100;
+
+    const checkIn = new Date(r.checkIn);
+    const checkOut = new Date(r.checkOut);
+    const nights = Math.max(
+      0,
+      Math.ceil((checkOut.getTime() - checkIn.getTime()) / (24 * 60 * 60 * 1000))
+    );
+
+    return {
+      reservationId: r.id,
+      confirmationNumber: r.confirmationNumber ?? null,
+      guestName: r.guest?.name ?? "—",
+      guestEmail: r.guest?.email ?? null,
+      guestPhone: r.guest?.phone ?? null,
+      guestCountry: r.guest?.country ?? null,
+      guestNationality: r.guest?.nationality ?? null,
+      guestDateOfBirth: r.guest?.dateOfBirth ? r.guest.dateOfBirth.toISOString().slice(0, 10) : null,
+      guestGender: r.guest?.gender ?? null,
+      guestDocumentType: r.guest?.documentType ?? null,
+      guestDocumentNumber: r.guest?.documentNumber ?? null,
+      guestIsVip: r.guest?.isVip ?? false,
+      guestIsBlacklisted: r.guest?.isBlacklisted ?? false,
+      companyName: r.company?.name ?? null,
+      companyNip: r.company?.nip ?? null,
+      roomNumber: r.room?.number ?? "—",
+      roomTypeName: r.room?.type ?? "—",
+      checkIn: r.checkIn.toISOString().slice(0, 10),
+      checkOut: r.checkOut.toISOString().slice(0, 10),
+      nights,
+      adults: r.adults ?? 0,
+      children: r.children ?? 0,
+      status: r.status,
+      source: r.source ?? null,
+      channel: r.channel ?? null,
+      marketSegment: r.marketSegment ?? null,
+      mealPlan: r.mealPlan ?? null,
+      rateCode: r.rateCode?.code ?? null,
+      totalPrice,
+      totalPaid,
+      remaining,
+      notes: r.notes ?? null,
+      internalNotes: r.internalNotes ?? null,
+      createdAt: r.createdAt.toISOString(),
+    };
+  });
+
+  return {
+    data: entries,
+    total: totalCount,
+    summary,
+  };
+}
+
+async function getLogbookSummary(
+  dateFrom: Date,
+  dateTo: Date,
+  today: Date,
+  optionalWhere: Record<string, unknown>
+): Promise<{ arrivals: number; departures: number; inhouse: number; noshow: number; cancelled: number }> {
+  const todayEnd = new Date(today);
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const [arrivals, departures, inhouse, noshow, cancelled] = await Promise.all([
+    prisma.reservation.count({
+      where: { ...optionalWhere, checkIn: { gte: today, lte: todayEnd } },
+    }),
+    prisma.reservation.count({
+      where: { ...optionalWhere, checkOut: { gte: today, lte: todayEnd } },
+    }),
+    prisma.reservation.count({
+      where: {
+        ...optionalWhere,
+        status: "CHECKED_IN",
+        checkIn: { lte: todayEnd },
+        checkOut: { gte: today },
+      },
+    }),
+    prisma.reservation.count({
+      where: {
+        ...optionalWhere,
+        status: "NO_SHOW",
+        checkIn: { gte: dateFrom, lte: dateTo },
+      },
+    }),
+    prisma.reservation.count({
+      where: {
+        ...optionalWhere,
+        status: "CANCELLED",
+        checkIn: { gte: dateFrom, lte: dateTo },
+      },
+    }),
+  ]);
+
+  return { arrivals, departures, inhouse, noshow, cancelled };
 }

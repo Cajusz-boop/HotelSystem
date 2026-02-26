@@ -19,6 +19,10 @@ import {
   updateRoomActiveForSale,
   updateRoomStatus,
   deleteRoom,
+  softDeleteRoom,
+  restoreRoom,
+  getDeletedRooms,
+  getRoomsForExport,
   getRoomTypes,
   ensureRoomTypes,
   getRoomGroups,
@@ -46,7 +50,7 @@ import {
 } from "@/app/actions/rooms";
 import { getHotelConfig } from "@/app/actions/hotel-config";
 import { toast } from "sonner";
-import { BedDouble, Plus, Ban, CheckCircle, Trash2, Pencil, X, Tag, Settings2, ImageIcon, ClipboardList, Minus, Link2, Unlink, Wrench, Clock, CheckCircle2 } from "lucide-react";
+import { BedDouble, Plus, Ban, CheckCircle, Trash2, Pencil, X, Tag, Settings2, ImageIcon, ClipboardList, Minus, Link2, Unlink, Wrench, Clock, CheckCircle2, Download, ArchiveRestore } from "lucide-react";
 
 const STATUS_LABELS: Record<string, string> = {
   CLEAN: "Czysty",
@@ -92,6 +96,7 @@ export default function PokojePage() {
   const [editedTechnicalNotes, setEditedTechnicalNotes] = useState("");
   const [editedNextServiceDate, setEditedNextServiceDate] = useState("");
   const [editedNextServiceNote, setEditedNextServiceNote] = useState("");
+  const [editedSellPriority, setEditedSellPriority] = useState("");
   const [savingDetails, setSavingDetails] = useState(false);
 
   // Edycja typów łóżek
@@ -132,6 +137,12 @@ export default function PokojePage() {
   const [newIssueStartDate, setNewIssueStartDate] = useState("");
   const [newIssueEndDate, setNewIssueEndDate] = useState("");
   const [savingIssue, setSavingIssue] = useState(false);
+
+  // Eksport CSV i usunięte pokoje
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [deletedRooms, setDeletedRooms] = useState<RoomForManagement[]>([]);
+  const [loadingDeleted, setLoadingDeleted] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   // Blokady pokoi (remont, konserwacja)
   const [blocksRoom, setBlocksRoom] = useState<RoomForManagement | null>(null);
@@ -670,7 +681,7 @@ export default function PokojePage() {
 
   const queryClient = useQueryClient();
 
-  const { data: _initialData } = useQuery({
+  const { data: _initialData, isLoading: queryLoading, isError: queryError, error: queryErrorDetail } = useQuery({
     queryKey: ["pokoje-initial"],
     queryFn: async () => {
       await ensureRoomTypes();
@@ -698,6 +709,11 @@ export default function PokojePage() {
     setFloorOptions([...new Set([...configFloors, ...usedFloors])]);
     setLoading(false);
   }, [_initialData]);
+
+  // Gdy zapytanie się zakończy (błąd lub brak danych) — wyłącz spinner, żeby nie wisieć na "Ładowanie…"
+  useEffect(() => {
+    if (!queryLoading) setLoading(false);
+  }, [queryLoading]);
 
   const _load = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["pokoje-initial"] });
@@ -854,6 +870,7 @@ export default function PokojePage() {
     setEditedTechnicalNotes(room.technicalNotes ?? "");
     setEditedNextServiceDate(room.nextServiceDate ?? "");
     setEditedNextServiceNote(room.nextServiceNote ?? "");
+    setEditedSellPriority(room.sellPriority != null ? String(room.sellPriority) : "0");
   };
 
   const closeDetailsDialog = () => {
@@ -870,6 +887,7 @@ export default function PokojePage() {
     setEditedTechnicalNotes("");
     setEditedNextServiceDate("");
     setEditedNextServiceNote("");
+    setEditedSellPriority("");
   };
 
   const handleSaveDetails = async () => {
@@ -887,6 +905,7 @@ export default function PokojePage() {
     const technicalNotes = editedTechnicalNotes.trim() || null;
     const nextServiceDate = editedNextServiceDate.trim() || null;
     const nextServiceNote = editedNextServiceNote.trim() || null;
+    const sellPriority = editedSellPriority.trim() !== "" ? parseInt(editedSellPriority, 10) : 0;
 
     // Walidacja
     if (surfaceArea != null && (isNaN(surfaceArea) || surfaceArea < 0)) {
@@ -912,6 +931,7 @@ export default function PokojePage() {
       technicalNotes,
       nextServiceDate,
       nextServiceNote,
+      sellPriority: Number.isNaN(sellPriority) ? 0 : sellPriority,
     });
     setSavingDetails(false);
 
@@ -919,7 +939,7 @@ export default function PokojePage() {
       setRooms((prev) =>
         prev.map((r) =>
           r.id === editingDetails.id
-            ? { ...r, surfaceArea, floor, building, view, exposure, bedTypes, amenities, maxOccupancy, description, technicalNotes, nextServiceDate, nextServiceNote }
+            ? { ...r, surfaceArea, floor, building, view, exposure, bedTypes, amenities, maxOccupancy, description, technicalNotes, nextServiceDate, nextServiceNote, sellPriority: Number.isNaN(sellPriority) ? 0 : sellPriority }
             : r
         )
       );
@@ -945,6 +965,104 @@ export default function PokojePage() {
       <p className="text-muted-foreground text-sm">
         Dodawaj pokoje, wycofuj lub przywracaj je do sprzedaży. Pokoje wycofane nie pojawiają się na grafiku ani w dostępności do rezerwacji.
       </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={async () => {
+            const res = await getRoomsForExport();
+            if (!res.success) {
+              toast.error(res.error ?? "Błąd eksportu");
+              return;
+            }
+            if (!res.data) {
+              toast.error("Błąd eksportu");
+              return;
+            }
+            const BOM = "\uFEFF";
+            const header = "Numer;Typ;Piętro;Budynek;Łóżka;Max os.;Pow.;Cena;Status;W sprzedaży;Cechy;Priorytet;Widok";
+            const rows = res.data.map(
+              (r) =>
+                [r.number, r.type, r.floor, r.building, r.beds, r.maxOccupancy, r.surfaceArea, r.price, r.status, r.activeForSale, r.features, r.sellPriority, r.view].join(";")
+            );
+            const csv = BOM + header + "\r\n" + rows.join("\r\n");
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `pokoje-${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast.success("Eksport CSV pobrany");
+          }}
+        >
+          <Download className="h-3.5 w-3.5" />
+          Eksport CSV
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={async () => {
+            if (!showDeleted) {
+              setLoadingDeleted(true);
+              const res = await getDeletedRooms();
+              setLoadingDeleted(false);
+              if (res.success && res.data) setDeletedRooms(res.data);
+              else if (!res.success) toast.error(res.error);
+            }
+            setShowDeleted((prev) => !prev);
+          }}
+        >
+          <ArchiveRestore className="h-3.5 w-3.5" />
+          {showDeleted ? `Ukryj usunięte (${deletedRooms.length})` : "Pokaż usunięte"}
+        </Button>
+      </div>
+
+      {showDeleted && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-2">
+          <h3 className="font-medium text-sm">Usunięte pokoje (soft-delete)</h3>
+          {loadingDeleted ? (
+            <p className="text-sm text-muted-foreground">Ładowanie…</p>
+          ) : deletedRooms.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Brak usuniętych pokoi.</p>
+          ) : (
+            <ul className="flex flex-wrap gap-2">
+              {deletedRooms.map((r) => (
+                <li key={r.id} className="flex items-center gap-2 rounded border bg-card px-3 py-2 text-sm">
+                  <span className="font-medium">{r.number}</span>
+                  <span className="text-muted-foreground">{r.type}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1"
+                    disabled={restoringId === r.id}
+                    onClick={async () => {
+                      setRestoringId(r.id);
+                      const res = await restoreRoom(r.id);
+                      setRestoringId(null);
+                      if (res.success) {
+                        setDeletedRooms((prev) => prev.filter((x) => x.id !== r.id));
+                        queryClient.invalidateQueries({ queryKey: ["pokoje-initial"] });
+                        toast.success(`Przywrócono pokój ${r.number}`);
+                      } else {
+                        toast.error(res.error);
+                      }
+                    }}
+                  >
+                    <ArchiveRestore className="h-3.5 w-3.5" />
+                    Przywróć
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Formularz: nowy pokój */}
       <form
@@ -1021,6 +1139,14 @@ export default function PokojePage() {
       <div className="rounded-lg border border-border bg-card">
         {loading ? (
           <div className="p-8 text-center text-muted-foreground">Ładowanie…</div>
+        ) : queryError ? (
+          <div className="p-8 text-center">
+            <p className="text-destructive font-medium">Nie udało się załadować listy pokoi.</p>
+            <p className="text-sm text-muted-foreground mt-1">{queryErrorDetail instanceof Error ? queryErrorDetail.message : String(queryErrorDetail)}</p>
+            <Button variant="outline" className="mt-4" onClick={() => queryClient.invalidateQueries({ queryKey: ["pokoje-initial"] })}>
+              Spróbuj ponownie
+            </Button>
+          </div>
         ) : rooms.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">Brak pokoi. Dodaj pierwszy pokój powyżej.</div>
         ) : (
@@ -1700,6 +1826,21 @@ export default function PokojePage() {
                   onChange={(e) => setEditedMaxOccupancy(e.target.value)}
                   className="mt-1"
                 />
+              </div>
+              <div>
+                <Label htmlFor="edit-sell-priority" className="text-sm font-medium">
+                  Priorytet sprzedaży
+                </Label>
+                <Input
+                  id="edit-sell-priority"
+                  type="number"
+                  min={0}
+                  value={editedSellPriority}
+                  onChange={(e) => setEditedSellPriority(e.target.value)}
+                  placeholder="0"
+                  className="mt-1"
+                />
+                <p className="text-xs text-muted-foreground mt-0.5">Niższy = wyższy priorytet propozycji</p>
               </div>
             </div>
 

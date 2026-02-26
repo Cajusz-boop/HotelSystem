@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   getRoomsForCennik,
   updateRoomPrice,
@@ -13,6 +14,7 @@ import {
   updateRoomTypeBasePrice,
   updateRoomTypeName,
   updateRoomTypeSortOrder,
+  updateRoomType,
   getRatePlans,
   createRatePlan,
   deleteRatePlan,
@@ -31,8 +33,20 @@ import {
 import { getCennikConfig, updateCennikConfig, type CennikConfigForUi } from "@/app/actions/cennik-config";
 import { getPackagesForCennik, type PackageForCennik } from "@/app/actions/packages";
 import { toast } from "sonner";
-import { Receipt, Printer, FileText, History, ChevronDown, ChevronUp, Download, Upload, Calendar, Trash2, Tag } from "lucide-react";
+import { Receipt, Printer, FileText, History, ChevronDown, ChevronUp, Download, Upload, Calendar, Trash2, Tag, CalendarDays, Users, UtensilsCrossed, Moon, Settings2 } from "lucide-react";
 import Link from "next/link";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { AgeGroupsTab } from "./components/age-groups-tab";
+import { ServiceRatesTab } from "./components/service-rates-tab";
+import { LongStayTab } from "./components/long-stay-tab";
+import { SeasonsTab } from "./components/seasons-tab";
 
 const STATUS_LABELS: Record<string, string> = {
   CLEAN: "Czysty",
@@ -58,6 +72,14 @@ export default function CennikPage() {
   const [savingTypeId, setSavingTypeId] = useState<string | null>(null);
   const [savingTypeNameId, setSavingTypeNameId] = useState<string | null>(null);
   const [savingTypeSortOrderId, setSavingTypeSortOrderId] = useState<string | null>(null);
+  const [editingTypeDetails, setEditingTypeDetails] = useState<RoomTypeForCennik | null>(null);
+  const [typeDetailsDesc, setTypeDetailsDesc] = useState("");
+  const [typeDetailsVisibleInStats, setTypeDetailsVisibleInStats] = useState(true);
+  const [typeDetailsTransEn, setTypeDetailsTransEn] = useState("");
+  const [typeDetailsTransDe, setTypeDetailsTransDe] = useState("");
+  const [typeDetailsMaxOccupancy, setTypeDetailsMaxOccupancy] = useState("");
+  const [typeDetailsBeds, setTypeDetailsBeds] = useState("");
+  const [savingTypeDetails, setSavingTypeDetails] = useState(false);
   const [ratePlans, setRatePlans] = useState<RatePlanForCennik[]>([]);
   const [newPlanRoomTypeId, setNewPlanRoomTypeId] = useState("");
   const [newPlanFrom, setNewPlanFrom] = useState("");
@@ -362,6 +384,46 @@ export default function CennikPage() {
         Cena pokoju = nadpisanie (jeśli ustawione) lub cena bazowa typu. Stawki sezonowe nadpisują w podanym zakresie dat. Zmiany w dzienniku audytu.
       </p>
 
+      <Tabs defaultValue="plany" className="w-full">
+        <TabsList className="flex flex-wrap gap-1 h-auto p-1">
+          <TabsTrigger value="plany" className="gap-1">
+            <Calendar className="h-4 w-4" />
+            Plany cenowe
+          </TabsTrigger>
+          <TabsTrigger value="dzienne" className="gap-1">
+            <CalendarDays className="h-4 w-4" />
+            Ceny dzienne
+          </TabsTrigger>
+          <TabsTrigger value="sezony" className="gap-1">
+            <Moon className="h-4 w-4" />
+            Sezony
+          </TabsTrigger>
+          <TabsTrigger value="grupy" className="gap-1">
+            <Users className="h-4 w-4" />
+            Grupy wiekowe
+          </TabsTrigger>
+          <TabsTrigger value="uslugi" className="gap-1">
+            <UtensilsCrossed className="h-4 w-4" />
+            Usługi stałe
+          </TabsTrigger>
+          <TabsTrigger value="dlugie" className="gap-1">
+            <Moon className="h-4 w-4" />
+            Długie pobyty
+          </TabsTrigger>
+          <Button asChild variant="ghost" size="sm" className="gap-1">
+            <Link href="/cennik/reguly-pochodne">
+              Reguły pochodne
+            </Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm" className="gap-1">
+            <Link href="/cennik/wydruk">
+              <FileText className="h-4 w-4" />
+              Wydruk
+            </Link>
+          </Button>
+        </TabsList>
+
+        <TabsContent value="plany" className="mt-4 space-y-8">
       <div className="rounded-lg border bg-card p-4 print:hidden">
         <h2 className="mb-3 text-sm font-semibold">Ustawienia (waluta, VAT, netto/brutto)</h2>
         <div className="flex flex-wrap items-end gap-4">
@@ -502,11 +564,146 @@ export default function CennikPage() {
                 >
                   {savingTypeNameId === t.id ? "…" : "Zapisz nazwę"}
                 </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setEditingTypeDetails(t);
+                    setTypeDetailsDesc(t.description ?? "");
+                    setTypeDetailsVisibleInStats(t.visibleInStats ?? true);
+                    setTypeDetailsTransEn((t.translations as Record<string, string>)?.["en"] ?? "");
+                    setTypeDetailsTransDe((t.translations as Record<string, string>)?.["de"] ?? "");
+                    setTypeDetailsMaxOccupancy(t.maxOccupancy != null ? String(t.maxOccupancy) : "");
+                    setTypeDetailsBeds(t.bedsDescription ?? "");
+                  }}
+                  title="Opis, statystyki, tłumaczenia"
+                >
+                  <Settings2 className="h-4 w-4" />
+                </Button>
               </div>
             ))}
           </div>
         </div>
       )}
+
+      {/* Dialog szczegółów typu pokoju (opis, widoczny w statystykach, tłumaczenia) */}
+      <Dialog open={!!editingTypeDetails} onOpenChange={(open) => !open && setEditingTypeDetails(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Szczegóły typu: {editingTypeDetails?.name}</DialogTitle>
+          </DialogHeader>
+          {editingTypeDetails && (
+            <div className="space-y-4 py-2">
+              <div>
+                <Label className="text-xs">Opis</Label>
+                <textarea
+                  className="mt-1 w-full rounded border border-input bg-background px-3 py-2 text-sm min-h-[60px]"
+                  value={typeDetailsDesc}
+                  onChange={(e) => setTypeDetailsDesc(e.target.value)}
+                  placeholder="np. Pokój z balkonem i widokiem na jezioro"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="type-visible-in-stats"
+                  checked={typeDetailsVisibleInStats}
+                  onCheckedChange={(v) => setTypeDetailsVisibleInStats(v === true)}
+                />
+                <Label htmlFor="type-visible-in-stats" className="text-sm font-normal cursor-pointer">
+                  Widoczny w statystykach obłożenia
+                </Label>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Maks. osób</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={typeDetailsMaxOccupancy}
+                    onChange={(e) => setTypeDetailsMaxOccupancy(e.target.value)}
+                    placeholder="—"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Łóżka (np. 2×DB)</Label>
+                  <Input
+                    value={typeDetailsBeds}
+                    onChange={(e) => setTypeDetailsBeds(e.target.value)}
+                    placeholder="2×DB"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs">Tłumaczenia nazwy</Label>
+                <div className="mt-1 flex gap-2">
+                  <Input
+                    placeholder="EN"
+                    value={typeDetailsTransEn}
+                    onChange={(e) => setTypeDetailsTransEn(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Input
+                    placeholder="DE"
+                    value={typeDetailsTransDe}
+                    onChange={(e) => setTypeDetailsTransDe(e.target.value)}
+                    className="flex-1"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingTypeDetails(null)}>
+              Anuluj
+            </Button>
+            <Button
+              disabled={savingTypeDetails || !editingTypeDetails}
+              onClick={async () => {
+                if (!editingTypeDetails) return;
+                setSavingTypeDetails(true);
+                const maxOcc = typeDetailsMaxOccupancy.trim() ? parseInt(typeDetailsMaxOccupancy, 10) : null;
+                const result = await updateRoomType(editingTypeDetails.id, {
+                  description: typeDetailsDesc.trim() || null,
+                  visibleInStats: typeDetailsVisibleInStats,
+                  maxOccupancy: maxOcc != null && !Number.isNaN(maxOcc) ? maxOcc : null,
+                  bedsDescription: typeDetailsBeds.trim() || null,
+                  translations:
+                    typeDetailsTransEn.trim() || typeDetailsTransDe.trim()
+                      ? { en: typeDetailsTransEn.trim(), de: typeDetailsTransDe.trim() }
+                      : null,
+                });
+                setSavingTypeDetails(false);
+                if (result.success) {
+                  toast.success("Zapisano.");
+                  setRoomTypes((prev) =>
+                    prev.map((x) =>
+                      x.id === editingTypeDetails.id
+                        ? {
+                            ...x,
+                            description: typeDetailsDesc.trim() || undefined,
+                            visibleInStats: typeDetailsVisibleInStats,
+                            maxOccupancy: maxOcc != null && !Number.isNaN(maxOcc) ? maxOcc : undefined,
+                            bedsDescription: typeDetailsBeds.trim() || undefined,
+                            translations:
+                              typeDetailsTransEn.trim() || typeDetailsTransDe.trim()
+                                ? { en: typeDetailsTransEn.trim(), de: typeDetailsTransDe.trim() }
+                                : undefined,
+                          }
+                        : x
+                    )
+                  );
+                  setEditingTypeDetails(null);
+                } else {
+                  toast.error("error" in result ? result.error : "Błąd zapisu");
+                }
+              }}
+            >
+              {savingTypeDetails ? "…" : "Zapisz"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="rounded-lg border bg-card p-4 print:hidden">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
@@ -938,6 +1135,30 @@ export default function CennikPage() {
           </div>
         )}
       </div>
+        </TabsContent>
+
+        <TabsContent value="dzienne" className="mt-4">
+          <p className="text-muted-foreground text-sm">
+            Siatka cen dziennych (nadpisania na konkretny dzień) — w przygotowaniu. Na razie używaj planów cenowych i nadpisań w tabeli pokoi.
+          </p>
+        </TabsContent>
+
+        <TabsContent value="sezony" className="mt-4">
+          <SeasonsTab />
+        </TabsContent>
+
+        <TabsContent value="grupy" className="mt-4">
+          <AgeGroupsTab />
+        </TabsContent>
+
+        <TabsContent value="uslugi" className="mt-4">
+          <ServiceRatesTab />
+        </TabsContent>
+
+        <TabsContent value="dlugie" className="mt-4">
+          <LongStayTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -18,16 +18,23 @@ async function importConfigSnapshot() {
 async function main() {
   console.log("⏳ Resetting data for KWHotel demo seed…");
 
-  await prisma.$transaction([
-    prisma.parkingBooking.deleteMany(),
-    prisma.parkingSpot.deleteMany(),
-    prisma.roomBlock.deleteMany(),
-    prisma.reservationGroup.deleteMany(),
-    prisma.reservation.deleteMany(),
-    prisma.guest.deleteMany(),
-    prisma.room.deleteMany(),
-    prisma.auditLog.deleteMany(),
-  ]);
+  // Usuwamy sekwencyjnie (bez transakcji) — na dużej bazie (44k+ rezerwacji) transakcja się przekracza timeout
+  console.log("  Usuwanie parkingBooking…");
+  await prisma.parkingBooking.deleteMany();
+  console.log("  Usuwanie roomBlock…");
+  await prisma.roomBlock.deleteMany();
+  console.log("  Usuwanie reservation…");
+  await prisma.reservation.deleteMany();
+  console.log("  Usuwanie reservationGroup…");
+  await prisma.reservationGroup.deleteMany();
+  console.log("  Usuwanie guest…");
+  await prisma.guest.deleteMany();
+  console.log("  Usuwanie parkingSpot…");
+  await prisma.parkingSpot.deleteMany();
+  console.log("  Usuwanie room…");
+  await prisma.room.deleteMany();
+  console.log("  Usuwanie auditLog…");
+  await prisma.auditLog.deleteMany();
 
   const defaultProperty = await prisma.property.upsert({
     where: { code: "default" },
@@ -126,6 +133,7 @@ async function main() {
       "Konferencja Liderzy 2026",
       "Anna Weekend",
       "Jan Biznes",
+      "Testowy, Jan", // E2E: rezerwacja na dziś, status CONFIRMED
     ].map((name) => prisma.guest.create({ data: { name } }))
   );
 
@@ -141,6 +149,8 @@ async function main() {
   });
 
   const today = new Date("2026-02-11T00:00:00.000Z");
+  const realToday = new Date();
+  realToday.setHours(0, 0, 0, 0);
   const addDays = (date: Date, days: number) => new Date(date.getTime() + days * 86400000);
 
   const reservationsData = [
@@ -208,6 +218,14 @@ async function main() {
       room: "103",
       checkIn: addDays(today, 5),
       checkOut: addDays(today, 8),
+      status: "CONFIRMED" as const,
+      pax: 1,
+    },
+    {
+      guest: guests[7],
+      room: "102",
+      checkIn: realToday,
+      checkOut: addDays(realToday, 3),
       status: "CONFIRMED" as const,
       pax: 1,
     },

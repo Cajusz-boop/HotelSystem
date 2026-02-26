@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { existsSync } from "fs";
 import { join } from "path";
 import { prisma } from "../lib/db";
+import { clearPermissionsCache } from "../lib/permissions";
 
 async function importConfigSnapshot() {
   const snapshotPath = join(__dirname, "config-snapshot.json");
@@ -252,6 +253,34 @@ async function main() {
   }
 
   await importConfigSnapshot();
+
+  // Nadaj roli RECEPTION dostęp do modułów (w tym Finanse) — config-snapshot ma tylko MANAGER
+  const receptionModules = [
+    "module.dashboard",
+    "module.front_office",
+    "module.check_in",
+    "module.guests",
+    "module.companies",
+    "module.rooms",
+    "module.rates",
+    "module.finance",
+    "module.reports",
+    "module.housekeeping",
+  ];
+  const permissions = await prisma.permission.findMany({
+    where: { code: { in: receptionModules } },
+    select: { id: true },
+  });
+  if (permissions.length > 0) {
+    const { count } = await prisma.rolePermission.createMany({
+      data: permissions.map((p) => ({ role: "RECEPTION", permissionId: p.id })),
+      skipDuplicates: true,
+    });
+    if (count > 0) {
+      clearPermissionsCache();
+      console.log(`Przypisano ${count} uprawnień do roli RECEPTION (module.finance itd.)`);
+    }
+  }
 
   console.log("Seed completed.");
 }

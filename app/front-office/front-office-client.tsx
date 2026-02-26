@@ -7,6 +7,15 @@ import { TapeChartStoreProvider } from "@/lib/store/tape-chart-store";
 import { getTapeChartData } from "@/app/actions/tape-chart";
 import type { Reservation, ReservationGroupSummary, Room } from "@/lib/tape-chart-types";
 
+interface TapeChartEventItem {
+  id: string;
+  name: string;
+  dateFrom: string;
+  dateTo: string;
+  color: string | null;
+  description?: string | null;
+}
+
 interface FrontOfficeInitialData {
   rooms: Room[];
   reservationGroups: ReservationGroupSummary[];
@@ -14,6 +23,7 @@ interface FrontOfficeInitialData {
   propertyId?: string | null;
   reservations: Reservation[];
   today?: string;
+  events?: TapeChartEventItem[];
 }
 
 const LOADING_MSG = "Ładowanie recepcji…";
@@ -26,6 +36,7 @@ export function FrontOfficeClient({ initialData }: { initialData: FrontOfficeIni
     propertyId: initialData?.propertyId ?? null,
     reservations: initialData?.reservations ?? [],
     today: initialData?.today ?? undefined,
+    events: initialData?.events ?? [],
   }));
   const searchParams = useSearchParams();
   const [reservationId, setReservationId] = useState<string | undefined>(undefined);
@@ -63,6 +74,7 @@ export function FrontOfficeClient({ initialData }: { initialData: FrontOfficeIni
         propertyId: full.propertyId ?? null,
         reservations: Array.isArray(full.reservations) ? (full.reservations as Reservation[]) : [],
         today: prev.today ?? today,
+        events: Array.isArray(full.events) ? full.events : [],
       }));
     }).catch(() => {
       // Zachowaj initialData przy błędzie
@@ -102,6 +114,7 @@ export function FrontOfficeClient({ initialData }: { initialData: FrontOfficeIni
           initialTodayStr={data.today}
           initialHighlightReservationId={reservationId}
           initialOpenCreate={e2eOpenCreate}
+          initialEvents={data.events}
         />
       </TapeChartStoreProvider>
     </div>

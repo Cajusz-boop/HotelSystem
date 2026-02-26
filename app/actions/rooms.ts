@@ -177,7 +177,7 @@ export async function getRooms(): Promise<
   try {
     const [rooms, roomTypes] = await Promise.all([
       prisma.room.findMany({
-        where: { activeForSale: true },
+        where: { activeForSale: true, isDeleted: false },
         orderBy: { number: "asc" },
       }),
       prisma.roomType.findMany({ select: { name: true, basePrice: true } }).catch(() => [] as { name: string; basePrice: unknown }[]),
@@ -235,6 +235,7 @@ export interface RoomForManagement {
   roomFeatures: string[];
   roomTypeId: string | null;
   activeForSale: boolean;
+  sellPriority?: number;
 }
 
 /** Pobiera wszystkie pokoje (w tym wycofane ze sprzedaży) – do zarządzania */
@@ -245,7 +246,7 @@ export async function getRoomsForManagement(): Promise<
     const propertyId = await getEffectivePropertyId();
     const [rooms, roomTypes] = await Promise.all([
       prisma.room.findMany({
-        where: propertyId ? { propertyId } : {},
+        where: propertyId ? { propertyId, isDeleted: false } : { isDeleted: false },
         orderBy: { number: "asc" },
       }),
       prisma.roomType.findMany({ select: { id: true, name: true, basePrice: true } }).catch(() => [] as { id: string; name: string; basePrice: unknown }[]),
@@ -284,6 +285,7 @@ export async function getRoomsForManagement(): Promise<
           roomFeatures: (r.roomFeatures as string[] | null) ?? [],
           roomTypeId: rtData?.id ?? null,
           activeForSale: r.activeForSale,
+          sellPriority: r.sellPriority ?? 0,
         };
       }),
     };
@@ -455,6 +457,208 @@ export async function deleteRoom(roomId: string): Promise<ActionResult> {
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd usuwania pokoju",
+    };
+  }
+}
+
+/** Soft-delete pokoju (ustawia isDeleted). Nie usuwa fizycznie. Wymaga braku aktywnych rezerwacji. */
+export async function softDeleteRoom(roomId: string, userId?: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return { success: false, error: "Zaloguj się" };
+  const uid = userId ?? session.userId;
+  const activeReservations = await prisma.reservation.count({
+    where: {
+      roomId,
+      status: { in: ["CONFIRMED", "CHECKED_IN"] },
+      checkOut: { gte: new Date() },
+    },
+  });
+  if (activeReservations > 0) {
+    return {
+      success: false,
+      error: `Pokój ma ${activeReservations} aktywnych rezerwacji. Anuluj je najpierw.`,
+    };
+  }
+  try {
+    await prisma.room.update({
+      where: { id: roomId },
+      data: { isDeleted: true, deletedAt: new Date(), deletedBy: uid, activeForSale: false },
+    });
+    revalidatePath("/front-office");
+    revalidatePath("/pokoje");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd soft-delete pokoju",
+    };
+  }
+}
+
+/** Przywraca soft-deleted pokój. */
+export async function restoreRoom(roomId: string): Promise<ActionResult> {
+  try {
+    await prisma.room.update({
+      where: { id: roomId },
+      data: { isDeleted: false, deletedAt: null, deletedBy: null },
+    });
+    revalidatePath("/front-office");
+    revalidatePath("/pokoje");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd przywracania pokoju",
+    };
+  }
+}
+
+/** Pobiera listę usuniętych (soft-deleted) pokoi. */
+export async function getDeletedRooms(): Promise<ActionResult<RoomForManagement[]>> {
+  try {
+    const propertyId = await getEffectivePropertyId();
+    const rooms = await prisma.room.findMany({
+      where: { isDeleted: true, ...(propertyId ? { propertyId } : {}) },
+      orderBy: { deletedAt: "desc" },
+      include: {},
+    });
+    const roomTypes = await prisma.roomType.findMany({ select: { id: true, name: true, basePrice: true } }).catch(() => [] as { id: string; name: string; basePrice: unknown }[]);
+    const typeData = new Map<string, { basePrice: number | null; id: string }>(
+      roomTypes.map((t) => [t.name, { basePrice: t.basePrice != null ? Number(t.basePrice) : null, id: t.id }] as const)
+    );
+    return {
+      success: true,
+      data: rooms.map((r) => {
+        const rtData = typeData.get(r.type);
+        return {
+          id: r.id,
+          number: r.number,
+          type: r.type,
+          status: r.status as string,
+          price: r.price != null ? Number(r.price) : rtData?.basePrice ?? null,
+          reason: r.reason ?? undefined,
+          beds: r.beds ?? 1,
+          bedTypes: (r.bedTypes as string[] | null) ?? [],
+          photos: (r.photos as string[] | null) ?? [],
+          amenities: (r.amenities as string[] | null) ?? [],
+          inventory: (r.inventory as InventoryItem[] | null) ?? [],
+          connectedRooms: (r.connectedRooms as string[] | null) ?? [],
+          floor: r.floor,
+          building: r.building,
+          view: r.view,
+          exposure: r.exposure,
+          maxOccupancy: r.maxOccupancy ?? 2,
+          surfaceArea: r.surfaceArea != null ? Number(r.surfaceArea) : null,
+          description: r.description,
+          technicalNotes: r.technicalNotes,
+          nextServiceDate: r.nextServiceDate?.toISOString().slice(0, 10) ?? null,
+          nextServiceNote: r.nextServiceNote,
+          roomFeatures: (r.roomFeatures as string[] | null) ?? [],
+          roomTypeId: rtData?.id ?? null,
+          activeForSale: r.activeForSale,
+          sellPriority: r.sellPriority ?? 0,
+        };
+      }),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd odczytu usuniętych pokoi",
+    };
+  }
+}
+
+export interface RoomExportEntry {
+  number: string;
+  type: string;
+  floor: string;
+  building: string;
+  beds: string;
+  maxOccupancy: string;
+  surfaceArea: string;
+  price: string;
+  status: string;
+  activeForSale: string;
+  features: string;
+  sellPriority: number;
+  view: string;
+}
+
+/** Eksport pokoi do CSV (tylko nieusunięte). */
+export async function getRoomsForExport(): Promise<ActionResult<RoomExportEntry[]>> {
+  try {
+    const propertyId = await getEffectivePropertyId();
+    const rooms = await prisma.room.findMany({
+      where: { isDeleted: false, ...(propertyId ? { propertyId } : {}) },
+      orderBy: [{ floor: "asc" }, { number: "asc" }],
+    });
+    const typeNames = [...new Set(rooms.map((r) => r.type))];
+    const roomTypes = await prisma.roomType.findMany({
+      where: { name: { in: typeNames } },
+      select: { name: true },
+    }).catch(() => [] as { name: string }[]);
+    const typeByName = new Map<string, { name: string }>(roomTypes.map((t) => [t.name, t]));
+    const data: RoomExportEntry[] = rooms.map((r) => ({
+      number: r.number,
+      type: (typeByName.get(r.type)?.name ?? r.type) || r.type,
+      floor: r.floor ?? "",
+      building: r.building ?? "",
+      beds: String(r.beds ?? ""),
+      maxOccupancy: r.maxOccupancy != null ? String(r.maxOccupancy) : "",
+      surfaceArea: r.surfaceArea != null ? String(r.surfaceArea) : "",
+      price: r.price != null ? String(r.price) : "",
+      status: r.status,
+      activeForSale: r.activeForSale ? "Tak" : "Nie",
+      features: Array.isArray(r.roomFeatures) ? (r.roomFeatures as string[]).join(", ") : (r.roomFeatures != null ? String(r.roomFeatures) : ""),
+      sellPriority: r.sellPriority ?? 0,
+      view: r.view ?? "",
+    }));
+    return { success: true, data };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd eksportu pokoi",
+    };
+  }
+}
+
+/** Ustawia priorytet sprzedaży pokoju. */
+export async function updateRoomSellPriority(roomId: string, priority: number): Promise<ActionResult> {
+  try {
+    await prisma.room.update({
+      where: { id: roomId },
+      data: { sellPriority: priority },
+    });
+    revalidatePath("/pokoje");
+    revalidatePath("/front-office");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd aktualizacji priorytetu",
+    };
+  }
+}
+
+/** Zbiorcza aktualizacja priorytetów sprzedaży. */
+export async function bulkUpdateSellPriority(updates: { roomId: string; priority: number }[]): Promise<ActionResult> {
+  if (!updates.length) return { success: true, data: undefined };
+  try {
+    await prisma.$transaction(
+      updates.map((u) =>
+        prisma.room.update({
+          where: { id: u.roomId },
+          data: { sellPriority: u.priority },
+        })
+      )
+    );
+    revalidatePath("/pokoje");
+    revalidatePath("/front-office");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd aktualizacji priorytetów",
     };
   }
 }
@@ -890,14 +1094,34 @@ export interface RoomTypeForCennik {
   name: string;
   basePrice: number | null;
   sortOrder: number;
+  /** Opis typu (KWHotel) */
+  description?: string | null;
+  /** Czy uwzględniać w raportach obłożenia */
+  visibleInStats?: boolean;
+  /** Tłumaczenia nazwy { "en": "...", "de": "..." } */
+  translations?: Record<string, string> | null;
+  /** Maks. osób dla typu */
+  maxOccupancy?: number | null;
+  /** Opis łóżek np. "2×DB" */
+  bedsDescription?: string | null;
 }
 
-/** Pobiera typy pokoi z cenami bazowymi */
+/** Pobiera typy pokoi z cenami bazowymi i polami do edycji (opis, visibleInStats, tłumaczenia, maxOccupancy, bedsDescription) */
 export async function getRoomTypes(): Promise<ActionResult<RoomTypeForCennik[]>> {
   try {
     const types = await prisma.roomType.findMany({
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, basePrice: true, sortOrder: true },
+      select: {
+        id: true,
+        name: true,
+        basePrice: true,
+        sortOrder: true,
+        description: true,
+        visibleInStats: true,
+        translations: true,
+        maxOccupancy: true,
+        bedsDescription: true,
+      },
     });
     return {
       success: true,
@@ -906,6 +1130,11 @@ export async function getRoomTypes(): Promise<ActionResult<RoomTypeForCennik[]>>
         name: t.name,
         basePrice: t.basePrice != null ? Number(t.basePrice) : null,
         sortOrder: t.sortOrder ?? 0,
+        description: t.description ?? undefined,
+        visibleInStats: t.visibleInStats ?? true,
+        translations: t.translations as Record<string, string> | null ?? undefined,
+        maxOccupancy: t.maxOccupancy ?? undefined,
+        bedsDescription: t.bedsDescription ?? undefined,
       })),
     };
   } catch (e) {
@@ -1026,6 +1255,41 @@ export async function updateRoomTypeSortOrder(
   }
 }
 
+/** Aktualizuje pola typu pokoju: opis, visibleInStats, tłumaczenia, maxOccupancy, bedsDescription */
+export async function updateRoomType(
+  roomTypeId: string,
+  data: {
+    description?: string | null;
+    visibleInStats?: boolean;
+    translations?: Record<string, string> | null;
+    maxOccupancy?: number | null;
+    bedsDescription?: string | null;
+  }
+): Promise<ActionResult> {
+  try {
+    const updateData: Parameters<typeof prisma.roomType.update>[0]["data"] = {};
+    if (data.description !== undefined) updateData.description = data.description || null;
+    if (data.visibleInStats !== undefined) updateData.visibleInStats = data.visibleInStats;
+    if (data.translations !== undefined) updateData.translations = data.translations === null ? Prisma.JsonNull : (data.translations as Prisma.InputJsonValue);
+    if (data.maxOccupancy !== undefined) updateData.maxOccupancy = data.maxOccupancy ?? null;
+    if (data.bedsDescription !== undefined) updateData.bedsDescription = data.bedsDescription || null;
+    if (Object.keys(updateData).length === 0) return { success: true, data: undefined };
+    await prisma.roomType.update({
+      where: { id: roomTypeId },
+      data: updateData,
+    });
+    revalidatePath("/cennik");
+    revalidatePath("/front-office");
+    revalidatePath("/pokoje");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd aktualizacji typu pokoju",
+    };
+  }
+}
+
 /** Kopiuje stawki sezonowe z roku na rok (przesunięcie dat) */
 export async function copyRatePlansFromYearToYear(
   fromYear: number,
@@ -1055,6 +1319,16 @@ export async function copyRatePlansFromYearToYear(
           minStayNights: p.minStayNights,
           maxStayNights: p.maxStayNights,
           isNonRefundable: p.isNonRefundable,
+          isWeekendHoliday: p.isWeekendHoliday,
+          pricePerPerson: p.pricePerPerson,
+          adultPrice: p.adultPrice,
+          child1Price: p.child1Price,
+          child2Price: p.child2Price,
+          child3Price: p.child3Price,
+          closedToArrival: p.closedToArrival,
+          closedToDeparture: p.closedToDeparture,
+          seasonId: p.seasonId,
+          includedMealPlan: p.includedMealPlan,
         },
       });
       copied++;
@@ -1065,6 +1339,83 @@ export async function copyRatePlansFromYearToYear(
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd kopiowania stawek",
+    };
+  }
+}
+
+/** Kopiuje plany cenowe z przesunięciem dat i opcjonalną modyfikacją ceny */
+export async function copyRatePlansWithModification(params: {
+  sourceRoomTypeId: string;
+  targetRoomTypeId: string;
+  sourceDateFrom: string;
+  sourceDateTo: string;
+  targetDateFrom: string;
+  targetDateTo: string;
+  adjustmentType: "NONE" | "PERCENT" | "FIXED";
+  adjustmentValue: number;
+}): Promise<ActionResult<{ copied: number }>> {
+  try {
+    const srcFrom = new Date(params.sourceDateFrom + "T12:00:00Z");
+    const srcTo = new Date(params.sourceDateTo + "T12:00:00Z");
+    const tgtFrom = new Date(params.targetDateFrom + "T12:00:00Z");
+    const tgtTo = new Date(params.targetDateTo + "T12:00:00Z");
+    if (Number.isNaN(srcFrom.getTime()) || Number.isNaN(srcTo.getTime()) || srcTo < srcFrom) {
+      return { success: false, error: "Nieprawidłowy zakres dat źródłowych." };
+    }
+    if (Number.isNaN(tgtFrom.getTime()) || Number.isNaN(tgtTo.getTime()) || tgtTo < tgtFrom) {
+      return { success: false, error: "Nieprawidłowy zakres dat docelowych." };
+    }
+    const plans = await prisma.ratePlan.findMany({
+      where: {
+        roomTypeId: params.sourceRoomTypeId,
+        validFrom: { gte: srcFrom },
+        validTo: { lte: srcTo },
+      },
+    });
+    const daysDiff =
+      (tgtFrom.getTime() - srcFrom.getTime()) / (1000 * 60 * 60 * 24);
+    let copied = 0;
+    for (const p of plans) {
+      const from = new Date(p.validFrom);
+      const to = new Date(p.validTo);
+      from.setDate(from.getDate() + Math.round(daysDiff));
+      to.setDate(to.getDate() + Math.round(daysDiff));
+      if (from > tgtTo || to < tgtFrom) continue;
+      let price = Number(p.price);
+      if (params.adjustmentType === "PERCENT") {
+        price = price * (1 + params.adjustmentValue / 100);
+      } else if (params.adjustmentType === "FIXED") {
+        price = price + params.adjustmentValue;
+      }
+      await prisma.ratePlan.create({
+        data: {
+          roomTypeId: params.targetRoomTypeId,
+          validFrom: from,
+          validTo: to,
+          price,
+          minStayNights: p.minStayNights,
+          maxStayNights: p.maxStayNights,
+          isNonRefundable: p.isNonRefundable,
+          isWeekendHoliday: p.isWeekendHoliday,
+          pricePerPerson: p.pricePerPerson,
+          adultPrice: p.adultPrice,
+          child1Price: p.child1Price,
+          child2Price: p.child2Price,
+          child3Price: p.child3Price,
+          closedToArrival: p.closedToArrival,
+          closedToDeparture: p.closedToDeparture,
+          seasonId: p.seasonId,
+          includedMealPlan: p.includedMealPlan,
+        },
+      });
+      copied++;
+    }
+    revalidatePath("/cennik");
+    return { success: true, data: { copied } };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd kopiowania planów",
     };
   }
 }
@@ -1080,6 +1431,15 @@ export interface RatePlanForCennik {
   maxStayNights: number | null;
   isNonRefundable: boolean;
   isWeekendHoliday: boolean;
+  seasonName?: string | null;
+  pricePerPerson?: number | null;
+  adultPrice?: number | null;
+  child1Price?: number | null;
+  child2Price?: number | null;
+  child3Price?: number | null;
+  closedToArrival?: boolean;
+  closedToDeparture?: boolean;
+  includedMealPlan?: string | null;
 }
 
 /** Lista stawek sezonowych */
@@ -1087,7 +1447,7 @@ export async function getRatePlans(): Promise<ActionResult<RatePlanForCennik[]>>
   try {
     const plans = await prisma.ratePlan.findMany({
       orderBy: [{ validFrom: "asc" }, { roomTypeId: "asc" }],
-      include: { roomType: { select: { name: true } } },
+      include: { roomType: { select: { name: true } }, season: { select: { name: true } } },
     });
     return {
       success: true,
@@ -1102,6 +1462,15 @@ export async function getRatePlans(): Promise<ActionResult<RatePlanForCennik[]>>
         maxStayNights: p.maxStayNights,
         isNonRefundable: p.isNonRefundable ?? false,
         isWeekendHoliday: p.isWeekendHoliday ?? false,
+        seasonName: p.season?.name ?? null,
+        pricePerPerson: p.pricePerPerson != null ? Number(p.pricePerPerson) : null,
+        adultPrice: p.adultPrice != null ? Number(p.adultPrice) : null,
+        child1Price: p.child1Price != null ? Number(p.child1Price) : null,
+        child2Price: p.child2Price != null ? Number(p.child2Price) : null,
+        child3Price: p.child3Price != null ? Number(p.child3Price) : null,
+        closedToArrival: p.closedToArrival ?? false,
+        closedToDeparture: p.closedToDeparture ?? false,
+        includedMealPlan: p.includedMealPlan ?? null,
       })),
     };
   } catch (e) {
@@ -1122,6 +1491,15 @@ export async function createRatePlan(data: {
   maxStayNights?: number | null;
   isNonRefundable?: boolean;
   isWeekendHoliday?: boolean;
+  pricePerPerson?: number | null;
+  adultPrice?: number | null;
+  child1Price?: number | null;
+  child2Price?: number | null;
+  child3Price?: number | null;
+  closedToArrival?: boolean;
+  closedToDeparture?: boolean;
+  seasonId?: string | null;
+  includedMealPlan?: string | null;
 }): Promise<ActionResult<RatePlanForCennik>> {
   if (data.price < 0 || !Number.isFinite(data.price)) {
     return { success: false, error: "Cena musi być liczbą nieujemną." };
@@ -1142,8 +1520,17 @@ export async function createRatePlan(data: {
         maxStayNights: data.maxStayNights ?? null,
         isNonRefundable: data.isNonRefundable ?? false,
         isWeekendHoliday: data.isWeekendHoliday ?? false,
+        pricePerPerson: data.pricePerPerson ?? null,
+        adultPrice: data.adultPrice ?? null,
+        child1Price: data.child1Price ?? null,
+        child2Price: data.child2Price ?? null,
+        child3Price: data.child3Price ?? null,
+        closedToArrival: data.closedToArrival ?? false,
+        closedToDeparture: data.closedToDeparture ?? false,
+        seasonId: data.seasonId ?? null,
+        includedMealPlan: data.includedMealPlan ?? null,
       },
-      include: { roomType: { select: { name: true } } },
+      include: { roomType: { select: { name: true } }, season: { select: { name: true } } },
     });
     revalidatePath("/cennik");
     return {
@@ -1159,6 +1546,15 @@ export async function createRatePlan(data: {
         maxStayNights: created.maxStayNights,
         isNonRefundable: created.isNonRefundable ?? false,
         isWeekendHoliday: created.isWeekendHoliday ?? false,
+        seasonName: created.season?.name ?? null,
+        pricePerPerson: created.pricePerPerson != null ? Number(created.pricePerPerson) : null,
+        adultPrice: created.adultPrice != null ? Number(created.adultPrice) : null,
+        child1Price: created.child1Price != null ? Number(created.child1Price) : null,
+        child2Price: created.child2Price != null ? Number(created.child2Price) : null,
+        child3Price: created.child3Price != null ? Number(created.child3Price) : null,
+        closedToArrival: created.closedToArrival ?? false,
+        closedToDeparture: created.closedToDeparture ?? false,
+        includedMealPlan: created.includedMealPlan ?? null,
       },
     };
   } catch (e) {
@@ -1285,6 +1681,7 @@ export async function updateRoom(
     technicalNotes?: string | null;
     nextServiceDate?: string | null;
     nextServiceNote?: string | null;
+    sellPriority?: number;
   }
 ): Promise<ActionResult<RoomForManagement>> {
   const headersList = await headers();
@@ -1324,6 +1721,7 @@ export async function updateRoom(
       technicalNotes?: string | null;
       nextServiceDate?: Date | null;
       nextServiceNote?: string | null;
+      sellPriority?: number;
     } = {};
 
     if (data.number !== undefined) updateData.number = data.number;
@@ -1352,6 +1750,7 @@ export async function updateRoom(
       updateData.nextServiceDate = data.nextServiceDate ? new Date(data.nextServiceDate + "T00:00:00Z") : null;
     }
     if (data.nextServiceNote !== undefined) updateData.nextServiceNote = data.nextServiceNote;
+    if (data.sellPriority !== undefined) updateData.sellPriority = data.sellPriority;
 
     const updated = await prisma.room.update({
       where: { id: roomId },
@@ -1417,6 +1816,7 @@ export async function updateRoom(
         nextServiceNote: updated.nextServiceNote,
         roomFeatures: (updated.roomFeatures as string[] | null) ?? [],
         roomTypeId: roomType?.id ?? null,
+        sellPriority: updated.sellPriority ?? 0,
       },
     };
   } catch (e) {
@@ -1616,6 +2016,7 @@ export async function getAvailableRoomsForDates(
       where: {
         status: "CLEAN",
         activeForSale: true,
+        isDeleted: false,
         ...(propertyId ? { propertyId } : {}),
       },
       orderBy: { number: "asc" },
@@ -1637,6 +2038,120 @@ export async function getAvailableRoomsForDates(
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd odczytu dostępności pokoi",
+    };
+  }
+}
+
+export interface RoomSearchResult {
+  roomId: string;
+  roomNumber: string;
+  roomTypeName: string;
+  floor: string | null;
+  beds: string | number;
+  features: string | null;
+  maxOccupancy: number | null;
+  pricePerNight: number | null;
+  totalPrice: number;
+  nights: number;
+  isAvailable: boolean;
+  conflictReason: string | null;
+}
+
+/** Wyszukiwarka pokoi po kryteriach (daty, osoby, typ, piętro, widok, wyposażenie, cena max). */
+export async function searchAvailableRooms(params: {
+  propertyId: string | null;
+  checkIn: string;
+  checkOut: string;
+  adults: number;
+  children?: number;
+  roomTypeId?: string | null;
+  floor?: string | null;
+  view?: string | null;
+  requiredFeatures?: string[];
+  maxPrice?: number | null;
+}): Promise<ActionResult<{ available: RoomSearchResult[]; unavailable: RoomSearchResult[] }>> {
+  try {
+    const checkIn = new Date(params.checkIn + "T12:00:00Z");
+    const checkOut = new Date(params.checkOut + "T12:00:00Z");
+    if (Number.isNaN(checkIn.getTime()) || Number.isNaN(checkOut.getTime()) || checkOut <= checkIn) {
+      return { success: false, error: "Nieprawidłowy zakres dat" };
+    }
+    const totalPax = params.adults + (params.children ?? 0);
+    let roomTypeName: string | null = null;
+    if (params.roomTypeId) {
+      const rt = await prisma.roomType.findUnique({ where: { id: params.roomTypeId }, select: { name: true } });
+      roomTypeName = rt?.name ?? null;
+    }
+    const rooms = await prisma.room.findMany({
+      where: {
+        propertyId: params.propertyId ?? undefined,
+        isDeleted: false,
+        activeForSale: true,
+        ...(roomTypeName ? { type: roomTypeName } : {}),
+        ...(params.floor ? { floor: params.floor } : {}),
+        ...(params.view ? { view: params.view } : {}),
+        maxOccupancy: { gte: totalPax },
+      },
+      orderBy: [{ sellPriority: "asc" }, { number: "asc" }],
+    });
+    let filtered = rooms;
+    if (params.requiredFeatures?.length) {
+      const required = params.requiredFeatures.map((f) => f.toLowerCase());
+      filtered = rooms.filter((room) => {
+        const features = room.roomFeatures;
+        const str = Array.isArray(features) ? (features as string[]).join(" ").toLowerCase() : (features != null ? String(features).toLowerCase() : "");
+        const amenitiesStr = Array.isArray(room.amenities) ? (room.amenities as string[]).join(" ").toLowerCase() : (room.amenities != null ? String(room.amenities).toLowerCase() : "");
+        const combined = str + " " + amenitiesStr;
+        return required.every((f) => combined.includes(f));
+      });
+    }
+    const conflicting = await prisma.reservation.findMany({
+      where: {
+        roomId: { in: filtered.map((r) => r.id) },
+        status: { in: ["CONFIRMED", "CHECKED_IN"] },
+        checkIn: { lt: checkOut },
+        checkOut: { gt: checkIn },
+      },
+      select: { roomId: true },
+    });
+    const conflictingRoomIds = new Set(conflicting.map((r) => r.roomId));
+    const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+    const results: RoomSearchResult[] = await Promise.all(
+      filtered.map(async (room) => {
+        const price = await getEffectivePriceForRoomOnDate(room.number, params.checkIn);
+        const pricePerNight = price ?? (room.price != null ? Number(room.price) : null);
+        const totalPrice = (pricePerNight ?? 0) * nights;
+        return {
+          roomId: room.id,
+          roomNumber: room.number,
+          roomTypeName: room.type,
+          floor: room.floor,
+          beds: room.beds ?? "",
+          features: room.roomFeatures != null ? (Array.isArray(room.roomFeatures) ? (room.roomFeatures as string[]).join(", ") : String(room.roomFeatures)) : null,
+          maxOccupancy: room.maxOccupancy,
+          pricePerNight,
+          totalPrice,
+          nights,
+          isAvailable: !conflictingRoomIds.has(room.id),
+          conflictReason: conflictingRoomIds.has(room.id) ? "Zajęty w wybranym okresie" : null,
+        };
+      })
+    );
+    let finalResults = results;
+    if (params.maxPrice != null && params.maxPrice > 0) {
+      finalResults = results.filter((r) => (r.pricePerNight ?? 0) <= params.maxPrice!);
+    }
+    return {
+      success: true,
+      data: {
+        available: finalResults.filter((r) => r.isAvailable),
+        unavailable: finalResults.filter((r) => !r.isAvailable),
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd wyszukiwania pokoi",
     };
   }
 }
@@ -1663,7 +2178,7 @@ export async function getRoomsForHousekeeping(): Promise<
   try {
     const propertyId = await getEffectivePropertyId();
     const rooms = await prisma.room.findMany({
-      where: propertyId ? { propertyId } : {},
+      where: propertyId ? { propertyId, isDeleted: false } : { isDeleted: false },
       orderBy: { number: "asc" },
       select: { id: true, number: true, type: true, status: true, floor: true, assignedHousekeeper: true, estimatedCleaningMinutes: true, reason: true, cleaningPriority: true, updatedAt: true },
     });

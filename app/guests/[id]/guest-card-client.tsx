@@ -4,17 +4,23 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { 
-  updateGuest, 
-  updateGuestBlacklist, 
-  withdrawAllGdprConsents, 
-  anonymizeGuestData, 
+import {
+  updateGuest,
+  updateGuestBlacklist,
+  withdrawAllGdprConsents,
+  anonymizeGuestData,
   exportGuestData,
   getGuestRelations,
   addGuestRelation,
   removeGuestRelation,
   searchGuestsForRelation,
+  getGuestDocuments,
+  getGuestDiscounts,
+  createGuestDiscount,
+  deleteGuestDiscount,
   type GuestRelationData,
+  type GuestDocumentEntry,
+  type GuestDiscountData,
   findPotentialDuplicates,
   mergeGuests,
   type PotentialDuplicateGuest,
@@ -24,6 +30,7 @@ import {
   getGuestAutoFillData,
   type GuestAutoFillData,
 } from "@/app/actions/reservations";
+import { getFormFieldsForForm } from "@/app/actions/hotel-config";
 import { useRouter } from "next/navigation";
 import {
   getGuestLoyaltyStatus,
@@ -101,6 +108,7 @@ interface GuestCardClientProps {
     gdprConsentWithdrawnAt: string | null;
     gdprAnonymizedAt: string | null;
     gdprNotes: string | null;
+    customFields: Record<string, unknown> | null;
   };
   history: Array<{
     id: string;
@@ -114,7 +122,7 @@ interface GuestCardClientProps {
 
 export function GuestCardClient({ guest: initialGuest, history }: GuestCardClientProps) {
   const router = useRouter();
-  const [tab, setTab] = useState<"dane" | "lojalnosc" | "relacje" | "duplikaty" | "rodo">("dane");
+  const [tab, setTab] = useState<"dane" | "rezerwacje" | "dokumenty" | "rabaty" | "dodatkowe" | "lojalnosc" | "relacje" | "duplikaty" | "rodo">("dane");
   const [name, setName] = useState(initialGuest.name);
   const [email, setEmail] = useState(initialGuest.email ?? "");
   const [phone, setPhone] = useState(initialGuest.phone ?? "");
@@ -227,6 +235,18 @@ export function GuestCardClient({ guest: initialGuest, history }: GuestCardClien
   const [mergeInProgress, setMergeInProgress] = useState(false);
   const [lastMergeResult, setLastMergeResult] = useState<MergeGuestsResult | null>(null);
 
+  // CRM: Dokumenty, Rabaty, Własne pola
+  const [documents, setDocuments] = useState<GuestDocumentEntry[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [discounts, setDiscounts] = useState<GuestDiscountData[]>([]);
+  const [discountsLoading, setDiscountsLoading] = useState(false);
+  const [discountForm, setDiscountForm] = useState({ percentage: "", dateFrom: "", dateTo: "", reason: "" });
+  const [discountSaving, setDiscountSaving] = useState(false);
+  const [discountError, setDiscountError] = useState<string | null>(null);
+  const [customFormFields, setCustomFormFields] = useState<Array<{ id: string; key: string; label: string; type: string }>>([]);
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
+  const [customFieldsLoading, setCustomFieldsLoading] = useState(false);
+
   // Ładowanie danych lojalnościowych
   const loadLoyaltyData = useCallback(async () => {
     setLoyaltyLoading(true);
@@ -295,6 +315,74 @@ export function GuestCardClient({ guest: initialGuest, history }: GuestCardClien
       loadDuplicates();
     }
   }, [tab, loadDuplicates]);
+
+  // Ładowanie dokumentów gościa (CRM)
+  const loadDocuments = useCallback(async () => {
+    setDocumentsLoading(true);
+    const res = await getGuestDocuments(initialGuest.id);
+    setDocumentsLoading(false);
+    if (res.success) setDocuments(res.data);
+  }, [initialGuest.id]);
+
+  useEffect(() => {
+    if (tab === "dokumenty") loadDocuments();
+  }, [tab, loadDocuments]);
+
+  // Ładowanie rabatów gościa (CRM)
+  const loadDiscounts = useCallback(async () => {
+    setDiscountsLoading(true);
+    const res = await getGuestDiscounts(initialGuest.id);
+    setDiscountsLoading(false);
+    if (res.success) setDiscounts(res.data);
+  }, [initialGuest.id]);
+
+  useEffect(() => {
+    if (tab === "rabaty") loadDiscounts();
+  }, [tab, loadDiscounts]);
+
+  // Ładowanie pól własnych (GUEST) i wartości z gościa
+  useEffect(() => {
+    if (tab === "dodatkowe") {
+      setCustomFieldsLoading(true);
+      getFormFieldsForForm("GUEST")
+        .then((fields) => {
+          setCustomFormFields(fields);
+          const initial = (initialGuest.customFields ?? {}) as Record<string, string>;
+          const next: Record<string, string> = {};
+          fields.forEach((f) => { next[f.key] = initial[f.key] ?? ""; });
+          setCustomFieldValues(next);
+        })
+        .finally(() => setCustomFieldsLoading(false));
+    }
+  }, [tab, initialGuest.customFields]);
+
+  const handleAddDiscount = async () => {
+    const pct = parseFloat(discountForm.percentage);
+    if (isNaN(pct) || pct <= 0 || pct > 100 || !discountForm.dateFrom || !discountForm.dateTo) {
+      setDiscountError("Wypełnij procent (1–100) oraz daty od i do.");
+      return;
+    }
+    setDiscountSaving(true);
+    setDiscountError(null);
+    const res = await createGuestDiscount({
+      guestId: initialGuest.id,
+      percentage: pct,
+      dateFrom: discountForm.dateFrom,
+      dateTo: discountForm.dateTo,
+      reason: discountForm.reason.trim() || undefined,
+    });
+    setDiscountSaving(false);
+    if (res.success) {
+      setDiscountForm({ percentage: "", dateFrom: "", dateTo: "", reason: "" });
+      loadDiscounts();
+    } else setDiscountError(res.error ?? "Błąd dodawania rabatu");
+  };
+
+  const handleDeleteDiscount = async (id: string) => {
+    if (!confirm("Usunąć ten rabat?")) return;
+    const res = await deleteGuestDiscount(id);
+    if (res.success) loadDiscounts();
+  };
 
   // Ładowanie historii RODO
   const loadGdprHistory = useCallback(async () => {
@@ -916,6 +1004,34 @@ export function GuestCardClient({ guest: initialGuest, history }: GuestCardClien
         </button>
         <button
           type="button"
+          onClick={() => setTab("rezerwacje")}
+          className={`px-3 py-2 text-sm font-medium ${tab === "rezerwacje" ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          Rezerwacje
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("dokumenty")}
+          className={`px-3 py-2 text-sm font-medium ${tab === "dokumenty" ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          Dokumenty
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("rabaty")}
+          className={`px-3 py-2 text-sm font-medium ${tab === "rabaty" ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          Rabaty
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("dodatkowe")}
+          className={`px-3 py-2 text-sm font-medium ${tab === "dodatkowe" ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          Dodatkowe
+        </button>
+        <button
+          type="button"
           onClick={() => setTab("lojalnosc")}
           className={`px-3 py-2 text-sm font-medium ${tab === "lojalnosc" ? "border-b-2 border-primary text-primary" : "text-muted-foreground hover:text-foreground"}`}
         >
@@ -943,6 +1059,190 @@ export function GuestCardClient({ guest: initialGuest, history }: GuestCardClien
           RODO
         </button>
       </div>
+
+      {tab === "rezerwacje" && (
+        <section className="rounded-lg border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Rezerwacje ({history.length} pobytów)</h2>
+          {history.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Brak rezerwacji.</p>
+          ) : (
+            <ul className="space-y-2">
+              {history.map((r) => (
+                <li
+                  key={r.id}
+                  className="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
+                >
+                  <span className="font-medium">{r.room}</span>
+                  <span className="text-muted-foreground">
+                    {r.checkIn} – {r.checkOut}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {STATUS_LABELS[r.status] ?? r.status}
+                  </span>
+                  <Link
+                    href={`/front-office?reservation=${r.id}`}
+                    className="text-primary hover:underline ml-auto"
+                  >
+                    Otwórz rezerwację
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {tab === "dokumenty" && (
+        <section className="rounded-lg border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Dokumenty gościa</h2>
+          {documentsLoading ? (
+            <p className="text-sm text-muted-foreground">Ładowanie...</p>
+          ) : documents.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Brak faktur, rachunków ani proform dla tego gościa.</p>
+          ) : (
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left px-4 py-2 font-medium">Nr dokumentu</th>
+                    <th className="text-left px-4 py-2 font-medium">Typ</th>
+                    <th className="text-left px-4 py-2 font-medium">Data</th>
+                    <th className="text-right px-4 py-2 font-medium">Kwota</th>
+                    <th className="text-left px-4 py-2 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {documents.map((doc) => (
+                    <tr key={doc.id} className="border-t hover:bg-muted/30">
+                      <td className="px-4 py-2 font-mono">{doc.number}</td>
+                      <td className="px-4 py-2">
+                        {doc.type === "invoice" ? "Faktura" : doc.type === "receipt" ? "Rachunek" : "Proforma"}
+                      </td>
+                      <td className="px-4 py-2">{doc.issuedAt}</td>
+                      <td className="px-4 py-2 text-right font-medium">
+                        {doc.amount.toLocaleString("pl-PL", { minimumFractionDigits: 2 })} zł
+                      </td>
+                      <td className="px-4 py-2">{doc.status ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground mt-2">Klik na dokument może otwierać PDF (do zaimplementowania w integracji z drukiem).</p>
+        </section>
+      )}
+
+      {tab === "rabaty" && (
+        <section className="rounded-lg border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Rabaty</h2>
+          {discountError && (
+            <div className="mb-4 p-3 bg-destructive/10 text-destructive rounded-md text-sm">{discountError}</div>
+          )}
+          {discountsLoading ? (
+            <p className="text-sm text-muted-foreground">Ładowanie...</p>
+          ) : discounts.length === 0 ? (
+            <p className="text-sm text-muted-foreground mb-4">Brak rabatów.</p>
+          ) : (
+            <div className="mb-6 border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left px-4 py-2 font-medium">Rabat</th>
+                    <th className="text-left px-4 py-2 font-medium">Od</th>
+                    <th className="text-left px-4 py-2 font-medium">Do</th>
+                    <th className="text-left px-4 py-2 font-medium">Powód</th>
+                    <th className="text-left px-4 py-2 font-medium">Aktywny</th>
+                    <th className="px-4 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {discounts.map((d) => (
+                    <tr key={d.id} className="border-t hover:bg-muted/30">
+                      <td className="px-4 py-2 font-medium">{d.percentage}%</td>
+                      <td className="px-4 py-2">{d.dateFrom}</td>
+                      <td className="px-4 py-2">{d.dateTo}</td>
+                      <td className="px-4 py-2">{d.reason ?? "—"}</td>
+                      <td className="px-4 py-2">{d.isActive ? "Tak" : "Nie"}</td>
+                      <td className="px-4 py-2">
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteDiscount(d.id)} className="text-destructive hover:text-destructive">
+                          Usuń
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="p-4 border rounded-lg bg-muted/30">
+            <h3 className="text-sm font-medium mb-3">Dodaj rabat</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <Label htmlFor="discountPct" className="text-xs">Procent %</Label>
+                <Input id="discountPct" type="number" min={1} max={100} step={0.5} value={discountForm.percentage} onChange={(e) => setDiscountForm((f) => ({ ...f, percentage: e.target.value }))} className="mt-1 h-9" />
+              </div>
+              <div>
+                <Label htmlFor="discountFrom" className="text-xs">Od</Label>
+                <Input id="discountFrom" type="date" value={discountForm.dateFrom} onChange={(e) => setDiscountForm((f) => ({ ...f, dateFrom: e.target.value }))} className="mt-1 h-9" />
+              </div>
+              <div>
+                <Label htmlFor="discountTo" className="text-xs">Do</Label>
+                <Input id="discountTo" type="date" value={discountForm.dateTo} onChange={(e) => setDiscountForm((f) => ({ ...f, dateTo: e.target.value }))} className="mt-1 h-9" />
+              </div>
+              <div>
+                <Label htmlFor="discountReason" className="text-xs">Powód</Label>
+                <Input id="discountReason" value={discountForm.reason} onChange={(e) => setDiscountForm((f) => ({ ...f, reason: e.target.value }))} placeholder="np. Stały klient" className="mt-1 h-9" />
+              </div>
+            </div>
+            <Button type="button" size="sm" className="mt-3" onClick={handleAddDiscount} disabled={discountSaving}>
+              {discountSaving ? "Zapisywanie…" : "Dodaj rabat"}
+            </Button>
+          </div>
+        </section>
+      )}
+
+      {tab === "dodatkowe" && (
+        <section className="rounded-lg border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Dodatkowe informacje</h2>
+          {customFieldsLoading ? (
+            <p className="text-sm text-muted-foreground">Ładowanie pól...</p>
+          ) : customFormFields.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Brak skonfigurowanych pól własnych dla gościa. Skonfiguruj je w Ustawieniach (Formularze – Karta gościa).</p>
+          ) : (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setSaving(true);
+                setError(null);
+                const res = await updateGuest(initialGuest.id, {
+                  customFields: Object.fromEntries(Object.entries(customFieldValues).filter(([, v]) => v !== undefined)),
+                });
+                setSaving(false);
+                if (res.success) setSuccess(true);
+                else setError(res.error ?? null);
+              }}
+              className="space-y-4"
+            >
+              {customFormFields.map((f) => (
+                <div key={f.id}>
+                  <Label htmlFor={`cf-${f.key}`} className="text-sm">{f.label}</Label>
+                  <Input
+                    id={`cf-${f.key}`}
+                    value={customFieldValues[f.key] ?? ""}
+                    onChange={(e) => setCustomFieldValues((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                    className="mt-1"
+                    placeholder={f.label}
+                  />
+                </div>
+              ))}
+              <Button type="submit" disabled={saving}>
+                {saving ? "Zapisywanie…" : "Zapisz"}
+              </Button>
+            </form>
+          )}
+        </section>
+      )}
 
       {tab === "relacje" && (
         <section className="rounded-lg border bg-card p-6 shadow-sm">
@@ -2528,36 +2828,6 @@ export function GuestCardClient({ guest: initialGuest, history }: GuestCardClien
         </div>
       </section>
       )}
-
-      <section className="rounded-lg border bg-card p-6 shadow-sm">
-        <h2 className="text-lg font-semibold mb-4">Historia pobytów</h2>
-        {history.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Brak rezerwacji.</p>
-        ) : (
-          <ul className="space-y-2">
-            {history.map((r) => (
-              <li
-                key={r.id}
-                className="flex flex-wrap items-center gap-2 rounded border px-3 py-2 text-sm"
-              >
-                <span className="font-medium">{r.room}</span>
-                <span className="text-muted-foreground">
-                  {r.checkIn} – {r.checkOut}
-                </span>
-                <span className="text-muted-foreground">
-                  {STATUS_LABELS[r.status] ?? r.status}
-                </span>
-                <Link
-                  href={`/front-office?reservation=${r.id}`}
-                  className="text-primary hover:underline ml-auto"
-                >
-                  Otwórz rezerwację
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </div>
   );
 }

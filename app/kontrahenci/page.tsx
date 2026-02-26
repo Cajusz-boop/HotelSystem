@@ -9,7 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { Users, Building2 } from "lucide-react";
-import { searchGuests, type GuestSearchResult } from "@/app/actions/reservations";
+import {
+  getFilteredGuests,
+  getGuestsForExport,
+  type GuestSearchResult,
+  type FilteredGuestsParams,
+  type GuestExportEntry,
+} from "@/app/actions/reservations";
+import { exportToExcel } from "@/lib/export-excel";
 import {
   getAllCompanies,
   lookupCompanyByNip,
@@ -109,40 +116,76 @@ function GuestsSection() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [onlyVip, setOnlyVip] = useState(false);
-  const [onlyBlacklisted, setOnlyBlacklisted] = useState(false);
-  const [guestType, setGuestType] = useState("");
   const [segment, setSegment] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "lastStay" | "totalStays" | "createdAt">("name");
+  const [country, setCountry] = useState("");
+  const [nationality, setNationality] = useState("");
+  const [vipFilter, setVipFilter] = useState<"" | "true" | "false">("");
+  const [blacklistFilter, setBlacklistFilter] = useState<"" | "true" | "false">("");
+  const [lastStayFrom, setLastStayFrom] = useState("");
+  const [lastStayTo, setLastStayTo] = useState("");
+  const [minStays, setMinStays] = useState("");
+  const [maxStays, setMaxStays] = useState("");
+  const [minAge, setMinAge] = useState("");
+  const [maxAge, setMaxAge] = useState("");
+  const [sortBy, setSortBy] = useState<"name" | "lastStayDate" | "totalStays" | "createdAt">("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   const [page, setPage] = useState(1);
   const pageSize = 20;
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(t);
   }, [query]);
 
+  const filterParams: FilteredGuestsParams = {
+    search: debouncedQuery || undefined,
+    segment: segment || undefined,
+    country: country || undefined,
+    nationality: nationality || undefined,
+    isVip: vipFilter === "" ? undefined : vipFilter === "true",
+    isBlacklisted: blacklistFilter === "" ? undefined : blacklistFilter === "true",
+    lastStayFrom: lastStayFrom || undefined,
+    lastStayTo: lastStayTo || undefined,
+    minStays: minStays ? parseInt(minStays, 10) : undefined,
+    maxStays: maxStays ? parseInt(maxStays, 10) : undefined,
+    minAge: minAge ? parseInt(minAge, 10) : undefined,
+    maxAge: maxAge ? parseInt(maxAge, 10) : undefined,
+    sortBy,
+    sortDir: sortOrder,
+    page,
+    pageSize,
+  };
+
   const { data: _guestsData, isLoading: guestsQueryLoading } = useQuery({
-    queryKey: ["kontrahenci-goscie", debouncedQuery, page, sortBy, sortOrder, onlyVip, onlyBlacklisted, guestType, segment],
-    queryFn: () => searchGuests(debouncedQuery, {
-      limit: pageSize,
-      offset: (page - 1) * pageSize,
+    queryKey: [
+      "kontrahenci-goscie",
+      debouncedQuery,
+      segment,
+      country,
+      nationality,
+      vipFilter,
+      blacklistFilter,
+      lastStayFrom,
+      lastStayTo,
+      minStays,
+      maxStays,
+      minAge,
+      maxAge,
       sortBy,
       sortOrder,
-      onlyVip: onlyVip || undefined,
-      onlyBlacklisted: onlyBlacklisted || undefined,
-      guestType: guestType || undefined,
-      segment: segment || undefined,
-    }),
+      page,
+      pageSize,
+    ],
+    queryFn: () => getFilteredGuests(filterParams),
     staleTime: 5 * 60 * 1000,
   });
 
   useEffect(() => {
     setLoading(guestsQueryLoading);
     if (_guestsData?.success) {
-      setGuests(_guestsData.data.guests);
+      setGuests(_guestsData.data.data);
       setTotal(_guestsData.data.total);
       setError(null);
     } else if (_guestsData && !_guestsData.success) {
@@ -152,42 +195,112 @@ function GuestsSection() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQuery, sortBy, sortOrder, onlyVip, onlyBlacklisted, guestType, segment]);
+  }, [debouncedQuery, segment, country, nationality, vipFilter, blacklistFilter, lastStayFrom, lastStayTo, minStays, maxStays, minAge, maxAge, sortBy, sortOrder]);
 
   const totalPages = Math.ceil(total / pageSize);
 
+  const handleExportCsv = async () => {
+    setExporting(true);
+    setError(null);
+    const res = await getGuestsForExport({ ...filterParams, page: undefined, pageSize: undefined });
+    setExporting(false);
+    if (!res.success) {
+      setError(res.error);
+      return;
+    }
+    const rows = res.data;
+    const headers = ["Imię i nazwisko", "Email", "Telefon", "Kraj", "Narodowość", "Segment", "VIP", "Czarna lista", "Liczba pobytów", "Ostatni pobyt", "Data urodzenia", "Ulica", "Miasto", "Kod pocztowy", "Nr dokumentu"];
+    const csvRows = rows.map((g: GuestExportEntry) => [
+      g.name,
+      g.email ?? "",
+      g.phone ?? "",
+      g.country ?? "",
+      g.nationality ?? "",
+      g.segment ?? "",
+      g.isVip ? "Tak" : "Nie",
+      g.isBlacklisted ? "Tak" : "Nie",
+      g.totalStays,
+      g.lastStayDate ?? "",
+      g.dateOfBirth ?? "",
+      g.street ?? "",
+      g.city ?? "",
+      g.postalCode ?? "",
+      g.documentNumber ?? "",
+    ]);
+    const csv = "\uFEFF" + [headers.join(";"), ...csvRows.map((r: (string | number)[]) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(";"))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `goscie-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    setError(null);
+    const res = await getGuestsForExport({ ...filterParams, page: undefined, pageSize: undefined });
+    setExporting(false);
+    if (!res.success) {
+      setError(res.error);
+      return;
+    }
+    const rows = res.data.map((g: GuestExportEntry) => ({
+      "Imię i nazwisko": g.name,
+      "Email": g.email ?? "",
+      "Telefon": g.phone ?? "",
+      "Kraj": g.country ?? "",
+      "Narodowość": g.nationality ?? "",
+      "Segment": g.segment ?? "",
+      "VIP": g.isVip ? "Tak" : "Nie",
+      "Czarna lista": g.isBlacklisted ? "Tak" : "Nie",
+      "Liczba pobytów": g.totalStays,
+      "Ostatni pobyt": g.lastStayDate ?? "",
+      "Data urodzenia": g.dateOfBirth ?? "",
+      "Ulica": g.street ?? "",
+      "Miasto": g.city ?? "",
+      "Kod pocztowy": g.postalCode ?? "",
+      "Nr dokumentu": g.documentNumber ?? "",
+    }));
+    await exportToExcel(rows, "Goście", `goscie-${new Date().toISOString().split("T")[0]}.xlsx`);
+  };
+
+  const clearFilters = () => {
+    setQuery("");
+    setDebouncedQuery("");
+    setSegment("");
+    setCountry("");
+    setNationality("");
+    setVipFilter("");
+    setBlacklistFilter("");
+    setLastStayFrom("");
+    setLastStayTo("");
+    setMinStays("");
+    setMaxStays("");
+    setMinAge("");
+    setMaxAge("");
+    setPage(1);
+  };
+
   return (
     <>
-      {/* Wyszukiwarka i filtry */}
+      {/* Panel filtrów gości (CRM) */}
       <div className="mb-6 p-4 border rounded-lg bg-card">
+        <h3 className="text-sm font-medium mb-3">Filtry gości</h3>
         <div className="grid gap-4">
           <div>
-            <Label htmlFor="search-guests" className="text-sm font-medium">Szukaj gościa</Label>
+            <Label htmlFor="search-guests" className="text-sm font-medium">Szukaj</Label>
             <Input
               id="search-guests"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Wpisz imię, nazwisko, e-mail, telefon lub numer dokumentu..."
+              placeholder="Nazwisko, email, telefon, NIP..."
               className="mt-1"
             />
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <Label htmlFor="guestType" className="text-xs">Typ gościa</Label>
-              <select
-                id="guestType"
-                value={guestType}
-                onChange={(e) => setGuestType(e.target.value)}
-                className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
-              >
-                <option value="">Wszystkie</option>
-                <option value="INDIVIDUAL">Indywidualny</option>
-                <option value="CORPORATE">Korporacyjny</option>
-                <option value="GROUP">Grupowy</option>
-                <option value="CREW">Załoga</option>
-              </select>
-            </div>
             <div>
               <Label htmlFor="segment" className="text-xs">Segment</Label>
               <select
@@ -206,6 +319,82 @@ function GuestsSection() {
               </select>
             </div>
             <div>
+              <Label htmlFor="country" className="text-xs">Kraj</Label>
+              <Input
+                id="country"
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                placeholder="np. PL"
+                className="mt-1 h-9"
+              />
+            </div>
+            <div>
+              <Label htmlFor="nationality" className="text-xs">Narodowość</Label>
+              <Input
+                id="nationality"
+                value={nationality}
+                onChange={(e) => setNationality(e.target.value)}
+                placeholder="np. PL"
+                className="mt-1 h-9"
+              />
+            </div>
+            <div>
+              <Label htmlFor="vipFilter" className="text-xs">VIP</Label>
+              <select
+                id="vipFilter"
+                value={vipFilter}
+                onChange={(e) => setVipFilter(e.target.value as "" | "true" | "false")}
+                className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+              >
+                <option value="">Wszystkie</option>
+                <option value="true">Tak</option>
+                <option value="false">Nie</option>
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="blacklistFilter" className="text-xs">Czarna lista</Label>
+              <select
+                id="blacklistFilter"
+                value={blacklistFilter}
+                onChange={(e) => setBlacklistFilter(e.target.value as "" | "true" | "false")}
+                className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+              >
+                <option value="">Wszystkie</option>
+                <option value="true">Tak</option>
+                <option value="false">Nie</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            <div>
+              <Label htmlFor="lastStayFrom" className="text-xs">Ostatni pobyt od</Label>
+              <Input id="lastStayFrom" type="date" value={lastStayFrom} onChange={(e) => setLastStayFrom(e.target.value)} className="mt-1 h-9" />
+            </div>
+            <div>
+              <Label htmlFor="lastStayTo" className="text-xs">do</Label>
+              <Input id="lastStayTo" type="date" value={lastStayTo} onChange={(e) => setLastStayTo(e.target.value)} className="mt-1 h-9" />
+            </div>
+            <div>
+              <Label htmlFor="minStays" className="text-xs">Liczba pobytów min</Label>
+              <Input id="minStays" type="number" min={0} value={minStays} onChange={(e) => setMinStays(e.target.value)} className="mt-1 h-9" />
+            </div>
+            <div>
+              <Label htmlFor="maxStays" className="text-xs">max</Label>
+              <Input id="maxStays" type="number" min={0} value={maxStays} onChange={(e) => setMaxStays(e.target.value)} className="mt-1 h-9" />
+            </div>
+            <div>
+              <Label htmlFor="minAge" className="text-xs">Wiek min</Label>
+              <Input id="minAge" type="number" min={0} value={minAge} onChange={(e) => setMinAge(e.target.value)} className="mt-1 h-9" />
+            </div>
+            <div>
+              <Label htmlFor="maxAge" className="text-xs">max</Label>
+              <Input id="maxAge" type="number" min={0} value={maxAge} onChange={(e) => setMaxAge(e.target.value)} className="mt-1 h-9" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
               <Label htmlFor="sortByGuests" className="text-xs">Sortuj wg</Label>
               <select
                 id="sortByGuests"
@@ -214,7 +403,7 @@ function GuestsSection() {
                 className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
               >
                 <option value="name">Nazwa</option>
-                <option value="lastStay">Ostatni pobyt</option>
+                <option value="lastStayDate">Ostatni pobyt</option>
                 <option value="totalStays">Liczba pobytów</option>
                 <option value="createdAt">Data utworzenia</option>
               </select>
@@ -227,31 +416,26 @@ function GuestsSection() {
                 onChange={(e) => setSortOrder(e.target.value as typeof sortOrder)}
                 className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
               >
-                <option value="asc">Rosnąco (A-Z)</option>
-                <option value="desc">Malejąco (Z-A)</option>
+                <option value="asc">Rosnąco</option>
+                <option value="desc">Malejąco</option>
               </select>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={onlyVip}
-                onChange={(e) => setOnlyVip(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300"
-              />
-              Tylko VIP
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={onlyBlacklisted}
-                onChange={(e) => setOnlyBlacklisted(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300"
-              />
-              Tylko czarna lista
-            </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="outline" size="sm" onClick={clearFilters}>
+              Wyczyść
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Wyników: {loading ? "…" : total}
+            </span>
+            <span className="flex-1" />
+            <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={exporting || total === 0}>
+              {exporting ? "…" : "Eksport CSV"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExportExcel} disabled={exporting || total === 0}>
+              {exporting ? "…" : "Eksport Excel"}
+            </Button>
           </div>
         </div>
       </div>

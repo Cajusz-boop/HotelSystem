@@ -191,6 +191,54 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/**
+ * Wysyła do recepcji powiadomienie o zapytaniu rezerwacyjnym („Zapytaj o dostępność”).
+ */
+export async function sendBookingRequestNotificationToHotel(
+  toEmail: string,
+  params: {
+    guestName: string;
+    guestEmail: string;
+    guestPhone: string;
+    checkIn: string;
+    checkOut: string;
+    roomTypeName: string;
+    message?: string;
+  }
+): Promise<{ success: boolean; error?: string }> {
+  if (!toEmail?.trim() || !isValidEmail(toEmail.trim())) {
+    return { success: false, error: "Nieprawidłowy adres e-mail recepcji" };
+  }
+  const subject = `[Rezerwacja] Zapytanie o dostępność – ${params.guestName}`;
+  const text = [
+    `Nowe zapytanie o dostępność z formularza rezerwacji.`,
+    ``,
+    `Gość: ${params.guestName}`,
+    `E-mail: ${params.guestEmail}`,
+    `Telefon: ${params.guestPhone}`,
+    `Okres: ${params.checkIn} – ${params.checkOut}`,
+    `Typ pokoju: ${params.roomTypeName}`,
+    params.message ? `Wiadomość: ${params.message}` : "",
+    ``,
+    `Odpowiedz w ciągu 24 h.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const html = [
+    "<p><strong>Nowe zapytanie o dostępność</strong> z formularza rezerwacji.</p>",
+    "<ul>",
+    `<li>Gość: ${escapeHtml(params.guestName)}</li>`,
+    `<li>E-mail: ${escapeHtml(params.guestEmail)}</li>`,
+    `<li>Telefon: ${escapeHtml(params.guestPhone)}</li>`,
+    `<li>Okres: ${escapeHtml(params.checkIn)} – ${escapeHtml(params.checkOut)}</li>`,
+    `<li>Typ pokoju: ${escapeHtml(params.roomTypeName)}</li>`,
+    ...(params.message ? [`<li>Wiadomość: ${escapeHtml(params.message)}</li>`] : []),
+    "</ul>",
+    "<p>Odpowiedz w ciągu 24 h.</p>",
+  ].join("");
+  return sendMailViaResend(toEmail.trim(), subject, html, text);
+}
+
 // ===== SZABLONY E-MAIL =====
 
 export type EmailTemplateType = 

@@ -20,12 +20,12 @@ export interface SessionPayload {
   passwordExpired?: boolean;
 }
 
-/** Domyślna sesja gdy logowanie jest wyłączone */
+/** Domyślna sesja gdy logowanie jest wyłączone — MANAGER ma pełne uprawnienia jak admin */
 const ANONYMOUS_SESSION: SessionPayload = {
   userId: "anonymous",
   email: "admin@hotel.local",
   name: "Demo",
-  role: "ADMIN",
+  role: "MANAGER",
   exp: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
 };
 

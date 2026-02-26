@@ -26,6 +26,7 @@ enum RoomStatus {
 }
 
 enum ReservationStatus {
+  PENDING       // zapytanie / oczekuje na potwierdzenie (Booking Engine)
   CONFIRMED
   CHECKED_IN
   CHECKED_OUT
@@ -219,10 +220,11 @@ model ParkingBooking {
 }
 
 model RoomType {
-  id         String   @id @default(cuid())
-  name       String   @unique  // np. "Queen", "Twin", "Suite"
-  basePrice  Decimal? @db.Decimal(10, 2)
-  sortOrder  Int      @default(0)
+  id             String   @id @default(cuid())
+  name           String   @unique  // np. "Queen", "Twin", "Suite"
+  basePrice      Decimal? @db.Decimal(10, 2)
+  sortOrder      Int      @default(0)
+  visibleInStats Boolean  @default(true)  // czy uwzględniać w raportach obłożenia
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   ratePlans       RatePlan[]
@@ -291,6 +293,10 @@ model Room {
   price         Decimal?   @db.Decimal(10, 2)
   reason        String?    // np. "Broken AC" dla OOO
   activeForSale Boolean    @default(true) // false = wycofany ze sprzedaży (nie pokazywany na grafiku / w dostępności)
+  sellPriority  Int        @default(0)    // kolejność propozycji przy sprzedaży (niższy = wyższy priorytet)
+  isDeleted     Boolean    @default(false) // soft-delete
+  deletedAt     DateTime?  @db.DateTime
+  deletedBy     String?    // User.id
   roomFeatures  Json?      // np. ["balkon", "widok"] – cechy do filtrowania
   beds          Int        @default(1)   // liczba łóżek (1 = cały pokój, >1 = sprzedaż po łóżku, np. dorm)
   surfaceArea   Decimal?   @db.Decimal(6, 2)  // metraż pokoju w m²
@@ -395,6 +401,7 @@ model Guest {
   favoriteMinibarItems Json?  // lista ulubionych produktów: [{ itemId?, name, quantity }]
   // Uwagi/ostrzeżenia dla personelu
   staffNotes    String?  @db.Text  // uwagi wewnętrzne dla personelu: "zawsze prosi o późny checkout", "skarżył się na hałas"
+  customFields  Json?    // własne pola gościa (np. { "favorite_room": "101", "diet": "bezglutenowa" })
   // RODO – zgody na przetwarzanie danych
   gdprDataProcessingConsent Boolean @default(false)  // zgoda na przetwarzanie danych osobowych (obowiązkowa dla meldunku)
   gdprDataProcessingDate    DateTime?  // data udzielenia zgody na przetwarzanie
@@ -660,8 +667,17 @@ model Reservation {
   paymentStatus String?        // status płatności: UNPAID, PARTIAL, PAID
   securityDeposit Json?        // kaucja/depozyt: { amount, collected, returned, refundDate, deductions, notes }
   cardGuarantee Json?          // karta gwarancyjna: { lastFourDigits, expiryMonth, expiryYear, cardType, cardholderName, status }
+  isCreditCardGuaranteed Boolean @default(false) // karta gwarancyjna aktywna
+  notesVisibleOnChart Boolean @default(false)    // uwagi widoczne na pasku w Tape Chart
+  showNotesOnChart Boolean @default(false)       // alias / legacy
   advancePayment Json?         // przedpłata: { required, amount, dueDate, paid, paidDate, paidAmount, method, notes }
+  advanceDueDate DateTime?     @db.Date  // termin wpłaty zaliczki
+  extraStatus    String?       // dodatkowy status: VIP, AWAITING_PAYMENT, COMPLAINT, itp.
+  reminderAt     DateTime?     // przypomnienie do rezerwacji
+  externalReservationNumber String?  // nr rezerwacji w OTA/Booking
+  currency       String?       // waluta (PLN, EUR, USD)
   cancellationReason String?   // powód anulacji rezerwacji
+  deletionReason String?       // powód usunięcia (audit)
   cancellationCode String?     // kod anulacji (GUEST_REQUEST, NO_SHOW, OVERBOOKING, itp.)
   cancelledAt DateTime?        // data i godzina anulacji
   cancelledBy String?          // kto anulował (ID użytkownika lub "GUEST", "SYSTEM")
@@ -958,6 +974,7 @@ model Transaction {
   category       String?  // kategoria: ACCOMMODATION, F_B, SPA, PARKING, PHONE, LAUNDRY, OTHER
   subcategory    String?  // podkategoria (np. dla F&B: RESTAURANT, BAR, MINIBAR)
   departmentCode String?  // kod działu/departamentu
+  gtuCode        String?  // kod GTU (JPK) – np. GTU_11 dla noclegu
   
   // Powiązania
   invoiceId      String?  // powiązanie z fakturą (jeśli zafakturowane)
@@ -1018,6 +1035,8 @@ model Invoice {
   id             String   @id @default(cuid())
   reservationId  String
   reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  invoiceType    String?  @default("NORMAL")  // NORMAL, ADVANCE, FINAL
+  advanceInvoiceId String?  // gdy invoiceType = FINAL: ID faktury zaliczkowej rozliczanej
   number        String   // FV/YYYY/SEQ – numer faktury VAT
   amountNet     Decimal  @db.Decimal(12, 2)
   amountVat     Decimal  @db.Decimal(12, 2)
@@ -1037,6 +1056,8 @@ model Invoice {
   ksefUpoUrl    String?  // link do pobrania UPO (Urzędowe Potwierdzenie Otrzymania)
   ksefPublishedAt DateTime?  // data przyjęcia faktury przez MF (KSeF)
   ksefErrorMessage String?  @db.Text  // komunikat błędu z bramki KSeF
+  paymentBreakdown Json?    // rozbicie płatności: [{ type: "CASH", amount: 100 }, { type: "CARD", amount: 50 }]
+  customFieldValues Json?   // własne pola faktury (np. zamówienie, projekt)
 
   corrections   InvoiceCorrection[]
 
