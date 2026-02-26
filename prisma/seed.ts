@@ -41,6 +41,39 @@ async function main() {
     console.log("Ustawiono PIN dla:", defaultEmail, "(PIN: 1234)");
   }
 
+  // Pracownicy recepcji — PIN 1234
+  const staffUsers = [
+    { email: "aneta@hotel.local", name: "Aneta", role: "RECEPTION" as const },
+    { email: "edyta@hotel.local", name: "Edyta", role: "RECEPTION" as const },
+    { email: "marta@hotel.local", name: "Marta", role: "RECEPTION" as const },
+    { email: "zastepca@hotel.local", name: "Zastępca", role: "MANAGER" as const },
+  ];
+
+  for (const staff of staffUsers) {
+    const existing = await prisma.user.findUnique({ where: { email: staff.email } }).catch(() => null);
+    if (!existing) {
+      const hash = await bcrypt.hash("Admin1234#", 10);
+      const pinHash = await bcrypt.hash("1234", 10);
+      await prisma.user.create({
+        data: {
+          email: staff.email,
+          name: staff.name,
+          passwordHash: hash,
+          pin: pinHash,
+          role: staff.role,
+        },
+      });
+      console.log(`Utworzono użytkownika: ${staff.name} (${staff.email}, PIN: 1234)`);
+    } else if (!existing.pin) {
+      const pinHash = await bcrypt.hash("1234", 10);
+      await prisma.user.update({
+        where: { email: staff.email },
+        data: { pin: pinHash },
+      });
+      console.log(`Ustawiono PIN dla: ${staff.name} (PIN: 1234)`);
+    }
+  }
+
   // Użytkownik Google OAuth (logowanie przez Google Workspace)
   const googleEmail = "lukasz.wojenkowski@labedzhotel.pl";
   const existingGoogleUser = await prisma.user.findUnique({ where: { email: googleEmail } }).catch(() => null);
