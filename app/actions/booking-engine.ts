@@ -173,13 +173,7 @@ export async function getRoomTypesForBookingWithPrices(params: {
       select: { roomId: true },
     }),
     propertyId ? prisma.property.findUnique({ where: { id: propertyId }, select: { mealPrices: true } }) : null,
-    propertyId
-      ? prisma.ageGroupConfig.findMany({
-          where: { propertyId },
-          orderBy: { sortOrder: "asc" },
-          select: { group: true, label: true, ageFrom: true, ageTo: true },
-        })
-      : [],
+    Promise.resolve([]) as Promise<{ group: string; label: string; ageFrom: number; ageTo: number }[]>,
     prisma.ratePlan.findMany({
       where: { validFrom: { lte: from }, validTo: { gte: from } },
       select: {

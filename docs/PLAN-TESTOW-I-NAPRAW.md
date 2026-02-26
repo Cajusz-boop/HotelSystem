@@ -230,6 +230,8 @@ npx playwright test tests/plan-v3-modules.spec.ts --reporter=list --project=chro
 - Kontrahenci — Goście, zakładka Firmy
 - Ustawienia — strona główna, Dane hotelu
 
+Stabilizacja: waitUntil: "domcontentloaded", asercje na body.textContent (odporność po długim przebiegu).
+
 **Pełna bateria (44/44):**
 ```
 npx playwright test tests/plan-v3-faza1.spec.ts tests/plan-v3-faza2-11.spec.ts tests/plan-v3-modules.spec.ts --reporter=list --project=chromium --timeout=90000 --workers=1

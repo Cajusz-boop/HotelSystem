@@ -75,6 +75,11 @@ model Property {
   surchargeTypes SurchargeType[]
   packages Package[]
   shopProducts ShopProduct[]
+  dailyRateOverrides DailyRateOverride[]
+  longStayDiscounts  LongStayDiscount[]
+  serviceRates       ServiceRate[]
+  ageGroupConfigs    AgeGroupConfig[]
+  seasons            Season[]
 }
 
 /** Rozliczenia z właścicielami – historia dokumentów rozliczenia. */
@@ -222,14 +227,20 @@ model ParkingBooking {
 model RoomType {
   id             String   @id @default(cuid())
   name           String   @unique  // np. "Queen", "Twin", "Suite"
+  description    String?  @db.Text  // opis typu pokoju (do booking engine)
   basePrice      Decimal? @db.Decimal(10, 2)
   sortOrder      Int      @default(0)
   visibleInStats Boolean  @default(true)  // czy uwzględniać w raportach obłożenia
+  maxOccupancy   Int?     // maksymalna liczba osób
+  bedsDescription String? @db.VarChar(200)  // opis łóżek (np. "1 queen + 1 sofa")
+  photoUrl       String?  @db.VarChar(500)  // zdjęcie typu pokoju
+  translations   Json?    // tłumaczenia nazwy/opisu: { en: { name, description }, de: { ... } }
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   ratePlans       RatePlan[]
   allotments      Allotment[]
   waitlistEntries WaitlistEntry[]
+  dailyRateOverrides DailyRateOverride[]
 }
 
 model RatePlan {
@@ -239,14 +250,25 @@ model RatePlan {
   validFrom      DateTime  @db.Date
   validTo        DateTime  @db.Date
   price          Decimal   @db.Decimal(10, 2)
+  pricePerPerson Decimal?  @db.Decimal(10, 2)
+  adultPrice     Decimal?  @db.Decimal(10, 2)
+  child1Price    Decimal?  @db.Decimal(10, 2)
+  child2Price    Decimal?  @db.Decimal(10, 2)
+  child3Price    Decimal?  @db.Decimal(10, 2)
   minStayNights  Int?      // min. długość pobytu (nocy)
   maxStayNights  Int?      // max. długość pobytu (nocy)
   isNonRefundable Boolean  @default(false)
   isWeekendHoliday Boolean @default(false)  // stawka weekend/święto (osobna logika wyceny)
+  closedToArrival Boolean  @default(false)
+  closedToDeparture Boolean @default(false)
+  seasonId       String?
+  season         Season?   @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  includedMealPlan String? // wyżywienie w cenie: RO, BB, HB, FB
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   @@index([roomTypeId])
   @@index([validFrom, validTo])
+  @@index([seasonId])
 }
 
 model DerivedRateRule {
@@ -436,8 +458,25 @@ model Guest {
   campsiteBookings  CampsiteBooking[]
   rentalBookings   RentalBooking[]
   receptionSales   ReceptionSale[]
+  guestDiscounts  GuestDiscount[]
 
   @@index([loyaltyTierId])
+}
+
+// Rabat przypisany do gościa na określony okres
+model GuestDiscount {
+  id         String   @id @default(cuid())
+  guestId    String
+  guest      Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  percentage Decimal  @db.Decimal(5, 2)
+  dateFrom   DateTime @db.Date
+  dateTo     DateTime @db.Date
+  reason     String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([guestId])
+  @@index([dateFrom, dateTo])
 }
 
 // Token dostępu do aplikacji mobilnej dla gościa
@@ -538,6 +577,18 @@ model ReservationFolio {
   @@index([reservationId])
   @@index([companyId])
   @@index([guestId])
+}
+
+// Ceny dzienne za pokój (możliwość edycji stawki za każdy dzień osobno)
+model ReservationDayRate {
+  id            String      @id @default(cuid())
+  reservationId String
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  date          DateTime    @db.Date
+  rate          Decimal     @db.Decimal(10, 2)
+
+  @@unique([reservationId, date])
+  @@index([reservationId])
 }
 
 // Biuro podróży / Agent (Travel Agent)
@@ -700,6 +751,7 @@ model Reservation {
   transactions   Transaction[]
   reservationOccupants ReservationOccupant[]
   reservationFolios ReservationFolio[]
+  reservationDayRates ReservationDayRate[]
   parkingBookings ParkingBooking[]
   proformas       Proforma[]
   invoices        Invoice[]
@@ -725,6 +777,7 @@ model Reservation {
   receptionSales    ReceptionSale[]
   phoneCallLogs     PhoneCallLog[]
   unassignedGastronomyCharges UnassignedGastronomyCharge[] @relation("UnassignedCharges")
+  cashDocuments    CashDocument[]
 
   @@index([checkIn, checkOut])
   @@index([roomId])
@@ -1060,6 +1113,7 @@ model Invoice {
   customFieldValues Json?   // własne pola faktury (np. zamówienie, projekt)
 
   corrections   InvoiceCorrection[]
+  cashDocuments CashDocument[]
 
   @@unique([number])
   @@index([reservationId])
@@ -1183,6 +1237,7 @@ model Receipt {
   
   // Metoda płatności i termin
   paymentMethod  String?  // CASH, TRANSFER, CARD
+  paymentBreakdown Json?  // rozbicie płatności: [{ type: "CASH", amount: 100 }, { type: "CARD", amount: 50 }]
   paymentDueDate DateTime? @db.Date  // termin płatności (opcjonalny)
   isPaid         Boolean  @default(false)
   paidAt         DateTime?
@@ -1195,6 +1250,7 @@ model Receipt {
   
   // Notatki
   notes          String?  @db.Text  // uwagi do rachunku
+  cashDocuments  CashDocument[]
 
   @@index([reservationId])
   @@index([issuedAt])
@@ -1435,6 +1491,93 @@ model CennikConfig {
   updatedAt      DateTime @updatedAt
 }
 
+// Nadpisania cen dziennych dla typu pokoju
+model DailyRateOverride {
+  id                String   @id @default(cuid())
+  propertyId        String
+  property          Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomTypeId        String
+  roomType          RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  date              DateTime @db.Date
+  price             Decimal? @db.Decimal(10, 2)
+  pricePerPerson    Decimal? @db.Decimal(10, 2)
+  adultPrice        Decimal? @db.Decimal(10, 2)
+  child1Price       Decimal? @db.Decimal(10, 2)
+  child2Price       Decimal? @db.Decimal(10, 2)
+  child3Price       Decimal? @db.Decimal(10, 2)
+  closedToArrival   Boolean  @default(false)
+  closedToDeparture Boolean  @default(false)
+  isClosed          Boolean  @default(false)
+  reason            String?
+
+  @@unique([propertyId, roomTypeId, date])
+  @@index([propertyId])
+  @@index([roomTypeId])
+  @@index([date])
+}
+
+// Rabaty za długi pobyt
+model LongStayDiscount {
+  id              String   @id @default(cuid())
+  propertyId      String
+  property        Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  minNights       Int
+  discountPercent Decimal? @db.Decimal(5, 2)
+  discountFixed   Decimal? @db.Decimal(10, 2)
+  isActive        Boolean  @default(true)
+
+  @@unique([propertyId, minNights])
+  @@index([propertyId])
+}
+
+// Stawki za usługi dodatkowe
+model ServiceRate {
+  id                String   @id @default(cuid())
+  propertyId        String
+  property          Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  name              String
+  code              String
+  price             Decimal  @db.Decimal(10, 2)
+  calculationMethod String   @default("PER_NIGHT")
+  vatRate           Decimal? @db.Decimal(5, 4)
+  isActive          Boolean  @default(true)
+  sortOrder         Int      @default(0)
+
+  @@index([propertyId])
+}
+
+// Konfiguracja grup wiekowych
+model AgeGroupConfig {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  group      String
+  label      String
+  ageFrom    Int
+  ageTo      Int
+  sortOrder  Int      @default(0)
+
+  @@index([propertyId])
+}
+
+// Sezony cenowe
+model Season {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  name       String
+  color      String?
+  dateFrom   DateTime @db.Date
+  dateTo     DateTime @db.Date
+  year       Int
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  ratePlans  RatePlan[]
+
+  @@index([propertyId])
+  @@index([year])
+}
+
 /** Dane hotelu / organizacji (nazwa, adres, NIP, KRS, logo, kontakt) – do faktur i dokumentów */
 model HotelConfig {
   id             String   @id @default("default")
@@ -1456,6 +1599,10 @@ model HotelConfig {
   seasons                 Json?   // okresy sezonowe: [{ id, name, type: "PEAK"|"OFF_PEAK", dateFrom: "MM-DD", dateTo: "MM-DD" }]
   cancellationPolicyTemplates Json?   // szablony polityki anulacji: [{ id, name, freeUntilDaysBefore, penaltyPercent, description? }]
   authDisabled   Boolean  @default(false)  // wyłączenie wymogu logowania (tryb demo/szkoleniowy)
+  maxVoidHours   Int?     // maks. czas na anulowanie transakcji (w godzinach); null = bez limitu
+  bankAccount    String?  @db.VarChar(50)  // numer konta bankowego
+  bankName       String?  @db.VarChar(200)  // nazwa banku
+  bookingNotificationEmail String?  @db.VarChar(254)  // e-mail do powiadomień o rezerwacjach
   updatedAt      DateTime @updatedAt
 }
 
@@ -1610,6 +1757,20 @@ model MenuItem {
   updatedAt DateTime @updatedAt
 
   orderItems OrderItem[]
+}
+
+// Baza asortymentu – pozycje do fakturowania (nazwa, cena, VAT, GTU)
+model AssortmentItem {
+  id           String   @id @default(cuid())
+  name         String
+  defaultPrice Decimal  @db.Decimal(10, 2)
+  vatRate      Decimal  @db.Decimal(5, 4) // np. 0.23 dla 23%
+  gtuCode      String?
+  category     String?
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // Gastronomia – zamówienie (room service, restauracja)
@@ -1846,9 +2007,34 @@ model CashShift {
   closedByUserId      String?
   closedBy            User?     @relation("ShiftClosedBy", fields: [closedByUserId], references: [id], onDelete: SetNull)
   notes               String?   @db.Text
+  cashDocuments       CashDocument[]
 
   @@index([openedAt])
   @@index([closedAt])
+}
+
+// Dokumenty kasowe KP/KW
+model CashDocument {
+  id            String       @id @default(cuid())
+  type          String       // KP (kasa przyjmie) / KW (kasa wyda)
+  number        String       // numer dokumentu np. KP/001/2026
+  amount        Decimal      @db.Decimal(12, 2)
+  description   String?
+  cashShiftId   String?
+  cashShift     CashShift?   @relation(fields: [cashShiftId], references: [id], onDelete: SetNull)
+  reservationId String?
+  reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  invoiceId     String?
+  invoice       Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  receiptId     String?
+  receipt       Receipt?     @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  issuedAt      DateTime     @default(now())
+
+  @@index([cashShiftId])
+  @@index([reservationId])
+  @@index([invoiceId])
+  @@index([receiptId])
+  @@index([type])
 }
 
 model User {
@@ -1907,7 +2093,9 @@ model HotelEvent {
   endDate     DateTime? @db.Date  // null = jednodniowe
   eventType   String   @default("OTHER")  // CONFERENCE, WEDDING, MAINTENANCE, HOLIDAY, OTHER
   description String?  @db.Text
+  color       String?  @db.VarChar(20)  // kolor wydarzenia (np. "#FF5733")
   propertyId  String?
+  isPublic    Boolean  @default(true)  // czy wydarzenie jest widoczne publicznie
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

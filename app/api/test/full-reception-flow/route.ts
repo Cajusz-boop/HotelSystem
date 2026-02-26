@@ -67,8 +67,12 @@ export async function GET() {
       children: 0,
       pax: 1,
     });
-    if (!createRes.success || !createRes.data) {
-      fail("2. TWORZENIE", createRes.error ?? "Błąd");
+    if (!createRes.success) {
+      fail("2. TWORZENIE", createRes.error);
+      return NextResponse.json({ results });
+    }
+    if (!createRes.data) {
+      fail("2. TWORZENIE", "Brak danych");
       return NextResponse.json({ results });
     }
     const resData = createRes.data as { id: string; guestId?: string };

@@ -1394,7 +1394,7 @@ export function TapeChart({
               .filter(Boolean)
               .join(", ");
             toast.success(msg ? `Przeniesiono rezerwację → ${msg}` : "Przeniesiono rezerwację");
-            setSelectedReservation(updated);
+            setSelectedReservation(updated as Reservation);
             setSheetOpen(true);
           } else if (!result.success) {
             toast.error("error" in result ? result.error : "Nie można przenieść rezerwacji");

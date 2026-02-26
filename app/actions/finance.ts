@@ -4518,7 +4518,7 @@ export async function getInvoicesForReservation(
         number: i.number,
         amountGross: Number(i.amountGross),
         issuedAt: i.issuedAt.toISOString(),
-        invoiceType: i.invoiceType,
+        invoiceType: i.invoiceType ?? "NORMAL",
         advanceInvoiceId: i.advanceInvoiceId,
       })),
     };
@@ -4737,7 +4737,7 @@ export async function getInvoiceById(
         buyerCity: invoice.buyerCity,
         issuedAt: invoice.issuedAt.toISOString(),
         isEditable,
-        invoiceType: invoice.invoiceType,
+        invoiceType: invoice.invoiceType ?? "NORMAL",
         advanceInvoiceId: invoice.advanceInvoiceId,
         paymentBreakdown: paymentBreakdown ?? null,
         customFieldValues: customFieldValues ?? null,
