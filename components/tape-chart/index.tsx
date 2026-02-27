@@ -1254,6 +1254,27 @@ export function TapeChart({
         }
         // === END TEMP DEBUG ===
 
+        // === PLACEMENT DEBUG ===
+        if (typeof window !== 'undefined' && res.room === '001') {
+          if (!(window as any).__TC_PL__) (window as any).__TC_PL__ = [];
+          (window as any).__TC_PL__.push({
+            id: res.id?.slice(-8),
+            checkIn: res.checkIn,
+            checkOut: res.checkOut,
+            guestName: res.guestName?.slice(0, 20),
+            row,
+            startIdx,
+            endIdx,
+            isClampedStart,
+            isClampedEnd: typeof isClampedEnd !== 'undefined' ? isClampedEnd : 'N/A',
+            willReject: startIdx >= endIdx,
+            gridRow: row + 1,
+            gridColumnStart: startIdx + 2,
+            gridColumnEnd: Math.min(endIdx + 3, dates.length + 2),
+          });
+        }
+        // === END PLACEMENT DEBUG ===
+
         if (startIdx >= endIdx) return null;
 
         const numDays = endIdx - startIdx;
