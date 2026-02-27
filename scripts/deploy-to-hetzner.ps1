@@ -67,7 +67,27 @@ if (Test-Path $nextDir) {
     Write-Host "Usuwanie starego .next..." -ForegroundColor Yellow
     Remove-Item -Recurse -Force $nextDir
 }
+
+# Podmiana DATABASE_URL na produkcyjny przed buildem (Next.js wbudowuje go jako stala)
+$envLocalPath = Join-Path $ProjectRoot ".env"
+$envBackupPath = Join-Path $ProjectRoot ".env.local.deploy-backup"
+$PROD_DB_URL = "mysql://hotel:HotelPMS2024%23Secure@localhost/hotel_pms"
+
+if (Test-Path $envLocalPath) {
+    Copy-Item $envLocalPath $envBackupPath -Force
+    $envContent = Get-Content $envLocalPath -Raw
+    $envContent = $envContent -replace 'DATABASE_URL="[^"]*"', ('DATABASE_URL="' + $PROD_DB_URL + '"')
+    Set-Content $envLocalPath $envContent
+    Write-Host "Tymczasowo ustawiono produkcyjny DATABASE_URL" -ForegroundColor Yellow
+}
+
 npm run build
+
+# Przywroc oryginalny .env
+if (Test-Path $envBackupPath) {
+    Move-Item $envBackupPath $envLocalPath -Force
+    Write-Host "Przywrocono lokalny .env" -ForegroundColor Yellow
+}
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[BLAD] Build nie powiodl sie!" -ForegroundColor Red
     exit 1
@@ -230,7 +250,7 @@ if (-not $FullZip) {
                 exit 1
             }
             Write-Host "Rozpakowywanie delta na serwerze..." -ForegroundColor Yellow
-            ssh hetzner ("cd " + $REMOTE_PATH + " && rm -rf .next/standalone/.next/static && tar -xzf _deploy_delta.tar.gz && rm -f _deploy_delta.tar.gz")
+            ssh hetzner ("cd " + $REMOTE_PATH + " && tar -xzf _deploy_delta.tar.gz && rm -f _deploy_delta.tar.gz")
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "[BLAD] Rozpakowanie delta na serwerze nie powiodlo sie!" -ForegroundColor Red
                 exit 1

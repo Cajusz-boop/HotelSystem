@@ -1160,20 +1160,67 @@ export function TapeChart({
 
   /** Konwencja KWHotel: pasek od połowy dnia zameldowania do połowy dnia wymeldowania. */
   const reservationPlacements = useMemo(() => {
+    if (dates.length === 0) return [];
+    const firstDate = dates[0];
+    const lastDate = dates[dates.length - 1];
+
+    // === TEMP DEBUG — usunąć po diagnozie ===
+    if (typeof window !== 'undefined') {
+      const dbg001 = filteredReservations.filter(r => r.room === '001');
+      console.log('[PROD DEBUG] filteredReservations for 001:', dbg001);
+      console.log('[PROD DEBUG] dates range:', dates[0], '→', dates[dates.length - 1]);
+      console.log('[PROD DEBUG] all reservation rooms (unique):', [...new Set(filteredReservations.map(r => r.room))].sort());
+      console.log('[PROD DEBUG] total reservations:', filteredReservations.length);
+      if (filteredReservations.length > 0) {
+        console.log('[PROD DEBUG] sample res:', JSON.stringify(filteredReservations[0]));
+      }
+      // Sprawdź co dateIndex ma dla dzisiejszej daty
+      console.log('[PROD DEBUG] dateIndex for 2026-02-27:', dateIndex.get('2026-02-27'));
+      console.log('[PROD DEBUG] visibleRoomNumbers has 001:', visibleRoomNumbers.has('001'));
+    }
+    // === END TEMP DEBUG ===
+
     return filteredReservations
       .map((res) => {
         const row = roomRowIndex.get(res.room);
         if (row == null) return null;
-        const startIdx = dateIndex.get(res.checkIn);
+
+        let startIdx = dateIndex.get(res.checkIn);
         let endIdx = dateIndex.get(res.checkOut);
-        if (endIdx != null) endIdx = endIdx;
-        else endIdx = dates.findIndex((d) => d >= res.checkOut);
-        if (endIdx === -1) endIdx = dates.length;
-        if (startIdx == null || startIdx >= endIdx) return null;
+
+        // Clamp startIdx: jeśli checkIn jest przed widocznym zakresem, zaczynamy od 0
+        const isClampedStart = startIdx == null && res.checkIn < firstDate;
+        if (startIdx == null) {
+          if (isClampedStart) {
+            startIdx = 0;
+          } else {
+            return null; // checkIn po zakresie — nie renderuj
+          }
+        }
+
+        // Clamp endIdx: jeśli checkOut jest poza widocznym zakresem, kończymy na końcu
+        const isClampedEnd = endIdx == null && res.checkOut > lastDate;
+        if (endIdx == null) {
+          if (isClampedEnd) {
+            endIdx = dates.length;
+          } else {
+            const found = dates.findIndex((d) => d >= res.checkOut);
+            endIdx = found === -1 ? dates.length : found;
+          }
+        }
+
+        if (startIdx >= endIdx) return null;
+
         const numDays = endIdx - startIdx;
         const numColumns = numDays + 1;
-        const barLeftPercent = 0.5 / numColumns;
-        const barWidthPercent = numDays / numColumns;
+
+        // Jeśli checkIn przed widokiem — pasek zaczyna się od lewej krawędzi (bez offsetu 0.5)
+        const barLeftPercent = isClampedStart ? 0 : (0.5 / numColumns);
+        // Jeśli checkOut za widokiem — pasek ciągnie się do prawej krawędzi
+        const barWidthPercent = isClampedStart
+          ? (isClampedEnd ? 1 : (numDays + 0.5) / numColumns)
+          : (isClampedEnd ? (numDays + 0.5) / numColumns : numDays / numColumns);
+
         const gridColumnEnd = Math.min(endIdx + 3, dates.length + 2);
         return {
           reservation: res,

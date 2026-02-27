@@ -16,10 +16,11 @@ const INITIAL_DAYS_VIEW = 42;
 async function FrontOfficeData() {
   unstable_noStore();
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
+  // Używaj polskiej strefy czasowej dla spójności z klientem (unika rozbieżności UTC vs local o północy)
+  const today = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
   const future = new Date(now);
   future.setDate(future.getDate() + INITIAL_DAYS_VIEW);
-  const dateToInitial = future.toISOString().slice(0, 10);
+  const dateToInitial = future.toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
 
   let data: { reservations: Reservation[]; rooms: Room[]; reservationGroups: ReservationGroupSummary[]; reservationStatusColors?: Partial<Record<string, string>> | null; propertyId?: string | null; events?: Array<{ id: string; name: string; dateFrom: string; dateTo: string; color: string | null; description?: string | null }> };
   try {

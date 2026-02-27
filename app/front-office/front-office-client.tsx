@@ -56,10 +56,11 @@ export function FrontOfficeClient({ initialData }: { initialData: FrontOfficeIni
 
   useEffect(() => {
     const now = new Date();
-    const today = now.toISOString().slice(0, 10);
+    // Używaj polskiej strefy czasowej dla spójności z serwerem
+    const today = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
     const to = new Date(now);
     to.setDate(to.getDate() + 42);
-    const dateTo = to.toISOString().slice(0, 10);
+    const dateTo = to.toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
     getTapeChartData({ dateFrom: today, dateTo }).then((full) => {
       setData((prev) => ({
         rooms: Array.isArray(full.rooms) ? (full.rooms as Room[]) : [],
