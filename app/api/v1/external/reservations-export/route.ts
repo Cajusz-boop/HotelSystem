@@ -78,7 +78,6 @@ export async function GET(request: NextRequest) {
       groupName: r.group?.name || null,
       adults: r.adults,
       children: r.children,
-      totalPrice: r.totalPrice ? Number(r.totalPrice) : null,
       notes: r.notes,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
