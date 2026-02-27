@@ -459,7 +459,7 @@ async function main() {
     const group = await prisma.reservationGroup.create({
       data: {
         name: groupName.substring(0, 200),
-        note: g.Uwagi?.trim() || null,
+        note: g.Uwagi?.trim()?.substring(0, 190) || null,
       },
     });
     groupIdMap.set(g.GrupaID, group.id);
