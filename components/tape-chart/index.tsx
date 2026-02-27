@@ -1158,6 +1158,9 @@ export function TapeChart({
     return map;
   }, [dates]);
 
+  // Liczba wierszy nagłówkowych w CSS grid (events row + header row, lub tylko header row)
+  const headerRowCount = (initialEvents && initialEvents.length > 0) ? 2 : 1;
+
   /** Konwencja KWHotel: pasek od połowy dnia zameldowania do połowy dnia wymeldowania. */
   const reservationPlacements = useMemo(() => {
     if (dates.length === 0) return [];
@@ -1268,7 +1271,7 @@ export function TapeChart({
             isClampedStart,
             isClampedEnd: typeof isClampedEnd !== 'undefined' ? isClampedEnd : 'N/A',
             willReject: startIdx >= endIdx,
-            gridRow: row + 1,
+            gridRow: row + headerRowCount,
             gridColumnStart: startIdx + 2,
             gridColumnEnd: Math.min(endIdx + 3, dates.length + 2),
           });
@@ -1290,7 +1293,7 @@ export function TapeChart({
         const gridColumnEnd = Math.min(endIdx + 3, dates.length + 2);
         return {
           reservation: res,
-          gridRow: row + 1,
+          gridRow: row + headerRowCount,
           gridColumnStart: startIdx + 2,
           gridColumnEnd,
           barLeftPercent,
@@ -1298,7 +1301,7 @@ export function TapeChart({
         };
       })
       .filter((p): p is NonNullable<typeof p> => p != null);
-  }, [filteredReservations, roomRowIndex, dateIndex, dates]);
+  }, [filteredReservations, roomRowIndex, dateIndex, dates, headerRowCount]);
 
   /** Zbiór komórek faktycznie pokrytych paskiem – zgodnie z logiką placementu (bar spans checkIn..checkOut inclusive) */
   const occupiedCellsSet = useMemo(() => {
@@ -1948,8 +1951,11 @@ export function TapeChart({
 
   /* Kolumny o stałej szerokości – siatka zawsze szersza niż kontener → przewijanie myszką we wszystkich widokach */
   const gridColumns = `${ROOM_LABEL_WIDTH_PX}px repeat(${dates.length}, ${effectiveColumnWidthPx}px)`;
-  const totalHeaderPx = EVENTS_ROW_PX + HEADER_ROW_PX;
-  const gridRows = `${EVENTS_ROW_PX}px ${HEADER_ROW_PX}px repeat(${displayRooms.length}, ${effectiveRowHeightPx}px)`;
+  const hasEvents = !!(initialEvents && initialEvents.length > 0);
+  const totalHeaderPx = hasEvents ? (EVENTS_ROW_PX + HEADER_ROW_PX) : HEADER_ROW_PX;
+  const gridRows = hasEvents
+    ? `${EVENTS_ROW_PX}px ${HEADER_ROW_PX}px repeat(${displayRooms.length}, ${effectiveRowHeightPx}px)`
+    : `${HEADER_ROW_PX}px repeat(${displayRooms.length}, ${effectiveRowHeightPx}px)`;
 
   const rowVirtualizer = useVirtualizer({
     count: displayRooms.length,
@@ -1961,8 +1967,8 @@ export function TapeChart({
 
   const virtualRows = rowVirtualizer.getVirtualItems();
   const visibleRowSet = useMemo(() => {
-    return new Set(virtualRows.map((v) => v.index + 3));
-  }, [virtualRows]);
+    return new Set(virtualRows.map((v) => v.index + 1 + headerRowCount));
+  }, [virtualRows, headerRowCount]);
   const visiblePlacements = useMemo(
     () => reservationPlacements.filter((p) => visibleRowSet.has(p.gridRow)),
     [reservationPlacements, visibleRowSet]
