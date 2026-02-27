@@ -130,12 +130,12 @@ export async function POST(request: NextRequest) {
       
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
       
+      // Szukamy aktywnej rezerwacji: CHECKED_IN lub CONFIRMED z pasującymi datami
+      // CONFIRMED akceptujemy bo KWHotel może nie synchronizować statusu zameldowania
       const active = room.reservations.find(
         (r) =>
-          r.status === "CHECKED_IN" &&
+          (r.status === "CHECKED_IN" || r.status === "CONFIRMED") &&
           r.checkIn <= today &&
           r.checkOut >= today
       );
