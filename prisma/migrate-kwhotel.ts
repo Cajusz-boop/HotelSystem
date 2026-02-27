@@ -27,6 +27,7 @@ import { prisma } from "../lib/db";
 
 const KW_URL = process.env.KW_DATABASE_URL ?? "mysql://root@127.0.0.1:3306/kwhotel_import";
 const DRY_RUN = process.env.DRY_RUN === "1";
+const CLEAR_RESERVATIONS = process.env.CLEAR_RESERVATIONS === "1";
 const BATCH_SIZE = 500;
 
 // ---------------------------------------------------------------------------
@@ -234,6 +235,7 @@ async function main() {
   console.log("║  Migracja KWHotel → HotelSystem                    ║");
   console.log("╚══════════════════════════════════════════════════════╝");
   if (DRY_RUN) console.log("⚠ Tryb DRY_RUN – dane nie zostaną zapisane.\n");
+  if (CLEAR_RESERVATIONS) console.log("⚠ Tryb CLEAR_RESERVATIONS – istniejące rezerwacje zostaną usunięte!\n");
 
   // Połącz z bazą KWHotel
   const kw = await mysql.createConnection(KW_URL);
@@ -246,6 +248,34 @@ async function main() {
     create: { name: "Karczma Łabędź", code: "default", overbookingLimitPercent: 0 },
   });
   console.log(`✔ Property: ${property.name} (${property.id})\n`);
+
+  // =========================================================================
+  // 0. Czyszczenie istniejących rezerwacji (jeśli CLEAR_RESERVATIONS=1)
+  // =========================================================================
+  if (CLEAR_RESERVATIONS && !DRY_RUN) {
+    console.log("=== 0/6 Czyszczenie istniejących danych ===");
+    
+    // Usuń w odpowiedniej kolejności (foreign keys)
+    const deletedOccupants = await prisma.reservationOccupant.deleteMany({});
+    console.log(`  Usunięto ReservationOccupant: ${deletedOccupants.count}`);
+    
+    const deletedTransactions = await prisma.transaction.deleteMany({});
+    console.log(`  Usunięto Transaction: ${deletedTransactions.count}`);
+    
+    const deletedReservations = await prisma.reservation.deleteMany({});
+    console.log(`  Usunięto Reservation: ${deletedReservations.count}`);
+    
+    const deletedGroups = await prisma.reservationGroup.deleteMany({});
+    console.log(`  Usunięto ReservationGroup: ${deletedGroups.count}`);
+    
+    const deletedGuests = await prisma.guest.deleteMany({});
+    console.log(`  Usunięto Guest: ${deletedGuests.count}`);
+    
+    const deletedCompanies = await prisma.company.deleteMany({});
+    console.log(`  Usunięto Company: ${deletedCompanies.count}`);
+    
+    console.log("  ✔ Dane wyczyszczone\n");
+  }
 
   // =========================================================================
   // 1. Typy pokoi (room_groups → RoomType)
