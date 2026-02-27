@@ -57,9 +57,9 @@ export async function GET(request: NextRequest) {
             name: true, 
             email: true, 
             phone: true,
-            company: { select: { id: true, name: true } }
           } 
         },
+        company: { select: { id: true, name: true } },
         group: { select: { id: true, name: true } },
       },
       orderBy: { checkIn: "asc" },
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
       guestName: r.guest?.name || null,
       guestEmail: r.guest?.email || null,
       guestPhone: r.guest?.phone || null,
-      companyName: r.guest?.company?.name || null,
+      companyName: r.company?.name || null,
       groupName: r.group?.name || null,
       adults: r.adults,
       children: r.children,
