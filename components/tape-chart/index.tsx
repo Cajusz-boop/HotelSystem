@@ -2775,12 +2775,11 @@ export function TapeChart({
                             return next;
                           });
                         } else {
-                          const clickedDate = getDateFromClientX(e.clientX);
-                          if (clickedDate === reservation.checkOut) {
-                            setNewReservationContext({ roomNumber: reservation.room, checkIn: reservation.checkOut });
-                            setCreateSheetOpen(true);
-                            setSelectedReservationIds(new Set());
-                          }
+                          setSelectedReservationIds(new Set());
+                          setSelectedReservation(reservation);
+                          setEditInitialTab(undefined);
+                          setSheetOpen(true);
+                          setHighlightedReservationId(null);
                         }
                         }
                       }
