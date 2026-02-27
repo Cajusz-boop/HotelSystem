@@ -174,31 +174,40 @@ async function main() {
     }),
   ];
 
-  for (const r of roomData) {
-    await prisma.room.upsert({
-      where: { number: r.number },
-      update: {
-        propertyId: defaultProperty.id,
-        building: r.building,
-        floor: r.floor,
-        beds: r.beds,
-        bedTypes: r.bedTypes,
-        maxOccupancy: r.maxOccupancy,
-      },
-      create: {
-        propertyId: defaultProperty.id,
-        number: r.number,
-        type: r.type,
-        status: r.status,
-        price: r.price,
-        building: r.building,
-        floor: r.floor,
-        beds: r.beds,
-        bedTypes: r.bedTypes,
-        maxOccupancy: r.maxOccupancy,
-        reason: r.reason,
-      },
-    });
+  // Ochrona produkcji: NIE nadpisuj istniejących pokoi, chyba że jawnie SEED_RESET_ROOMS=1
+  const allowRoomReset = process.env.SEED_RESET_ROOMS === "1";
+  const existingRoomsCount = await prisma.room.count();
+
+  if (existingRoomsCount > 0 && !allowRoomReset) {
+    console.log(`Pomijam pokoje: w bazie jest ${existingRoomsCount} pokoi (ochrona produkcji). Aby zresetować: SEED_RESET_ROOMS=1 npm run db:seed`);
+  } else {
+    for (const r of roomData) {
+      await prisma.room.upsert({
+        where: { number: r.number },
+        update: {
+          propertyId: defaultProperty.id,
+          building: r.building,
+          floor: r.floor,
+          beds: r.beds,
+          bedTypes: r.bedTypes,
+          maxOccupancy: r.maxOccupancy,
+        },
+        create: {
+          propertyId: defaultProperty.id,
+          number: r.number,
+          type: r.type,
+          status: r.status,
+          price: r.price,
+          building: r.building,
+          floor: r.floor,
+          beds: r.beds,
+          bedTypes: r.bedTypes,
+          maxOccupancy: r.maxOccupancy,
+          reason: r.reason,
+        },
+      });
+    }
+    console.log(`Utworzono/zaktualizowano ${roomData.length} pokoi.`);
   }
 
   // Firma testowa – dla auto-uzupełnienia NIP w formularzu meldunku

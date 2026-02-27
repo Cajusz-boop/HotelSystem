@@ -74,12 +74,15 @@ for attempt in $(seq 1 $MAX_BUILD_RETRIES); do
 done
 
 # 3b. Prisma db push (po buildzie, tylko jesli schema sie zmienila)
+# WAZNE: NIE uzywamy --accept-data-loss - chroni dane produkcyjne przed utratą!
+# Jesli push sie nie powiedzie z powodu destrukcyjnych zmian, deploy sie zatrzyma
+# i trzeba recznie rozwiazac problem migracji.
 if [ "$SCHEMA_CHANGED" = true ]; then
-    log "Prisma db push..."
-    if npx prisma db push --accept-data-loss; then
+    log "Prisma db push (bezpieczny tryb - bez --accept-data-loss)..."
+    if npx prisma db push; then
         log "Prisma db push OK"
     else
-        ERR_MSG="[$(date '+%Y-%m-%d %H:%M:%S')] Prisma db push FAILED - schema migracja nie powiodla sie, deploy przerwany"
+        ERR_MSG="[$(date '+%Y-%m-%d %H:%M:%S')] Prisma db push FAILED - schema wymaga destrukcyjnych zmian. Zaloguj sie na serwer i rozwiaz recznie: ssh hetzner -> cd /var/www/hotel -> npx prisma db push (i postepuj wg instrukcji)"
         log "$ERR_MSG"
         echo "$ERR_MSG" >> /var/www/hotel/deploy-errors.log
         exit 1
