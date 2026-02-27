@@ -1182,6 +1182,27 @@ export function TapeChart({
 
     return filteredReservations
       .map((res) => {
+        // === TEMP DEBUG — room 001 (INSIDE MAP) ===
+        if (typeof window !== 'undefined' && res.room === '001') {
+          const rawStartIdx = dateIndex.get(res.checkIn);
+          const rawEndIdx = dateIndex.get(res.checkOut);
+          console.log('[TC-MAP-DBG] Processing room 001:', {
+            id: res.id,
+            checkIn: res.checkIn,
+            checkOut: res.checkOut,
+            status: res.status,
+            guestName: res.guestName,
+            roomRowValue: roomRowIndex.get(res.room),
+            rawStartIdx,
+            rawEndIdx,
+            firstDate,
+            lastDate,
+            wouldClampStart: rawStartIdx == null && res.checkIn < firstDate,
+            wouldClampEnd: rawEndIdx == null && res.checkOut > lastDate,
+          });
+        }
+        // === END TEMP DEBUG ===
+
         const row = roomRowIndex.get(res.room);
         if (row == null) return null;
 
@@ -1208,6 +1229,20 @@ export function TapeChart({
             endIdx = found === -1 ? dates.length : found;
           }
         }
+
+        // === TEMP DEBUG — room 001 (AFTER CLAMP) ===
+        if (typeof window !== 'undefined' && res.room === '001') {
+          console.log('[TC-MAP-DBG] After clamp for room 001:', {
+            id: res.id,
+            finalStartIdx: startIdx,
+            finalEndIdx: endIdx,
+            isClampedStart,
+            isClampedEnd,
+            willBeFiltered: startIdx >= endIdx,
+            reason: startIdx >= endIdx ? `startIdx(${startIdx}) >= endIdx(${endIdx})` : 'PASS',
+          });
+        }
+        // === END TEMP DEBUG ===
 
         if (startIdx >= endIdx) return null;
 
