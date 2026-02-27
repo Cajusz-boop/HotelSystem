@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Mail, Settings, MessageSquare, FileText, Palette, Receipt, ClipboardList, FileCheck, Users, Shield, Key, Database, Building2, FormInput, BookOpen, CalendarRange, FileX, Upload, Printer } from "lucide-react";
+import { Mail, Settings, MessageSquare, FileText, Palette, Receipt, ClipboardList, FileCheck, Users, Shield, Key, Database, Building2, FormInput, BookOpen, CalendarRange, FileX, Upload, Printer, Globe } from "lucide-react";
 
 const settingsItems = [
   {
@@ -124,6 +124,12 @@ const settingsItems = [
     icon: Upload,
     title: "Import z innego PMS",
     description: "Import gości i pokoi z pliku JSON (inny system PMS).",
+  },
+  {
+    href: "/ustawienia/channel-manager",
+    icon: Globe,
+    title: "Channel Manager",
+    description: "Integracja z Booking.com, Expedia, Airbnb przez Channel Manager (WuBook, Channex, itp.)",
   },
 ];
 

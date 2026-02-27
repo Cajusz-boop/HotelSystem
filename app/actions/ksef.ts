@@ -299,6 +299,14 @@ export async function sendInvoiceToKsef(invoiceId: string): Promise<
     buyerAddress: invoice.buyerAddress,
     buyerPostalCode: invoice.buyerPostalCode,
     buyerCity: invoice.buyerCity,
+    // Nowe pola KSeF
+    receiverName: invoice.receiverName,
+    receiverAddress: invoice.receiverAddress,
+    receiverPostalCode: invoice.receiverPostalCode,
+    receiverCity: invoice.receiverCity,
+    deliveryDate: invoice.deliveryDate,
+    paymentMethod: invoice.paymentMethod,
+    paymentDueDate: invoice.paymentDueDate,
   };
 
   const xml = buildFa2Xml(inv, seller);
@@ -443,6 +451,14 @@ export async function sendBatchToKsef(invoiceIds: string[]): Promise<
       buyerAddress: invoice.buyerAddress,
       buyerPostalCode: invoice.buyerPostalCode,
       buyerCity: invoice.buyerCity,
+      // Nowe pola KSeF
+      receiverName: invoice.receiverName,
+      receiverAddress: invoice.receiverAddress,
+      receiverPostalCode: invoice.receiverPostalCode,
+      receiverCity: invoice.receiverCity,
+      deliveryDate: invoice.deliveryDate,
+      paymentMethod: invoice.paymentMethod,
+      paymentDueDate: invoice.paymentDueDate,
     };
     xmls.push(buildFa2Xml(inv, seller));
   }

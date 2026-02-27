@@ -1057,7 +1057,7 @@ model Transaction {
   refundTransactions    Transaction[] @relation("RefundTarget")
   
   // Referencje zewnętrzne
-  externalRef    String?  // np. numer zamówienia z restauracji
+  externalRef    String?  @db.Text  // np. numer zamówienia z restauracji (JSON z pozycjami)
   notes          String?  @db.Text  // notatki wewnętrzne
 
   @@index([reservationId])
@@ -1101,7 +1101,27 @@ model Invoice {
   buyerAddress  String?
   buyerPostalCode String?
   buyerCity      String?
+  
+  // Odbiorca (gdy inny niż nabywca, np. szkoła/oddział)
+  receiverName     String?
+  receiverAddress  String?
+  receiverPostalCode String?
+  receiverCity     String?
+  
+  // Daty i miejsce
   issuedAt      DateTime @default(now())
+  deliveryDate  DateTime?  // Data dostawy/wykonania usługi
+  placeOfIssue  String?    // Miejsce wystawienia
+  
+  // Płatność
+  paymentMethod   String?    // Forma płatności: "przelew", "gotówka", "karta"
+  paymentDueDate  DateTime?  // Termin płatności
+  paymentDays     Int?       // Ilość dni na płatność (alternatywa dla paymentDueDate)
+  
+  // Podpisy
+  issuedByName    String?    // Osoba upoważniona do wystawienia
+  receivedByName  String?    // Osoba upoważniona do odbioru
+  
   createdAt      DateTime @default(now())
   ksefUuid      String?  // nadany numer UUID faktury w KSeF (Krajowy System e-Faktur)
   ksefReferenceNumber String?  // nr referencyjny sesji/wysyłki KSeF
@@ -2367,6 +2387,20 @@ model InvoiceTemplate {
 
   // Nazwa produktu/usługi noclegowej na fakturze (np. "Nocleg", "Usługa noclegowa")
   roomProductName  String?  // nadpisuje domyślne "Nocleg" w pozycjach faktury
+  
+  // Domyślne ustawienia płatności
+  defaultPaymentMethod String?  @default("przelew")  // domyślna forma płatności
+  defaultPaymentDays   Int?     @default(14)         // domyślna ilość dni na płatność
+  
+  // Domyślne miejsce i podpisy
+  placeOfIssue     String?  // domyślne miejsce wystawienia
+  issuedByName     String?  // domyślna osoba upoważniona do wystawienia
+  
+  // Ustawienia kolumn tabeli pozycji
+  showPkwiu        Boolean  @default(false)  // pokaż kolumnę PKWIU
+  showUnit         Boolean  @default(true)   // pokaż kolumnę j.m. (jednostka miary)
+  showDiscount     Boolean  @default(false)  // pokaż kolumnę Rabat
+  defaultUnit      String?  @default("szt.") // domyślna jednostka miary
   
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
