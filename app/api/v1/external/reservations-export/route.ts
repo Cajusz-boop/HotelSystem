@@ -54,8 +54,7 @@ export async function GET(request: NextRequest) {
         guest: { 
           select: { 
             id: true, 
-            firstName: true, 
-            lastName: true, 
+            name: true, 
             email: true, 
             phone: true,
             company: { select: { id: true, name: true } }
@@ -72,9 +71,7 @@ export async function GET(request: NextRequest) {
       checkIn: r.checkIn.toISOString().split("T")[0],
       checkOut: r.checkOut.toISOString().split("T")[0],
       status: r.status,
-      guestName: r.guest 
-        ? `${r.guest.firstName || ""} ${r.guest.lastName || ""}`.trim() 
-        : null,
+      guestName: r.guest?.name || null,
       guestEmail: r.guest?.email || null,
       guestPhone: r.guest?.phone || null,
       companyName: r.guest?.company?.name || null,
