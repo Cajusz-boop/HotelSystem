@@ -7,7 +7,7 @@ Pobiera nowe zamówienia z bazy KWHotel i wysyła do API HotelSystem.
 
 INSTALACJA NA SERWERZE LOKALNYM:
 1. Zainstaluj Python 3.x: https://www.python.org/downloads/
-2. Zainstaluj zależności: pip install mysql-connector-python requests
+2. Zainstaluj zależności: pip install pymysql requests
 3. Skopiuj ten plik na serwer (np. C:\\Scripts\\sync-bistro.py)
 4. Edytuj CONFIG poniżej (hasła, klucz API)
 5. Dodaj do Harmonogramu zadań Windows:
@@ -123,11 +123,11 @@ def main():
     
     # Importy (mogą nie być zainstalowane)
     try:
-        import mysql.connector
+        import pymysql
         import requests
     except ImportError as e:
         logger.error(f"Brak wymaganej biblioteki: {e}")
-        logger.error("Zainstaluj: pip install mysql-connector-python requests")
+        logger.error("Zainstaluj: pip install pymysql requests")
         sys.exit(1)
     
     # Pobierz stan
@@ -137,15 +137,16 @@ def main():
     
     try:
         # Połącz z bazą KWHotel
-        conn = mysql.connector.connect(
+        conn = pymysql.connect(
             host=CONFIG["db_host"],
             port=CONFIG["db_port"],
             database=CONFIG["db_name"],
             user=CONFIG["db_user"],
             password=CONFIG["db_password"],
-            charset="utf8mb4"
+            charset="utf8mb4",
+            cursorclass=pymysql.cursors.DictCursor
         )
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor()
         logger.info("Połączono z bazą KWHotel")
         
         # Pobierz nowe pozycje gastronomiczne
@@ -226,6 +227,12 @@ def main():
             total_amount = sum(it["quantity"] * it["unitPrice"] for it in items)
             total_amount = round(total_amount, 2)
             
+            # Pomiń zamówienia z kwotą <= 0
+            if total_amount <= 0:
+                logger.info(f"Pomijam: pokój {room_number}, kwota {total_amount} PLN (kwota <= 0)")
+                success_count += 1  # nie liczymy jako błąd
+                continue
+            
             # Body dla API
             body = {
                 "roomNumber": room_number,
@@ -252,7 +259,10 @@ def main():
                 if response.status_code == 200:
                     data = response.json()
                     if data.get("success"):
-                        logger.info(f"  OK: transactionId={data.get('transactionId')}")
+                        if data.get("unassigned"):
+                            logger.info(f"  OK (nieprzypisane): {data.get('reason', 'zapisano jako nieprzypisane')}")
+                        else:
+                            logger.info(f"  OK: transactionId={data.get('transactionId')}")
                         success_count += 1
                     else:
                         logger.error(f"  BŁĄD API: {data.get('error')}")

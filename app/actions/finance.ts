@@ -6091,6 +6091,14 @@ export interface InvoiceTemplateData {
   paymentTermsText: string | null;
   thanksText: string | null;
   roomProductName: string | null;
+  defaultPaymentMethod: string | null;
+  defaultPaymentDays: number | null;
+  placeOfIssue: string | null;
+  issuedByName: string | null;
+  showPkwiu: boolean;
+  showUnit: boolean;
+  showDiscount: boolean;
+  defaultUnit: string | null;
 }
 
 /**
@@ -6146,6 +6154,14 @@ export async function getInvoiceTemplate(
         paymentTermsText: template.paymentTermsText,
         thanksText: template.thanksText,
         roomProductName: template.roomProductName,
+        defaultPaymentMethod: template.defaultPaymentMethod,
+        defaultPaymentDays: template.defaultPaymentDays,
+        placeOfIssue: template.placeOfIssue,
+        issuedByName: template.issuedByName,
+        showPkwiu: template.showPkwiu,
+        showUnit: template.showUnit,
+        showDiscount: template.showDiscount,
+        defaultUnit: template.defaultUnit,
       },
     };
   } catch (e) {
@@ -6202,6 +6218,14 @@ export async function updateInvoiceTemplate(
     if (data.paymentTermsText !== undefined) updateData.paymentTermsText = data.paymentTermsText;
     if (data.thanksText !== undefined) updateData.thanksText = data.thanksText;
     if (data.roomProductName !== undefined) updateData.roomProductName = data.roomProductName;
+    if (data.defaultPaymentMethod !== undefined) updateData.defaultPaymentMethod = data.defaultPaymentMethod;
+    if (data.defaultPaymentDays !== undefined) updateData.defaultPaymentDays = data.defaultPaymentDays;
+    if (data.placeOfIssue !== undefined) updateData.placeOfIssue = data.placeOfIssue;
+    if (data.issuedByName !== undefined) updateData.issuedByName = data.issuedByName;
+    if (data.showPkwiu !== undefined) updateData.showPkwiu = data.showPkwiu;
+    if (data.showUnit !== undefined) updateData.showUnit = data.showUnit;
+    if (data.showDiscount !== undefined) updateData.showDiscount = data.showDiscount;
+    if (data.defaultUnit !== undefined) updateData.defaultUnit = data.defaultUnit;
 
     const updated = await prisma.invoiceTemplate.update({
       where: { id: template.id },
@@ -6241,6 +6265,14 @@ export async function updateInvoiceTemplate(
         paymentTermsText: updated.paymentTermsText,
         thanksText: updated.thanksText,
         roomProductName: updated.roomProductName,
+        defaultPaymentMethod: updated.defaultPaymentMethod,
+        defaultPaymentDays: updated.defaultPaymentDays,
+        placeOfIssue: updated.placeOfIssue,
+        issuedByName: updated.issuedByName,
+        showPkwiu: updated.showPkwiu,
+        showUnit: updated.showUnit,
+        showDiscount: updated.showDiscount,
+        defaultUnit: updated.defaultUnit,
       },
     };
   } catch (e) {
