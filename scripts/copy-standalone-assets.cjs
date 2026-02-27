@@ -46,6 +46,26 @@ if (fs.existsSync(prismaSrc)) {
   console.warn("copy-standalone-assets: brak node_modules/.prisma (pomijam)");
 }
 
+// @prisma/adapter-mariadb -> .next/standalone/node_modules/@prisma/adapter-mariadb
+const adapterSrc = path.join(root, "node_modules", "@prisma", "adapter-mariadb");
+const adapterDest = path.join(standaloneDir, "node_modules", "@prisma", "adapter-mariadb");
+if (fs.existsSync(adapterSrc)) {
+  copyRecursive(adapterSrc, adapterDest);
+  console.log("copy-standalone-assets: @prisma/adapter-mariadb -> standalone");
+} else {
+  console.warn("copy-standalone-assets: brak @prisma/adapter-mariadb (pomijam)");
+}
+
+// dotenv -> .next/standalone/node_modules/dotenv
+const dotenvSrc = path.join(root, "node_modules", "dotenv");
+const dotenvDest = path.join(standaloneDir, "node_modules", "dotenv");
+if (fs.existsSync(dotenvSrc)) {
+  copyRecursive(dotenvSrc, dotenvDest);
+  console.log("copy-standalone-assets: dotenv -> standalone");
+} else {
+  console.warn("copy-standalone-assets: brak dotenv (pomijam)");
+}
+
 // public -> .next/standalone/public (dla PWA: manifest.json, sw.js, icons)
 const publicSrc = path.join(root, "public");
 const publicDest = path.join(standaloneDir, "public");

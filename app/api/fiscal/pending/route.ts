@@ -7,9 +7,6 @@ import { prisma } from "@/lib/db";
  *
  * Returns the oldest pending fiscal job and atomically marks it as "processing".
  * Called by the FiscalRelay component in the browser every few seconds.
- * 
- * Uses updateMany with status condition to prevent race conditions where
- * multiple requests could grab the same job before the update commits.
  */
 export async function GET() {
   const session = await getSession();
@@ -18,38 +15,34 @@ export async function GET() {
   }
 
   try {
-    // Find oldest pending job
-    const pending = await prisma.fiscalJob.findFirst({
-      where: { status: "pending" },
-      orderBy: { createdAt: "asc" },
+    const job = await prisma.$transaction(async (tx) => {
+      const pending = await tx.fiscalJob.findFirst({
+        where: { status: "pending" },
+        orderBy: { createdAt: "asc" },
+      });
+
+      if (!pending) return null;
+
+      await tx.fiscalJob.update({
+        where: { id: pending.id },
+        data: {
+          status: "processing",
+          attempts: { increment: 1 },
+        },
+      });
+
+      return pending;
     });
 
-    if (!pending) {
-      return NextResponse.json({ job: null });
-    }
-
-    // Atomically update ONLY if still pending (prevents race condition)
-    const updated = await prisma.fiscalJob.updateMany({
-      where: {
-        id: pending.id,
-        status: "pending", // Only update if still pending!
-      },
-      data: {
-        status: "processing",
-        attempts: { increment: 1 },
-      },
-    });
-
-    // If no rows updated, another request already grabbed this job
-    if (updated.count === 0) {
+    if (!job) {
       return NextResponse.json({ job: null });
     }
 
     return NextResponse.json({
       job: {
-        id: pending.id,
-        type: pending.type,
-        payload: pending.payload,
+        id: job.id,
+        type: job.type,
+        payload: job.payload,
       },
     });
   } catch (e) {
