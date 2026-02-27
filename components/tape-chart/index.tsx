@@ -1167,18 +1167,28 @@ export function TapeChart({
     // === TEMP DEBUG — usunąć po diagnozie ===
     if (typeof window !== 'undefined') {
       const dbg001 = filteredReservations.filter(r => r.room === '001');
-      console.log('[PROD DEBUG] filteredReservations for 001:', dbg001);
-      console.log('[PROD DEBUG] dates range:', dates[0], '→', dates[dates.length - 1]);
-      console.log('[PROD DEBUG] all reservation rooms (unique):', [...new Set(filteredReservations.map(r => r.room))].sort());
-      console.log('[PROD DEBUG] total reservations:', filteredReservations.length);
+      console.warn('[PROD DEBUG] filteredReservations for 001:', dbg001);
+      console.warn('[PROD DEBUG] dates range:', dates[0], '→', dates[dates.length - 1]);
+      console.warn('[PROD DEBUG] all reservation rooms (unique):', [...new Set(filteredReservations.map(r => r.room))].sort());
+      console.warn('[PROD DEBUG] total reservations:', filteredReservations.length);
       if (filteredReservations.length > 0) {
-        console.log('[PROD DEBUG] sample res:', JSON.stringify(filteredReservations[0]));
+        console.warn('[PROD DEBUG] sample res:', JSON.stringify(filteredReservations[0]));
       }
       // Sprawdź co dateIndex ma dla dzisiejszej daty
-      console.log('[PROD DEBUG] dateIndex for 2026-02-27:', dateIndex.get('2026-02-27'));
-      console.log('[PROD DEBUG] visibleRoomNumbers has 001:', visibleRoomNumbers.has('001'));
+      console.warn('[PROD DEBUG] dateIndex for 2026-02-27:', dateIndex.get('2026-02-27'));
+      console.warn('[PROD DEBUG] visibleRoomNumbers has 001:', visibleRoomNumbers.has('001'));
     }
     // === END TEMP DEBUG ===
+
+    if (typeof window !== 'undefined') {
+      (window as any).__TC_DEBUG__ = {
+        room001: filteredReservations.filter(r => r.room === '001'),
+        dates3: dates.slice(0, 5),
+        di27: dateIndex.get('2026-02-27'),
+        di28: dateIndex.get('2026-02-28'),
+        rr001: roomRowIndex.get('001'),
+      };
+    }
 
     return filteredReservations
       .map((res) => {
@@ -1186,7 +1196,7 @@ export function TapeChart({
         if (typeof window !== 'undefined' && res.room === '001') {
           const rawStartIdx = dateIndex.get(res.checkIn);
           const rawEndIdx = dateIndex.get(res.checkOut);
-          console.log('[TC-MAP-DBG] Processing room 001:', {
+          console.warn('[TC-MAP-DBG] Processing room 001:', {
             id: res.id,
             checkIn: res.checkIn,
             checkOut: res.checkOut,
@@ -1232,7 +1242,7 @@ export function TapeChart({
 
         // === TEMP DEBUG — room 001 (AFTER CLAMP) ===
         if (typeof window !== 'undefined' && res.room === '001') {
-          console.log('[TC-MAP-DBG] After clamp for room 001:', {
+          console.warn('[TC-MAP-DBG] After clamp for room 001:', {
             id: res.id,
             finalStartIdx: startIdx,
             finalEndIdx: endIdx,
