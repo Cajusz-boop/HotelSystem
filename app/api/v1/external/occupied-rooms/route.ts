@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
       checkIn: r.checkIn.toISOString().slice(0, 10),
       checkOut: r.checkOut.toISOString().slice(0, 10),
       pax: r.pax ?? 1,
+      status: r.status, // CHECKED_IN lub CONFIRMED
     }));
 
     return NextResponse.json({
