@@ -261,8 +261,8 @@ async function syncRoomsToKw(kw) {
     if (!kwClientId) {
       kwClientId = nextClientId++;
       await kw.query(
-        `INSERT INTO klienci (KlientID, Nazwisko, Active, IsFirma)
-         VALUES (?, ?, 1, 0)
+        `INSERT INTO klienci (KlientID, Nazwisko, Active, IsFirma, Dziecko)
+         VALUES (?, ?, 1, 0, 0)
          ON DUPLICATE KEY UPDATE Nazwisko = VALUES(Nazwisko), Active = 1`,
         [kwClientId, guestName]
       );
