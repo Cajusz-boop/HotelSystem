@@ -1,31 +1,20 @@
 #!/usr/bin/env node
 /**
- * sync.mjs — Dwukierunkowy synchronizator: nowy system hotelowy ↔ baza KW Hotel (Bistro)
+ * sync.mjs — Synchronizacja HotelSystem → Bistro POS (Symplex Small Business SB4)
  *
- * Kierunek 1 (Hotel → Bistro):
- *   Pobiera zajęte pokoje z API nowego systemu i zapisuje je do tabel KW Hotel
- *   (rooms, klienci, rezerwacje), żeby Bistro widziało aktualną listę pokoi z gośćmi.
- *
- * Kierunek 2 (Bistro → Hotel):
- *   Czyta nowe dokumenty sprzedaży (rachunki "na pokój") z bazy KW Hotel
- *   i wysyła je do API nowego systemu (POST /api/v1/external/posting).
+ * Generuje plik Rezerwacje.txt z listą zameldowanych gości.
+ * Bistro czyta ten plik przy otwieraniu okna "Klient hotelowy".
  *
  * ENV:
- *   KW_DATABASE_URL     — URL do bazy KW Hotel (mysql://user:pass@host:port/db)
- *   OCCUPIED_ROOMS_URL  — URL API nowego systemu (GET /api/v1/external/occupied-rooms)
- *   POSTING_URL         — URL API nowego systemu (POST /api/v1/external/posting)
- *   EXTERNAL_API_KEY    — klucz API (wspólny dla obu endpointów)
- *   SYNC_DIRECTION      — "both" (domyślnie), "to-kw", "from-kw"
+ *   OCCUPIED_ROOMS_URL  — URL API HotelSystem (GET /api/v1/external/occupied-rooms)
+ *   EXTERNAL_API_KEY    — klucz API
+ *   OUTPUT_PATH         — ścieżka do pliku Rezerwacje.txt (domyślnie W:\Rezerwacje.txt)
  *   SYNC_LOG_FILE       — ścieżka do pliku logów (opcjonalnie)
  *
  * Użycie:
- *   node symplex-bridge/sync.mjs                    # oba kierunki
- *   node symplex-bridge/sync.mjs --to-kw            # tylko pokoje → KW Hotel
- *   node symplex-bridge/sync.mjs --from-kw          # tylko rachunki → nowy system
- *   node symplex-bridge/sync.mjs --recon            # diagnostyka bazy
+ *   node symplex-bridge/sync.mjs
  */
 
-import mysql from "mysql2/promise";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -62,25 +51,43 @@ function loadDotenv(filePath) {
 // Konfiguracja
 // ---------------------------------------------------------------------------
 
-const KW_URL = process.env.KW_DATABASE_URL?.trim();
 const OCCUPIED_ROOMS_URL = process.env.OCCUPIED_ROOMS_URL?.trim();
-const POSTING_URL = process.env.POSTING_URL?.trim();
 const EXTERNAL_API_KEY = process.env.EXTERNAL_API_KEY?.trim();
+const OUTPUT_PATH = process.env.OUTPUT_PATH?.trim() || "W:\\Rezerwacje.txt";
 const LOG_FILE = process.env.SYNC_LOG_FILE?.trim();
 
-const args = process.argv.slice(2);
-const directionArg = args.find((a) => a.startsWith("--"));
-const DIRECTION =
-  directionArg === "--to-kw"
-    ? "to-kw"
-    : directionArg === "--from-kw"
-      ? "from-kw"
-      : directionArg === "--recon"
-        ? "recon"
-        : process.env.SYNC_DIRECTION?.trim() || "both";
-
-// Plik stanu — zapamiętuje ostatnio przetworzony ID rachunku
-const STATE_FILE = path.join(__dirname, ".sync-state.json");
+// Mapowanie numerów pokoi HotelSystem → ID pokoi KWHotel
+// ID 17 nie istnieje, ID 19 = "NOWA BAZA NOCLE" (ignorowane)
+const ROOM_MAP = {
+  "001": { id: 1, name: "001 " },
+  "002": { id: 2, name: "002 " },
+  "003": { id: 3, name: "003 " },
+  "004": { id: 4, name: "004 " },
+  "005": { id: 5, name: "005 " },
+  "006": { id: 6, name: "006 " },
+  "007": { id: 7, name: "007 " },
+  "008": { id: 8, name: "008 " },
+  "009": { id: 9, name: "009 " },
+  "010": { id: 10, name: "010 " },
+  "011": { id: 11, name: "011 " },
+  "012": { id: 12, name: "012" },
+  "013": { id: 13, name: "013 " },
+  "014": { id: 14, name: "014 " },
+  "015": { id: 15, name: "015 " },
+  "016": { id: 16, name: "016 " },
+  "SI 020": { id: 18, name: "SI 020 " },
+  "SI 021": { id: 20, name: "SI 021 " },
+  "SI 022": { id: 21, name: "SI 022 " },
+  "SI 023": { id: 22, name: "SI 023 " },
+  "SI 024": { id: 23, name: "SI 024 " },
+  "SI 025": { id: 24, name: "SI 025 " },
+  "SI 026": { id: 25, name: "SI 026 " },
+  "SI 027": { id: 26, name: "SI 027 " },
+  "SI 028": { id: 27, name: "SI 028 " },
+  "SI 029": { id: 28, name: "SI 029 " },
+  "SI 030": { id: 29, name: "SI 030 " },
+  "SI 031": { id: 30, name: "SI 031 " },
+};
 
 // ---------------------------------------------------------------------------
 // Logowanie
@@ -99,671 +106,155 @@ function log(level, msg) {
   }
 }
 
-function loadState() {
-  try {
-    if (fs.existsSync(STATE_FILE)) {
-      return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-    }
-  } catch {
-    // ignoruj
-  }
-  return { lastProcessedDocId: 0, lastSyncTime: null };
-}
-
-function saveState(state) {
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-}
-
 // ---------------------------------------------------------------------------
 // Walidacja
 // ---------------------------------------------------------------------------
 
 function validateConfig() {
   const errors = [];
-  if (!KW_URL) errors.push("Brak KW_DATABASE_URL");
-  if (DIRECTION !== "from-kw" && !OCCUPIED_ROOMS_URL)
-    errors.push("Brak OCCUPIED_ROOMS_URL (wymagany dla kierunku to-kw/both)");
-  if (DIRECTION !== "to-kw" && !POSTING_URL)
-    errors.push("Brak POSTING_URL (wymagany dla kierunku from-kw/both)");
+  if (!OCCUPIED_ROOMS_URL) errors.push("Brak OCCUPIED_ROOMS_URL");
   if (!EXTERNAL_API_KEY) errors.push("Brak EXTERNAL_API_KEY");
   if (errors.length > 0) {
     log("ERROR", "Brakujące zmienne środowiskowe:");
     errors.forEach((e) => log("ERROR", `  - ${e}`));
-    log(
-      "INFO",
-      "Ustaw zmienne w pliku .env bridge'a lub jako zmienne środowiskowe."
-    );
+    log("INFO", "Ustaw zmienne w pliku .env bridge'a lub jako zmienne środowiskowe.");
     process.exit(1);
   }
 }
 
-// =========================================================================
-// KIERUNEK 1: Hotel → KW Hotel (pokoje z gośćmi)
-// =========================================================================
+// ---------------------------------------------------------------------------
+// Generowanie ID rezerwacji
+// ---------------------------------------------------------------------------
 
 /**
- * Pobiera zajęte pokoje z API nowego systemu i synchronizuje do bazy KW Hotel.
- *
- * Strategia:
- *  1. Pobierz listę zajętych pokoi z GET /api/v1/external/occupied-rooms
- *  2. Dla każdego pokoju upewnij się, że istnieje w tabeli `rooms`
- *  3. Dla każdego gościa upewnij się, że istnieje w tabeli `klienci`
- *  4. Utwórz/aktualizuj rezerwację w tabeli `rezerwacje`:
- *     - status=CHECKED_IN (HotelSystem) → status_id=2 (zameldowana) — Bistro WIDZI
- *     - status=CONFIRMED (HotelSystem)  → status_id=1 (potwierdzona) — Bistro NIE widzi
- *  5. Zamknij rezerwacje (status_id=3) dla pokoi, które nie są już zajęte (wymeldowanie)
+ * Generuje numeryczny ID rezerwacji z prefixem "1" (format KWHotel).
+ * Używa hash z reservationId jeśli dostępne, lub timestampu.
  */
-async function syncRoomsToKw(kw) {
-  log("INFO", "=== Kierunek 1: Hotel → KW Hotel (pokoje) ===");
+function generateReservationId(room) {
+  if (room.kwhotelReservationId) {
+    return `1${room.kwhotelReservationId}`;
+  }
+  
+  // Hash z reservationId (UUID) → 6-cyfrowy numer
+  if (room.reservationId) {
+    let hash = 0;
+    for (let i = 0; i < room.reservationId.length; i++) {
+      hash = ((hash << 5) - hash) + room.reservationId.charCodeAt(i);
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    const num = Math.abs(hash) % 900000 + 100000; // 100000-999999
+    return `1${num}`;
+  }
+  
+  // Fallback: timestamp
+  return `1${Date.now() % 1000000}`;
+}
 
-  // Pobierz zajęte pokoje z API
-  const res = await fetch(OCCUPIED_ROOMS_URL, {
+// ---------------------------------------------------------------------------
+// Główna funkcja synchronizacji
+// ---------------------------------------------------------------------------
+
+async function sync() {
+  log("INFO", "=== Synchronizacja HotelSystem → Bistro (Rezerwacje.txt) ===");
+  log("INFO", `Ścieżka docelowa: ${OUTPUT_PATH}`);
+
+  // 1. Pobierz zajęte pokoje z API
+  log("INFO", `Pobieranie danych z: ${OCCUPIED_ROOMS_URL}`);
+  
+  const response = await fetch(OCCUPIED_ROOMS_URL, {
     headers: { "X-API-Key": EXTERNAL_API_KEY },
   });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(
-      `API occupied-rooms zwróciło ${res.status}: ${body.substring(0, 200)}`
-    );
+  
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`API zwróciło ${response.status}: ${body.substring(0, 200)}`);
   }
-  const data = await res.json();
-  const occupiedRooms = data.rooms || [];
-  log("INFO", `Pobrano ${occupiedRooms.length} zajętych pokoi z API (data: ${data.date})`);
+  
+  const data = await response.json();
+  const rooms = data.rooms || [];
+  
+  log("INFO", `Pobrano ${rooms.length} pokoi z API (data: ${data.date})`);
 
-  if (occupiedRooms.length === 0) {
-    // Zamknij wszystkie aktywne rezerwacje w KW Hotel (status 1=potwierdzona lub 2=zameldowana → 3=wymeldowana)
-    const [result] = await kw.query(
-      "UPDATE rezerwacje SET status_id = 3 WHERE status_id IN (1, 2)"
-    );
-    if (result.changedRows > 0) {
-      log("INFO", `Zamknięto ${result.changedRows} rezerwacji (brak zajętych pokoi)`);
-    }
-    return;
-  }
+  // 2. Filtruj tylko zameldowanych gości (CHECKED_IN)
+  const checkedInRooms = rooms.filter(r => r.status === "CHECKED_IN" || r.status === "CONFIRMED");
+  log("INFO", `Zameldowanych gości: ${checkedInRooms.length}`);
 
-  // Pobierz istniejące pokoje z KW Hotel
-  const [kwRooms] = await kw.query(
-    "SELECT id, name FROM rooms WHERE deleted = 0"
-  );
-  const roomByName = new Map();
-  for (const r of kwRooms) {
-    roomByName.set(r.name.trim(), r.id);
-  }
-
-  // Pobierz istniejących klientów z KW Hotel (szukamy po nazwisku)
-  const [kwClients] = await kw.query(
-    "SELECT KlientID, Nazwisko FROM klienci WHERE Active = 1"
-  );
-  const clientByName = new Map();
-  for (const c of kwClients) {
-    clientByName.set(c.Nazwisko?.trim(), c.KlientID);
-  }
-
-  // Pobierz aktywne rezerwacje z KW Hotel (status_id=1 potwierdzona, status_id=2 zameldowana)
-  const [kwActiveRez] = await kw.query(
-    "SELECT RezerwacjaID, PokojID, KlientID, status_id FROM rezerwacje WHERE status_id IN (1, 2)"
-  );
-  const activeRezByRoom = new Map();
-  for (const r of kwActiveRez) {
-    activeRezByRoom.set(r.PokojID, r);
-  }
-
-  // Znajdź max ID-ki do generowania nowych
-  const [maxRoom] = await kw.query("SELECT COALESCE(MAX(id), 0) AS m FROM rooms");
-  let nextRoomId = maxRoom[0].m + 1;
-
-  const [maxClient] = await kw.query(
-    "SELECT COALESCE(MAX(KlientID), 0) AS m FROM klienci"
-  );
-  let nextClientId = maxClient[0].m + 1;
-
-  const [maxRez] = await kw.query(
-    "SELECT COALESCE(MAX(RezerwacjaID), 0) AS m FROM rezerwacje"
-  );
-  let nextRezId = maxRez[0].m + 1;
-
-  // Zbiór pokoi, które są teraz zajęte (KW room ID)
-  const occupiedKwRoomIds = new Set();
-
-  let created = 0;
-  let updated = 0;
-  let roomsCreated = 0;
-  let clientsCreated = 0;
-
-  for (const room of occupiedRooms) {
+  // 3. Generuj linie pliku
+  const lines = [];
+  let skipped = 0;
+  
+  for (const room of checkedInRooms) {
     const roomNumber = room.roomNumber?.trim();
     const guestName = room.guestName?.trim();
-    if (!roomNumber || !guestName) continue;
-
-    // Mapowanie statusu HotelSystem → KWHotel:
-    //   CHECKED_IN  → status_id=2 (zameldowana - Bistro widzi)
-    //   CONFIRMED   → status_id=1 (potwierdzona - Bistro NIE widzi)
-    //   (domyślnie) → status_id=2 (dla kompatybilności wstecznej)
-    const kwStatusId = room.status === "CONFIRMED" ? 1 : 2;
-
-    // 1. Upewnij się, że pokój istnieje w KW Hotel
-    let kwRoomId = roomByName.get(roomNumber);
-    if (!kwRoomId) {
-      kwRoomId = nextRoomId++;
-      await kw.query(
-        `INSERT INTO rooms (id, name, room_group_id, floor, cleanliness, renovation, deleted)
-         VALUES (?, ?, 1, 0, 0, 0, 0)
-         ON DUPLICATE KEY UPDATE deleted = 0`,
-        [kwRoomId, roomNumber]
-      );
-      roomByName.set(roomNumber, kwRoomId);
-      roomsCreated++;
+    
+    if (!roomNumber || !guestName) {
+      log("WARN", `Pominięto pokój bez danych: roomNumber=${roomNumber}, guestName=${guestName}`);
+      skipped++;
+      continue;
     }
-    occupiedKwRoomIds.add(kwRoomId);
-
-    // 2. Upewnij się, że gość istnieje w KW Hotel
-    let kwClientId = clientByName.get(guestName);
-    if (!kwClientId) {
-      kwClientId = nextClientId++;
-      await kw.query(
-        `INSERT INTO klienci (KlientID, Nazwisko, Active, IsFirma, Dziecko)
-         VALUES (?, ?, 1, 0, 0)
-         ON DUPLICATE KEY UPDATE Nazwisko = VALUES(Nazwisko), Active = 1`,
-        [kwClientId, guestName]
-      );
-      clientByName.set(guestName, kwClientId);
-      clientsCreated++;
+    
+    // Znajdź mapowanie pokoju
+    const mapping = ROOM_MAP[roomNumber];
+    if (!mapping) {
+      log("WARN", `Nieznany pokój: ${roomNumber} (gość: ${guestName}) — pominięto`);
+      skipped++;
+      continue;
     }
-
-    // 3. Utwórz/aktualizuj rezerwację
-    const checkIn = room.checkIn || new Date().toISOString().slice(0, 10);
-    const checkOut = room.checkOut || new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-    const pax = room.pax || 1;
-
-    const existingRez = activeRezByRoom.get(kwRoomId);
-    if (existingRez) {
-      // Aktualizuj istniejącą rezerwację (status może się zmienić: CONFIRMED→CHECKED_IN)
-      await kw.query(
-        `UPDATE rezerwacje SET KlientID = ?, DataOd = ?, DataDo = ?, Osob = ?, status_id = ?
-         WHERE RezerwacjaID = ?`,
-        [kwClientId, checkIn, checkOut, pax, kwStatusId, existingRez.RezerwacjaID]
-      );
-      updated++;
-    } else {
-      // Utwórz nową rezerwację z odpowiednim statusem (2=zameldowana, 1=potwierdzona)
-      const rezId = nextRezId++;
-      const now = new Date().toISOString().slice(0, 19).replace("T", " ");
-      await kw.query(
-        `INSERT INTO rezerwacje (RezerwacjaID, PokojID, KlientID, DataOd, DataDo, Osob, status_id, status2_id, Cena, cena_noc, SposRozlicz, CenaDzieci, DataUtworzenia, WplataZaliczka, CenaTowaryGrupy)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, 0, 0, 0, ?, 0, 0)`,
-        [rezId, kwRoomId, kwClientId, checkIn, checkOut, pax, kwStatusId, now]
-      );
-      created++;
-      log("DEBUG", `Nowa rez#${rezId}: pokój=${roomNumber}, status_id=${kwStatusId} (${room.status || "CHECKED_IN"})`);
-    }
+    
+    const roomId = mapping.id;
+    const roomName = mapping.name;
+    const rezId = generateReservationId(room);
+    
+    // Daty w formacie YYYY-MM-DD
+    const checkIn = room.checkIn ? room.checkIn.split("T")[0] : new Date().toISOString().split("T")[0];
+    const checkOut = room.checkOut ? room.checkOut.split("T")[0] : new Date(Date.now() + 86400000).toISOString().split("T")[0];
+    
+    // Format linii: ROOM_NAME ;GUEST_NAME;1RESERVATION_ID;ROOM_INTERNAL_ID;CHECK_IN_DATE;CHECK_OUT_DATE 14:00
+    const line = `${roomName};${guestName};${rezId};${roomId};${checkIn};${checkOut} 14:00`;
+    lines.push(line);
+    
+    log("DEBUG", `  ${roomNumber}: ${guestName} (rez: ${rezId})`);
   }
 
-  // 4. Zamknij rezerwacje dla pokoi, które nie są już zajęte
-  let closed = 0;
-  for (const [roomId, rez] of activeRezByRoom) {
-    if (!occupiedKwRoomIds.has(roomId)) {
-      await kw.query(
-        "UPDATE rezerwacje SET status_id = 3 WHERE RezerwacjaID = ?",
-        [rez.RezerwacjaID]
-      );
-      closed++;
-    }
-  }
-
-  log(
-    "INFO",
-    `Pokoje: ${roomsCreated} nowych, Goście: ${clientsCreated} nowych`
-  );
-  log(
-    "INFO",
-    `Rezerwacje: ${created} utworzono, ${updated} zaktualizowano, ${closed} zamknięto`
-  );
-}
-
-// =========================================================================
-// KIERUNEK 2: KW Hotel → Hotel (rachunki z Bistro)
-// =========================================================================
-
-/**
- * Czyta dokumenty sprzedaży z bazy KW Hotel i wysyła do API nowego systemu.
- *
- * Strategia adaptacyjna — skrypt automatycznie wykrywa strukturę bazy:
- *  - Szuka tabel z rachunkami/dokumentami (dokumenty, dokumenty_sprzedazy, rachunki, itp.)
- *  - Czyta nowe rekordy (ID > ostatnio przetworzony)
- *  - Parsuje pozycje z powiązanej tabeli pozycji
- *  - Wysyła POST /api/v1/external/posting
- *  - Zapisuje ostatni przetworzony ID do pliku stanu
- */
-async function syncBillsFromKw(kw) {
-  log("INFO", "=== Kierunek 2: KW Hotel → Hotel (rachunki) ===");
-
-  const state = loadState();
-
-  // Wykryj tabelę z dokumentami sprzedaży
-  const docTable = await detectDocumentTable(kw);
-  if (!docTable) {
-    log(
-      "WARN",
-      "Nie znaleziono tabeli z dokumentami sprzedaży w bazie KW Hotel. " +
-        "Uruchom recon (node symplex-bridge/sync.mjs --recon) żeby zbadać strukturę bazy."
-    );
-    return;
-  }
-
-  log("INFO", `Tabela dokumentów: ${docTable.table} (ID: ${docTable.idCol})`);
-
-  // Pobierz nowe dokumenty
-  const lastId = state.lastProcessedDocId || 0;
-  const [docs] = await kw.query(
-    `SELECT * FROM \`${docTable.table}\` WHERE \`${docTable.idCol}\` > ? ORDER BY \`${docTable.idCol}\` ASC LIMIT 100`,
-    [lastId]
-  );
-
-  if (docs.length === 0) {
-    log("INFO", "Brak nowych dokumentów do przetworzenia.");
-    return;
-  }
-
-  log("INFO", `Znaleziono ${docs.length} nowych dokumentów (od ID > ${lastId})`);
-
-  // Wykryj tabelę pozycji
-  const posTable = await detectPositionsTable(kw, docTable);
-
-  let ok = 0;
-  let err = 0;
-  let maxProcessedId = lastId;
-
-  for (const doc of docs) {
-    const docId = doc[docTable.idCol];
-    try {
-      const posting = await buildPostingFromDoc(kw, doc, docTable, posTable);
-      if (!posting) {
-        log("DEBUG", `Dok#${docId}: pominięto (nie dotyczy pokoju)`);
-        maxProcessedId = Math.max(maxProcessedId, docId);
-        continue;
-      }
-
-      const result = await postToHotelApi(posting);
-      ok++;
-      log(
-        "INFO",
-        `Dok#${docId}: pokój ${posting.roomNumber} ${posting.amount} PLN → txId: ${result.transactionId}`
-      );
-    } catch (e) {
-      err++;
-      log("ERROR", `Dok#${docId}: ${e.message}`);
-    }
-    maxProcessedId = Math.max(maxProcessedId, docId);
-  }
-
-  // Zapisz stan
-  state.lastProcessedDocId = maxProcessedId;
-  state.lastSyncTime = new Date().toISOString();
-  saveState(state);
-
-  log("INFO", `Przetworzono: ${ok} OK, ${err} błędów. Ostatni ID: ${maxProcessedId}`);
-}
-
-/**
- * Wykrywa tabelę z dokumentami sprzedaży w bazie KW Hotel.
- * Szuka tabel o nazwach pasujących do wzorców.
- */
-async function detectDocumentTable(kw) {
-  const [tables] = await kw.query("SHOW TABLES");
-  const tableNames = tables.map((r) => Object.values(r)[0]);
-
-  // Wzorce nazw tabel z dokumentami sprzedaży (od najbardziej prawdopodobnych)
-  const patterns = [
-    "dokumenty_sprzedazy",
-    "dokumenty",
-    "rachunki",
-    "faktury",
-    "paragony",
-    "sprzedaz",
-    "dok_sprzedazy",
-  ];
-
-  let tableName = null;
-  for (const p of patterns) {
-    const match = tableNames.find(
-      (t) => t.toLowerCase() === p || t.toLowerCase().includes(p)
-    );
-    if (match) {
-      tableName = match;
-      break;
-    }
-  }
-
-  if (!tableName) return null;
-
-  // Wykryj kolumnę ID i kolumnę z numerem pokoju
-  const [cols] = await kw.query(`DESCRIBE \`${tableName}\``);
-  const colNames = cols.map((c) => c.Field);
-
-  // Kolumna ID (PK)
-  const pkCol = cols.find((c) => c.Key === "PRI");
-  const idCol = pkCol ? pkCol.Field : colNames[0];
-
-  // Kolumna z numerem pokoju / klienta
-  const roomCol =
-    colNames.find((c) => /pokoj|room|nrpokoju|pokojid/i.test(c)) ||
-    colNames.find((c) => /klient|kontrah/i.test(c)) ||
-    null;
-
-  // Kolumna z kwotą
-  const amountCol =
-    colNames.find((c) => /brutto|wartosc|kwota|suma|amount|total/i.test(c)) ||
-    colNames.find((c) => /cena|netto/i.test(c)) ||
-    null;
-
-  // Kolumna z numerem dokumentu
-  const docNumCol =
-    colNames.find((c) => /nrdok|numer|nr_dok|numer_dok/i.test(c)) || null;
-
-  // Kolumna z datą
-  const dateCol =
-    colNames.find((c) => /data|date|created|czas/i.test(c)) || null;
-
-  return {
-    table: tableName,
-    idCol,
-    roomCol,
-    amountCol,
-    docNumCol,
-    dateCol,
-    allCols: colNames,
-  };
-}
-
-/**
- * Wykrywa tabelę z pozycjami dokumentów.
- */
-async function detectPositionsTable(kw, docTable) {
-  const [tables] = await kw.query("SHOW TABLES");
-  const tableNames = tables.map((r) => Object.values(r)[0]);
-
-  const patterns = [
-    "pozycje_dokumentow",
-    "pozycje_sprzedazy",
-    "pozycje",
-    "dok_pozycje",
-    "poz_dokumenty",
-    "poz_sprzedazy",
-    "items",
-  ];
-
-  let tableName = null;
-  for (const p of patterns) {
-    const match = tableNames.find(
-      (t) => t.toLowerCase() === p || t.toLowerCase().includes(p)
-    );
-    if (match) {
-      tableName = match;
-      break;
-    }
-  }
-
-  if (!tableName) return null;
-
-  const [cols] = await kw.query(`DESCRIBE \`${tableName}\``);
-  const colNames = cols.map((c) => c.Field);
-
-  // Kolumna łącząca z dokumentem
-  const docFkCol =
-    colNames.find((c) => /dok.*id|document.*id|faktura.*id|rachunek.*id/i.test(c)) ||
-    colNames.find((c) => c.toLowerCase().includes(docTable.idCol.toLowerCase())) ||
-    colNames.find((c) => /id_dok|iddok/i.test(c)) ||
-    null;
-
-  // Kolumna z nazwą pozycji
-  const nameCol =
-    colNames.find((c) => /nazwa|name|towar|opis/i.test(c)) || null;
-
-  // Kolumna z ilością
-  const qtyCol =
-    colNames.find((c) => /ilosc|qty|quantity|il/i.test(c)) || null;
-
-  // Kolumna z ceną
-  const priceCol =
-    colNames.find((c) => /cena|price|cena_jed|cenajed/i.test(c)) || null;
-
-  return {
-    table: tableName,
-    docFkCol,
-    nameCol,
-    qtyCol,
-    priceCol,
-    allCols: colNames,
-  };
-}
-
-/**
- * Buduje obiekt postingu z rekordu dokumentu.
- * Zwraca null jeśli dokument nie dotyczy pokoju.
- */
-async function buildPostingFromDoc(kw, doc, docTable, posTable) {
-  // Wyciągnij numer pokoju
-  let roomNumber = null;
-
-  if (docTable.roomCol) {
-    const rawVal = doc[docTable.roomCol];
-    if (rawVal != null) {
-      const str = String(rawVal).trim();
-      // Jeśli to ID pokoju (liczba), przetłumacz na numer pokoju
-      if (/^\d+$/.test(str) && docTable.roomCol.toLowerCase().includes("id")) {
-        try {
-          const [rooms] = await kw.query(
-            "SELECT name FROM rooms WHERE id = ?",
-            [parseInt(str, 10)]
-          );
-          if (rooms.length > 0) roomNumber = rooms[0].name.trim();
-        } catch {
-          roomNumber = str;
-        }
-      } else {
-        roomNumber = str;
-      }
-    }
-  }
-
-  // Jeśli nie znaleziono numeru pokoju, szukaj w uwagach/opisie
-  if (!roomNumber) {
-    for (const col of docTable.allCols) {
-      const val = doc[col];
-      if (typeof val === "string") {
-        const match = val.match(/pok[oó]j\s*[:=]?\s*(\d+)/i);
-        if (match) {
-          roomNumber = match[1];
-          break;
-        }
-      }
-    }
-  }
-
-  if (!roomNumber) return null;
-
-  // Wyciągnij kwotę
-  let amount = 0;
-  if (docTable.amountCol) {
-    amount = parseFloat(doc[docTable.amountCol]) || 0;
-  }
-  if (amount <= 0) return null;
-
-  // Wyciągnij numer dokumentu
-  const receiptNumber = docTable.docNumCol
-    ? String(doc[docTable.docNumCol] || "").trim() || undefined
-    : undefined;
-
-  // Pobierz pozycje
-  const items = [];
-  if (posTable && posTable.docFkCol) {
-    const docId = doc[docTable.idCol];
-    try {
-      const [positions] = await kw.query(
-        `SELECT * FROM \`${posTable.table}\` WHERE \`${posTable.docFkCol}\` = ?`,
-        [docId]
-      );
-      for (const pos of positions) {
-        const name = posTable.nameCol
-          ? String(pos[posTable.nameCol] || "Pozycja").trim()
-          : "Pozycja";
-        const quantity = posTable.qtyCol
-          ? parseFloat(pos[posTable.qtyCol]) || 1
-          : 1;
-        const unitPrice = posTable.priceCol
-          ? parseFloat(pos[posTable.priceCol]) || 0
-          : 0;
-        if (unitPrice > 0) {
-          items.push({ name, quantity, unitPrice });
-        }
-      }
-    } catch {
-      // tabela pozycji niedostępna — kontynuuj bez pozycji
-    }
-  }
-
-  return {
-    roomNumber,
-    amount,
-    type: "RESTAURANT",
-    description: items.length > 0
-      ? `Restauracja (${items.length} poz.)`
-      : "Restauracja",
-    receiptNumber,
-    posSystem: "Symplex Bistro",
-    items: items.length > 0 ? items : undefined,
-  };
-}
-
-/**
- * Wysyła obciążenie do API nowego systemu.
- */
-async function postToHotelApi(posting) {
-  const res = await fetch(POSTING_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": EXTERNAL_API_KEY,
-    },
-    body: JSON.stringify(posting),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return data;
-}
-
-// =========================================================================
-// RECON — diagnostyka bazy
-// =========================================================================
-
-async function recon(kw) {
-  log("INFO", "=== Diagnostyka bazy KW Hotel ===\n");
-
-  const [dbs] = await kw.query("SHOW DATABASES");
-  log("INFO", "Bazy danych:");
-  for (const row of dbs) log("INFO", `  ${Object.values(row)[0]}`);
-
-  const [currentDb] = await kw.query("SELECT DATABASE() AS db");
-  const dbName = currentDb[0]?.db;
-  if (!dbName) {
-    log("ERROR", "Brak wybranej bazy. Podaj nazwę bazy w KW_DATABASE_URL.");
-    return;
-  }
-
-  log("INFO", `\nTabele w bazie ${dbName}:`);
-  const [tables] = await kw.query("SHOW TABLES");
-  const tableNames = tables.map((r) => Object.values(r)[0]);
-  for (const t of tableNames) log("INFO", `  ${t}`);
-
-  // Struktura kluczowych tabel
-  const patterns = [
-    "room", "pokoj", "klient", "rezerw", "dokument", "rachunek",
-    "faktur", "sprzedaz", "paragon", "pozycj", "kontrah",
-  ];
-  const matched = tableNames.filter((t) =>
-    patterns.some((p) => t.toLowerCase().includes(p))
-  );
-
-  if (matched.length > 0) {
-    log("INFO", `\nStruktura kluczowych tabel (${matched.length}):`);
-    for (const t of matched) {
-      log("INFO", `\n  >> ${t}`);
-      const [cols] = await kw.query(`DESCRIBE \`${t}\``);
-      for (const c of cols) {
-        const key = c.Key === "PRI" ? " [PK]" : c.Key === "UNI" ? " [UQ]" : "";
-        log("INFO", `     ${c.Field} ${c.Type}${key}`);
-      }
-      try {
-        const [cnt] = await kw.query(`SELECT COUNT(*) AS cnt FROM \`${t}\``);
-        log("INFO", `     (${cnt[0].cnt} rekordów)`);
-      } catch {
-        // ignoruj
-      }
-    }
-  }
-
-  // Próbka aktywnych rezerwacji
-  if (tableNames.includes("rezerwacje")) {
-    log("INFO", "\nAktywne rezerwacje (status_id=2, limit 5):");
-    try {
-      const [rows] = await kw.query(
-        "SELECT RezerwacjaID, PokojID, KlientID, DataOd, DataDo, status_id FROM rezerwacje WHERE status_id = 2 LIMIT 5"
-      );
-      if (rows.length === 0) {
-        log("INFO", "  Brak aktywnych rezerwacji.");
-      } else {
-        for (const r of rows) {
-          log("INFO", `  Rez#${r.RezerwacjaID} Pokój=${r.PokojID} Klient=${r.KlientID} ${r.DataOd}→${r.DataDo}`);
-        }
-      }
-    } catch (e) {
-      log("ERROR", `  ${e.message}`);
-    }
-  }
-}
-
-// =========================================================================
-// Main
-// =========================================================================
-
-async function main() {
-  if (DIRECTION === "recon") {
-    if (!KW_URL) {
-      log("ERROR", "Brak KW_DATABASE_URL. Ustaw np. KW_DATABASE_URL=mysql://root:pass@192.168.1.10:3306/kwhotel");
-      process.exit(1);
-    }
-    const kw = await mysql.createConnection(KW_URL);
-    log("INFO", `Połączono z bazą: ${KW_URL.replace(/:[^:@]+@/, ":***@")}`);
-    await recon(kw);
-    await kw.end();
-    return;
-  }
-
-  validateConfig();
-
-  const kw = await mysql.createConnection(KW_URL);
-  log("INFO", `Połączono z bazą KW Hotel: ${KW_URL.replace(/:[^:@]+@/, ":***@")}`);
-
+  // 4. Zapisz plik z UTF-8 BOM
+  const BOM = "\uFEFF";
+  const content = lines.length > 0 
+    ? BOM + lines.join("\r\n") + "\r\n"
+    : BOM; // Pusty plik z samym BOM jeśli brak gości
+  
   try {
-    // Kierunek 1: Hotel → KW Hotel
-    if (DIRECTION === "both" || DIRECTION === "to-kw") {
-      await syncRoomsToKw(kw);
+    fs.writeFileSync(OUTPUT_PATH, content, "utf8");
+    log("INFO", `Zapisano ${lines.length} rekordów do ${OUTPUT_PATH}`);
+  } catch (err) {
+    if (err.code === "ENOENT") {
+      // Spróbuj utworzyć folder nadrzędny
+      const dir = path.dirname(OUTPUT_PATH);
+      log("WARN", `Folder ${dir} nie istnieje, próbuję utworzyć...`);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(OUTPUT_PATH, content, "utf8");
+      log("INFO", `Zapisano ${lines.length} rekordów do ${OUTPUT_PATH}`);
+    } else {
+      throw err;
     }
-
-    // Kierunek 2: KW Hotel → Hotel
-    if (DIRECTION === "both" || DIRECTION === "from-kw") {
-      await syncBillsFromKw(kw);
-    }
-
-    log("INFO", "=== Synchronizacja zakończona ===");
-  } finally {
-    await kw.end();
   }
+
+  if (skipped > 0) {
+    log("WARN", `Pominięto ${skipped} rekordów (brak mapowania lub danych)`);
+  }
+  
+  log("INFO", "=== Synchronizacja zakończona ===");
 }
 
-main().catch((e) => {
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+validateConfig();
+
+sync().catch((e) => {
   log("ERROR", `Błąd krytyczny: ${e.message}`);
+  if (e.stack) {
+    log("DEBUG", e.stack);
+  }
   process.exit(1);
 });
