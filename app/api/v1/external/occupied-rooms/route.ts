@@ -52,10 +52,11 @@ export async function GET(request: NextRequest) {
     const dayEnd = new Date(dayStart);
     dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
-    // Znajdź rezerwacje ze statusem CHECKED_IN, których pobyt obejmuje dany dzień
+    // Znajdź rezerwacje CHECKED_IN lub CONFIRMED, których pobyt obejmuje dany dzień
+    // CONFIRMED akceptujemy bo gość może być fizycznie w pokoju, ale bez formalnego check-in w systemie
     const reservations = await prisma.reservation.findMany({
       where: {
-        status: "CHECKED_IN",
+        status: { in: ["CHECKED_IN", "CONFIRMED"] },
         checkIn: { lte: dayStart },
         checkOut: { gt: dayStart },
       },
