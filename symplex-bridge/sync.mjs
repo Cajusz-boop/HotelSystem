@@ -148,8 +148,10 @@ function validateConfig() {
  *  1. Pobierz listę zajętych pokoi z GET /api/v1/external/occupied-rooms
  *  2. Dla każdego pokoju upewnij się, że istnieje w tabeli `rooms`
  *  3. Dla każdego gościa upewnij się, że istnieje w tabeli `klienci`
- *  4. Utwórz/aktualizuj rezerwację w tabeli `rezerwacje` ze status_id=2 (CHECKED_IN)
- *  5. Zamknij stare rezerwacje (status_id=2) dla pokoi, które nie są już zajęte
+ *  4. Utwórz/aktualizuj rezerwację w tabeli `rezerwacje`:
+ *     - status=CHECKED_IN (HotelSystem) → status_id=2 (zameldowana) — Bistro WIDZI
+ *     - status=CONFIRMED (HotelSystem)  → status_id=1 (potwierdzona) — Bistro NIE widzi
+ *  5. Zamknij rezerwacje (status_id=3) dla pokoi, które nie są już zajęte (wymeldowanie)
  */
 async function syncRoomsToKw(kw) {
   log("INFO", "=== Kierunek 1: Hotel → KW Hotel (pokoje) ===");
@@ -169,9 +171,9 @@ async function syncRoomsToKw(kw) {
   log("INFO", `Pobrano ${occupiedRooms.length} zajętych pokoi z API (data: ${data.date})`);
 
   if (occupiedRooms.length === 0) {
-    // Zamknij wszystkie aktywne rezerwacje w KW Hotel
+    // Zamknij wszystkie aktywne rezerwacje w KW Hotel (status 1=potwierdzona lub 2=zameldowana → 3=wymeldowana)
     const [result] = await kw.query(
-      "UPDATE rezerwacje SET status_id = 3 WHERE status_id = 2"
+      "UPDATE rezerwacje SET status_id = 3 WHERE status_id IN (1, 2)"
     );
     if (result.changedRows > 0) {
       log("INFO", `Zamknięto ${result.changedRows} rezerwacji (brak zajętych pokoi)`);
@@ -197,9 +199,9 @@ async function syncRoomsToKw(kw) {
     clientByName.set(c.Nazwisko?.trim(), c.KlientID);
   }
 
-  // Pobierz aktywne rezerwacje z KW Hotel
+  // Pobierz aktywne rezerwacje z KW Hotel (status_id=1 potwierdzona, status_id=2 zameldowana)
   const [kwActiveRez] = await kw.query(
-    "SELECT RezerwacjaID, PokojID, KlientID FROM rezerwacje WHERE status_id = 2"
+    "SELECT RezerwacjaID, PokojID, KlientID, status_id FROM rezerwacje WHERE status_id IN (1, 2)"
   );
   const activeRezByRoom = new Map();
   for (const r of kwActiveRez) {
@@ -232,6 +234,12 @@ async function syncRoomsToKw(kw) {
     const roomNumber = room.roomNumber?.trim();
     const guestName = room.guestName?.trim();
     if (!roomNumber || !guestName) continue;
+
+    // Mapowanie statusu HotelSystem → KWHotel:
+    //   CHECKED_IN  → status_id=2 (zameldowana - Bistro widzi)
+    //   CONFIRMED   → status_id=1 (potwierdzona - Bistro NIE widzi)
+    //   (domyślnie) → status_id=2 (dla kompatybilności wstecznej)
+    const kwStatusId = room.status === "CONFIRMED" ? 1 : 2;
 
     // 1. Upewnij się, że pokój istnieje w KW Hotel
     let kwRoomId = roomByName.get(roomNumber);
@@ -269,22 +277,24 @@ async function syncRoomsToKw(kw) {
 
     const existingRez = activeRezByRoom.get(kwRoomId);
     if (existingRez) {
-      // Aktualizuj istniejącą rezerwację
+      // Aktualizuj istniejącą rezerwację (status może się zmienić: CONFIRMED→CHECKED_IN)
       await kw.query(
-        `UPDATE rezerwacje SET KlientID = ?, DataOd = ?, DataDo = ?, Osob = ?, status_id = 2
+        `UPDATE rezerwacje SET KlientID = ?, DataOd = ?, DataDo = ?, Osob = ?, status_id = ?
          WHERE RezerwacjaID = ?`,
-        [kwClientId, checkIn, checkOut, pax, existingRez.RezerwacjaID]
+        [kwClientId, checkIn, checkOut, pax, kwStatusId, existingRez.RezerwacjaID]
       );
       updated++;
     } else {
-      // Utwórz nową rezerwację
+      // Utwórz nową rezerwację z odpowiednim statusem (2=zameldowana, 1=potwierdzona)
       const rezId = nextRezId++;
+      const now = new Date().toISOString().slice(0, 19).replace("T", " ");
       await kw.query(
-        `INSERT INTO rezerwacje (RezerwacjaID, PokojID, KlientID, DataOd, DataDo, Osob, status_id, status2_id, Cena, cena_noc)
-         VALUES (?, ?, ?, ?, ?, ?, 2, 0, 0, 0)`,
-        [rezId, kwRoomId, kwClientId, checkIn, checkOut, pax]
+        `INSERT INTO rezerwacje (RezerwacjaID, PokojID, KlientID, DataOd, DataDo, Osob, status_id, status2_id, Cena, cena_noc, SposRozlicz, CenaDzieci, DataUtworzenia, WplataZaliczka, CenaTowaryGrupy)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, 0, 0, 0, ?, 0, 0)`,
+        [rezId, kwRoomId, kwClientId, checkIn, checkOut, pax, kwStatusId, now]
       );
       created++;
+      log("DEBUG", `Nowa rez#${rezId}: pokój=${roomNumber}, status_id=${kwStatusId} (${room.status || "CHECKED_IN"})`);
     }
   }
 
