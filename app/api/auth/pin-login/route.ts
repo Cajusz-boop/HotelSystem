@@ -7,13 +7,39 @@ import { headers } from "next/headers";
 const LOCKOUT_ATTEMPTS = 3;
 const LOCKOUT_MINUTES = 5;
 
+// BUG 6: Memory management constants
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_ENTRIES = 1000;
+
 const failedAttempts = new Map<
   string,
   { count: number; lockedUntil: Date }
 >();
 
+// BUG 6: Periodic cleanup of expired lockouts
+if (typeof setInterval !== "undefined") {
+  setInterval(() => {
+    const now = new Date();
+    for (const [key, value] of failedAttempts.entries()) {
+      if (value.lockedUntil < now) {
+        failedAttempts.delete(key);
+      }
+    }
+  }, CLEANUP_INTERVAL_MS);
+}
+
 export async function POST(request: NextRequest) {
   try {
+    // BUG 6: Emergency cleanup if map too large
+    if (failedAttempts.size > MAX_ENTRIES) {
+      const now = new Date();
+      for (const [key, value] of failedAttempts.entries()) {
+        if (value.lockedUntil < now) {
+          failedAttempts.delete(key);
+        }
+      }
+    }
+
     const body = await request.json();
     const { userId, pin } = body;
 
@@ -54,6 +80,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Get IP early for logging
+    const headersList = await headers();
+    const ip = getClientIp(headersList);
+
     if (!user || !user.isActive) {
       return NextResponse.json(
         { error: "Nieprawidłowy użytkownik" },
@@ -72,6 +102,19 @@ export async function POST(request: NextRequest) {
     if (!valid) {
       const prev = failedAttempts.get(userId);
       const count = (prev?.count ?? 0) + 1;
+
+      // Log failed attempt
+      await prisma.loginLog.create({
+        data: {
+          email: user.email,
+          userId: user.id,
+          success: false,
+          ipAddress: ip,
+        },
+      }).catch((err) => {
+        console.error("Failed to log unsuccessful PIN attempt:", err);
+      });
+
       if (count >= LOCKOUT_ATTEMPTS) {
         const lockedUntil = new Date(now.getTime() + LOCKOUT_MINUTES * 60 * 1000);
         failedAttempts.set(userId, { count, lockedUntil });
@@ -93,10 +136,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Clear failed attempts on success
     failedAttempts.delete(userId);
 
-    const headersList = await headers();
-    const ip = getClientIp(headersList);
+    // Log successful login
     await prisma.loginLog.create({
       data: { email: user.email, userId: user.id, success: true, ipAddress: ip },
     });

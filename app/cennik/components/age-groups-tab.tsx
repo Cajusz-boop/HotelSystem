@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   getAgeGroupConfig,
   saveAgeGroupConfig,
@@ -20,7 +19,7 @@ const GROUPS = [
 ];
 
 export function AgeGroupsTab() {
-  const [list, setList] = useState<AgeGroupConfigRow[]>([]);
+  const [_list, setList] = useState<AgeGroupConfigRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<Record<string, { label: string; ageFrom: string; ageTo: string }>>({});

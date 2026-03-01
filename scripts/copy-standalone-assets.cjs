@@ -2,6 +2,14 @@
  * Kopiuje pliki statyczne Next.js i klienta Prisma do .next/standalone,
  * żeby uruchomienie `node app.js` (lub deploy) miało dostęp do CSS/JS i bazy.
  * Uruchamiane jako postbuild (npm run build).
+ *
+ * Kopiowane zasoby:
+ * - .next/static (CSS/JS bundles)
+ * - node_modules/.prisma (wygenerowany klient)
+ * - Pakiety runtime: mariadb, @prisma/adapter-mariadb, @prisma/adapter-utils, dotenv
+ *   (Next.js standalone nie wykrywa ich automatycznie bo są ładowane dynamicznie)
+ * - public (PWA assets)
+ * - .env (fallback dla produkcji)
  */
 const fs = require("fs");
 const path = require("path");
@@ -46,26 +54,6 @@ if (fs.existsSync(prismaSrc)) {
   console.warn("copy-standalone-assets: brak node_modules/.prisma (pomijam)");
 }
 
-// @prisma/adapter-mariadb -> .next/standalone/node_modules/@prisma/adapter-mariadb
-const adapterSrc = path.join(root, "node_modules", "@prisma", "adapter-mariadb");
-const adapterDest = path.join(standaloneDir, "node_modules", "@prisma", "adapter-mariadb");
-if (fs.existsSync(adapterSrc)) {
-  copyRecursive(adapterSrc, adapterDest);
-  console.log("copy-standalone-assets: @prisma/adapter-mariadb -> standalone");
-} else {
-  console.warn("copy-standalone-assets: brak @prisma/adapter-mariadb (pomijam)");
-}
-
-// dotenv -> .next/standalone/node_modules/dotenv
-const dotenvSrc = path.join(root, "node_modules", "dotenv");
-const dotenvDest = path.join(standaloneDir, "node_modules", "dotenv");
-if (fs.existsSync(dotenvSrc)) {
-  copyRecursive(dotenvSrc, dotenvDest);
-  console.log("copy-standalone-assets: dotenv -> standalone");
-} else {
-  console.warn("copy-standalone-assets: brak dotenv (pomijam)");
-}
-
 // public -> .next/standalone/public (dla PWA: manifest.json, sw.js, icons)
 const publicSrc = path.join(root, "public");
 const publicDest = path.join(standaloneDir, "public");
@@ -74,4 +62,42 @@ if (fs.existsSync(publicSrc)) {
   console.log("copy-standalone-assets: public -> standalone/public (PWA assets)");
 } else {
   console.warn("copy-standalone-assets: brak public (pomijam)");
+}
+
+// === Pakiety wymagane przez Prisma MariaDB adapter ===
+// Next.js standalone nie wykrywa ich automatycznie bo są ładowane dynamicznie.
+// Bez nich Prisma rzuca "error 2038" (missing configured driver adapter).
+const runtimePackages = [
+  "mariadb",
+  "@prisma/adapter-mariadb",
+  "@prisma/adapter-utils",
+  "dotenv",
+];
+
+const standaloneNodeModules = path.join(standaloneDir, "node_modules");
+let copiedCount = 0;
+
+for (const pkg of runtimePackages) {
+  const src = path.join(root, "node_modules", pkg);
+  const dest = path.join(standaloneNodeModules, pkg);
+  if (fs.existsSync(src)) {
+    copyRecursive(src, dest);
+    copiedCount++;
+  } else {
+    console.warn(`copy-standalone-assets: brak node_modules/${pkg} (pomijam)`);
+  }
+}
+
+if (copiedCount > 0) {
+  console.log(
+    `copy-standalone-assets: skopiowano ${copiedCount}/${runtimePackages.length} pakietow runtime (mariadb, adaptery, dotenv)`
+  );
+}
+
+// === Kopiuj .env do standalone (fallback - deploy skrypt też to robi) ===
+const envSrc = path.join(root, ".env");
+const envDest = path.join(standaloneDir, ".env");
+if (fs.existsSync(envSrc)) {
+  fs.copyFileSync(envSrc, envDest);
+  console.log("copy-standalone-assets: .env -> standalone/.env");
 }

@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
-const PAGE_SIZE_KEY = "logbook-pageSize";
+const _PAGE_SIZE_KEY = "logbook-pageSize";
 
 export interface DataTableProps {
   data: LogbookEntry[];

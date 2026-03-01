@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,16 +31,16 @@ export function SeasonsTab() {
   const [copyToYear, setCopyToYear] = useState(String(currentYear));
   const [copying, setCopying] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     const res = await getSeasonsFromTable({ year });
     if (res.success && res.data) setList(res.data);
     setLoading(false);
-  };
+  }, [year]);
 
   useEffect(() => {
     load();
-  }, [year]);
+  }, [load]);
 
   const resetForm = () => {
     setFormOpen(false);

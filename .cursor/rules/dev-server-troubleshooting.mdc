@@ -59,15 +59,22 @@ To usuwa `.next` i startuje `next dev -p 3011`. Stary `.next` to najczestsza prz
 
 Pierwsza kompilacja po czystym starcie trwa 10-20 sekund. Nie panikuj jesli przegladarka nie odpowiada od razu — sprawdz logi terminala, czy widac `Compiled /front-office` i zapytania `prisma:query`.
 
-## Produkcja (MyDevil)
+## Produkcja (Hetzner)
 
-Po deployu na MyDevil wystarczy restart:
+**Deploy odbywa się TYLKO przez git:**
+```powershell
+git add .
+git commit -m "opis zmian"
+git push origin master
+```
+GitHub Actions automatycznie wdroży zmiany na serwer.
 
+**Restart aplikacji ręcznie (gdy potrzebny):**
 ```bash
-devil www restart hotel.karczma-labedz.pl
+ssh hetzner "pm2 restart hotel-pms"
 ```
 
-Jesli po restarcie nadal 500:
-1. Usun stary `.next` na serwerze: `rm -rf ~/domains/hotel.karczma-labedz.pl/public_nodejs/.next`
-2. Wgraj ponownie ZIP ze standalone
-3. Sprawdz czy SQL z nowymi kolumnami zostal wykonany
+**Sprawdzenie logów:**
+```bash
+ssh hetzner "pm2 logs hotel-pms --lines 50"
+```

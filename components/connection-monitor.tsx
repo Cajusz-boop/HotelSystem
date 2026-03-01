@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { WifiOff, Wifi, AlertTriangle, ArrowRight } from "lucide-react";
+import { WifiOff, Wifi, ArrowRight } from "lucide-react";
 
 const MAIN_SERVER = "https://hotel.karczma-labedz.pl";
 const LOCAL_SERVER = "http://10.119.169.20:3000";
@@ -35,7 +35,7 @@ export function ConnectionMonitor() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch(`${url}/api/health`, {
+      await fetch(`${url}/api/health`, {
         method: "HEAD",
         mode: "no-cors",
         cache: "no-store",
@@ -51,7 +51,6 @@ export function ConnectionMonitor() {
 
   // Główna logika monitorowania
   useEffect(() => {
-    let intervalId: NodeJS.Timeout | undefined;
     let redirectTimeout: NodeJS.Timeout | undefined;
     let countdownInterval: NodeJS.Timeout | undefined;
 
@@ -118,7 +117,7 @@ export function ConnectionMonitor() {
     const initialCheck = setTimeout(checkConnection, 2000);
 
     // Regularne sprawdzanie
-    intervalId = setInterval(checkConnection, CHECK_INTERVAL);
+    const intervalId = setInterval(checkConnection, CHECK_INTERVAL);
 
     // Nasłuchuj zmian stanu sieci
     const handleOnline = () => checkConnection();
@@ -129,7 +128,7 @@ export function ConnectionMonitor() {
 
     return () => {
       clearTimeout(initialCheck);
-      if (intervalId) clearInterval(intervalId);
+      clearInterval(intervalId);
       if (redirectTimeout) clearTimeout(redirectTimeout);
       if (countdownInterval) clearInterval(countdownInterval);
       window.removeEventListener("online", handleOnline);

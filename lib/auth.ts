@@ -16,6 +16,8 @@ export interface SessionPayload {
   name: string;
   role: string;
   exp: number;
+  /** Czy użytkownik jest aktywny */
+  isActive?: boolean;
   /** Ustawione gdy hasło użytkownika wygasło – wymusza zmianę hasła */
   passwordExpired?: boolean;
 }
@@ -55,6 +57,7 @@ export async function getSession(): Promise<SessionPayload | null> {
       name: payload.name as string,
       role: payload.role as string,
       exp: payload.exp as number,
+      isActive: payload.isActive !== false,
       passwordExpired: payload.passwordExpired === true,
     };
   } catch {
@@ -69,6 +72,7 @@ export async function createSessionToken(
     email: string;
     name: string;
     role: string;
+    isActive?: boolean;
     passwordExpired?: boolean;
   }
 ): Promise<{ name: string; value: string; options: { httpOnly: true; secure: boolean; sameSite: "lax"; path: string; maxAge: number } }> {
@@ -78,6 +82,7 @@ export async function createSessionToken(
     email: payload.email,
     name: payload.name,
     role: payload.role,
+    isActive: payload.isActive ?? true,
     ...(payload.passwordExpired && { passwordExpired: true }),
   })
     .setProtectedHeader({ alg: "HS256" })

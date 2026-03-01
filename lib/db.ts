@@ -1,4 +1,5 @@
 import "dotenv/config";
+import "@/lib/env"; // Walidacja env vars przy starcie
 import { PrismaClient } from "@prisma/client";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 

@@ -12,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 
 export type LogbookMode = "all" | "arrivals" | "departures" | "inhouse" | "noshow" | "cancelled";
 

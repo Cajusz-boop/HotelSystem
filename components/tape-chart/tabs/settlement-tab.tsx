@@ -367,9 +367,9 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   const totalAmount = pricePerNight != null && pricePerNight > 0 && nights > 0 ? pricePerNight * nights : undefined;
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const isPastRes = form.checkOut && form.checkOut <= todayStr;
-  const isCheckedIn = form.status === "CHECKED_IN";
-  const isTodayRes = form.checkIn && form.checkOut && form.checkIn <= todayStr && todayStr < form.checkOut;
+  const _isPastRes = form.checkOut && form.checkOut <= todayStr;
+  const _isCheckedIn = form.status === "CHECKED_IN";
+  const _isTodayRes = form.checkIn && form.checkOut && form.checkIn <= todayStr && todayStr < form.checkOut;
   const availableStatusValues = getAvailableStatuses({ checkIn: form.checkIn || "", checkOut: form.checkOut || "", status: form.status });
   const allowedStatusOptions = STATUS_OPTIONS.filter((s) => availableStatusValues.includes(s.value));
 
@@ -551,7 +551,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   /** Lewa kolumna: tylko formularz w 4 sekcjach (KWHotel) */
   if (layout === "form") {
     const sectionHeader = "text-xs font-medium uppercase tracking-wider text-gray-500 border-b border-gray-100 pb-1.5 mb-2";
-    const selectedRoomData = rooms.find((r) => r.number === form.room);
+    const _selectedRoomData = rooms.find((r) => r.number === form.room);
     const filteredRooms = filteredRoomsByType;
     return (
       <div className="space-y-6">

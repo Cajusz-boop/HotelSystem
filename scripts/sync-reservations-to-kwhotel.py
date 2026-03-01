@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # HotelSystem API
 HOTELSYSTEM_API_URL = "https://hotel.karczma-labedz.pl/api/v1/external/reservations-export"
-HOTELSYSTEM_API_KEY = "hotel-bistro-2024-secret"
+HOTELSYSTEM_API_KEY = "a89f3281-8ae4-4c06-a351-987b35caa4f"
 
 # KWHotel MySQL (lokalnie na serwerze)
 KWHOTEL_DB_HOST = "localhost"

@@ -196,7 +196,7 @@ export async function getRoomTypesForBookingWithPrices(params: {
   const mealPrices = (property?.mealPrices as { breakfast?: number; lunch?: number; dinner?: number }) ?? {};
   const breakfastPrice = mealPrices.breakfast ?? 50;
   const lunchPrice = mealPrices.lunch ?? 80;
-  const dinnerPrice = mealPrices.dinner ?? 80;
+  const _dinnerPrice = mealPrices.dinner ?? 80;
 
   const defaultAgeLabels: Record<string, string> = {
     ADULT: "Dorosły",
@@ -334,7 +334,7 @@ async function findAvailableRoomByTypeName(
 }
 
 const MAX_BOOKING_DAYS = 365;
-const ADVANCE_PERCENT = 30;
+const _ADVANCE_PERCENT = 30;
 
 /** Złożenie rezerwacji z Booking Engine – rozbudowana wersja (typ pokoju, plan wyżywienia, płatność). */
 export async function submitBookingFromEngine(params: {

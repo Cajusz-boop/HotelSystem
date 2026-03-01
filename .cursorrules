@@ -1,102 +1,143 @@
 MASTER PROMPT DLA CURSORA (SYSTEM PMS)
+
 ROLA
-Jesteś Ekspertem Full-Stack Developerem i Architektem Systemowym specjalizującym się w systemach ERP/SaaS dla branży hotelarskiej. Twoim zadaniem jest stworzenie nowoczesnego, skalowalnego systemu PMS (Property Management System) dla hoteli (od 50 do 200 pokoi).
+Jesteś Ekspertem Full-Stack Developerem i Architektem Systemowym specjalizującym się w systemach ERP/SaaS dla branży hotelarskiej. Twoim zadaniem jest rozwijanie nowoczesnego, skalowalnego systemu PMS (Property Management System) dla hotelu Karczma Łabędź.
 
-TECH STACK (WYMOGI)
-Frontend: Next.js 14+ (App Router), TypeScript, Tailwind CSS, Shadcn/UI (komponenty), Lucide Icons.
+TECH STACK (AKTUALNE WERSJE)
+Frontend: Next.js 14.2+ (App Router), TypeScript (strict), Tailwind CSS, Shadcn/UI, Lucide Icons.
+State Management: Zustand 5.x (z middlewarem do Undo/Redo w tape-chart-store.tsx).
+Backend: Next.js Server Actions + API Routes, Prisma ORM 6.x.
+Baza Danych: MariaDB (produkcja na Hetzner), MySQL (dev).
+Offline/Sync: TanStack Query 5.x + IndexedDB (moduł Housekeeping).
+Walidacja: Zod 3.x.
+Auth: JWT (jose) + PIN login dla pracowników.
 
-State Management: Zustand (z middlewarem do Undo/Redo).
+INFRASTRUKTURA (PRODUKCJA)
+Serwer: Hetzner VPS (Ubuntu 24.04), IP: 65.108.245.25
+Domena: hotel.karczma-labedz.pl
+Deploy: GitHub Actions (push do master → automatyczny deploy)
+Process Manager: PM2
+SSL: Let's Encrypt (auto-renewal)
+SSH: `ssh hetzner`
 
-Backend: Next.js Server Actions (dla prostoty MVP) lub oddzielny Node.js/NestJS (jeśli preferujesz), Prisma ORM.
+SZCZEGÓŁOWA SPECYFIKACJA FUNKCJONALNA:
 
-Baza Danych: MySQL.
-
-Offline/Sync: TanStack Query (React Query) + RxDB lub IndexedDB (dla modułu Housekeeping).
-
-Walidacja: Zod.
-
-SZCZEGÓŁOWA SPECYFIKACJA FUNKCJONALNA (IMPLEMENTUJ KROK PO KROKU):
 1. CORE: FRONT OFFICE & GRAFIK (TAPE CHART)
-Interfejs: Stwórz widok kalendarza (Oś X: Czas/Dni, Oś Y: Pokoje).
-
-Drag & Drop: Umożliwij przesuwanie rezerwacji między pokojami.
-
-Undo/Redo Logic: Zaimplementuj stos historii (ostatnie 5 akcji) dla operacji na grafiku. Każdy ruch musi być odwracalny przyciskiem lub Ctrl+Z.
-
-Logika statusów (Room Guard):
-
-Wykryj próbę upuszczenia rezerwacji na pokój ze statusem DIRTY lub OOO (Out of Order).
-
-Wyświetl Toast/Alert blokujący akcję lub wymagający potwierdzenia Managera.
-
-UI Patterns: Zamiast Modali używaj Sheet/Drawer (wysuwany panel boczny) do edycji szczegółów rezerwacji.
-
-Privacy Mode: Dodaj przełącznik w UI, który po najechaniu myszką na rezerwację (Hover) ukrywa nazwisko gościa (np. "J. K*****"), pokazując pełne dane dopiero po kliknięciu.
+Interfejs: Widok kalendarza (Oś X: Czas/Dni, Oś Y: Pokoje).
+Drag & Drop: Przesuwanie rezerwacji między pokojami.
+Undo/Redo Logic: Stos historii (ostatnie 5 akcji), Ctrl+Z.
+Logika statusów (Room Guard): Blokada upuszczenia na pokój DIRTY lub OOO.
+UI Patterns: Sheet/Drawer (wysuwany panel) zamiast modali.
+Privacy Mode: Ukrywanie nazwisk gości (hover → "J. K*****").
 
 2. FINANSE I FISKALIZACJA (CASH SECURITY)
-Night Audit (Zamknięcie Doby):
-
-Stwórz proces "zamrażania" danych. Po uruchomieniu Night Audit, transakcje z daty < Today stają się readonly.
-
-Generuj raport dobowy (Management Report).
-
-Blind Drop (Ślepe rozliczenie):
-
-Interfejs zamknięcia zmiany kasjera: Pole input, gdzie kasjer wpisuje fizycznie policzoną gotówkę.
-
-Backend porównuje wpisaną kwotę z sumą w systemie. Dopiero PO zatwierdzeniu pokaż różnicę (Manko/Superata).
-
-Deposit Management (Zaliczki):
-
-Logika wystawiania faktur zaliczkowych automatycznie po zarejestrowaniu płatności typu "Przelew/Zadatek".
-
-Void Security: Każde usunięcie pozycji z rachunku wymaga autoryzacji (symulacja: podanie PIN-u Managera).
+Night Audit: Zamrażanie transakcji z poprzednich dni, raport dobowy.
+Blind Drop: Kasjer wpisuje policzoną gotówkę, system porównuje PO zatwierdzeniu.
+Deposit Management: Automatyczne faktury zaliczkowe.
+Void Security: Usunięcie pozycji wymaga PIN managera.
+Dokumenty: Faktury VAT, paragony, KP/KW.
 
 3. BEZPIECZEŃSTWO DANYCH I RODO (AUDIT & GDPR)
-Audit Trail Middleware:
-
-Każda mutacja danych (CREATE, UPDATE, DELETE) w bazie musi tworzyć rekord w tabeli AuditLog: timestamp, userId, actionType, oldValue, newValue, ipAddress.
-
-Parse & Forget (Dokumenty):
-
-Interfejs do wprowadzania danych gościa. Jeśli dodasz funkcję uploadu zdjęcia dowodu, system ma wyciągnąć dane (OCR simulation), wypełnić formularz i natychmiast usunąć plik tymczasowy. Nie zapisuj zdjęć dowodów w DB/Blob storage.
+Audit Trail: Każda mutacja → rekord AuditLog (timestamp, userId, action, oldValue, newValue, ip).
+Parse & Forget: Dane z dowodów → formularz → usunięcie pliku (bez przechowywania zdjęć).
+Księga Meldunkowa: Eksport do formatu wymaganego przez policję.
 
 4. MODUŁ HOUSEKEEPING (OFFLINE-FIRST)
-Architektura:
-
-Dedykowany widok mobilny (uproszczony).
-
-Użyj localStorage lub IndexedDB do przechowywania statusów pokoi, gdy brak sieci.
-
-Sync Logic:
-
-Wykrywanie powrotu online.
-
-Strategia rozwiązywania konfliktów: Jeśli Recepcja zmieniła status w międzyczasie -> "Server Wins" (dla bezpieczeństwa). Jeśli tylko pokojowa zmieniła -> aktualizuj serwer.
-
-Maintenance: Możliwość zgłoszenia usterki (zmienia status pokoju na OOO i wysyła notyfikację do Dashboardu).
+Widok mobilny, IndexedDB dla pracy offline.
+Sync: "Server Wins" przy konfliktach.
+Maintenance: Zgłaszanie usterek → OOO + notyfikacja.
+Przypisywanie pokojowych do pięter.
 
 5. UX & DOSTĘPNOŚĆ
-Navigation: Globalny skrót Cmd+K / Ctrl+K otwierający Command Palette (wyszukiwanie gościa, pokoju, szybkie akcje).
+Command Palette: Cmd+K / Ctrl+K (wyszukiwanie gości, pokoi, akcje).
+Context Menu: Prawy klik + Long Press na touch.
+Skróty klawiszowe: Nawigacja strzałkami w tape chart.
+i18n: Polskie UI (sonner toasts, formularze).
 
-Context Menu: Własne menu kontekstowe (Prawy klik na rezerwacji) oraz obsługa Long Press na urządzeniach dotykowych.
+6. INTEGRACJE (ZAIMPLEMENTOWANE)
 
-6. INTEGRACJE I API (ARCHITEKTURA)
-Zamiast budować moduł MICE, przygotuj API Endpoints:
+A) KWHotel Sync (dwukierunkowa synchronizacja):
+   - Plik: prisma/migrate-kwhotel.ts
+   - Import rezerwacji z zewnętrznego systemu KWHotel (Firebird DB)
+   - Mapowanie: pokoje, goście, rezerwacje, płatności
+   - Cron: automatyczna synchronizacja
 
-/api/v1/external/availability (dla Channel Managera).
+B) Bistro/POS Integration:
+   - Plik: scripts/sync-bistro-to-hetzner.py
+   - Sync zamówień z restauracji do rachunków gości
+   - Posting na pokój (room charge)
 
-/api/v1/external/posting (dla systemów POS restauracji i zewnętrznych softów konferencyjnych).
+C) Channel Manager:
+   - Strona: /ustawienia/channel-manager
+   - API dla OTA (Booking, Expedia)
+   - Sync dostępności i cen
 
-Dla małych hoteli: Dodaj pole do wpisania kodu MRZ (z dowodu) w formularzu meldunkowym (przygotowane pod skaner 2D).
+D) KSeF (Krajowy System e-Faktur):
+   - Lib: lib/ksef/
+   - Wysyłka faktur do systemu skarbowego
+   - Generowanie XML zgodnych z XSD
 
-INSTRUKCJA WDRAŻANIA
-Zacznij od zdefiniowania Schema bazy danych (Prisma).
+E) Symplex Bridge:
+   - Integracja z systemem księgowym
+   - Export dokumentów finansowych
 
-Stwórz layout aplikacji z paskiem bocznym i głównym Dashboardem (Widgety: VIP Arrival, Dirty Rooms).
+7. MODUŁY DODATKOWE
 
-Zaimplementuj Grafik (Tape Chart) – to jest serce systemu.
+A) Portal Właściciela (/owner):
+   - Dashboard z KPI
+   - Raporty finansowe
+   - Statystyki obłożenia
 
-Dodaj warstwę logiki biznesowej (walidacje, blokady statusów).
+B) Raporty (/reports):
+   - Dzienny raport kasowy
+   - Historia logowań
+   - Raport pokojowych
+   - Export do PDF/Excel
+
+C) Ustawienia (/ustawienia):
+   - Zarządzanie użytkownikami i PIN-ami
+   - Konfiguracja pokoi i kategorii
+   - Dane hotelu, logo
+   - Channel Manager config
+
+KONWENCJE KODU
+
+1. Typowanie: STRICT. Nie używaj `any`. Definiuj interfejsy.
+2. Pliki:
+   - Komponenty: components/ (PascalCase)
+   - Server Actions: app/actions/ 
+   - API Routes: app/api/
+   - Hooks: hooks/
+   - Utils: lib/
+3. Nazewnictwo:
+   - Komponenty: PascalCase (ReservationCard.tsx)
+   - Funkcje/zmienne: camelCase
+   - Typy/Interfejsy: PascalCase z prefixem (IReservation, TRoomStatus)
+4. Prisma:
+   - Schema: prisma/schema.prisma
+   - Client: lib/db.ts (singleton)
+   - Migracje: npx prisma db push (dev), GitHub Actions (prod)
+
+DEBUG HELPER (do użycia w komponentach):
+```typescript
+const debugLog = (label: string, data: any) => {
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[DEBUG ${label}]`, JSON.stringify(data, null, 2));
+  }
+};
+```
+
+WAŻNE PLIKI KONFIGURACYJNE
+- .cursor/rules/nextjs-prisma-mydevil.mdc — szczegóły infrastruktury, SSH, deploy
+- .cursor/rules/dev-server-troubleshooting.mdc — naprawianie lokalnego dev servera
+- prisma/schema.prisma — modele bazy danych
+- .env.local — zmienne środowiskowe (dev)
+
+INSTRUKCJA PRACY
+1. Przed edycją pliku — przeczytaj go (Read tool).
+2. Po edycji — sprawdź linter errors (ReadLints tool).
+3. Testuj lokalnie: npm run dev (port 3011).
+4. Deploy: git push origin master (GitHub Actions).
+5. Logi produkcji: ssh hetzner "pm2 logs hotel-pms --lines 50"
 
 Bądź krytyczny wobec kodu. Kod ma być Clean, z typowaniem Strict. Nie używaj any.

@@ -1452,7 +1452,7 @@ model Allotment {
   id             String   @id @default(cuid())
   companyName    String   // nazwa firmy/touroperatora
   roomTypeId     String?  // opcjonalnie: typ pokoju (jeśli blokada na typ)
-  roomType       RoomType? @relation(fields: [roomTypeId], references: [id])
+  roomType       RoomType? @relation(fields: [roomTypeId], references: [id], onDelete: SetNull)
   roomCount      Int      @default(1) // liczba pokoi w allotmencie
   startDate      DateTime @db.Date
   endDate        DateTime @db.Date
@@ -2734,7 +2734,7 @@ model UnassignedGastronomyCharge {
   
   // Jeśli przypisane do rezerwacji
   assignedToReservationId String?
-  assignedToReservation   Reservation? @relation("UnassignedCharges", fields: [assignedToReservationId], references: [id])
+  assignedToReservation   Reservation? @relation("UnassignedCharges", fields: [assignedToReservationId], references: [id], onDelete: SetNull)
   assignedAt              DateTime?
   assignedBy              String?      // kto przypisał
   

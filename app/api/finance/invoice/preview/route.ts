@@ -54,7 +54,7 @@ export async function GET() {
     const paymentMethod = template.defaultPaymentMethod || "przelew";
 
     // Przykładowe pozycje z PKWIU, j.m., rabat
-    const roomLabel = (template.roomProductName?.trim() || "Nocleg") as string;
+    const _roomLabel = (template.roomProductName?.trim() || "Nocleg") as string;
     const defaultUnit = template.defaultUnit || "szt.";
     
     type LineItem = {
@@ -91,7 +91,7 @@ export async function GET() {
 
     // Przykładowy numer KSeF
     const ksefUuid = "1234567890-20240115-ABC123DEF456-01";
-    const ksefVerifyUrl = (getEffectiveKsefEnv() === "test"
+    const _ksefVerifyUrl = (getEffectiveKsefEnv() === "test"
       ? "https://ksef-test.mf.gov.pl"
       : "https://ksef.mf.gov.pl") + `/web/verify/${encodeURIComponent(ksefUuid)}`;
 

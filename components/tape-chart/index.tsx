@@ -58,7 +58,7 @@ import { ReservationBarWithMenu } from "./reservation-bar-with-menu";
 import { RoomStatusIcon } from "./room-status-icon";
 import { getDateRange } from "@/lib/tape-chart-data";
 import { useTapeChartStore } from "@/lib/store/tape-chart-store";
-import { moveReservation, updateReservation, updateReservationStatus } from "@/app/actions/reservations";
+import { moveReservation, updateReservationStatus } from "@/app/actions/reservations";
 import { getEffectivePricesBatch, updateRoomStatus } from "@/app/actions/rooms";
 import { getTapeChartData } from "@/app/actions/tape-chart";
 import { useRoomsSync, broadcastRoomStatusChange } from "@/hooks/useRoomsSync";
@@ -131,7 +131,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   onCellClick,
   hasReservation,
   isCellSelected,
-  selectionKey,
+  selectionKey: _selectionKey,
   onRoomLabelClick,
   onRoomBlock,
   onRoomStatusChange,
@@ -1184,7 +1184,8 @@ export function TapeChart({
     // === END TEMP DEBUG ===
 
     if (typeof window !== 'undefined') {
-      (window as any).__TC_DEBUG__ = {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- temporary debug
+      (window as unknown as Record<string, unknown>).__TC_DEBUG__ = {
         room001: filteredReservations.filter(r => r.room === '001'),
         dates3: dates.slice(0, 5),
         di27: dateIndex.get('2026-02-27'),
@@ -1259,8 +1260,9 @@ export function TapeChart({
 
         // === PLACEMENT DEBUG ===
         if (typeof window !== 'undefined' && res.room === '001') {
-          if (!(window as any).__TC_PL__) (window as any).__TC_PL__ = [];
-          (window as any).__TC_PL__.push({
+          const w = window as unknown as Record<string, unknown[]>;
+          if (!w.__TC_PL__) w.__TC_PL__ = [];
+          w.__TC_PL__.push({
             id: res.id?.slice(-8),
             checkIn: res.checkIn,
             checkOut: res.checkOut,
@@ -1301,7 +1303,7 @@ export function TapeChart({
         };
       })
       .filter((p): p is NonNullable<typeof p> => p != null);
-  }, [filteredReservations, roomRowIndex, dateIndex, dates, headerRowCount]);
+  }, [filteredReservations, roomRowIndex, dateIndex, dates, headerRowCount, visibleRoomNumbers]);
 
   /** Zbiór komórek faktycznie pokrytych paskiem – zgodnie z logiką placementu (bar spans checkIn..checkOut inclusive) */
   const occupiedCellsSet = useMemo(() => {
@@ -1528,9 +1530,9 @@ export function TapeChart({
     setDragOverTarget(null);
   }, []);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dnd-kit sensor activator signature mismatch
   const sensors = useSensors(
-    useSensor(ConditionalPointerSensor as any, {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- dnd-kit sensor activator signature mismatch
+    useSensor(ConditionalPointerSensor as unknown as typeof PointerSensor, {
       requireShift: !dragWithoutShift,
       activationConstraint: { distance: 8 },
     })
@@ -1673,7 +1675,7 @@ export function TapeChart({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [undo, redo, sheetOpen, createSheetOpen, displayRooms, dates, focusedCell, reservations, setReservations]);
+  }, [undo, redo, sheetOpen, createSheetOpen, displayRooms, dates, focusedCell, reservations, setReservations, todayStr]);
 
   const handleCreateReservationClick = useCallback(() => {
     const defaultRoom = displayRooms[0] ?? allRooms[0];
@@ -2549,7 +2551,7 @@ export function TapeChart({
               <div className="flex items-center px-3 py-2.5 text-sm font-bold border-r border-[hsl(var(--kw-grid-border))]">
                 Pokój
               </div>
-              {dates.map((dateStr, i) => {
+              {dates.map((dateStr) => {
                 const isToday = dateStr === todayStr;
                 const saturday = isSaturdayDate(dateStr);
                 const sunday = isSundayDate(dateStr);

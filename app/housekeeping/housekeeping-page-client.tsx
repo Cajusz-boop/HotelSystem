@@ -396,7 +396,7 @@ export default function HousekeepingPageClient({ role }: { role?: string | null 
       <div className="flex flex-col gap-6 p-6 md:p-8">
         <h1 className="text-2xl font-semibold">{isCleaningStaffOnly ? "Tryb sprzątania" : "Housekeeping"}</h1>
         <p className="text-muted-foreground">Ładowanie…</p>
-        <p className="text-xs text-muted-foreground">(max 10 s – jeśli dłużej, pojawi się błąd i przycisk „Ponów")</p>
+        <p className="text-xs text-muted-foreground">(max 10 s – jeśli dłużej, pojawi się błąd i przycisk &ldquo;Ponów&rdquo;)</p>
       </div>
     );
   }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { jwtVerify, type JWTPayload } from "jose";
 import { getAuthDisabledCache, setAuthDisabledCache, isAuthCacheLoaded } from "@/lib/auth-disabled-cache";
 
 const COOKIE_NAME = "pms_session";
@@ -10,6 +11,56 @@ const API_IP_WHITELIST = (process.env.API_IP_WHITELIST ?? "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+
+interface SessionJWTPayload extends JWTPayload {
+  userId: string;
+  email: string;
+  name: string;
+  role: string;
+  isActive?: boolean;
+  passwordExpired?: boolean;
+}
+
+function getJWTSecret(): Uint8Array {
+  const secret = process.env.SESSION_SECRET ?? "dev-secret-change-in-production";
+  return new TextEncoder().encode(secret);
+}
+
+const userStatusCache = new Map<string, { isActive: boolean; cachedAt: number }>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minut
+
+async function checkUserActive(userId: string, origin: string): Promise<boolean> {
+  const now = Date.now();
+  const cached = userStatusCache.get(userId);
+
+  if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
+    return cached.isActive;
+  }
+
+  try {
+    const res = await fetch(`${origin}/api/auth/check-active?userId=${encodeURIComponent(userId)}`, {
+      headers: { "x-internal-secret": process.env.SESSION_SECRET || "" },
+      cache: "no-store",
+    });
+
+    if (!res.ok) return true; // fail-open
+
+    const data = await res.json();
+    userStatusCache.set(userId, { isActive: data.isActive, cachedAt: now });
+
+    // Cleanup starych wpisów (memory leak prevention)
+    if (userStatusCache.size > 500) {
+      for (const [key, val] of userStatusCache.entries()) {
+        if (now - val.cachedAt > CACHE_TTL_MS) userStatusCache.delete(key);
+      }
+    }
+
+    return data.isActive;
+  } catch {
+    console.error(`[Middleware] Failed to check isActive for ${userId}`);
+    return true; // fail-open
+  }
+}
 
 function getClientIp(request: NextRequest): string {
   const forwarded = request.headers.get("x-forwarded-for");
@@ -62,7 +113,7 @@ export async function middleware(request: NextRequest) {
   const authDisabled = isAuthCheckRoute ? false : await isAuthDisabled(request);
 
   if (path.startsWith("/api/")) {
-    if (path === "/api/health" || isAuthCheckRoute) return NextResponse.next();
+    if (path === "/api/health" || isAuthCheckRoute || path === "/api/auth/check-active") return NextResponse.next();
 
     // OAuth callback routes – muszą być dostępne z zewnątrz (redirect z Google)
     if (path.startsWith("/api/auth/staff/google") || path.startsWith("/api/auth/guest/google")) {
@@ -106,19 +157,41 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  const response = NextResponse.next();
+  let response = NextResponse.next();
+  const origin = request.nextUrl.origin;
 
   try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return NextResponse.next();
-    const payload = JSON.parse(atob(parts[1]));
+    // NAPRAWA 1: Weryfikacja JWT kryptograficznie (nie tylko parsowanie)
+    const { payload } = await jwtVerify(token, getJWTSecret()) as { payload: SessionJWTPayload };
+
+    // NAPRAWA 2: Sprawdzenie isActive
+    // Szybkie sprawdzenie z JWT payload
+    if (payload.isActive === false) {
+      response = NextResponse.redirect(new URL("/login?reason=inactive", request.url));
+      response.cookies.delete(COOKIE_NAME);
+      response.cookies.delete(LAST_ACTIVITY_COOKIE);
+      return response;
+    }
+
+    // Dokładne sprawdzenie z cache (co 5 minut) - tylko gdy mamy userId
+    if (payload.userId) {
+      const isActive = await checkUserActive(payload.userId, origin);
+      if (!isActive) {
+        response = NextResponse.redirect(new URL("/login?reason=inactive", request.url));
+        response.cookies.delete(COOKIE_NAME);
+        response.cookies.delete(LAST_ACTIVITY_COOKIE);
+        return response;
+      }
+    }
+
+    // Sprawdź czy hasło wygasło
     if (payload.passwordExpired === true) {
-      // Nie przekierowuj na /change-password, gdy użytkownik już na niej jest (unikanie pętli)
       if (path !== "/change-password" && !path.startsWith("/change-password/")) {
         return NextResponse.redirect(new URL("/change-password", request.url));
       }
     }
 
+    // Idle timeout check
     const lastActivity = request.cookies.get(LAST_ACTIVITY_COOKIE)?.value;
     const lastTs = lastActivity ? parseInt(lastActivity, 10) : 0;
     const now = Date.now();
@@ -138,7 +211,11 @@ export async function middleware(request: NextRequest) {
       secure: process.env.NODE_ENV === "production",
     });
   } catch {
-    // ignore
+    // Token nieprawidłowy, wygasły lub sfabrykowany → redirect na /login
+    response = NextResponse.redirect(new URL("/login", request.url));
+    response.cookies.delete(COOKIE_NAME);
+    response.cookies.delete(LAST_ACTIVITY_COOKIE);
+    return response;
   }
   return response;
 }

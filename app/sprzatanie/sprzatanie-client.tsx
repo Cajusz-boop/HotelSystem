@@ -313,7 +313,7 @@ export default function SprzatanieClient() {
       </div>
 
       <p className="mb-6 text-muted-foreground">
-        Pokoje do posprzątania. Kliknij „Brudny", aby oznaczyć jako posprzątany.
+        Pokoje do posprzątania. Kliknij &ldquo;Brudny&rdquo;, aby oznaczyć jako posprzątany.
         {!isOnline && " Zmiany zostaną zsynchronizowane po połączeniu z siecią."}
       </p>
 

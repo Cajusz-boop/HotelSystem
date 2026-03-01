@@ -20,7 +20,7 @@ const TEST_GUEST = "Test Recepcja";
 
 export async function GET() {
   const results: Array<{ step: string; ok: boolean; message?: string; data?: unknown }> = [];
-  let guestId: string | null = null;
+  let _guestId: string | null = null;
   let reservationId: string | null = null;
   let invoiceId: string | null = null;
 
@@ -77,7 +77,7 @@ export async function GET() {
     }
     const resData = createRes.data as { id: string; guestId?: string };
     reservationId = resData.id;
-    guestId = resData.guestId ?? null;
+    _guestId = resData.guestId ?? null;
     ok("2. TWORZENIE", { id: reservationId, pokój: found.roomNumber, daty: `${found.checkIn} – ${found.checkOut}` });
 
     // 3. CHECK-IN
@@ -167,7 +167,7 @@ export async function GET() {
   }
 }
 
-async function cleanup(reservationId: string | null, invoiceId: string | null): Promise<void> {
+async function cleanup(reservationId: string | null, _invoiceId: string | null): Promise<void> {
   try {
     if (reservationId) {
       await prisma.transaction.deleteMany({ where: { reservationId } });
