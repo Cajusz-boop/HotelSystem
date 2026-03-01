@@ -740,6 +740,14 @@ export function UnifiedReservationDialog({
           </div>
         )}
 
+        {/* Banner błędu */}
+        {error && (
+          <div data-testid="create-reservation-error" className="mx-4 mt-3 p-3 rounded-md border-l-4 bg-red-50 border-red-500 text-red-800 flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5 text-red-500" />
+            <div className="text-sm font-medium">{error}</div>
+          </div>
+        )}
+
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* LEWA KOLUMNA (40%) - Formularz */}
           <div className="w-[40%] min-w-0 overflow-y-auto bg-muted/30 border-r flex-shrink-0">
@@ -769,7 +777,6 @@ export function UnifiedReservationDialog({
                 onNipLookup={handleNipLookup}
                 layout="form"
               />
-              {error && <p data-testid="create-reservation-error" className="text-xs text-destructive">{error}</p>}
               </fieldset>
             </form>
           </div>

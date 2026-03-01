@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { AlertTriangle } from "lucide-react";
 import { createRoomBlock, deleteRoomBlock } from "@/app/actions/rooms";
 import type { Room, RoomBlock } from "@/lib/tape-chart-types";
 
@@ -160,7 +161,12 @@ export function RoomBlockSheet({
               </ul>
             </div>
           )}
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <div className="p-3 rounded-md border-l-4 bg-red-50 border-red-500 text-red-800 flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5 text-red-500" />
+              <div className="text-sm font-medium">{error}</div>
+            </div>
+          )}
           <SheetFooter className="flex flex-row gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Zamknij
