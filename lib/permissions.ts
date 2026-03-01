@@ -62,6 +62,7 @@ export const PERMISSION_CODES = [
   "reservation.cancel",
   "reservation.check_in",
   "reservation.check_out",
+  "reservation.edit_closed_period",
   "finance.view",
   "finance.post",
   "finance.void",

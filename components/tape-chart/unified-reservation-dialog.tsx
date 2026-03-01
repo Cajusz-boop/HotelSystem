@@ -31,7 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { X, ChevronDown } from "lucide-react";
+import { X, ChevronDown, AlertTriangle } from "lucide-react";
 import type { Reservation } from "@/lib/tape-chart-types";
 import type { ReservationSource, ReservationChannel, MealPlan, MarketSegment } from "@/lib/validations/schemas";
 import { SettlementTab, type SettlementTabFormState } from "./tabs/settlement-tab";
@@ -179,6 +179,8 @@ export function UnifiedReservationDialog({
   const [dayRatesDialogOpen, setDayRatesDialogOpen] = useState(false);
   const [dayRates, setDayRates] = useState<Array<{ date: string; rate: number }>>([]);
   const [dayRatesSaving, setDayRatesSaving] = useState(false);
+  const [isInClosedPeriod, setIsInClosedPeriod] = useState(false);
+  const [canEditClosedPeriod, setCanEditClosedPeriod] = useState(false);
 
   // Guest autocomplete
   const [guestSuggestions, setGuestSuggestions] = useState<GuestCheckInSuggestion[]>([]);
@@ -241,6 +243,8 @@ export function UnifiedReservationDialog({
             extraStatus: d.extraStatus ?? "",
             depositDueDate: d.advanceDueDate ?? "",
           }));
+          setIsInClosedPeriod(d.isInClosedPeriod ?? false);
+          setCanEditClosedPeriod(d.canEditClosedPeriod ?? false);
         }
       });
       // Załaduj firmę (NIP) powiązaną z rezerwacją
@@ -279,6 +283,10 @@ export function UnifiedReservationDialog({
     setGuestSuggestions([]);
     setSuggestionsOpen(false);
     setHighlightedIdx(-1);
+    if (!isEdit) {
+      setIsInClosedPeriod(false);
+      setCanEditClosedPeriod(false);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, reservation, createContext, isEdit]);
 
@@ -706,10 +714,37 @@ export function UnifiedReservationDialog({
           </DialogClose>
         </DialogHeader>
 
+        {/* Banner o zamkniętym okresie */}
+        {isEdit && isInClosedPeriod && (
+          <div className={`mx-4 mt-3 p-3 rounded-md border-l-4 flex items-start gap-3 ${
+            canEditClosedPeriod 
+              ? "bg-blue-50 border-blue-500 text-blue-800" 
+              : "bg-amber-50 border-amber-500 text-amber-800"
+          }`}>
+            <AlertTriangle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${canEditClosedPeriod ? "text-blue-500" : "text-amber-500"}`} />
+            <div className="text-sm">
+              {canEditClosedPeriod ? (
+                <>
+                  <span className="font-medium">Rezerwacja w zamkniętym okresie (po Night Audit).</span>
+                  <br />
+                  <span>Edycja możliwa dzięki specjalnym uprawnieniom.</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-medium">Nie można edytować rezerwacji w zamkniętym okresie (po Night Audit).</span>
+                  <br />
+                  <span>Skontaktuj się z administratorem, aby uzyskać uprawnienia do edycji.</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* LEWA KOLUMNA (40%) - Formularz */}
           <div className="w-[40%] min-w-0 overflow-y-auto bg-muted/30 border-r flex-shrink-0">
             <form id="reservation-form" onSubmit={handleSubmit} className="p-4 space-y-6">
+              <fieldset disabled={isEdit && isInClosedPeriod && !canEditClosedPeriod} className="space-y-6">
               <SettlementTab
                 ref={settlementTabRef}
                 mode={mode}
@@ -735,6 +770,7 @@ export function UnifiedReservationDialog({
                 layout="form"
               />
               {error && <p data-testid="create-reservation-error" className="text-xs text-destructive">{error}</p>}
+              </fieldset>
             </form>
           </div>
 
@@ -880,10 +916,10 @@ export function UnifiedReservationDialog({
                 {checkoutLoading ? "Rozliczanie…" : "Rozlicz i wymelduj"}
               </Button>
             )}
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200" disabled={saving} onClick={() => { saveAndPrintRef.current = true; handleSubmit(); }} title="Ctrl+Shift+Enter">
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200" disabled={saving || (isEdit && isInClosedPeriod && !canEditClosedPeriod)} onClick={() => { saveAndPrintRef.current = true; handleSubmit(); }} title="Ctrl+Shift+Enter">
               {saving && saveAndPrintRef.current ? "Zapisywanie…" : "Zapisz i drukuj"}
             </Button>
-            <Button ref={saveBtnRef} type="submit" form="reservation-form" size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white" disabled={saving} title="Ctrl+Enter" data-testid="create-reservation-save">
+            <Button ref={saveBtnRef} type="submit" form="reservation-form" size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white" disabled={saving || (isEdit && isInClosedPeriod && !canEditClosedPeriod)} title="Ctrl+Enter" data-testid="create-reservation-save">
               {saving && !saveAndPrintRef.current ? "Zapisywanie…" : "💾 Zapisz"}
             </Button>
             <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
