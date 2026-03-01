@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { createGroupReservation } from "@/app/actions/reservations";
 import { getRoomGroups } from "@/app/actions/rooms";
 import type { Reservation, Room } from "@/lib/tape-chart-types";
-import { X, Users, Calendar, CopyCheck, Plus, Trash2 } from "lucide-react";
+import { X, Users, Calendar, CopyCheck, Plus, Trash2, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STATUS_OPTIONS: { value: Reservation["status"]; label: string }[] = [
@@ -378,9 +378,10 @@ export function GroupReservationSheet({
               </section>
 
               {error && (
-                <p className="text-xs text-destructive" data-testid="group-reservation-error">
-                  {error}
-                </p>
+                <div className="p-3 rounded-md border-l-4 bg-red-50 border-red-500 text-red-800 flex items-start gap-3" data-testid="group-reservation-error">
+                  <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5 text-red-500" />
+                  <div className="text-sm font-medium">{error}</div>
+                </div>
               )}
             </form>
           </div>
