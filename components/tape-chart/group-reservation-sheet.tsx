@@ -89,7 +89,7 @@ export function GroupReservationSheet({
   rooms,
   defaultDate,
   initialRooms,
-  editGroupId,
+  editGroupId: _editGroupId,
   onCreated,
 }: GroupReservationSheetProps) {
   const [groupName, setGroupName] = useState("");

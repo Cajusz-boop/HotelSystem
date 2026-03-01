@@ -19,7 +19,6 @@ import {
   updateRoomActiveForSale,
   updateRoomStatus,
   deleteRoom,
-  softDeleteRoom,
   restoreRoom,
   getDeletedRooms,
   getRoomsForExport,

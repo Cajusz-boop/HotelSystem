@@ -5,7 +5,6 @@ import { getRoomsForProperty } from "@/app/actions/properties";
 import {
   getLogbookData,
   type LogbookResponse,
-  type LogbookEntry,
 } from "@/app/actions/dashboard";
 import { KsiegaMeldunkowaClient } from "./ksiega-meldunkowa-client";
 

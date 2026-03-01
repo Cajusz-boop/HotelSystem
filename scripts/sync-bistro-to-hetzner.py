@@ -37,7 +37,7 @@ CONFIG = {
     
     # API HotelSystem (Hetzner)
     "api_url": "https://hotel.karczma-labedz.pl/api/v1/external/posting",
-    "api_key": "TUTAJ_WSTAW_KLUCZ_API",  # Klucz z .env na Hetzner (EXTERNAL_API_KEY)
+    "api_key": "a89f3281-8ae4-4c06-a351-987b35caa4f",  # Klucz z .env na Hetzner (EXTERNAL_API_KEY)
     
     # Plik ze stanem synchronizacji
     "state_file": "C:\\Scripts\\bistro-sync-state.json",

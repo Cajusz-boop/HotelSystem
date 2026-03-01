@@ -16,8 +16,6 @@ alwaysApply: true
 - **Node:** v20 LTS, zarządzany przez PM2
 - **Baza danych:** MariaDB lokalna na serwerze
 - **SSL:** Let's Encrypt (certbot, auto-odnawialny)
-- **Deploy:** `.\scripts\deploy-to-hetzner.ps1`
-- **Konfiguracja:** `.env.deploy.hetzner`
 
 ### MyDevil (BACKUP — nie używaj do produkcji!)
 
@@ -25,29 +23,29 @@ alwaysApply: true
 - Główna strona `karczma-labedz.pl` nadal jest na MyDevil
 - Skrypt `deploy-to-mydevil.ps1` działa, ale używaj tylko w razie powrotu
 
-## 2. Deploy na produkcję (Hetzner)
+## 2. Deploy na produkcję (Hetzner) — TYLKO PRZEZ GIT!
 
-### Dwa sposoby deployu — WAŻNE!
+### JEDYNY sposób deployu:
 
-**A) Automatyczny (domyślny): GitHub Webhook**
-- Push do `master` → GitHub wysyła webhook na `https://hotel.karczma-labedz.pl/webhook`
-- Serwer uruchamia `deploy.sh`: git pull → build na serwerze → pm2 restart
-- **Nie trzeba** ręcznie uruchamiać skryptów — wystarczy `git push origin master`
-- Szybki commit+push: `.\scripts\git-deploy.ps1`
-
-**B) Ręczny (alternatywa):** gdy webhook się wysypie (np. OOM "Killed" podczas build)
 ```powershell
-.\scripts\deploy-to-hetzner.ps1
+git add .
+git commit -m "opis zmian"
+git push origin master
 ```
-Skrypt: build LOKALNIE → tar → scp → unpack → pm2 restart. Obciąża PC, nie serwer.
+
+**GitHub Actions automatycznie:**
+1. Buduje aplikację
+2. Wdraża na serwer Hetzner
+3. Restartuje PM2
+
+**WAŻNE — NIE UŻYWAJ:**
+- ❌ `scripts/deploy-to-hetzner.ps1` — NIEAKTUALNY, nie używać!
+- ❌ `scripts/git-deploy.ps1` — NIEAKTUALNY, nie używać!
+- ❌ Żadnych innych skryptów deploy
 
 **Sprawdzenie statusu deployu:**
-```bash
-ssh hetzner "tail -100 /var/www/hotel/deploy.log"
-ssh hetzner "pm2 logs github-webhook --lines 30 --nostream"
-```
-
-**Konfiguracja webhooka:** `scripts/setup-webhook-hetzner.sh`, `webhook-server.js`, `deploy.sh`
+- W GitHub → Actions → ostatni workflow
+- Lub przez SSH: `ssh hetzner "pm2 logs hotel-pms --lines 50"`
 
 ## 3. Dane dostępowe Hetzner
 
@@ -111,7 +109,7 @@ binaryTargets = ["native", "freebsd14", "debian-openssl-3.0.x"]
 **Hetzner:** `~/.ssh/hetzner_key` (skonfigurowany w `~/.ssh/config` jako host `hetzner`)
 **MyDevil:** `~/.ssh/id_ed25519` (backup)
 
-Agent może uruchamiać deploy bez pytania o hasło.
+Agent może łączyć się przez SSH bez pytania o hasło (do diagnostyki, logów, prisma db push).
 
 ## 8. Nginx na Hetzner
 
@@ -128,10 +126,13 @@ ssh hetzner "systemctl reload nginx"
 ```bash
 ssh hetzner
 pm2 logs hotel-pms --lines 50      # logi aplikacji
-tail -100 /var/www/hotel/deploy.log   # logi deploy (webhook)
-pm2 logs github-webhook --lines 30 # logi webhooka
 tail -50 /var/log/nginx/error.log  # logi nginx
 systemctl status mariadb           # status bazy
 ```
 
-**Deploy "Killed" podczas build:** VPS brakuje RAM (OOM). Użyj `.\scripts\deploy-to-hetzner.ps1` — build lokalnie, upload gotowych plików.
+**Sprawdzenie statusu GitHub Actions:** Wejdź na GitHub → repozytorium → Actions → ostatni workflow.
+
+**Restart aplikacji ręcznie (przez SSH):**
+```bash
+ssh hetzner "pm2 restart hotel-pms"
+```

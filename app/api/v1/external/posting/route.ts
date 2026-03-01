@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     }
 
     let resId: string | null = null;
-    let roomNumberNormalized: string | null = roomNumber?.trim() || null;
+    let _roomNumberNormalized: string | null = roomNumber?.trim() || null;
 
     if (reservationId) {
       const res = await prisma.reservation.findUnique({
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest) {
         });
       }
       resId = active.id;
-      roomNumberNormalized = room.number;
+      _roomNumberNormalized = room.number;
     } else {
       return NextResponse.json(
         { error: "Podaj reservationId lub roomNumber" },

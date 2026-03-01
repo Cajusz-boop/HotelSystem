@@ -120,16 +120,13 @@ ssh-keygen -t ed25519 -f $env:USERPROFILE\.ssh\hetzner_key
 ### Workflow (identyczny jak na komputerze A)
 
 ```powershell
-# 1. Zapisz zmiany
+# Zapisz zmiany i wdróż (GitHub Actions automatycznie wdroży)
 git add .
 git commit -m "opis zmian"
-
-# 2. Wyślij na GitHub
 git push origin master
-
-# 3. Deploy:
-.\scripts\deploy-to-hetzner.ps1
 ```
+
+> **Uwaga:** Deploy odbywa się automatycznie przez GitHub Actions po `git push`. Nie używaj żadnych skryptów deploy.
 
 ---
 

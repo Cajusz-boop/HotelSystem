@@ -12,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
 
 const COLUMNS_STORAGE_KEY = "logbook-columns";
 const DEFAULT_VISIBLE_IDS = [
@@ -406,7 +405,7 @@ export function ColumnsDialog({
   onClose,
   visibleColumnIds,
   onApply,
-  onReset,
+  onReset: _onReset,
 }: ColumnsDialogProps) {
   const [localIds, setLocalIds] = useState<Set<string>>(() => new Set(visibleColumnIds));
 

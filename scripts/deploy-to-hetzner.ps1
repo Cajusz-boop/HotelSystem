@@ -60,35 +60,69 @@ Write-Host ""
 Write-Host "=== 1/6 Prisma generate ===" -ForegroundColor Cyan
 npx prisma generate
 
-# === 2/6 npm run build ===
+# === 2/6 npm run build (z produkcyjnym .env) ===
 Write-Host "" ; Write-Host "=== 2/6 npm run build ===" -ForegroundColor Cyan
+
+# --- KLUCZOWE: Podmien .env na produkcyjne wartosci przed buildem ---
+# Next.js wbudowuje process.env.* jako stale w bundle w build time.
+# Bez tego bundle zawiera lokalny DATABASE_URL i FISCAL_ENABLED=false.
+$envLocalPath = Join-Path $ProjectRoot ".env"
+$envBackupPath = Join-Path $ProjectRoot ".env.local-backup"
+
+$buildEnvSwapped = $false
+if (Test-Path $envLocalPath) {
+    Write-Host "Podmiana .env na produkcyjne wartosci (build time)..." -ForegroundColor Yellow
+    Copy-Item $envLocalPath $envBackupPath -Force
+
+    $envContent = Get-Content $envLocalPath -Raw
+
+    # Podmien DATABASE_URL na produkcyjny
+    if ($DB_URL) {
+        if ($envContent -match 'DATABASE_URL=') {
+            # Dodaj cudzysłowy wokół URL - bez nich # w haśle jest traktowany jako komentarz
+            $envContent = $envContent -replace 'DATABASE_URL=[^\r\n]*', ('DATABASE_URL="' + $DB_URL + '"')
+        } else {
+            $envContent += "`nDATABASE_URL=`"$DB_URL`""
+        }
+    }
+
+    # Ustaw FISCAL_ENABLED=true dla produkcji
+    if ($envContent -match 'FISCAL_ENABLED=') {
+        $envContent = $envContent -replace 'FISCAL_ENABLED=[^\r\n]*', 'FISCAL_ENABLED=true'
+    } else {
+        $envContent += "`nFISCAL_ENABLED=true"
+    }
+
+    # Ustaw FISCAL_DRIVER=posnet dla produkcji
+    if ($envContent -match 'FISCAL_DRIVER=') {
+        $envContent = $envContent -replace 'FISCAL_DRIVER=[^\r\n]*', 'FISCAL_DRIVER=posnet'
+    } else {
+        $envContent += "`nFISCAL_DRIVER=posnet"
+    }
+
+    Set-Content $envLocalPath $envContent -NoNewline
+    $buildEnvSwapped = $true
+    Write-Host "  DATABASE_URL -> produkcyjny" -ForegroundColor Gray
+    Write-Host "  FISCAL_ENABLED -> true" -ForegroundColor Gray
+    Write-Host "  FISCAL_DRIVER -> posnet" -ForegroundColor Gray
+}
+
 $nextDir = Join-Path $ProjectRoot ".next"
 if (Test-Path $nextDir) {
     Write-Host "Usuwanie starego .next..." -ForegroundColor Yellow
     Remove-Item -Recurse -Force $nextDir
 }
 
-# Podmiana DATABASE_URL na produkcyjny przed buildem (Next.js wbudowuje go jako stala)
-$envLocalPath = Join-Path $ProjectRoot ".env"
-$envBackupPath = Join-Path $ProjectRoot ".env.local.deploy-backup"
-$PROD_DB_URL = "mysql://hotel:HotelPMS2024%23Secure@localhost/hotel_pms"
-
-if (Test-Path $envLocalPath) {
-    Copy-Item $envLocalPath $envBackupPath -Force
-    $envContent = Get-Content $envLocalPath -Raw
-    $envContent = $envContent -replace 'DATABASE_URL="[^"]*"', ('DATABASE_URL="' + $PROD_DB_URL + '"')
-    Set-Content $envLocalPath $envContent
-    Write-Host "Tymczasowo ustawiono produkcyjny DATABASE_URL" -ForegroundColor Yellow
-}
-
 npm run build
+$buildExitCode = $LASTEXITCODE
 
-# Przywroc oryginalny .env
-if (Test-Path $envBackupPath) {
+# --- Przywroc oryginalny .env ---
+if ($buildEnvSwapped -and (Test-Path $envBackupPath)) {
+    Write-Host "Przywracanie oryginalnego .env..." -ForegroundColor Yellow
     Move-Item $envBackupPath $envLocalPath -Force
-    Write-Host "Przywrocono lokalny .env" -ForegroundColor Yellow
 }
-if ($LASTEXITCODE -ne 0) {
+
+if ($buildExitCode -ne 0) {
     Write-Host "[BLAD] Build nie powiodl sie!" -ForegroundColor Red
     exit 1
 }
@@ -369,8 +403,18 @@ if [ ! -f .env ]; then
     echo "DATABASE_URL=$DB_URL" > .env
     echo "NODE_ENV=production" >> .env
     echo "PORT=3000" >> .env
+    echo "FISCAL_ENABLED=true" >> .env
+    echo "FISCAL_DRIVER=posnet" >> .env
     echo "Utworzono .env"
+else
+    # Upewnij się że FISCAL_* są ustawione
+    grep -q 'FISCAL_ENABLED' .env || echo 'FISCAL_ENABLED=true' >> .env
+    grep -q 'FISCAL_DRIVER' .env || echo 'FISCAL_DRIVER=posnet' >> .env
 fi
+
+# Skopiuj .env do standalone
+cp .env .next/standalone/.env
+echo "Skopiowano .env do standalone"
 
 # Utwórz ecosystem.config.js dla PM2
 cat > ecosystem.config.js << 'PMEOF'

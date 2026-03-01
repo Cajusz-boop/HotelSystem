@@ -1,3 +1,5 @@
+> **UWAGA: Sekcja o deploy jest nieaktualna.** Deploy odbywa się przez `git push origin master` → GitHub Actions automatycznie wdraża zmiany na serwer. NIE używaj skryptów `deploy-to-hetzner.ps1` ani żadnych innych.
+
 # Opis systemu dla Testera QA / Testera Manualnego
 
 **Projekt:** Hotel PMS (Property Management System) — Karczma Łabędź  
@@ -217,7 +219,7 @@ W folderze `docs/` znajdują się specyfikacje i opisy modułów (np. okno rezer
 ## 8. Środowisko produkcyjne (Hetzner)
 
 - **URL:** `https://hotel.karczma-labedz.pl`
-- **Deploy:** push do `master` uruchamia webhook i deploy na serwerze; alternatywnie skrypt `.\scripts\deploy-to-hetzner.ps1`.
+- **Deploy:** wyłącznie przez `git push origin master` → GitHub Actions automatycznie wdraża zmiany.
 - Testy na produkcji należy wykonywać ostrożnie (np. na kopii danych lub w oknie testowym), bez niszczenia danych klientów.
 
 ---

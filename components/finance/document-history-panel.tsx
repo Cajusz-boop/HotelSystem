@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getDocumentHistory } from "@/app/actions/finance";
 import { Button } from "@/components/ui/button";
 import { History, RefreshCw } from "lucide-react";
@@ -33,7 +33,7 @@ export function DocumentHistoryPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!entityId) return;
     setLoading(true);
     setError(null);
@@ -44,11 +44,11 @@ export function DocumentHistoryPanel({
     } finally {
       setLoading(false);
     }
-  };
+  }, [entityType, entityId]);
 
   useEffect(() => {
     load();
-  }, [entityType, entityId]);
+  }, [load]);
 
   const actionLabel: Record<string, string> = {
     CREATE: "Utworzono",

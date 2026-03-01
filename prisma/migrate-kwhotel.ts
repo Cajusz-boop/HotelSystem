@@ -208,6 +208,17 @@ function parseAddress(adres: string | null): { street: string | null; postalCode
 }
 
 // ---------------------------------------------------------------------------
+// Konwersja dat KWHotel → HotelSystem
+// ---------------------------------------------------------------------------
+
+function convertKwDates(dataOd: Date, dataDo: Date): { checkIn: Date; checkOut: Date } {
+  const checkIn = new Date(dataOd);
+  const checkOut = new Date(dataDo);
+  checkOut.setDate(checkOut.getDate() + 1);
+  return { checkIn, checkOut };
+}
+
+// ---------------------------------------------------------------------------
 // Statystyki
 // ---------------------------------------------------------------------------
 
@@ -569,12 +580,7 @@ async function main() {
       }
 
       try {
-        const checkIn = new Date(r.DataOd);
-        const checkOut = new Date(r.DataDo);
-        // Jeśli checkIn === checkOut, dodaj 1 noc
-        if (checkIn.getTime() === checkOut.getTime()) {
-          checkOut.setDate(checkOut.getDate() + 1);
-        }
+        const { checkIn, checkOut } = convertKwDates(r.DataOd, r.DataDo);
 
         const reservation = await prisma.reservation.create({
           data: {

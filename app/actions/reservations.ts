@@ -2571,6 +2571,14 @@ export async function moveReservation(
       return { success: false, error: `Pokój ${newRoomNumber} nie istnieje` };
     }
 
+    // Walidacja statusu pokoju: OOO całkowicie blokuje, DIRTY tylko ostrzega
+    if (newRoom.status === "OOO") {
+      return {
+        success: false,
+        error: `Pokój ${newRoomNumber} jest wyłączony ze sprzedaży (OOO). Zmień status pokoju przed przeniesieniem rezerwacji.`,
+      };
+    }
+
     // Efektywne daty: nowe jeśli podane, w przeciwnym razie obecne
     const effectiveCheckIn = newCheckIn ? new Date(newCheckIn) : reservation.checkIn;
     const effectiveCheckOut = newCheckOut ? new Date(newCheckOut) : reservation.checkOut;
@@ -3240,6 +3248,25 @@ export async function updateReservationStatus(
     });
     if (!prev) return { success: false, error: "Rezerwacja nie istnieje" };
 
+    // Przy check-in: walidacja statusu pokoju
+    if (status === "CHECKED_IN" && prev.status !== "CHECKED_IN") {
+      const room = await prisma.room.findUnique({
+        where: { id: prev.roomId },
+        select: { status: true, number: true },
+      });
+      if (room?.status === "OOO") {
+        return {
+          success: false,
+          error: `Pokój ${room.number} jest wyłączony ze sprzedaży (OOO). Zmień status pokoju przed zameldowaniem gościa.`,
+        };
+      }
+      if (room?.status === "DIRTY") {
+        console.warn(
+          `[check-in-warn] Rezerwacja ${reservationId}: pokój ${room.number} ma status DIRTY. Gość zostanie zameldowany, ale pokój wymaga sprzątania.`
+        );
+      }
+    }
+
     // Przy check-out: ostrzeżenie o nieopłaconych rachunkach z restauracji
     if (status === "CHECKED_OUT" && prev.status !== "CHECKED_OUT") {
       const unpaidCharges = await prisma.transaction.aggregate({
@@ -3402,6 +3429,21 @@ export async function deleteReservation(reservationId: string, cancellationReaso
   if (!reservationId || typeof reservationId !== "string" || !reservationId.trim()) {
     return { success: false, error: "ID rezerwacji jest wymagane" };
   }
+
+  // Sprawdź uprawnienia - tylko użytkownicy z uprawnieniem reservation.cancel mogą usuwać rezerwacje
+  let session: Awaited<ReturnType<typeof getSession>> = null;
+  try {
+    session = await getSession();
+  } catch (error) {
+    console.error("[deleteReservation] getSession error:", error instanceof Error ? error.message : String(error));
+  }
+  if (session) {
+    const allowed = await can(session.role, "reservation.cancel");
+    if (!allowed) {
+      return { success: false, error: "Brak uprawnień do usuwania rezerwacji. Wymagane uprawnienie: reservation.cancel" };
+    }
+  }
+
   const headersList = await headers();
   const ip = getClientIp(headersList);
   const id = reservationId.trim();
@@ -3904,7 +3946,7 @@ export async function generateReservationVoucher(
 
     // Pobierz dane przedpłaty
     const advancePayment = reservation.advancePayment as Record<string, unknown> | null;
-    const cardGuarantee = reservation.isCreditCardGuaranteed ? ({} as Record<string, unknown>) : null;
+    const _cardGuarantee = reservation.isCreditCardGuaranteed ? ({} as Record<string, unknown>) : null;
 
     // Mapuj plan wyżywienia na czytelny opis
     const mealPlanDescriptions: Record<string, string> = {

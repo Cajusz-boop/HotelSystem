@@ -35,7 +35,7 @@ export function BookingForm() {
   const [children7_12, setChildren7_12] = useState(0);
   const [children13_17, setChildren13_17] = useState(0);
   const [promoCode, setPromoCode] = useState("");
-  const [roomTypesLegacy, setRoomTypesLegacy] = useState<{ type: string }[]>([]);
+  const [_roomTypesLegacy, setRoomTypesLegacy] = useState<{ type: string }[]>([]);
   const [roomsWithPrices, setRoomsWithPrices] = useState<BookingRoomType[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<BookingRoomType | null>(null);
   const [selectedMealPlan, setSelectedMealPlan] = useState("RO");
