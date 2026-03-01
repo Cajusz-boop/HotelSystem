@@ -3634,13 +3634,35 @@ export async function postRoomChargeOnCheckout(
       d.setUTCDate(d.getUTCDate() + i);
       dateStrs.push(d.toISOString().slice(0, 10));
     }
+
+    // 1. Sprawdź czy są zapisane ceny dzienne (ReservationDayRate) - priorytet najwyższy
+    const savedDayRates = await prisma.reservationDayRate.findMany({
+      where: { reservationId },
+    });
+    const dayRateMap = new Map(
+      savedDayRates.map((r) => [r.date.toISOString().slice(0, 10), Number(r.rate)])
+    );
+
+    // 2. Ręcznie nadpisana cena za dobę (rateCodePrice) - drugi priorytet
+    const manualPricePerNight = reservation.rateCodePrice != null ? Number(reservation.rateCodePrice) : null;
+
+    // 3. Cennik pokoju (getEffectivePricesBatch) - trzeci priorytet (fallback)
     const priceMap = await getEffectivePricesBatch(
       dateStrs.map((dateStr) => ({ roomNumber, dateStr }))
     );
+
     let totalAmount = 0;
     for (const dateStr of dateStrs) {
-      const p = priceMap[`${roomNumber}-${dateStr}`];
-      totalAmount += p ?? Number(reservation.room?.price ?? 0) ?? 0;
+      // Priorytet: 1) zapisana cena dzienna, 2) ręczna cena za dobę, 3) cennik, 4) bazowa cena pokoju
+      const savedRate = dayRateMap.get(dateStr);
+      if (savedRate != null && savedRate > 0) {
+        totalAmount += savedRate;
+      } else if (manualPricePerNight != null && manualPricePerNight > 0) {
+        totalAmount += manualPricePerNight;
+      } else {
+        const p = priceMap[`${roomNumber}-${dateStr}`];
+        totalAmount += p ?? Number(reservation.room?.price ?? 0) ?? 0;
+      }
     }
     if (totalAmount <= 0) {
       return { success: false, error: "Nie udało się naliczyć noclegu – pokój nie ma przypisanej ceny. Ustaw cenę pokoju w konfiguracji." };
