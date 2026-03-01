@@ -482,6 +482,7 @@ export async function getReservationsByGuestId(
 
 /**
  * Pobiera dane rezerwacji do edycji (email, telefon, źródło, kanał, wyżywienie, dorośli, dzieci, eta, uwagi wewnętrzne).
+ * Dodatkowo zwraca informację o zamkniętym okresie i uprawnieniach użytkownika.
  */
 export async function getReservationEditData(
   reservationId: string
@@ -502,12 +503,16 @@ export async function getReservationEditData(
   notesVisibleOnChart: boolean;
   extraStatus: string | null;
   advanceDueDate: string | null;
+  isInClosedPeriod: boolean;
+  canEditClosedPeriod: boolean;
 }>> {
   if (!reservationId?.trim()) return { success: false, error: "ID rezerwacji wymagane" };
   try {
     const res = await prisma.reservation.findUnique({
       where: { id: reservationId },
       select: {
+        checkIn: true,
+        checkOut: true,
         source: true,
         channel: true,
         mealPlan: true,
@@ -526,6 +531,16 @@ export async function getReservationEditData(
       },
     });
     if (!res) return { success: false, error: "Rezerwacja nie istnieje" };
+
+    const isInClosedPeriod = isReservationInClosedPeriod(res.checkIn, res.checkOut);
+    let canEditClosedPeriod = false;
+    if (isInClosedPeriod) {
+      const session = await getSession();
+      if (session) {
+        canEditClosedPeriod = session.role === "ADMIN" || session.role === "MANAGER" || await can(session.role, "reservation.edit_closed_period");
+      }
+    }
+
     return {
       success: true,
       data: {
@@ -545,6 +560,8 @@ export async function getReservationEditData(
         notesVisibleOnChart: res.notesVisibleOnChart ?? false,
         extraStatus: res.extraStatus ?? null,
         advanceDueDate: res.advanceDueDate ? res.advanceDueDate.toISOString().slice(0, 10) : null,
+        isInClosedPeriod,
+        canEditClosedPeriod,
       },
     };
   } catch (e) {
@@ -2549,6 +2566,7 @@ export async function moveReservation(
 
   const headersList = await headers();
   const ip = getClientIp(headersList);
+  const session = await getSession();
 
   try {
     const reservation = await prisma.reservation.findUnique({
@@ -2559,11 +2577,21 @@ export async function moveReservation(
       return { success: false, error: "Rezerwacja nie istnieje" };
     }
 
-    if (isReservationInClosedPeriod(reservation.checkIn, reservation.checkOut)) {
-      return {
-        success: false,
-        error: "Nie można edytować rezerwacji w zamkniętym okresie (po Night Audit).",
-      };
+    const isInClosedPeriod = isReservationInClosedPeriod(reservation.checkIn, reservation.checkOut);
+    let editingClosedPeriod = false;
+    if (isInClosedPeriod) {
+      const hasPermission = session && (
+        session.role === "ADMIN" || 
+        session.role === "MANAGER" || 
+        await can(session.role, "reservation.edit_closed_period")
+      );
+      if (!hasPermission) {
+        return {
+          success: false,
+          error: "Nie można edytować rezerwacji w zamkniętym okresie (po Night Audit).",
+        };
+      }
+      editingClosedPeriod = true;
     }
 
     const newRoom = await prisma.room.findUnique({ where: { number: newRoomNumber } });
@@ -2650,12 +2678,18 @@ export async function moveReservation(
     });
     const newUi = toUiReservation(updated);
 
+    const auditNewValue = { ...newUi } as unknown as Record<string, unknown>;
+    if (editingClosedPeriod) {
+      auditNewValue._editedInClosedPeriod = true;
+      auditNewValue._editedBy = session?.name ?? session?.email ?? "unknown";
+      auditNewValue._editedByRole = session?.role ?? "unknown";
+    }
     await createAuditLog({
       actionType: "UPDATE",
       entityType: "Reservation",
       entityId: reservationId,
       oldValue: { ...oldUi } as unknown as Record<string, unknown>,
-      newValue: { ...newUi } as unknown as Record<string, unknown>,
+      newValue: auditNewValue,
       ipAddress: ip,
     });
 
@@ -2676,6 +2710,7 @@ export async function updateReservation(
 ): Promise<ActionResult<ReturnType<typeof toUiReservation>>> {
   const headersList = await headers();
   const ip = getClientIp(headersList);
+  const session = await getSession();
 
   try {
     const prev = await prisma.reservation.findUnique({
@@ -2684,11 +2719,21 @@ export async function updateReservation(
     });
     if (!prev) return { success: false, error: "Rezerwacja nie istnieje" };
 
-    if (isReservationInClosedPeriod(prev.checkIn, prev.checkOut)) {
-      return {
-        success: false,
-        error: "Nie można edytować rezerwacji w zamkniętym okresie (po Night Audit).",
-      };
+    const isInClosedPeriod = isReservationInClosedPeriod(prev.checkIn, prev.checkOut);
+    let editingClosedPeriod = false;
+    if (isInClosedPeriod) {
+      const hasPermission = session && (
+        session.role === "ADMIN" || 
+        session.role === "MANAGER" || 
+        await can(session.role, "reservation.edit_closed_period")
+      );
+      if (!hasPermission) {
+        return {
+          success: false,
+          error: "Nie można edytować rezerwacji w zamkniętym okresie (po Night Audit).",
+        };
+      }
+      editingClosedPeriod = true;
     }
 
     const data: Partial<{
@@ -3096,12 +3141,18 @@ export async function updateReservation(
       include: { guest: true, room: true, rateCode: true, parkingBookings: { include: { parkingSpot: true } }, group: true },
     }) ?? updated;
 
+    const auditNewValue = toUiReservation(finalUpdated) as unknown as Record<string, unknown>;
+    if (editingClosedPeriod) {
+      auditNewValue._editedInClosedPeriod = true;
+      auditNewValue._editedBy = session?.name ?? session?.email ?? "unknown";
+      auditNewValue._editedByRole = session?.role ?? "unknown";
+    }
     await createAuditLog({
       actionType: "UPDATE",
       entityType: "Reservation",
       entityId: reservationId,
       oldValue: toUiReservation(prev) as unknown as Record<string, unknown>,
-      newValue: toUiReservation(finalUpdated) as unknown as Record<string, unknown>,
+      newValue: auditNewValue,
       ipAddress: ip,
     });
 
@@ -3128,6 +3179,7 @@ export async function splitReservation(
   const { reservationId, splitDate, secondRoomNumber } = parsed.data;
   const headersList = await headers();
   const ip = getClientIp(headersList);
+  const session = await getSession();
 
   try {
     const prev = await prisma.reservation.findUnique({
@@ -3136,11 +3188,21 @@ export async function splitReservation(
     });
     if (!prev) return { success: false, error: "Rezerwacja nie istnieje" };
 
-    if (isReservationInClosedPeriod(prev.checkIn, prev.checkOut)) {
-      return {
-        success: false,
-        error: "Nie można edytować rezerwacji w zamkniętym okresie (po Night Audit).",
-      };
+    const isInClosedPeriod = isReservationInClosedPeriod(prev.checkIn, prev.checkOut);
+    let editingClosedPeriod = false;
+    if (isInClosedPeriod) {
+      const hasPermission = session && (
+        session.role === "ADMIN" || 
+        session.role === "MANAGER" || 
+        await can(session.role, "reservation.edit_closed_period")
+      );
+      if (!hasPermission) {
+        return {
+          success: false,
+          error: "Nie można edytować rezerwacji w zamkniętym okresie (po Night Audit).",
+        };
+      }
+      editingClosedPeriod = true;
     }
 
     const splitD = new Date(splitDate + "T12:00:00Z");
@@ -3199,20 +3261,30 @@ export async function splitReservation(
       data: { endDate: splitD },
     });
 
+    const firstAuditNewValue = toUiReservation(updatedFirst) as unknown as Record<string, unknown>;
+    const secondAuditNewValue = toUiReservation(newSecond) as unknown as Record<string, unknown>;
+    if (editingClosedPeriod) {
+      firstAuditNewValue._editedInClosedPeriod = true;
+      firstAuditNewValue._editedBy = session?.name ?? session?.email ?? "unknown";
+      firstAuditNewValue._editedByRole = session?.role ?? "unknown";
+      secondAuditNewValue._editedInClosedPeriod = true;
+      secondAuditNewValue._editedBy = session?.name ?? session?.email ?? "unknown";
+      secondAuditNewValue._editedByRole = session?.role ?? "unknown";
+    }
     await Promise.all([
       createAuditLog({
         actionType: "UPDATE",
         entityType: "Reservation",
         entityId: reservationId,
         oldValue: toUiReservation(prev) as unknown as Record<string, unknown>,
-        newValue: toUiReservation(updatedFirst) as unknown as Record<string, unknown>,
+        newValue: firstAuditNewValue,
         ipAddress: ip,
       }),
       createAuditLog({
         actionType: "CREATE",
         entityType: "Reservation",
         entityId: newSecond.id,
-        newValue: toUiReservation(newSecond) as unknown as Record<string, unknown>,
+        newValue: secondAuditNewValue,
         ipAddress: ip,
       }),
     ]);
