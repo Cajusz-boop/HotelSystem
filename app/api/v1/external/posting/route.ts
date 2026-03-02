@@ -3,7 +3,6 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireExternalApiKey } from "@/lib/api-auth";
 import { checkApiRateLimit } from "@/lib/rate-limit";
-import { isFiscalEnabled, printFiscalReceipt, buildReceiptRequest } from "@/lib/fiscal";
 
 interface PostingItem {
   name: string;
@@ -128,17 +127,24 @@ export async function POST(request: NextRequest) {
         });
       }
       
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // Porównujemy daty jako YYYY-MM-DD w UTC aby uniknąć problemów ze strefami czasowymi
+      // Prisma zwraca @db.Date jako Date UTC, więc normalizujemy "dziś" też do UTC
+      const now = new Date();
+      const todayUTC = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
       
       // Szukamy aktywnej rezerwacji: CHECKED_IN lub CONFIRMED z pasującymi datami
       // CONFIRMED akceptujemy bo KWHotel może nie synchronizować statusu zameldowania
-      const active = room.reservations.find(
-        (r) =>
+      const active = room.reservations.find((r) => {
+        // Normalizuj daty rezerwacji do UTC midnight (Prisma @db.Date już jest w UTC)
+        const checkInUTC = new Date(r.checkIn);
+        const checkOutUTC = new Date(r.checkOut);
+        
+        return (
           (r.status === "CHECKED_IN" || r.status === "CONFIRMED") &&
-          r.checkIn <= today &&
-          r.checkOut >= today
-      );
+          checkInUTC.getTime() <= todayUTC.getTime() &&
+          checkOutUTC.getTime() >= todayUTC.getTime()
+        );
+      });
       
       if (!active) {
         // Brak aktywnej rezerwacji - zapisz jako nieprzypisane
@@ -220,22 +226,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    let fiscalError: string | undefined;
-    if (await isFiscalEnabled()) {
-      const receiptRequest = await buildReceiptRequest({
-        transactionId: tx.id,
-        reservationId: resId,
-        amount: Number(tx.amount),
-        type: txType,
-        description: fullDescription ?? undefined,
-      });
-      const fiscalResult = await printFiscalReceipt(receiptRequest);
-      if (!fiscalResult.success && fiscalResult.error) {
-        fiscalError = fiscalResult.error;
-        console.error("[FISCAL] Błąd druku paragonu:", fiscalResult.error);
-      }
-    }
-
     // Rewalidacja stron, żeby recepcja zobaczyła nowe obciążenie
     revalidatePath("/front-office");
     revalidatePath("/");
@@ -248,7 +238,6 @@ export async function POST(request: NextRequest) {
       type: tx.type,
       description: fullDescription ?? null,
       itemsCount: items?.length ?? 0,
-      fiscalError: fiscalError ?? undefined,
     });
   } catch (e) {
     return NextResponse.json(
