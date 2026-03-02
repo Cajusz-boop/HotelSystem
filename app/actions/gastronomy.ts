@@ -330,14 +330,16 @@ export async function getRestaurantChargesForReservation(
   >
 > {
   try {
+    // Szukamy transakcji gastronomicznych - po kategorii F_B lub typie RESTAURANT/GASTRONOMY/POSTING
+    // Wykluczamy tylko anulowane (VOIDED), nie wymagamy ACTIVE (mogą być null/undefined)
     const transactions = await prisma.transaction.findMany({
       where: {
         reservationId,
-        status: "ACTIVE",
         OR: [
           { category: "F_B" },
           { type: { in: ["RESTAURANT", "GASTRONOMY", "POSTING"] } },
         ],
+        NOT: { status: "VOIDED" },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -412,12 +414,12 @@ export async function getTodayRestaurantSummary(): Promise<
 
     const transactions = await prisma.transaction.findMany({
       where: {
-        status: "ACTIVE",
         createdAt: { gte: today, lt: tomorrow },
         OR: [
           { category: "F_B" },
           { type: { in: ["RESTAURANT", "GASTRONOMY", "POSTING"] } },
         ],
+        NOT: { status: "VOIDED" },
       },
       include: {
         reservation: {
@@ -480,12 +482,12 @@ export async function getGuestRestaurantHistory(
   try {
     const transactions = await prisma.transaction.findMany({
       where: {
-        status: "ACTIVE",
         reservation: { guestId },
         OR: [
           { category: "F_B" },
           { type: { in: ["RESTAURANT", "GASTRONOMY", "POSTING"] } },
         ],
+        NOT: { status: "VOIDED" },
       },
       include: {
         reservation: {
