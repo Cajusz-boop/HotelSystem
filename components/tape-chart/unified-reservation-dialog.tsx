@@ -13,6 +13,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { createReservation, updateReservation, updateReservationStatus, getCheckoutBalanceWarning, findGuestsForCheckIn, getReservationCompany, getReservationEditData, deleteReservation, type GuestCheckInSuggestion } from "@/app/actions/reservations";
 import { postRoomChargeOnCheckout, createVatInvoice, printFiscalReceiptForReservation, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates } from "@/app/actions/finance";
 import { lookupCompanyByNip } from "@/app/actions/companies";
@@ -173,6 +174,7 @@ export function UnifiedReservationDialog({
   const [docChoiceResId, setDocChoiceResId] = useState<string | null>(null);
   const [_docChoiceGuestName, setDocChoiceGuestName] = useState("");
   const [docIssuing, setDocIssuing] = useState(false);
+  const [invoiceNotes, setInvoiceNotes] = useState("");
   const [issueDocMenuOpen, setIssueDocMenuOpen] = useState(false);
   const [paymentsDialogOpen, setPaymentsDialogOpen] = useState(false);
   const [paymentsList, setPaymentsList] = useState<Array<{ id: string; amount: number; type: string; createdAt: string }>>([]);
@@ -627,13 +629,14 @@ export function UnifiedReservationDialog({
   const handleDocChoice = useCallback(async (choice: "vat" | "posnet" | "none") => {
     if (choice === "none" || !docChoiceResId) {
       setDocChoiceOpen(false);
+      setInvoiceNotes("");
       onOpenChange(false);
       return;
     }
     setDocIssuing(true);
     try {
       if (choice === "vat") {
-        const result = await createVatInvoice(docChoiceResId);
+        const result = await createVatInvoice(docChoiceResId, undefined, { notes: invoiceNotes.trim() || undefined });
         if (result.success && result.data) {
           toast.success(`Faktura VAT ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);
           const printWindow = window.open(`/api/finance/invoice/${result.data.id}/pdf`, "_blank");
@@ -659,9 +662,10 @@ export function UnifiedReservationDialog({
     } finally {
       setDocIssuing(false);
       setDocChoiceOpen(false);
+      setInvoiceNotes("");
       onOpenChange(false);
     }
-  }, [docChoiceResId, onOpenChange]);
+  }, [docChoiceResId, invoiceNotes, onOpenChange]);
 
   const handleIssueDoc = useCallback(async (choice: "vat" | "posnet" | "proforma" | "potwierdzenie") => {
     if (!reservation?.id) return;
@@ -670,27 +674,25 @@ export function UnifiedReservationDialog({
       setIssueDocMenuOpen(false);
       return;
     }
+    if (choice === "vat") {
+      setDocChoiceResId(reservation.id);
+      setDocChoiceGuestName(reservation.guestName);
+      setIssueDocMenuOpen(false);
+      setDocChoiceOpen(true);
+      return;
+    }
     setDocIssuing(true);
     setIssueDocMenuOpen(false);
     try {
-      if (choice === "vat") {
-        const result = await createVatInvoice(reservation.id);
-        if (result.success && result.data) {
-          toast.success(`Faktura VAT ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);
-          const printWindow = window.open(`/api/finance/invoice/${result.data.id}/pdf`, "_blank");
-          if (printWindow) printWindow.addEventListener("load", () => { setTimeout(() => printWindow.print(), 500); });
-        } else toast.error("error" in result ? result.error : "Błąd wystawiania faktury");
-      } else {
-        const result = await printFiscalReceiptForReservation(reservation.id);
-        if (result.success) {
-          window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
-          toast.success(result.data?.receiptNumber ? `Paragon: ${result.data.receiptNumber}` : "Paragon wysłany do kasy");
-        } else toast.error("error" in result ? result.error : "Błąd druku paragonu");
-      }
+      const result = await printFiscalReceiptForReservation(reservation.id);
+      if (result.success) {
+        window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
+        toast.success(result.data?.receiptNumber ? `Paragon: ${result.data.receiptNumber}` : "Paragon wysłany do kasy");
+      } else toast.error("error" in result ? result.error : "Błąd druku paragonu");
     } finally {
       setDocIssuing(false);
     }
-  }, [reservation?.id]);
+  }, [reservation?.id, reservation?.guestName]);
 
   if (isEdit && !reservation) return null;
   if (!isEdit && !createContext) return null;
@@ -975,23 +977,35 @@ export function UnifiedReservationDialog({
 
       {/* Post-checkout: document choice */}
       <Dialog open={docChoiceOpen} onOpenChange={(open) => { if (!open) handleDocChoice("none"); }}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Gość wymeldowany — wystawić dokument?</DialogTitle>
+            <DialogTitle>Wystawić dokument?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Gość został wymeldowany. Wybierz jaki dokument wystawić:
+            Wybierz jaki dokument wystawić:
           </p>
-          <div className="flex flex-col gap-2 mt-2">
-            <Button variant="default" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => handleDocChoice("vat")}>
-              📄 Faktura VAT (PDF) — drukuj
-            </Button>
-            <Button variant="secondary" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => handleDocChoice("posnet")}>
-              🧾 Paragon (kasa fiskalna POSNET)
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => handleDocChoice("none")}>
-              Bez dokumentu
-            </Button>
+          <div className="space-y-3 mt-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Uwagi na fakturze (opcjonalnie)</label>
+              <Textarea
+                value={invoiceNotes}
+                onChange={(e) => setInvoiceNotes(e.target.value)}
+                placeholder="Wpisz uwagi, które pojawią się na fakturze..."
+                rows={2}
+                className="text-sm"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Button variant="default" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => handleDocChoice("vat")}>
+                📄 Faktura VAT (PDF) — drukuj
+              </Button>
+              <Button variant="secondary" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => handleDocChoice("posnet")}>
+                🧾 Paragon (kasa fiskalna POSNET)
+              </Button>
+              <Button variant="outline" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => handleDocChoice("none")}>
+                Bez dokumentu
+              </Button>
+            </div>
           </div>
           {docIssuing && <p className="text-xs text-muted-foreground mt-2">Wystawianie dokumentu…</p>}
         </DialogContent>

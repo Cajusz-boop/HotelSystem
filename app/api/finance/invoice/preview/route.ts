@@ -51,7 +51,17 @@ export async function GET() {
       month: "2-digit",
       year: "numeric",
     });
-    const paymentMethod = template.defaultPaymentMethod || "przelew";
+    const rawPaymentMethod = template.defaultPaymentMethod || "TRANSFER";
+    const paymentMethodNames: Record<string, string> = {
+      CASH: "Gotówka",
+      TRANSFER: "Przelew",
+      CARD: "Karta płatnicza",
+      BLIK: "BLIK",
+      VOUCHER: "Voucher",
+      PREPAID: "Przedpłata",
+      OTHER: "Inna",
+    };
+    const paymentMethod = paymentMethodNames[rawPaymentMethod.toUpperCase()] || rawPaymentMethod;
 
     // Przykładowe pozycje z PKWIU, j.m., rabat
     const _roomLabel = (template.roomProductName?.trim() || "Nocleg") as string;
@@ -420,7 +430,9 @@ export async function GET() {
     </div>
     <div>
       <strong>Forma płatności:</strong><br>
-      ${escapeHtml(paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1))} w terminie ${paymentDays} dni = ${escapeHtml(dueDateStr)}
+      ${["CASH", "CARD", "BLIK", "VOUCHER", "PREPAID"].includes(rawPaymentMethod.toUpperCase())
+        ? `${escapeHtml(paymentMethod)} – zapłacono`
+        : `${escapeHtml(paymentMethod)} w terminie ${paymentDays} dni = ${escapeHtml(dueDateStr)}`}
     </div>
   </div>
 

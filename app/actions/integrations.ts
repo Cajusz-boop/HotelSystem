@@ -63,6 +63,7 @@ export async function exportToOptimaAction(
     buyerPostalCode: i.buyerPostalCode,
     buyerCity: i.buyerCity,
     description: "Usługa noclegowa",
+    paymentMethod: i.paymentMethod,
   }));
 
   const result: AccountingExportResult = await exportToOptima({
@@ -149,6 +150,7 @@ export async function exportToSubiektAction(
     buyerPostalCode: i.buyerPostalCode,
     buyerCity: i.buyerCity,
     description: "Usługa noclegowa",
+    paymentMethod: i.paymentMethod,
   }));
 
   const result: AccountingExportResult = await exportToSubiekt({
@@ -235,6 +237,7 @@ export async function exportToWfirmaAction(
     buyerPostalCode: i.buyerPostalCode,
     buyerCity: i.buyerCity,
     description: "Usługa noclegowa",
+    paymentMethod: i.paymentMethod,
   }));
 
   const result: AccountingExportResult = await exportToWfirma({
@@ -343,6 +346,7 @@ export async function exportToFakturowniaAction(
     buyerPostalCode: i.buyerPostalCode,
     buyerCity: i.buyerCity,
     description: "Usługa noclegowa",
+    paymentMethod: i.paymentMethod,
   }));
 
   const result: AccountingExportResult = await exportToFakturownia({
@@ -450,6 +454,7 @@ export async function exportToSymfoniaAction(
     buyerPostalCode: i.buyerPostalCode,
     buyerCity: i.buyerCity,
     description: "Usługa noclegowa",
+    paymentMethod: i.paymentMethod,
   }));
 
   const result: AccountingExportResult = await exportToSymfonia({
@@ -536,6 +541,7 @@ export async function exportToEnovaAction(
     buyerPostalCode: i.buyerPostalCode,
     buyerCity: i.buyerCity,
     description: "Usługa noclegowa",
+    paymentMethod: i.paymentMethod,
   }));
 
   const result: AccountingExportResult = await exportToEnova({

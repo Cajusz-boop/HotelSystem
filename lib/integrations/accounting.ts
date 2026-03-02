@@ -20,6 +20,8 @@ export interface InvoiceForExport {
   buyerCity?: string | null;
   /** Opis pozycji (np. "Usługa noclegowa") – jedna pozycja na fakturze. */
   description?: string;
+  /** Forma płatności: CASH, CARD, TRANSFER, BLIK, etc. */
+  paymentMethod?: string | null;
 }
 
 export interface AccountingExportOptions {
@@ -203,9 +205,22 @@ export async function exportToSubiekt(
  * Struktura zgodna z dokumentacją api.ifirma.pl – wystawianie faktury sprzedaży.
  */
 function buildWfirmaJson(documents: InvoiceForExport[]): string {
+  const paymentMethodMap: Record<string, string> = {
+    CASH: "gotowka",
+    CARD: "karta",
+    TRANSFER: "przelew",
+    BLIK: "przelew",
+    VOUCHER: "inne",
+    PREPAID: "przelew",
+    OTHER: "inne",
+  };
+
   const faktury = documents.map((doc) => {
     const dataWystawienia = formatDateOptima(doc.issuedAt);
     const nazwaPozycji = doc.description ?? "Usługa noclegowa";
+    const formaPlatnosci = doc.paymentMethod
+      ? paymentMethodMap[doc.paymentMethod.toUpperCase()] || "przelew"
+      : "przelew";
     return {
       Faktura: {
         Kontrahent: {
@@ -226,7 +241,7 @@ function buildWfirmaJson(documents: InvoiceForExport[]): string {
         ],
         DataWystawienia: dataWystawienia,
         NumerKontrahenta: doc.buyerNip.replace(/\s/g, ""),
-        FormaPlatnosci: "przelew",
+        FormaPlatnosci: formaPlatnosci,
         Waluta: "PLN",
       },
     };

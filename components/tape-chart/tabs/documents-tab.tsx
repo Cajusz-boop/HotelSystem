@@ -12,6 +12,7 @@ import { DocumentHistoryPanel } from "@/components/finance/document-history-pane
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Sheet,
   SheetContent,
@@ -51,8 +52,10 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
     isEditable: boolean;
     paymentBreakdown: Array<{ type: string; amount: number }> | null;
     customFieldValues: Record<string, string> | null;
+    notes: string | null;
   } | null>(null);
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
+  const [invoiceNotes, setInvoiceNotes] = useState("");
   const [payment1Type, setPayment1Type] = useState("CASH");
   const [payment1Amount, setPayment1Amount] = useState("");
   const [payment2Type, setPayment2Type] = useState("CARD");
@@ -78,8 +81,10 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
           isEditable: r.data.isEditable,
           paymentBreakdown: r.data.paymentBreakdown ?? null,
           customFieldValues: r.data.customFieldValues ?? null,
+          notes: r.data.notes ?? null,
         });
         setCustomFields(r.data.customFieldValues && typeof r.data.customFieldValues === "object" ? { ...r.data.customFieldValues } : {});
+        setInvoiceNotes(r.data.notes ?? "");
         const pb = r.data.paymentBreakdown;
         if (pb && pb.length >= 1) {
           setPayment1Type(pb[0].type);
@@ -132,6 +137,20 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
           if (r.success && r.data)
             setInvoiceDetail((d) => d ? { ...d, customFieldValues: r.data!.customFieldValues ?? null } : null);
         });
+      } else toast.error(result.error);
+    } finally {
+      setSavingInvoice(false);
+    }
+  };
+
+  const handleSaveInvoiceNotes = async () => {
+    if (!invoiceSheetId || !invoiceDetail?.isEditable) return;
+    setSavingInvoice(true);
+    try {
+      const result = await updateInvoice(invoiceSheetId, { notes: invoiceNotes.trim() || null });
+      if (result.success) {
+        toast.success("Zapisano uwagi");
+        setInvoiceDetail((d) => d ? { ...d, notes: invoiceNotes.trim() || null } : null);
       } else toast.error(result.error);
     } finally {
       setSavingInvoice(false);
@@ -264,6 +283,21 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
                   </div>
                   <Button type="button" size="sm" disabled={savingInvoice} onClick={handleSaveInvoicePayments}>
                     {savingInvoice ? "Zapisywanie…" : "Zapisz rozbicie płatności"}
+                  </Button>
+                </div>
+              )}
+              {invoiceDetail?.isEditable && (
+                <div className="rounded border p-3 space-y-2">
+                  <Label className="text-sm">Uwagi na fakturze</Label>
+                  <Textarea
+                    value={invoiceNotes}
+                    onChange={(e) => setInvoiceNotes(e.target.value)}
+                    placeholder="Wpisz uwagi, które pojawią się na fakturze..."
+                    rows={3}
+                    className="text-sm"
+                  />
+                  <Button type="button" size="sm" disabled={savingInvoice} onClick={handleSaveInvoiceNotes}>
+                    {savingInvoice ? "Zapisywanie…" : "Zapisz uwagi"}
                   </Button>
                 </div>
               )}

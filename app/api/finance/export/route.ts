@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
       buyerPostalCode: i.buyerPostalCode,
       buyerCity: i.buyerCity,
       description: "Usługa noclegowa",
+      paymentMethod: i.paymentMethod,
     }));
 
     const exportResult =

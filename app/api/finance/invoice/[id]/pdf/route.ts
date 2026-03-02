@@ -91,6 +91,31 @@ async function generateInvoiceHtml(id: string): Promise<string> {
       })
     : [];
 
+  // Pobierz transakcje płatności (do ustalenia metody płatności jeśli nie zapisana w fakturze)
+  let detectedPaymentMethod: string | null = null;
+  if (!invoice.paymentMethod && invoice.reservationId) {
+    const paymentTransactions = await prisma.transaction.findMany({
+      where: {
+        reservationId: invoice.reservationId,
+        type: "PAYMENT",
+        status: "ACTIVE",
+      },
+      select: { paymentMethod: true, amount: true },
+    });
+    if (paymentTransactions.length > 0) {
+      const methodCounts = new Map<string, number>();
+      for (const pt of paymentTransactions) {
+        if (pt.paymentMethod) {
+          const m = pt.paymentMethod.toUpperCase();
+          methodCounts.set(m, (methodCounts.get(m) || 0) + Number(pt.amount));
+        }
+      }
+      if (methodCounts.size > 0) {
+        detectedPaymentMethod = [...methodCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      }
+    }
+  }
+
   const issueDate = new Date(invoice.issuedAt).toLocaleDateString("pl-PL", {
     day: "2-digit",
     month: "2-digit",
@@ -107,8 +132,19 @@ async function generateInvoiceHtml(id: string): Promise<string> {
   const gross = Number(invoice.amountGross);
   const vatRate = Number(invoice.vatRate);
 
-  // Termin płatności
-  const paymentMethod = invoice.paymentMethod || template.defaultPaymentMethod || "przelew";
+  // Termin płatności - mapowanie kodów na polskie nazwy
+  const paymentMethodNames: Record<string, string> = {
+    CASH: "Gotówka",
+    TRANSFER: "Przelew",
+    CARD: "Karta płatnicza",
+    BLIK: "BLIK",
+    VOUCHER: "Voucher",
+    PREPAID: "Przedpłata",
+    SPLIT: "Płatność mieszana",
+    OTHER: "Inna",
+  };
+  const rawPaymentMethod = invoice.paymentMethod || detectedPaymentMethod || template.defaultPaymentMethod || "TRANSFER";
+  const paymentMethod = paymentMethodNames[rawPaymentMethod.toUpperCase()] || rawPaymentMethod;
   const paymentDays = invoice.paymentDays ?? template.defaultPaymentDays ?? 14;
   let dueDateStr = "";
   if (invoice.paymentDueDate) {
@@ -318,6 +354,9 @@ async function generateInvoiceHtml(id: string): Promise<string> {
   const thanksHtml = template.thanksText
     ? `<p class="thanks-text">${escapeHtml(template.thanksText)}</p>`
     : "";
+  const notesHtml = invoice.notes?.trim()
+    ? `<div class="invoice-notes"><strong>Uwagi:</strong><br>${escapeHtml(invoice.notes).replace(/\n/g, "<br>")}</div>`
+    : "";
 
   // KSeF
   const ksefUuid = invoice.ksefUuid?.trim();
@@ -433,6 +472,7 @@ async function generateInvoiceHtml(id: string): Promise<string> {
     .thanks-text { font-style: italic; font-size: 0.8rem; }
     .bank-info { font-size: 0.8rem; margin-top: 0.5rem; }
     .ksef-qr { margin-top: 1rem; padding: 0.5rem; border: 1px solid #eee; border-radius: 4px; display: inline-block; }
+    .invoice-notes { margin: 1rem 0; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; background: #fafafa; }
     @media print { 
       body { margin: 0; padding: 0.5rem; font-size: 11px; } 
       .no-print { display: none; }
@@ -527,13 +567,17 @@ async function generateInvoiceHtml(id: string): Promise<string> {
     </div>
     <div>
       <strong>Forma płatności:</strong><br>
-      ${escapeHtml(paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1))} w terminie ${paymentDays} dni = ${escapeHtml(dueDateStr)}
+      ${["CASH", "CARD", "BLIK", "VOUCHER", "PREPAID"].includes(rawPaymentMethod.toUpperCase())
+        ? `${escapeHtml(paymentMethod)} – zapłacono`
+        : `${escapeHtml(paymentMethod)} w terminie ${paymentDays} dni = ${escapeHtml(dueDateStr)}`}
     </div>
   </div>
 
   <div class="amount-words">
     <strong>Słownie zł:</strong> ${amountToWords(gross)}
   </div>
+
+  ${notesHtml}
 
   ${footerHtml}
   ${thanksHtml}

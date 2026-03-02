@@ -33,6 +33,31 @@ export async function GET(
       return new NextResponse("Rachunek nie istnieje", { status: 404 });
     }
 
+    // Pobierz metodę płatności z transakcji jeśli nie zapisana w rachunku
+    let detectedPaymentMethod: string | null = null;
+    if (!receipt.paymentMethod && receipt.reservationId) {
+      const paymentTransactions = await prisma.transaction.findMany({
+        where: {
+          reservationId: receipt.reservationId,
+          type: "PAYMENT",
+          status: "ACTIVE",
+        },
+        select: { paymentMethod: true, amount: true },
+      });
+      if (paymentTransactions.length > 0) {
+        const methodCounts = new Map<string, number>();
+        for (const pt of paymentTransactions) {
+          if (pt.paymentMethod) {
+            const m = pt.paymentMethod.toUpperCase();
+            methodCounts.set(m, (methodCounts.get(m) || 0) + Number(pt.amount));
+          }
+        }
+        if (methodCounts.size > 0) {
+          detectedPaymentMethod = [...methodCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+        }
+      }
+    }
+
     // Parsuj pozycje z JSON
     let items: ReceiptItem[] = [];
     if (receipt.items) {
@@ -122,9 +147,14 @@ export async function GET(
       CASH: "Gotówka",
       TRANSFER: "Przelew",
       CARD: "Karta płatnicza",
+      BLIK: "BLIK",
+      VOUCHER: "Voucher",
+      PREPAID: "Przedpłata",
+      OTHER: "Inna",
     };
-    const paymentMethodText = receipt.paymentMethod
-      ? paymentMethodNames[receipt.paymentMethod] || receipt.paymentMethod
+    const rawPaymentMethod = receipt.paymentMethod || detectedPaymentMethod;
+    const paymentMethodText = rawPaymentMethod
+      ? paymentMethodNames[rawPaymentMethod.toUpperCase()] || rawPaymentMethod
       : "";
 
     const html = `<!DOCTYPE html>

@@ -1131,6 +1131,7 @@ model Invoice {
   ksefErrorMessage String?  @db.Text  // komunikat błędu z bramki KSeF
   paymentBreakdown Json?    // rozbicie płatności: [{ type: "CASH", amount: 100 }, { type: "CARD", amount: 50 }]
   customFieldValues Json?   // własne pola faktury (np. zamówienie, projekt)
+  notes         String?  @db.Text  // uwagi widoczne na fakturze
 
   corrections   InvoiceCorrection[]
   cashDocuments CashDocument[]

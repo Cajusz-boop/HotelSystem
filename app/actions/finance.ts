@@ -4113,7 +4113,7 @@ export async function getTransactionsForReservation(
 export async function createVatInvoice(
   reservationId: string,
   marginMode?: boolean,
-  options?: { invoiceType?: "NORMAL" | "ADVANCE" | "FINAL"; advanceInvoiceId?: string }
+  options?: { invoiceType?: "NORMAL" | "ADVANCE" | "FINAL"; advanceInvoiceId?: string; notes?: string }
 ): Promise<
   ActionResult<{
     id: string;
@@ -4202,6 +4202,24 @@ export async function createVatInvoice(
     if (!numberResult.success) return { success: false, error: numberResult.error };
     const number = numberResult.data;
 
+    // Pobierz metodę płatności z transakcji PAYMENT (najnowsza lub dominująca)
+    const paymentTransactions = reservation.transactions.filter(
+      (t) => t.type === "PAYMENT" && (t.status === "ACTIVE" || t.status == null)
+    );
+    let invoicePaymentMethod: string | null = null;
+    if (paymentTransactions.length > 0) {
+      const methodCounts = new Map<string, number>();
+      for (const pt of paymentTransactions) {
+        if (pt.paymentMethod) {
+          const m = pt.paymentMethod.toUpperCase();
+          methodCounts.set(m, (methodCounts.get(m) || 0) + Number(pt.amount));
+        }
+      }
+      if (methodCounts.size > 0) {
+        invoicePaymentMethod = [...methodCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      }
+    }
+
     const buyerCompany = reservation.company!;
     const invoice = await prisma.invoice.create({
       data: {
@@ -4219,6 +4237,8 @@ export async function createVatInvoice(
         buyerAddress: buyerCompany.address ?? null,
         buyerPostalCode: buyerCompany.postalCode ?? null,
         buyerCity: buyerCompany.city ?? null,
+        notes: options?.notes?.trim() || null,
+        paymentMethod: invoicePaymentMethod,
       },
     });
     revalidatePath("/finance");
@@ -4246,7 +4266,8 @@ export async function createVatInvoice(
 export async function createAdvanceInvoice(
   reservationId: string,
   amountGross: number,
-  marginMode?: boolean
+  marginMode?: boolean,
+  notes?: string
 ): Promise<
   ActionResult<{
     id: string;
@@ -4261,7 +4282,7 @@ export async function createAdvanceInvoice(
   try {
     const reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
-      include: { company: true },
+      include: { company: true, transactions: true },
     });
     if (!reservation) return { success: false, error: "Rezerwacja nie istnieje" };
     if (!reservation.company) return { success: false, error: "Brak firmy przy rezerwacji – wpisz NIP i zapisz." };
@@ -4276,6 +4297,25 @@ export async function createAdvanceInvoice(
     const amountVat = amountGross - amountNet;
     const numberResult = await generateNextDocumentNumber("INVOICE");
     if (!numberResult.success) return { success: false, error: numberResult.error };
+
+    // Pobierz metodę płatności z transakcji PAYMENT
+    const paymentTransactions = reservation.transactions.filter(
+      (t) => t.type === "PAYMENT" && (t.status === "ACTIVE" || t.status == null)
+    );
+    let invoicePaymentMethod: string | null = null;
+    if (paymentTransactions.length > 0) {
+      const methodCounts = new Map<string, number>();
+      for (const pt of paymentTransactions) {
+        if (pt.paymentMethod) {
+          const m = pt.paymentMethod.toUpperCase();
+          methodCounts.set(m, (methodCounts.get(m) || 0) + Number(pt.amount));
+        }
+      }
+      if (methodCounts.size > 0) {
+        invoicePaymentMethod = [...methodCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      }
+    }
+
     const buyerCompany = reservation.company;
     const invoice = await prisma.invoice.create({
       data: {
@@ -4292,6 +4332,8 @@ export async function createAdvanceInvoice(
         buyerAddress: buyerCompany.address ?? null,
         buyerPostalCode: buyerCompany.postalCode ?? null,
         buyerCity: buyerCompany.city ?? null,
+        notes: notes?.trim() || null,
+        paymentMethod: invoicePaymentMethod,
       },
     });
     revalidatePath("/finance");
@@ -4316,7 +4358,8 @@ export async function createAdvanceInvoice(
 export async function createFinalInvoiceFromAdvance(
   reservationId: string,
   advanceInvoiceId: string,
-  marginMode?: boolean
+  marginMode?: boolean,
+  notes?: string
 ): Promise<
   ActionResult<{
     id: string;
@@ -4367,6 +4410,25 @@ export async function createFinalInvoiceFromAdvance(
     }
     const numberResult = await generateNextDocumentNumber("INVOICE");
     if (!numberResult.success) return { success: false, error: numberResult.error };
+
+    // Pobierz metodę płatności z transakcji PAYMENT
+    const paymentTransactions = reservation.transactions.filter(
+      (t) => t.type === "PAYMENT" && (t.status === "ACTIVE" || t.status == null)
+    );
+    let invoicePaymentMethod: string | null = null;
+    if (paymentTransactions.length > 0) {
+      const methodCounts = new Map<string, number>();
+      for (const pt of paymentTransactions) {
+        if (pt.paymentMethod) {
+          const m = pt.paymentMethod.toUpperCase();
+          methodCounts.set(m, (methodCounts.get(m) || 0) + Number(pt.amount));
+        }
+      }
+      if (methodCounts.size > 0) {
+        invoicePaymentMethod = [...methodCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      }
+    }
+
     const buyerCompany = reservation.company!;
     const invoice = await prisma.invoice.create({
       data: {
@@ -4384,6 +4446,8 @@ export async function createFinalInvoiceFromAdvance(
         buyerAddress: buyerCompany.address ?? null,
         buyerPostalCode: buyerCompany.postalCode ?? null,
         buyerCity: buyerCompany.city ?? null,
+        notes: notes?.trim() || null,
+        paymentMethod: invoicePaymentMethod,
       },
     });
     revalidatePath("/finance");
@@ -4671,6 +4735,8 @@ export async function updateInvoice(
     paymentBreakdown?: Array<{ type: string; amount: number }> | null;
     /** B3: pola własne na fakturze { "orderNo": "Z-123", "project": "Projekt X" } */
     customFieldValues?: Record<string, string> | null;
+    /** Uwagi widoczne na fakturze */
+    notes?: string | null;
   }
 ): Promise<ActionResult<{ id: string; number: string }>> {
   const editable = await ensureInvoiceEditable(invoiceId);
@@ -4691,6 +4757,7 @@ export async function updateInvoice(
     if (data.issuedAt != null) updatePayload.issuedAt = data.issuedAt;
     if (data.paymentBreakdown !== undefined) updatePayload.paymentBreakdown = data.paymentBreakdown === null ? Prisma.JsonNull : (data.paymentBreakdown as Prisma.InputJsonValue);
     if (data.customFieldValues !== undefined) updatePayload.customFieldValues = data.customFieldValues === null ? Prisma.JsonNull : (data.customFieldValues as Prisma.InputJsonValue);
+    if (data.notes !== undefined) updatePayload.notes = data.notes;
     if (Object.keys(updatePayload).length === 0) {
       const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: { id: true, number: true } });
       return inv ? { success: true, data: { id: inv.id, number: inv.number } } : { success: false, error: "Faktura nie istnieje" };
@@ -4733,6 +4800,8 @@ export async function getInvoiceById(
     paymentBreakdown: Array<{ type: string; amount: number }> | null;
     /** B3: pola własne na fakturze */
     customFieldValues: Record<string, string> | null;
+    /** Uwagi widoczne na fakturze */
+    notes: string | null;
   }>
 > {
   try {
@@ -4763,6 +4832,7 @@ export async function getInvoiceById(
         advanceInvoiceId: invoice.advanceInvoiceId,
         paymentBreakdown: paymentBreakdown ?? null,
         customFieldValues: customFieldValues ?? null,
+        notes: invoice.notes ?? null,
       },
     };
   } catch (e) {
