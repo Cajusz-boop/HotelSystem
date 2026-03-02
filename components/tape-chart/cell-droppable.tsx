@@ -41,7 +41,7 @@ export const CellDroppable = memo(function CellDroppable({
   style,
   className,
   isSelected,
-  hasReservation,
+  hasReservation: _hasReservation,
   onCellClick,
   title,
 }: CellDroppableProps) {
