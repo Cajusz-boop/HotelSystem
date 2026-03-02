@@ -2732,8 +2732,7 @@ export function TapeChart({
                   <div
                     key={reservation.id}
                     className={cn(
-                      "overflow-hidden flex items-center relative",
-                      isSelecting ? "pointer-events-none" : "pointer-events-auto",
+                      "overflow-hidden flex items-center relative pointer-events-none",
                       previewMode ? "cursor-default" : "cursor-grab active:cursor-grabbing",
                       highlightedReservationId === reservation.id &&
                         "ring-2 ring-primary rounded-md z-10",
@@ -2752,42 +2751,48 @@ export function TapeChart({
                       minHeight: barHeightPx,
                       marginBottom: -1,
                     }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (wasPanningRef.current) return; // Nie otwieraj po przesunięciu siatki (pan)
-                      if (previewMode) return; // No actions in preview mode
-                      if (activeDragReservation?.id !== reservation.id) {
-                        if (e.detail === 2) {
-                          setSelectedReservationIds(new Set());
-                          setSelectedReservation(reservation);
-                          setEditInitialTab("rozliczenie");
-                          setSheetOpen(true);
-                          setHighlightedReservationId(null);
-                          return;
-                        }
-                        if (e.detail === 1) {
-                          if (e.ctrlKey || e.metaKey) {
-                          setSelectedReservationIds((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(reservation.id)) {
-                              next.delete(reservation.id);
-                            } else {
-                              next.add(reservation.id);
-                            }
-                            return next;
-                          });
-                        } else {
-                          setSelectedReservationIds(new Set());
-                          setSelectedReservation(reservation);
-                          setEditInitialTab(undefined);
-                          setSheetOpen(true);
-                          setHighlightedReservationId(null);
-                        }
-                        }
-                      }
-                    }}
                   >
-                    <div className="absolute inset-y-0 flex items-stretch" style={{ left: `${(barLeftPercent ?? 0) * 100}%`, width: `${barWidthPercent * 100}%`, minWidth: 0 }}>
+                    <div
+                      className={cn(
+                        "absolute inset-y-0 flex items-stretch",
+                        isSelecting ? "pointer-events-none" : "pointer-events-auto"
+                      )}
+                      style={{ left: `${(barLeftPercent ?? 0) * 100}%`, width: `${barWidthPercent * 100}%`, minWidth: 0 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (wasPanningRef.current) return;
+                        if (previewMode) return;
+                        if (activeDragReservation?.id !== reservation.id) {
+                          if (e.detail === 2) {
+                            setSelectedReservationIds(new Set());
+                            setSelectedReservation(reservation);
+                            setEditInitialTab("rozliczenie");
+                            setSheetOpen(true);
+                            setHighlightedReservationId(null);
+                            return;
+                          }
+                          if (e.detail === 1) {
+                            if (e.ctrlKey || e.metaKey) {
+                              setSelectedReservationIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(reservation.id)) {
+                                  next.delete(reservation.id);
+                                } else {
+                                  next.add(reservation.id);
+                                }
+                                return next;
+                              });
+                            } else {
+                              setSelectedReservationIds(new Set());
+                              setSelectedReservation(reservation);
+                              setEditInitialTab(undefined);
+                              setSheetOpen(true);
+                              setHighlightedReservationId(null);
+                            }
+                          }
+                        }
+                      }}
+                    >
                     <ReservationBarWithMenu
                       reservation={reservation}
                       gridRow={0}

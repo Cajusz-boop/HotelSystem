@@ -49,12 +49,11 @@ export const CellDroppable = memo(function CellDroppable({
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
-      if (hasReservation) return;
       if (e.ctrlKey || e.metaKey) return;
       e.stopPropagation();
       onCellClick?.();
     },
-    [hasReservation, onCellClick]
+    [onCellClick]
   );
 
   const { setNodeRef, isOver } = useDroppable({
