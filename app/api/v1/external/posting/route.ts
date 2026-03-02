@@ -134,17 +134,21 @@ export async function POST(request: NextRequest) {
       
       // Szukamy aktywnej rezerwacji: CHECKED_IN lub CONFIRMED z pasującymi datami
       // CONFIRMED akceptujemy bo KWHotel może nie synchronizować statusu zameldowania
-      const active = room.reservations.find((r) => {
-        // Normalizuj daty rezerwacji do UTC midnight (Prisma @db.Date już jest w UTC)
-        const checkInUTC = new Date(r.checkIn);
-        const checkOutUTC = new Date(r.checkOut);
-        
-        return (
-          (r.status === "CHECKED_IN" || r.status === "CONFIRMED") &&
-          checkInUTC.getTime() <= todayUTC.getTime() &&
-          checkOutUTC.getTime() >= todayUTC.getTime()
-        );
-      });
+      // Gdy jest wiele pasujących (np. wczorajsza niewymeldowana + dzisiejsza), wybieramy
+      // tę z najpóźniejszym checkIn (najbardziej aktualną)
+      const candidates = room.reservations
+        .filter((r) => {
+          const checkInUTC = new Date(r.checkIn);
+          const checkOutUTC = new Date(r.checkOut);
+          return (
+            (r.status === "CHECKED_IN" || r.status === "CONFIRMED") &&
+            checkInUTC.getTime() <= todayUTC.getTime() &&
+            checkOutUTC.getTime() >= todayUTC.getTime()
+          );
+        })
+        .sort((a, b) => new Date(b.checkIn).getTime() - new Date(a.checkIn).getTime());
+      
+      const active = candidates[0] ?? null;
       
       if (!active) {
         // Brak aktywnej rezerwacji - zapisz jako nieprzypisane
