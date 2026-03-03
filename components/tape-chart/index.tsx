@@ -646,10 +646,13 @@ export function TapeChart({
     return getDateRange(viewStartDate, end);
   }, [viewStartDate, DAYS_VIEW, extraDaysLoaded]);
 
-  const viewStartDateStr = useMemo(
-    () => viewStartDate.toISOString().slice(0, 10),
-    [viewStartDate]
-  );
+  /** YYYY-MM-DD w strefie lokalnej – spójnie z getDateRange (unika błędu UTC przy północy). */
+  const viewStartDateStr = useMemo(() => {
+    const y = viewStartDate.getFullYear();
+    const m = String(viewStartDate.getMonth() + 1).padStart(2, "0");
+    const d = String(viewStartDate.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, [viewStartDate]);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   const loadingMoreRef = useRef(false);
@@ -660,7 +663,7 @@ export function TapeChart({
     const nextLoaded = extraDaysLoaded + extension;
     setExtraDaysLoaded(nextLoaded);
     const lastDate = addDays(viewStartDate, Math.max(0, DAYS_VIEW + nextLoaded - 1));
-    const dateToStr = lastDate.toISOString().slice(0, 10);
+    const dateToStr = `${lastDate.getFullYear()}-${String(lastDate.getMonth() + 1).padStart(2, "0")}-${String(lastDate.getDate()).padStart(2, "0")}`;
     getTapeChartData({ dateFrom: viewStartDateStr, dateTo: dateToStr })
       .then((res) => {
         setReservations((prevRes) => {
@@ -689,6 +692,29 @@ export function TapeChart({
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [extendDateRange]);
+
+  /** Doładowanie rezerwacji z przeszłości przy nawigacji wstecz (strzałka w lewo). */
+  const loadingPastRef = useRef(false);
+  useEffect(() => {
+    const firstDate = dates[0];
+    const lastDate = dates[dates.length - 1];
+    if (!firstDate || !lastDate || firstDate >= todayStr) return;
+    if (loadingPastRef.current) return;
+    loadingPastRef.current = true;
+    getTapeChartData({ dateFrom: firstDate, dateTo: lastDate })
+      .then((res) => {
+        setReservations((prevRes) => {
+          const byId = new Map(prevRes.map((r) => [r.id, r]));
+          (res.reservations as Reservation[]).forEach((r) => byId.set(r.id, r));
+          return Array.from(byId.values()).sort((a, b) =>
+            (a.checkIn as string).localeCompare(b.checkIn as string)
+          ) as Reservation[];
+        });
+      })
+      .finally(() => {
+        loadingPastRef.current = false;
+      });
+  }, [dates, todayStr, setReservations]);
 
   const allAvailableFeatures = useMemo(() => {
     const set = new Set<string>();
@@ -1161,70 +1187,30 @@ export function TapeChart({
   // Liczba wierszy nagłówkowych w CSS grid (events row + header row, lub tylko header row)
   const headerRowCount = (initialEvents && initialEvents.length > 0) ? 2 : 1;
 
+  /** Normalizuje datę do YYYY-MM-DD (API może zwracać ISO). */
+  const toDateKey = useCallback((val: string | unknown): string => {
+    const s = typeof val === "string" ? val : String(val ?? "");
+    return s.slice(0, 10);
+  }, []);
+
   /** Konwencja KWHotel: pasek od połowy dnia zameldowania do połowy dnia wymeldowania. */
   const reservationPlacements = useMemo(() => {
     if (dates.length === 0) return [];
     const firstDate = dates[0];
     const lastDate = dates[dates.length - 1];
 
-    // === TEMP DEBUG — usunąć po diagnozie ===
-    if (typeof window !== 'undefined') {
-      const dbg001 = filteredReservations.filter(r => r.room === '001');
-      console.warn('[PROD DEBUG] filteredReservations for 001:', dbg001);
-      console.warn('[PROD DEBUG] dates range:', dates[0], '→', dates[dates.length - 1]);
-      console.warn('[PROD DEBUG] all reservation rooms (unique):', [...new Set(filteredReservations.map(r => r.room))].sort());
-      console.warn('[PROD DEBUG] total reservations:', filteredReservations.length);
-      if (filteredReservations.length > 0) {
-        console.warn('[PROD DEBUG] sample res:', JSON.stringify(filteredReservations[0]));
-      }
-      // Sprawdź co dateIndex ma dla dzisiejszej daty
-      console.warn('[PROD DEBUG] dateIndex for 2026-02-27:', dateIndex.get('2026-02-27'));
-      console.warn('[PROD DEBUG] visibleRoomNumbers has 001:', visibleRoomNumbers.has('001'));
-    }
-    // === END TEMP DEBUG ===
-
-    if (typeof window !== 'undefined') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- temporary debug
-      (window as unknown as Record<string, unknown>).__TC_DEBUG__ = {
-        room001: filteredReservations.filter(r => r.room === '001'),
-        dates3: dates.slice(0, 5),
-        di27: dateIndex.get('2026-02-27'),
-        di28: dateIndex.get('2026-02-28'),
-        rr001: roomRowIndex.get('001'),
-      };
-    }
-
     return filteredReservations
       .map((res) => {
-        // === TEMP DEBUG — room 001 (INSIDE MAP) ===
-        if (typeof window !== 'undefined' && res.room === '001') {
-          const rawStartIdx = dateIndex.get(res.checkIn);
-          const rawEndIdx = dateIndex.get(res.checkOut);
-          console.warn('[TC-MAP-DBG] Processing room 001:', {
-            id: res.id,
-            checkIn: res.checkIn,
-            checkOut: res.checkOut,
-            status: res.status,
-            guestName: res.guestName,
-            roomRowValue: roomRowIndex.get(res.room),
-            rawStartIdx,
-            rawEndIdx,
-            firstDate,
-            lastDate,
-            wouldClampStart: rawStartIdx == null && res.checkIn < firstDate,
-            wouldClampEnd: rawEndIdx == null && res.checkOut > lastDate,
-          });
-        }
-        // === END TEMP DEBUG ===
-
         const row = roomRowIndex.get(res.room);
         if (row == null) return null;
 
-        let startIdx = dateIndex.get(res.checkIn);
-        let endIdx = dateIndex.get(res.checkOut);
+        const checkInKey = toDateKey(res.checkIn);
+        const checkOutKey = toDateKey(res.checkOut);
+        let startIdx = dateIndex.get(checkInKey);
+        let endIdx = dateIndex.get(checkOutKey);
 
         // Clamp startIdx: jeśli checkIn jest przed widocznym zakresem, zaczynamy od 0
-        const isClampedStart = startIdx == null && res.checkIn < firstDate;
+        const isClampedStart = startIdx == null && checkInKey < firstDate;
         if (startIdx == null) {
           if (isClampedStart) {
             startIdx = 0;
@@ -1234,51 +1220,15 @@ export function TapeChart({
         }
 
         // Clamp endIdx: jeśli checkOut jest poza widocznym zakresem, kończymy na końcu
-        const isClampedEnd = endIdx == null && res.checkOut > lastDate;
+        const isClampedEnd = endIdx == null && checkOutKey > lastDate;
         if (endIdx == null) {
           if (isClampedEnd) {
             endIdx = dates.length;
           } else {
-            const found = dates.findIndex((d) => d >= res.checkOut);
+            const found = dates.findIndex((d) => d >= checkOutKey);
             endIdx = found === -1 ? dates.length : found;
           }
         }
-
-        // === TEMP DEBUG — room 001 (AFTER CLAMP) ===
-        if (typeof window !== 'undefined' && res.room === '001') {
-          console.warn('[TC-MAP-DBG] After clamp for room 001:', {
-            id: res.id,
-            finalStartIdx: startIdx,
-            finalEndIdx: endIdx,
-            isClampedStart,
-            isClampedEnd,
-            willBeFiltered: startIdx >= endIdx,
-            reason: startIdx >= endIdx ? `startIdx(${startIdx}) >= endIdx(${endIdx})` : 'PASS',
-          });
-        }
-        // === END TEMP DEBUG ===
-
-        // === PLACEMENT DEBUG ===
-        if (typeof window !== 'undefined' && res.room === '001') {
-          const w = window as unknown as Record<string, unknown[]>;
-          if (!w.__TC_PL__) w.__TC_PL__ = [];
-          w.__TC_PL__.push({
-            id: res.id?.slice(-8),
-            checkIn: res.checkIn,
-            checkOut: res.checkOut,
-            guestName: res.guestName?.slice(0, 20),
-            row,
-            startIdx,
-            endIdx,
-            isClampedStart,
-            isClampedEnd: typeof isClampedEnd !== 'undefined' ? isClampedEnd : 'N/A',
-            willReject: startIdx >= endIdx,
-            gridRow: row + headerRowCount,
-            gridColumnStart: startIdx + 2,
-            gridColumnEnd: Math.min(endIdx + 3, dates.length + 2),
-          });
-        }
-        // === END PLACEMENT DEBUG ===
 
         if (startIdx >= endIdx) return null;
 
@@ -1303,7 +1253,7 @@ export function TapeChart({
         };
       })
       .filter((p): p is NonNullable<typeof p> => p != null);
-  }, [filteredReservations, roomRowIndex, dateIndex, dates, headerRowCount, visibleRoomNumbers]);
+  }, [filteredReservations, roomRowIndex, dateIndex, dates, headerRowCount, visibleRoomNumbers, toDateKey]);
 
   /** Zbiór komórek faktycznie pokrytych paskiem – zgodnie z logiką placementu (bar spans checkIn..checkOut inclusive) */
   const occupiedCellsSet = useMemo(() => {
