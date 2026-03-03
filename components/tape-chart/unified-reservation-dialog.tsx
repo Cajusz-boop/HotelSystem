@@ -140,6 +140,7 @@ const INITIAL_FORM: SettlementTabFormState = {
   voucherAmount: "",
   voucherType: "BON_TURYSTYCZNY",
   advanceAmount: "",
+  invoiceSingleLine: true,
 };
 
 export function UnifiedReservationDialog({
@@ -244,6 +245,7 @@ export function UnifiedReservationDialog({
             showNotesOnChart: d.notesVisibleOnChart ?? false,
             extraStatus: d.extraStatus ?? "",
             depositDueDate: d.advanceDueDate ?? "",
+            invoiceSingleLine: d.invoiceSingleLine ?? true,
           }));
           setIsInClosedPeriod(d.isInClosedPeriod ?? false);
           setCanEditClosedPeriod(d.canEditClosedPeriod ?? false);
@@ -455,6 +457,7 @@ export function UnifiedReservationDialog({
           notesVisibleOnChart: form.showNotesOnChart,
           extraStatus: form.extraStatus?.trim() || undefined,
           advanceDueDate: form.depositDueDate?.trim() || undefined,
+          invoiceSingleLine: form.invoiceSingleLine,
           ...(hasCompany ? {
             companyData: {
               nip: nipRaw,
@@ -829,7 +832,21 @@ export function UnifiedReservationDialog({
               </TabsContent>
 
               <TabsContent value="posilki" className="flex-1 min-h-0 overflow-y-auto mt-0 p-4">
-                {isEdit && reservation && <MealsTab reservationId={reservation.id} />}
+                {isEdit && reservation && (
+                  <MealsTab
+                    reservationId={reservation.id}
+                    invoiceSingleLine={form.invoiceSingleLine}
+                    onInvoiceSingleLineChange={async (value) => {
+                      const r = await updateReservation(reservation.id, { invoiceSingleLine: value } as Parameters<typeof updateReservation>[1]);
+                      if (r.success) {
+                        setForm((prev) => ({ ...prev, invoiceSingleLine: value }));
+                        toast.success("Zapisano ustawienie faktury");
+                      } else {
+                        toast.error(r.error ?? "Błąd zapisu");
+                      }
+                    }}
+                  />
+                )}
               </TabsContent>
 
               <TabsContent value="parking" className="flex-1 min-h-0 overflow-y-auto mt-0 p-4">

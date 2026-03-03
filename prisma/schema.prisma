@@ -745,6 +745,8 @@ model Reservation {
   kioskCheckInAt DateTime?    // meldunek przez kiosk samoobsługowy
   kioskSignature Json?        // podpis z kiosku (data URL z canvas)
   digitalKeyCode Json?        // cyfrowy klucz do drzwi { code, validFrom, validTo, generatedAt }
+  /** Gdy true: faktura pokazuje jedną linię „Usługa hotelowa” z całą sumą (nocleg + gastronomia + inne) */
+  invoiceSingleLine Boolean   @default(true)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 

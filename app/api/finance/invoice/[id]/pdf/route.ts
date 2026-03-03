@@ -189,7 +189,29 @@ async function generateInvoiceHtml(id: string): Promise<string> {
   };
   const lineItems: InvoiceLine[] = [];
 
-  if (transactions.length > 0) {
+  // Gdy rezerwacja ma invoiceSingleLine: faktura jako jedna linia „Usługa hotelowa” (nocleg + gastronomia + inne)
+  const reservation = invoice.reservationId
+    ? await prisma.reservation.findUnique({
+        where: { id: invoice.reservationId },
+        select: { invoiceSingleLine: true },
+      })
+    : null;
+  const useSingleLine = reservation?.invoiceSingleLine ?? true;
+
+  if (useSingleLine) {
+    lineItems.push({
+      name: "Usługa hotelowa",
+      pkwiu: "55.10.10.0",
+      unit: defaultUnit,
+      quantity: 1,
+      unitPrice: net,
+      discount: 0,
+      netAmount: net,
+      vatRate: vatRate,
+      vatAmount: vat,
+      grossAmount: gross,
+    });
+  } else if (transactions.length > 0) {
     const grouped = new Map<string, { name: string; total: number }>();
     for (const tx of transactions) {
       const txType = tx.type;

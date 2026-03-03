@@ -503,6 +503,7 @@ export async function getReservationEditData(
   notesVisibleOnChart: boolean;
   extraStatus: string | null;
   advanceDueDate: string | null;
+  invoiceSingleLine: boolean;
   isInClosedPeriod: boolean;
   canEditClosedPeriod: boolean;
 }>> {
@@ -513,6 +514,7 @@ export async function getReservationEditData(
       select: {
         checkIn: true,
         checkOut: true,
+        invoiceSingleLine: true,
         source: true,
         channel: true,
         mealPlan: true,
@@ -560,6 +562,7 @@ export async function getReservationEditData(
         notesVisibleOnChart: res.notesVisibleOnChart ?? false,
         extraStatus: res.extraStatus ?? null,
         advanceDueDate: res.advanceDueDate ? res.advanceDueDate.toISOString().slice(0, 10) : null,
+        invoiceSingleLine: res.invoiceSingleLine ?? true,
         isInClosedPeriod,
         canEditClosedPeriod,
       },
@@ -2862,6 +2865,9 @@ export async function updateReservation(
     if ((input as { showNotesOnChart?: boolean }).showNotesOnChart !== undefined) data.notesVisibleOnChart = Boolean((input as { showNotesOnChart?: boolean }).showNotesOnChart);
     if (input.extraStatus !== undefined) (data as Record<string, unknown>).extraStatus = (input.extraStatus === "" || input.extraStatus == null) ? null : input.extraStatus;
     if (input.advanceDueDate !== undefined) (data as Record<string, unknown>).advanceDueDate = input.advanceDueDate ? new Date(input.advanceDueDate) : null;
+    if ((input as { invoiceSingleLine?: boolean }).invoiceSingleLine !== undefined) {
+      (data as Record<string, unknown>).invoiceSingleLine = (input as { invoiceSingleLine?: boolean }).invoiceSingleLine;
+    }
 
     // Firma / NIP (dla faktury VAT)
     if (input.companyId !== undefined) {

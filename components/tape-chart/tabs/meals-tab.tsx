@@ -2,12 +2,37 @@
 
 import { useState, useEffect } from "react";
 import { getRestaurantChargesForReservation } from "@/app/actions/gastronomy";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+
+function InvoiceSingleLineCheckbox({
+  checked,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  onCheckedChange: (value: boolean) => void | Promise<void>;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border bg-muted/5 px-3 py-2">
+      <Checkbox
+        id="invoice-single-line"
+        checked={checked}
+        onCheckedChange={(v) => onCheckedChange(v === true)}
+      />
+      <Label htmlFor="invoice-single-line" className="text-sm font-normal cursor-pointer">
+        Faktura: jedna linia „Usługa hotelowa” z całą sumą rachunku (nocleg + gastronomia + inne)
+      </Label>
+    </div>
+  );
+}
 
 interface MealsTabProps {
   reservationId: string;
+  invoiceSingleLine: boolean;
+  onInvoiceSingleLineChange: (value: boolean) => void | Promise<void>;
 }
 
-export function MealsTab({ reservationId }: MealsTabProps) {
+export function MealsTab({ reservationId, invoiceSingleLine, onInvoiceSingleLineChange }: MealsTabProps) {
   const [charges, setCharges] = useState<
     Array<{
       id: string;
@@ -42,23 +67,27 @@ export function MealsTab({ reservationId }: MealsTabProps) {
     );
   }
 
-  if (charges.length === 0) {
-    return (
-      <div className="space-y-3">
-        <div className="rounded-lg border border-dashed bg-muted/10 p-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            Brak obciążeń gastronomicznych dla tej rezerwacji.
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground/70">
-            Dania nabite na pokój z systemu Symplex Bistro pojawią się tutaj automatycznie.
-          </p>
-        </div>
+  const emptyState = (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-dashed bg-muted/10 p-6 text-center">
+        <p className="text-sm text-muted-foreground">
+          Brak obciążeń gastronomicznych dla tej rezerwacji.
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground/70">
+          Dania nabite na pokój z systemu Symplex Bistro pojawią się tutaj automatycznie.
+        </p>
       </div>
-    );
+      <InvoiceSingleLineCheckbox checked={invoiceSingleLine} onCheckedChange={onInvoiceSingleLineChange} />
+    </div>
+  );
+
+  if (charges.length === 0) {
+    return emptyState;
   }
 
   return (
     <div className="space-y-3">
+      <InvoiceSingleLineCheckbox checked={invoiceSingleLine} onCheckedChange={onInvoiceSingleLineChange} />
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">
           Dania nabite na pokój

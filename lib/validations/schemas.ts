@@ -386,6 +386,7 @@ const reservationBaseSchema = z.object({
   notesVisibleOnChart: z.boolean().optional(), // pierwsza linia uwag na pasku rezerwacji w TapeChart
   reminderAt: z.string().datetime().optional().nullable(), // przypomnienie do rezerwacji (ISO datetime)
   advanceDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(), // termin wpłaty zaliczki (YYYY-MM-DD)
+  invoiceSingleLine: z.boolean().optional(), // faktura: jedna linia "Usługa hotelowa" z całą sumą (nocleg+gastronomia+inne)
   externalReservationNumber: z.string().max(100).optional().nullable(), // nr rezerwacji w OTA/Booking
   currency: z.string().max(3).optional().nullable(), // waluta (PLN, EUR, USD)
   extraStatus: z.string().max(50).optional().nullable(), // dodatkowy status: VIP, AWAITING_PAYMENT, COMPLAINT, itp.

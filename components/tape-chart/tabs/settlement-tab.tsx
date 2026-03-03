@@ -227,6 +227,8 @@ export interface SettlementTabFormState {
   voucherType: string;
   /** Kwota zaliczki do dodania (UI) */
   advanceAmount: string;
+  /** Faktura: jedna linia „Usługa hotelowa” z całą sumą (nocleg + gastronomia + inne) */
+  invoiceSingleLine: boolean;
 }
 
 interface SettlementTabProps {
