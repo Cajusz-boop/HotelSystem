@@ -184,6 +184,8 @@ export function UnifiedReservationDialog({
   const [dayRatesSaving, setDayRatesSaving] = useState(false);
   const [isInClosedPeriod, setIsInClosedPeriod] = useState(false);
   const [canEditClosedPeriod, setCanEditClosedPeriod] = useState(false);
+  /** W trybie edycji: true gdy są niezapisane zmiany; po Zapisz ustawiane na false, okno pozostaje otwarte */
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Guest autocomplete
   const [guestSuggestions, setGuestSuggestions] = useState<GuestCheckInSuggestion[]>([]);
@@ -287,6 +289,7 @@ export function UnifiedReservationDialog({
     setGuestSuggestions([]);
     setSuggestionsOpen(false);
     setHighlightedIdx(-1);
+    setHasUnsavedChanges(!isEdit);
     if (!isEdit) {
       setIsInClosedPeriod(false);
       setCanEditClosedPeriod(false);
@@ -330,6 +333,7 @@ export function UnifiedReservationDialog({
 
   const onFormChange = useCallback((patch: Partial<SettlementTabFormState>) => {
     setForm((prev) => ({ ...prev, ...patch }));
+    setHasUnsavedChanges(true);
   }, []);
 
   // Guest autocomplete search
@@ -357,6 +361,7 @@ export function UnifiedReservationDialog({
       guestPhone: g.phone ?? "",
       guestDateOfBirth: g.dateOfBirth ?? "",
     }));
+    setHasUnsavedChanges(true);
     setGuestSuggestions([]);
     setSuggestionsOpen(false);
     setHighlightedIdx(-1);
@@ -412,6 +417,7 @@ export function UnifiedReservationDialog({
 
   const handleSubmit = useCallback(async (e?: React.FormEvent) => {
     e?.preventDefault();
+    if (isEdit && !hasUnsavedChanges && !saveAndPrintRef.current) return;
     const nights = computeNights(form.checkIn, form.checkOut);
     if (nights <= 0) { setError("Data wymeldowania musi być po dacie zameldowania."); return; }
 
@@ -473,8 +479,11 @@ export function UnifiedReservationDialog({
           if (saveAndPrintRef.current) {
             saveAndPrintRef.current = false;
             openRegistrationCard(reservation.id, true);
+            onOpenChange(false);
+          } else {
+            setHasUnsavedChanges(false);
+            toast.success("Zapisano zmiany.");
           }
-          onOpenChange(false);
         } else {
           setError("error" in result ? (result.error ?? null) : null);
         }
@@ -549,7 +558,7 @@ export function UnifiedReservationDialog({
     } finally {
       setSaving(false);
     }
-  }, [form, isEdit, reservation, rooms, onSaved, onCreated, onOpenChange, openRegistrationCard]);
+  }, [form, isEdit, reservation, rooms, onSaved, onCreated, onOpenChange, openRegistrationCard, hasUnsavedChanges]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -945,7 +954,16 @@ export function UnifiedReservationDialog({
             <Button type="button" variant="outline" size="sm" className="h-8 text-xs bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200" disabled={saving || (isEdit && isInClosedPeriod && !canEditClosedPeriod)} onClick={() => { saveAndPrintRef.current = true; handleSubmit(); }} title="Ctrl+Shift+Enter">
               {saving && saveAndPrintRef.current ? "Zapisywanie…" : "Zapisz i drukuj"}
             </Button>
-            <Button ref={saveBtnRef} type="submit" form="reservation-form" size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 text-white" disabled={saving || (isEdit && isInClosedPeriod && !canEditClosedPeriod)} title="Ctrl+Enter" data-testid="create-reservation-save">
+            <Button
+              ref={saveBtnRef}
+              type="submit"
+              form="reservation-form"
+              size="sm"
+              className={isEdit && !hasUnsavedChanges ? "h-8 text-xs bg-gray-200 text-gray-500 cursor-default" : "h-8 text-xs bg-green-600 hover:bg-green-700 text-white"}
+              disabled={saving || (isEdit && isInClosedPeriod && !canEditClosedPeriod) || (isEdit && !hasUnsavedChanges)}
+              title="Ctrl+Enter"
+              data-testid="create-reservation-save"
+            >
               {saving && !saveAndPrintRef.current ? "Zapisywanie…" : "💾 Zapisz"}
             </Button>
             <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
