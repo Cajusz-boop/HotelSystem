@@ -41,7 +41,8 @@ import { sendInvoiceToKsef, sendBatchToKsef, downloadUpo, checkKsefInvoiceStatus
 import type { TransactionForList, AccountingNoteData, CommissionReportData, CashShiftData, BlindDropHistoryItem, VatRegisterData, KpirData, CashShiftHistoryItem, CashShiftReportDetail } from "@/app/actions/finance";
 import { getCennikConfig } from "@/app/actions/cennik-config";
 import { toast } from "sonner";
-import { Moon, Banknote, Shield, FileText, Receipt, ExternalLink, Check, X, Trash2, FileWarning, Ban, Percent, Clock, FileBarChart } from "lucide-react";
+import { Moon, Banknote, Shield, FileText, Receipt, ExternalLink, Check, X, Trash2, FileWarning, Ban, Percent, Clock, FileBarChart, FilePlus } from "lucide-react";
+import { SalesInvoiceDialog } from "@/components/finance/sales-invoice-dialog";
 import { getFiscalConfigAction } from "@/app/actions/finance";
 import type { FiscalConfig } from "@/lib/fiscal/types";
 
@@ -145,6 +146,7 @@ export default function FinancePage() {
   const [ksefBatchSending, setKsefBatchSending] = useState(false);
   const [ksefCheckStatusId, setKsefCheckStatusId] = useState<string | null>(null);
   const [ksefErrorDialog, setKsefErrorDialog] = useState<{ documentNumber: string; message: string } | null>(null);
+  const [salesInvoiceOpen, setSalesInvoiceOpen] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -468,6 +470,25 @@ export default function FinancePage() {
       <h1 className="text-2xl font-semibold">Finanse</h1>
 
       <div className="grid gap-6 md:grid-cols-2">
+        {/* Faktura na produkty */}
+        <section className="rounded-lg border bg-card p-6 shadow-sm">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
+            <FilePlus className="h-5 w-5" />
+            Faktura na produkty
+          </h2>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Wystaw fakturę VAT na stypy, vouchery, wynajem sal, catering lub inne usługi – bez rezerwacji noclegowej.
+          </p>
+          <Button variant="outline" onClick={() => setSalesInvoiceOpen(true)}>
+            Wystaw fakturę na produkty
+          </Button>
+          <SalesInvoiceDialog
+            open={salesInvoiceOpen}
+            onOpenChange={setSalesInvoiceOpen}
+            onSuccess={() => queryClient.invalidateQueries({ queryKey: ["finance-initial"] })}
+          />
+        </section>
+
         {/* Night Audit */}
         <section className="rounded-lg border bg-card p-6 shadow-sm">
           <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">

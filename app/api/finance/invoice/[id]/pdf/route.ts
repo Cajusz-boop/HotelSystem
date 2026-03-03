@@ -57,6 +57,7 @@ export async function GET(
 async function generateInvoiceHtml(id: string): Promise<string> {
   const invoice = await prisma.invoice.findUnique({
     where: { id },
+    include: { lineItems: { orderBy: { sortOrder: "asc" } } },
   });
 
   if (!invoice) {
@@ -189,6 +190,24 @@ async function generateInvoiceHtml(id: string): Promise<string> {
   };
   const lineItems: InvoiceLine[] = [];
 
+  // Faktura na produkty (stypy, vouchery, usługi) – pozycje z InvoiceLineItem
+  if (!invoice.reservationId && invoice.lineItems && invoice.lineItems.length > 0) {
+    for (const li of invoice.lineItems) {
+      lineItems.push({
+        name: li.description,
+        pkwiu: "55.10.10.0",
+        unit: li.unit || "szt.",
+        quantity: Number(li.quantity),
+        unitPrice: Number(li.unitPrice),
+        discount: 0,
+        netAmount: Number(li.amountNet),
+        vatRate: Number(li.vatRate),
+        vatAmount: Number(li.amountVat),
+        grossAmount: Number(li.amountGross),
+      });
+    }
+  }
+
   // Gdy rezerwacja ma invoiceSingleLine: faktura jako jedna linia „Usługa hotelowa” (nocleg + gastronomia + inne)
   const reservation = invoice.reservationId
     ? await prisma.reservation.findUnique({
@@ -198,7 +217,7 @@ async function generateInvoiceHtml(id: string): Promise<string> {
     : null;
   const useSingleLine = reservation?.invoiceSingleLine ?? true;
 
-  if (useSingleLine) {
+  if (lineItems.length === 0 && useSingleLine) {
     lineItems.push({
       name: "Usługa hotelowa",
       pkwiu: "55.10.10.0",
