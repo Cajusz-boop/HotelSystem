@@ -1088,8 +1088,10 @@ model Proforma {
 
 model Invoice {
   id             String   @id @default(cuid())
-  reservationId  String
-  reservation    Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservationId  String?  // opcjonalne: null dla faktur na produkty (stypy, vouchery, usługi)
+  reservation    Reservation? @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  sourceType     String   @default("RESERVATION")  // RESERVATION, EVENT, VOUCHER, MANUAL
+  sourceId       String?  // ID EventOrder, GiftVoucher itp. (gdy sourceType != RESERVATION)
   invoiceType    String?  @default("NORMAL")  // NORMAL, ADVANCE, FINAL
   advanceInvoiceId String?  // gdy invoiceType = FINAL: ID faktury zaliczkowej rozliczanej
   number        String   // FV/YYYY/SEQ – numer faktury VAT
@@ -1137,9 +1139,29 @@ model Invoice {
 
   corrections   InvoiceCorrection[]
   cashDocuments CashDocument[]
+  lineItems     InvoiceLineItem[]  // pozycje dla faktur bez rezerwacji (MANUAL, EVENT, VOUCHER)
 
   @@unique([number])
   @@index([reservationId])
+  @@index([sourceType, sourceId])
+}
+
+// Pozycje faktury (dla faktur na produkty: stypy, vouchery, usługi – bez rezerwacji)
+model InvoiceLineItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String   @db.Text  // np. "Stypa – 50 osób", "Voucher 500 PLN", "Wynajem sali"
+  quantity    Decimal  @db.Decimal(10, 2) @default(1)
+  unit        String   @default("szt.")  // szt., os., godz., usługa
+  unitPrice   Decimal  @db.Decimal(12, 2)  // cena jednostkowa netto
+  vatRate     Decimal  @db.Decimal(5, 2) @default(8)  // stawka VAT (%)
+  amountNet   Decimal  @db.Decimal(12, 2)
+  amountVat   Decimal  @db.Decimal(12, 2)
+  amountGross Decimal  @db.Decimal(12, 2)
+  sortOrder   Int      @default(0)
+
+  @@index([invoiceId])
 }
 
 // Faktura zbiorcza - dla wielu rezerwacji jednej firmy
@@ -2331,21 +2353,24 @@ model DocumentNumberingConfig {
   yearFormat     String   @default("YYYY")  // YYYY (np. 2026) lub YY (np. 26)
   sequencePadding Int     @default(4)  // ilość zer na początku sekwencji (np. 4 = "0001")
   resetYearly    Boolean  @default(true)  // czy resetować sekwencję na początku roku
+  includeMonth   Boolean  @default(false)  // format numer/miesiąc/rok/literka (np. 1/03/2025/A)
+  seriesLetter   String   @default("A")   // litera serii przy includeMonth (np. A, B, C)
   description    String?  // opis konfiguracji (dla UI)
   exampleNumber  String?  // przykładowy numer (generowany automatycznie przy zapisie)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
 
-// Licznik numeracji dokumentów (oddzielny dla każdego typu i roku)
+// Licznik numeracji dokumentów (oddzielny dla każdego typu, roku i opcjonalnie miesiąca)
 model DocumentNumberCounter {
   id             String   @id @default(cuid())
   documentType   String   // INVOICE, CORRECTION, CONSOLIDATED_INVOICE, RECEIPT, ACCOUNTING_NOTE, PROFORMA
   year           Int      // rok dla którego jest licznik
+  month          Int      @default(0)  // miesiąc (1-12); 0 = licznik roczny
   lastSequence   Int      @default(0)  // ostatnia użyta sekwencja
   updatedAt      DateTime @updatedAt
 
-  @@unique([documentType, year])
+  @@unique([documentType, year, month])
   @@index([documentType])
 }
 

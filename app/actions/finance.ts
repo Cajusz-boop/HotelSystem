@@ -117,6 +117,8 @@ export interface DocumentNumberingConfigData {
   yearFormat: string;
   sequencePadding: number;
   resetYearly: boolean;
+  includeMonth: boolean;
+  seriesLetter: string;
   description: string | null;
   exampleNumber: string | null;
 }
@@ -157,6 +159,8 @@ export async function getDocumentNumberingConfig(
           yearFormat: "YYYY",
           sequencePadding: 4,
           resetYearly: true,
+          includeMonth: false,
+          seriesLetter: "A",
           description: defaultConfig.description,
           exampleNumber,
         },
@@ -173,6 +177,8 @@ export async function getDocumentNumberingConfig(
         yearFormat: config.yearFormat,
         sequencePadding: config.sequencePadding,
         resetYearly: config.resetYearly,
+        includeMonth: config.includeMonth ?? false,
+        seriesLetter: config.seriesLetter ?? "A",
         description: config.description,
         exampleNumber: config.exampleNumber,
       },
@@ -208,6 +214,8 @@ export async function getAllDocumentNumberingConfigs(): Promise<ActionResult<Doc
             yearFormat: "YYYY",
             sequencePadding: 4,
             resetYearly: true,
+            includeMonth: false,
+            seriesLetter: "A",
             description: defaultConfig.description,
             exampleNumber,
           },
@@ -229,6 +237,8 @@ export async function getAllDocumentNumberingConfigs(): Promise<ActionResult<Doc
         yearFormat: c.yearFormat,
         sequencePadding: c.sequencePadding,
         resetYearly: c.resetYearly,
+        includeMonth: c.includeMonth ?? false,
+        seriesLetter: c.seriesLetter ?? "A",
         description: c.description,
         exampleNumber: c.exampleNumber,
       })),
@@ -255,6 +265,8 @@ export async function updateDocumentNumberingConfig(
     yearFormat?: "YYYY" | "YY";
     sequencePadding?: number;
     resetYearly?: boolean;
+    includeMonth?: boolean;
+    seriesLetter?: string;
   }
 ): Promise<ActionResult<DocumentNumberingConfigData>> {
   try {
@@ -267,6 +279,9 @@ export async function updateDocumentNumberingConfig(
     }
     if (data.sequencePadding !== undefined && (data.sequencePadding < 1 || data.sequencePadding > 10)) {
       return { success: false, error: "Długość sekwencji musi być między 1 a 10" };
+    }
+    if (data.seriesLetter !== undefined && data.seriesLetter.length > 1) {
+      return { success: false, error: "Litera serii musi być pojedynczą literą (A-Z)" };
     }
 
     // Upewnij się, że konfiguracja istnieje
@@ -296,17 +311,25 @@ export async function updateDocumentNumberingConfig(
     if (data.yearFormat !== undefined) updateData.yearFormat = data.yearFormat;
     if (data.sequencePadding !== undefined) updateData.sequencePadding = data.sequencePadding;
     if (data.resetYearly !== undefined) updateData.resetYearly = data.resetYearly;
+    if (data.includeMonth !== undefined) updateData.includeMonth = data.includeMonth;
+    if (data.seriesLetter !== undefined) updateData.seriesLetter = (data.seriesLetter || "A").toUpperCase().slice(0, 1);
 
     // Wygeneruj przykładowy numer
     const prefix = (updateData.prefix as string) ?? config.prefix;
     const separator = (updateData.separator as string) ?? config.separator;
     const yearFormat = (updateData.yearFormat as string) ?? config.yearFormat;
     const padding = (updateData.sequencePadding as number) ?? config.sequencePadding;
+    const includeMonth = (updateData.includeMonth as boolean) ?? (config.includeMonth ?? false);
+    const seriesLetter = (updateData.seriesLetter as string) ?? (config.seriesLetter ?? "A");
 
     const year = new Date().getFullYear();
+    const month = new Date().getMonth() + 1;
     const yearStr = yearFormat === "YY" ? String(year).slice(-2) : String(year);
+    const monthStr = String(month).padStart(2, "0");
     const exampleSeq = "1".padStart(padding, "0");
-    updateData.exampleNumber = `${prefix}${separator}${yearStr}${separator}${exampleSeq}`;
+    updateData.exampleNumber = includeMonth
+      ? `${prefix}${separator}${exampleSeq}${separator}${monthStr}${separator}${yearStr}${separator}${seriesLetter}`
+      : `${prefix}${separator}${yearStr}${separator}${exampleSeq}`;
 
     const updated = await prisma.documentNumberingConfig.update({
       where: { id: config.id },
@@ -327,6 +350,8 @@ export async function updateDocumentNumberingConfig(
         yearFormat: updated.yearFormat,
         sequencePadding: updated.sequencePadding,
         resetYearly: updated.resetYearly,
+        includeMonth: updated.includeMonth ?? false,
+        seriesLetter: updated.seriesLetter ?? "A",
         description: updated.description,
         exampleNumber: updated.exampleNumber,
       },
@@ -350,7 +375,9 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
     if (!documentType || !VALID_DOCUMENT_TYPES.includes(documentType)) {
       return { success: false, error: "Nieprawidłowy typ dokumentu" };
     }
-    const year = new Date().getFullYear();
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
 
     // Pobierz konfigurację (lub utwórz domyślną)
     const configResult = await getDocumentNumberingConfig(documentType);
@@ -361,116 +388,76 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
     }
 
     const config = configResult.data;
+    const useMonthly = config.includeMonth ?? false;
+    const counterMonth = useMonthly ? month : 0;
 
     // Atomowa operacja na liczniku
     const counter = await prisma.$transaction(async (tx) => {
-    // Znajdź lub utwórz licznik dla tego typu i roku
-    let counter = await tx.documentNumberCounter.findUnique({
-      where: { documentType_year: { documentType, year } },
-    });
+      let counter = await tx.documentNumberCounter.findUnique({
+        where: { documentType_year_month: { documentType, year, month: counterMonth } },
+      });
 
-    if (!counter) {
-      // Sprawdź istniejące dokumenty, żeby nie zaczynać od 0 jeśli są stare dokumenty
-      let existingMax = 0;
+      if (!counter) {
+        let existingMax = 0;
+        const yearStr = config.yearFormat === "YY" ? String(year).slice(-2) : String(year);
+        const monthStr = String(month).padStart(2, "0");
+        const letter = (config.seriesLetter ?? "A").toUpperCase().slice(0, 1);
 
-      // Zbuduj prefix do wyszukiwania
-      const yearStr = config.yearFormat === "YY" ? String(year).slice(-2) : String(year);
-      const searchPrefix = `${config.prefix}${config.separator}${yearStr}${config.separator}`;
+        const searchPrefix = useMonthly
+          ? `${config.prefix}${config.separator}`
+          : `${config.prefix}${config.separator}${yearStr}${config.separator}`;
+        const searchContains = useMonthly ? `${config.separator}${monthStr}${config.separator}${yearStr}${config.separator}${letter}` : null;
 
-      // Wyszukaj maksymalną sekwencję dla różnych typów dokumentów
-      if (documentType === "INVOICE") {
-        const existing = await tx.invoice.findMany({
-          where: { number: { startsWith: searchPrefix } },
-          orderBy: { number: "desc" },
-          take: 1,
-        });
-        if (existing.length > 0) {
-          const parts = existing[0].number.split(config.separator);
+        const parseSeqFromNumber = (num: string): number => {
+          const parts = num.split(config.separator);
+          if (useMonthly && parts.length >= 5) {
+            return parseInt(parts[1], 10) || 0;
+          }
           const lastSeq = parseInt(parts[parts.length - 1], 10);
-          if (!isNaN(lastSeq)) existingMax = lastSeq;
-        }
-      } else if (documentType === "CORRECTION") {
-        const existing = await tx.invoiceCorrection.findMany({
-          where: { number: { startsWith: searchPrefix } },
-          orderBy: { number: "desc" },
-          take: 1,
+          return !isNaN(lastSeq) ? lastSeq : 0;
+        };
+
+        const runQuery = async <T extends { number: string }>(
+          fn: (opts: { where: { number: { contains?: string; startsWith?: string } }; orderBy: { number: "desc" }; take: number }) => Promise<T[]>
+        ): Promise<number> => {
+          const where = searchContains
+            ? { number: { contains: searchContains } }
+            : { number: { startsWith: searchPrefix } };
+          const existing = await fn({ where, orderBy: { number: "desc" }, take: 1 });
+          return existing.length > 0 ? parseSeqFromNumber(existing[0].number) : 0;
+        };
+
+        if (documentType === "INVOICE") existingMax = await runQuery((o) => tx.invoice.findMany(o));
+        else if (documentType === "CORRECTION") existingMax = await runQuery((o) => tx.invoiceCorrection.findMany(o));
+        else if (documentType === "CONSOLIDATED_INVOICE") existingMax = await runQuery((o) => tx.consolidatedInvoice.findMany(o));
+        else if (documentType === "RECEIPT") existingMax = await runQuery((o) => tx.receipt.findMany(o));
+        else if (documentType === "ACCOUNTING_NOTE") existingMax = await runQuery((o) => tx.accountingNote.findMany(o));
+        else if (documentType === "PROFORMA") existingMax = await runQuery((o) => tx.proforma.findMany(o));
+
+        counter = await tx.documentNumberCounter.create({
+          data: { documentType, year, month: counterMonth, lastSequence: existingMax },
         });
-        if (existing.length > 0) {
-          const parts = existing[0].number.split(config.separator);
-          const lastSeq = parseInt(parts[parts.length - 1], 10);
-          if (!isNaN(lastSeq)) existingMax = lastSeq;
-        }
-      } else if (documentType === "CONSOLIDATED_INVOICE") {
-        const existing = await tx.consolidatedInvoice.findMany({
-          where: { number: { startsWith: searchPrefix } },
-          orderBy: { number: "desc" },
-          take: 1,
-        });
-        if (existing.length > 0) {
-          const parts = existing[0].number.split(config.separator);
-          const lastSeq = parseInt(parts[parts.length - 1], 10);
-          if (!isNaN(lastSeq)) existingMax = lastSeq;
-        }
-      } else if (documentType === "RECEIPT") {
-        const existing = await tx.receipt.findMany({
-          where: { number: { startsWith: searchPrefix } },
-          orderBy: { number: "desc" },
-          take: 1,
-        });
-        if (existing.length > 0) {
-          const parts = existing[0].number.split(config.separator);
-          const lastSeq = parseInt(parts[parts.length - 1], 10);
-          if (!isNaN(lastSeq)) existingMax = lastSeq;
-        }
-      } else if (documentType === "ACCOUNTING_NOTE") {
-        const existing = await tx.accountingNote.findMany({
-          where: { number: { startsWith: searchPrefix } },
-          orderBy: { number: "desc" },
-          take: 1,
-        });
-        if (existing.length > 0) {
-          const parts = existing[0].number.split(config.separator);
-          const lastSeq = parseInt(parts[parts.length - 1], 10);
-          if (!isNaN(lastSeq)) existingMax = lastSeq;
-        }
-      } else if (documentType === "PROFORMA") {
-        const existing = await tx.proforma.findMany({
-          where: { number: { startsWith: searchPrefix } },
-          orderBy: { number: "desc" },
-          take: 1,
-        });
-        if (existing.length > 0) {
-          const parts = existing[0].number.split(config.separator);
-          const lastSeq = parseInt(parts[parts.length - 1], 10);
-          if (!isNaN(lastSeq)) existingMax = lastSeq;
-        }
       }
 
-      // Utwórz nowy licznik
-      counter = await tx.documentNumberCounter.create({
-        data: {
-          documentType,
-          year,
-          lastSequence: existingMax,
-        },
+      const nextSeq = counter.lastSequence + 1;
+      await tx.documentNumberCounter.update({
+        where: { id: counter.id },
+        data: { lastSequence: nextSeq },
       });
-    }
-
-    // Inkrementuj i zapisz
-    const nextSeq = counter.lastSequence + 1;
-    await tx.documentNumberCounter.update({
-      where: { id: counter.id },
-      data: { lastSequence: nextSeq },
+      return { ...counter, lastSequence: nextSeq };
     });
 
-    return { ...counter, lastSequence: nextSeq };
-  });
+    const yearStr = config.yearFormat === "YY" ? String(year).slice(-2) : String(year);
+    const seqStr = String(counter.lastSequence).padStart(config.sequencePadding, "0");
 
-  // Zbuduj numer dokumentu
-  const yearStr = config.yearFormat === "YY" ? String(year).slice(-2) : String(year);
-  const seqStr = String(counter.lastSequence).padStart(config.sequencePadding, "0");
+    if (useMonthly) {
+      const monthStr = String(month).padStart(2, "0");
+      const letter = (config.seriesLetter ?? "A").toUpperCase().slice(0, 1);
+      const num = `${config.prefix}${config.separator}${seqStr}${config.separator}${monthStr}${config.separator}${yearStr}${config.separator}${letter}`;
+      return { success: true, data: num };
+    }
 
-  return { success: true, data: `${config.prefix}${config.separator}${yearStr}${config.separator}${seqStr}` };
+    return { success: true, data: `${config.prefix}${config.separator}${yearStr}${config.separator}${seqStr}` };
   } catch (e) {
     console.error("[generateNextDocumentNumber]", e);
     return {
@@ -488,11 +475,11 @@ export async function generateNextCashDocumentNumber(
     const year = new Date().getFullYear();
     const counter = await prisma.$transaction(async (tx) => {
       let c = await tx.documentNumberCounter.findUnique({
-        where: { documentType_year: { documentType: type, year } },
+        where: { documentType_year_month: { documentType: type, year, month: 0 } },
       });
       if (!c) {
         c = await tx.documentNumberCounter.create({
-          data: { documentType: type, year, lastSequence: 0 },
+          data: { documentType: type, year, month: 0, lastSequence: 0 },
         });
       }
       const nextSeq = c.lastSequence + 1;
@@ -3701,6 +3688,108 @@ export async function postRoomChargeOnCheckout(
   }
 }
 
+/**
+ * Synchronizuje kwotę transakcji ROOM z aktualną ceną rezerwacji (rateCodePrice / ReservationDayRate).
+ * Wywołaj po zapisie rateCodePrice lub ReservationDayRate, gdy istnieje już transakcja ROOM.
+ * Dzięki temu faktura będzie zawierać poprawną kwotę po zmianie ceny.
+ */
+export async function syncRoomChargeToReservationPrice(
+  reservationId: string
+): Promise<ActionResult<{ updated: boolean; amount?: number }>> {
+  try {
+    const existingTx = await prisma.transaction.findFirst({
+      where: {
+        reservationId,
+        type: "ROOM",
+        status: "ACTIVE",
+      },
+    });
+    if (!existingTx) {
+      return { success: true, data: { updated: false } };
+    }
+
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: { room: true },
+    });
+    if (!reservation || !reservation.room) {
+      return { success: true, data: { updated: false } };
+    }
+
+    const checkInDate = reservation.checkIn instanceof Date ? reservation.checkIn : new Date(reservation.checkIn);
+    const checkOutDate = reservation.checkOut instanceof Date ? reservation.checkOut : new Date(reservation.checkOut);
+    const checkInStr = checkInDate.toISOString().slice(0, 10);
+    const checkOutStr = checkOutDate.toISOString().slice(0, 10);
+    const checkIn = new Date(checkInStr + "T12:00:00Z");
+    const checkOut = new Date(checkOutStr + "T12:00:00Z");
+    const nights = Math.max(1, Math.round((checkOut.getTime() - checkIn.getTime()) / (24 * 60 * 60 * 1000)));
+    const roomNumber = reservation.room.number;
+
+    const dateStrs: string[] = [];
+    for (let i = 0; i < nights; i++) {
+      const d = new Date(checkIn);
+      d.setUTCDate(d.getUTCDate() + i);
+      dateStrs.push(d.toISOString().slice(0, 10));
+    }
+
+    const savedDayRates = await prisma.reservationDayRate.findMany({
+      where: { reservationId },
+    });
+    const dayRateMap = new Map(
+      savedDayRates.map((r) => [r.date.toISOString().slice(0, 10), Number(r.rate)])
+    );
+    const manualPricePerNight = reservation.rateCodePrice != null ? Number(reservation.rateCodePrice) : null;
+    const priceMap = await getEffectivePricesBatch(
+      dateStrs.map((dateStr) => ({ roomNumber, dateStr }))
+    );
+
+    let totalAmount = 0;
+    for (const dateStr of dateStrs) {
+      const savedRate = dayRateMap.get(dateStr);
+      if (savedRate != null && savedRate > 0) {
+        totalAmount += savedRate;
+      } else if (manualPricePerNight != null && manualPricePerNight > 0) {
+        totalAmount += manualPricePerNight;
+      } else {
+        const p = priceMap[`${roomNumber}-${dateStr}`];
+        totalAmount += p ?? Number(reservation.room?.price ?? 0) ?? 0;
+      }
+    }
+    if (totalAmount <= 0) {
+      return { success: true, data: { updated: false } };
+    }
+
+    const currentAmount = Number(existingTx.amount);
+    if (Math.abs(totalAmount - currentAmount) < 0.01) {
+      return { success: true, data: { updated: false } };
+    }
+
+    await prisma.transaction.update({
+      where: { id: existingTx.id },
+      data: {
+        amount: totalAmount,
+        unitPrice: totalAmount,
+      },
+    });
+    revalidatePath("/finance");
+    revalidatePath("/reports");
+    revalidatePath("/front-office");
+    await updateReservationPaymentStatus(reservationId).catch((err) =>
+      console.error("[updateReservationPaymentStatus]", err)
+    );
+    return {
+      success: true,
+      data: { updated: true, amount: totalAmount },
+    };
+  } catch (e) {
+    console.error("[syncRoomChargeToReservationPrice]", e);
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd synchronizacji transakcji ROOM",
+    };
+  }
+}
+
 /** Usunięcie transakcji (Void) – wymaga PIN managera. Limit 3 prób PIN, potem blokada 15 min (per IP). */
 export async function voidTransaction(
   transactionId: string,
@@ -4068,6 +4157,9 @@ export async function saveReservationDayRates(
         update: { rate },
       });
     }
+    await syncRoomChargeToReservationPrice(reservationId).catch((err) =>
+      console.error("[syncRoomChargeToReservationPrice on saveReservationDayRates]", err)
+    );
     revalidatePath("/front-office");
     return { success: true, data: undefined };
   } catch (e) {
@@ -4258,6 +4350,195 @@ export async function createVatInvoice(
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd wystawiania faktury VAT",
+    };
+  }
+}
+
+export type SalesInvoiceLineItem = {
+  description: string;
+  quantity: number;
+  unit?: string;
+  unitPrice: number; // netto
+  vatRate?: number;
+};
+
+export type SalesInvoiceBuyer =
+  | { companyId: string }
+  | { nip: string; name: string; address?: string; postalCode?: string; city?: string };
+
+/**
+ * Wystawia fakturę VAT na produkty/usługi (stypy, vouchery, wynajem sal itp.) – bez rezerwacji.
+ */
+export async function createSalesInvoice(
+  buyer: SalesInvoiceBuyer,
+  lineItems: SalesInvoiceLineItem[],
+  options?: {
+    paymentMethod?: string;
+    paymentDays?: number;
+    notes?: string;
+    sourceType?: "MANUAL" | "EVENT" | "VOUCHER";
+    sourceId?: string;
+  }
+): Promise<
+  ActionResult<{
+    id: string;
+    number: string;
+    amountNet: number;
+    amountVat: number;
+    amountGross: number;
+    issuedAt: string;
+  }>
+> {
+  if (!lineItems || lineItems.length === 0) {
+    return { success: false, error: "Dodaj co najmniej jedną pozycję do faktury." };
+  }
+  for (const item of lineItems) {
+    if (!item.description?.trim()) return { success: false, error: "Każda pozycja musi mieć opis." };
+    if (item.quantity <= 0) return { success: false, error: "Ilość musi być większa od zera." };
+    if (item.unitPrice <= 0) return { success: false, error: "Cena musi być większa od zera." };
+  }
+
+  try {
+    let buyerNip: string;
+    let buyerName: string;
+    let buyerAddress: string | null = null;
+    let buyerPostalCode: string | null = null;
+    let buyerCity: string | null = null;
+
+    if ("companyId" in buyer) {
+      const company = await prisma.company.findUnique({ where: { id: buyer.companyId } });
+      if (!company) return { success: false, error: "Firma nie istnieje." };
+      buyerNip = (company.nip ?? "").trim();
+      if (!buyerNip) return { success: false, error: "Firma nie ma NIP – wymagany do faktury VAT." };
+      buyerName = company.name;
+      buyerAddress = company.address ?? null;
+      buyerPostalCode = company.postalCode ?? null;
+      buyerCity = company.city ?? null;
+    } else {
+      buyerNip = (buyer.nip ?? "").trim().replace(/\s/g, "");
+      if (!buyerNip || buyerNip.length !== 10) return { success: false, error: "Podaj prawidłowy NIP (10 cyfr)." };
+      buyerName = (buyer.name ?? "").trim();
+      if (!buyerName) return { success: false, error: "Podaj nazwę nabywcy." };
+      buyerAddress = buyer.address?.trim() || null;
+      buyerPostalCode = buyer.postalCode?.trim() || null;
+      buyerCity = buyer.city?.trim() || null;
+    }
+
+    const configResult = await getCennikConfig();
+    if (!configResult.success || !configResult.data) {
+      return { success: false, error: "Błąd odczytu konfiguracji VAT." };
+    }
+    const defaultVatRate = configResult.data.vatPercent ?? 8;
+
+    const items: Array<{
+      description: string;
+      quantity: number;
+      unit: string;
+      unitPrice: number;
+      vatRate: number;
+      amountNet: number;
+      amountVat: number;
+      amountGross: number;
+      sortOrder: number;
+    }> = [];
+
+    let totalNet = 0;
+    let totalVat = 0;
+    let totalGross = 0;
+
+    lineItems.forEach((li, idx) => {
+      const qty = Number(li.quantity);
+      const unitPrice = Number(li.unitPrice);
+      const vatRate = li.vatRate ?? defaultVatRate;
+      const amountNet = Math.round(qty * unitPrice * 100) / 100;
+      const amountVat = Math.round(amountNet * (vatRate / 100) * 100) / 100;
+      const amountGross = Math.round((amountNet + amountVat) * 100) / 100;
+      totalNet += amountNet;
+      totalVat += amountVat;
+      totalGross += amountGross;
+      items.push({
+        description: li.description.trim(),
+        quantity: qty,
+        unit: li.unit ?? "szt.",
+        unitPrice,
+        vatRate,
+        amountNet,
+        amountVat,
+        amountGross,
+        sortOrder: idx,
+      });
+    });
+
+    totalNet = Math.round(totalNet * 100) / 100;
+    totalVat = Math.round(totalVat * 100) / 100;
+    totalGross = Math.round(totalGross * 100) / 100;
+
+    const numberResult = await generateNextDocumentNumber("INVOICE");
+    if (!numberResult.success) return { success: false, error: numberResult.error };
+
+    const paymentDays = options?.paymentDays ?? 14;
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + paymentDays);
+
+    const invoice = await prisma.$transaction(async (tx) => {
+      const inv = await tx.invoice.create({
+        data: {
+          reservationId: null,
+          sourceType: options?.sourceType ?? "MANUAL",
+          sourceId: options?.sourceId ?? null,
+          number: numberResult.data,
+          invoiceType: "NORMAL",
+          amountNet: totalNet,
+          amountVat: totalVat,
+          amountGross: totalGross,
+          vatRate: defaultVatRate,
+          marginMode: false,
+          buyerNip,
+          buyerName,
+          buyerAddress,
+          buyerPostalCode,
+          buyerCity,
+          paymentMethod: options?.paymentMethod ?? "TRANSFER",
+          paymentDueDate: dueDate,
+          paymentDays,
+          notes: options?.notes?.trim() || null,
+        },
+      });
+      await tx.invoiceLineItem.createMany({
+        data: items.map((it) => ({
+          invoiceId: inv.id,
+          description: it.description,
+          quantity: it.quantity,
+          unit: it.unit,
+          unitPrice: it.unitPrice,
+          vatRate: it.vatRate,
+          amountNet: it.amountNet,
+          amountVat: it.amountVat,
+          amountGross: it.amountGross,
+          sortOrder: it.sortOrder,
+        })),
+      });
+      return inv;
+    });
+
+    revalidatePath("/finance");
+    revalidatePath("/reports");
+    revalidatePath("/faktury");
+    return {
+      success: true,
+      data: {
+        id: invoice.id,
+        number: invoice.number,
+        amountNet: Number(invoice.amountNet),
+        amountVat: Number(invoice.amountVat),
+        amountGross: Number(invoice.amountGross),
+        issuedAt: invoice.issuedAt.toISOString(),
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd wystawiania faktury sprzedażowej",
     };
   }
 }
