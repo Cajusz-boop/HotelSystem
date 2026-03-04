@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { createChecklistDoc, createMenuDoc } from "@/lib/googleDocs";
 import { createEventWithDocs } from "@/lib/googleCalendar";
@@ -21,7 +22,7 @@ function sanitizeEventData(body: Record<string, unknown>) {
 
   return {
     name: String(b.name ?? (b.clientName ? `${b.clientName} – ${eventDate?.toLocaleDateString("pl-PL") ?? ""}` : "Impreza")),
-    eventType: EVENT_TYPES.includes(String(b.eventType ?? "")) ? b.eventType : "INNE",
+    eventType: EVENT_TYPES.includes(String(b.eventType ?? "")) ? String(b.eventType) : "INNE",
     clientName: b.clientName != null ? String(b.clientName) : null,
     clientPhone: b.clientPhone != null ? String(b.clientPhone) : null,
     eventDate: eventDate,
@@ -77,7 +78,7 @@ function sanitizeEventData(body: Record<string, unknown>) {
     roomIds: Array.isArray(b.roomIds) ? b.roomIds : null,
     dateFrom: dateFrom ?? new Date(),
     dateTo: dateTo ?? new Date(),
-    status: ["DRAFT", "CONFIRMED", "DONE", "CANCELLED"].includes(String(b.status ?? "")) ? b.status : "DRAFT",
+    status: ["DRAFT", "CONFIRMED", "DONE", "CANCELLED"].includes(String(b.status ?? "")) ? String(b.status) : "DRAFT",
     notes: b.notes != null ? String(b.notes) : null,
   };
 }
@@ -106,7 +107,7 @@ export async function POST(req: Request) {
       data: {
         ...sanitized,
         eventDate: sanitized.eventDate,
-        roomIds: sanitized.roomIds as object | null,
+        roomIds: sanitized.roomIds === null ? Prisma.JsonNull : (sanitized.roomIds as Prisma.InputJsonValue),
       },
     });
 
