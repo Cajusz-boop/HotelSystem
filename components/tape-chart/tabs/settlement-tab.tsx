@@ -24,6 +24,22 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { validateNipOrVat } from "@/lib/nip-vat-validate";
+
+/** Formatuje wpis NIP/VAT: polski NIP → XXX-XXX-XX-XX, numer VAT UE → alfanumerycznie (max 14). */
+function formatNipInput(value: string): string {
+  const raw = value.replace(/\s/g, "").toUpperCase();
+  if (raw.length === 0) return "";
+  const first = raw[0];
+  if (first && /[A-Z]/.test(first)) {
+    return raw.replace(/[^A-Z0-9]/g, "").slice(0, 14);
+  }
+  const digits = raw.replace(/\D/g, "").slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6, 8)}-${digits.slice(8)}`;
+}
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "CONFIRMED", label: "Potwierdzona" },
@@ -750,18 +766,14 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
             <div>
               <Label className="text-xs text-muted-foreground">NIP / Numer VAT (UE) firmy (dla faktury VAT)</Label>
               <div className="flex gap-1 mt-0.5">
-                <Input id="uni-nip" type="text" inputMode="numeric" className={`${inputCompact} flex-1`} value={form.nipInput}
+                <Input id="uni-nip" type="text" inputMode="text" className={`${inputCompact} flex-1`} value={form.nipInput}
                   onChange={(e) => {
-                    const d = e.target.value.replace(/\D/g, "").slice(0, 10);
-                    let formatted = d;
-                    if (d.length > 3) formatted = `${d.slice(0, 3)}-${d.slice(3)}`;
-                    if (d.length > 6) formatted = `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
-                    if (d.length > 8) formatted = `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6, 8)}-${d.slice(8)}`;
+                    const formatted = formatNipInput(e.target.value);
                     onFormChange({ nipInput: formatted, companyFound: false });
                   }}
-                  placeholder="000-000-00-00" autoComplete="off" />
+                  placeholder="000-000-00-00 lub SK1234567890" autoComplete="off" />
                 <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] px-2 shrink-0"
-                  disabled={nipLookupLoading || form.nipInput.replace(/\D/g, "").length !== 10}
+                  disabled={nipLookupLoading || !validateNipOrVat(form.nipInput.trim()).ok}
                   onClick={onNipLookup}>{nipLookupLoading ? "…" : "Sprawdź"}</Button>
               </div>
               {form.companyFound && (
@@ -1836,20 +1848,16 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
 
               {/* NIP inline — create mode */}
               <div className="mt-1 border-t pt-1">
-                <Label className="text-xs text-muted-foreground">🏢 NIP (firma/faktura)</Label>
+                <Label className="text-xs text-muted-foreground">🏢 NIP / Numer VAT (UE) (firma/faktura)</Label>
                 <div className="flex gap-1">
-                  <Input id="uni-nip" type="text" inputMode="numeric" className={`${inputCompact} flex-1`} value={form.nipInput}
+                  <Input id="uni-nip" type="text" inputMode="text" className={`${inputCompact} flex-1`} value={form.nipInput}
                     onChange={(e) => {
-                      const d = e.target.value.replace(/\D/g, "").slice(0, 10);
-                      let formatted = d;
-                      if (d.length > 3) formatted = `${d.slice(0, 3)}-${d.slice(3)}`;
-                      if (d.length > 6) formatted = `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
-                      if (d.length > 8) formatted = `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6, 8)}-${d.slice(8)}`;
+                      const formatted = formatNipInput(e.target.value);
                       onFormChange({ nipInput: formatted, companyFound: false });
                     }}
-                    placeholder="000-000-00-00" autoComplete="off" />
+                    placeholder="000-000-00-00 lub SK1234567890" autoComplete="off" />
                   <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] px-2 shrink-0"
-                    disabled={nipLookupLoading || form.nipInput.replace(/\D/g, "").length !== 10}
+                    disabled={nipLookupLoading || !validateNipOrVat(form.nipInput.trim()).ok}
                     onClick={onNipLookup}>
                     {nipLookupLoading ? "…" : "Sprawdź"}
                   </Button>
@@ -1871,21 +1879,17 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
           {/* NIP w trybie edycji — dla faktury VAT */}
           {isEdit && (
             <div className="mt-2 border-t pt-2">
-              <Label className="text-xs text-muted-foreground">🏢 NIP firmy (dla faktury VAT)</Label>
-              <p className="text-[10px] text-muted-foreground mb-1">Wpisz NIP i wybierz firmę, by móc wystawić fakturę.</p>
+              <Label className="text-xs text-muted-foreground">🏢 NIP / Numer VAT (UE) firmy (dla faktury VAT)</Label>
+              <p className="text-[10px] text-muted-foreground mb-1">Wpisz NIP lub numer VAT UE i wybierz firmę, by móc wystawić fakturę.</p>
               <div className="flex gap-1">
-                <Input id="uni-nip-edit" type="text" inputMode="numeric" className={`${inputCompact} flex-1`} value={form.nipInput}
+                <Input id="uni-nip-edit" type="text" inputMode="text" className={`${inputCompact} flex-1`} value={form.nipInput}
                   onChange={(e) => {
-                    const d = e.target.value.replace(/\D/g, "").slice(0, 10);
-                    let formatted = d;
-                    if (d.length > 3) formatted = `${d.slice(0, 3)}-${d.slice(3)}`;
-                    if (d.length > 6) formatted = `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
-                    if (d.length > 8) formatted = `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6, 8)}-${d.slice(8)}`;
+                    const formatted = formatNipInput(e.target.value);
                     onFormChange({ nipInput: formatted, companyFound: false });
                   }}
-                  placeholder="000-000-00-00" autoComplete="off" />
+                  placeholder="000-000-00-00 lub SK1234567890" autoComplete="off" />
                 <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] px-2 shrink-0"
-                  disabled={nipLookupLoading || form.nipInput.replace(/\D/g, "").length !== 10}
+                  disabled={nipLookupLoading || !validateNipOrVat(form.nipInput.trim()).ok}
                   onClick={onNipLookup}>
                   {nipLookupLoading ? "…" : "Sprawdź"}
                 </Button>

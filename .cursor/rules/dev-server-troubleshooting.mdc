@@ -59,6 +59,12 @@ To usuwa `.next` i startuje `next dev -p 3011`. Stary `.next` to najczestsza prz
 
 Pierwsza kompilacja po czystym starcie trwa 10-20 sekund. Nie panikuj jesli przegladarka nie odpowiada od razu — sprawdz logi terminala, czy widac `Compiled /front-office` i zapytania `prisma:query`.
 
+## 6. Błąd schema.prisma: „url is no longer supported”
+
+Projekt używa **Prisma 6**. Rozszerzenie Prisma w Cursor/VS Code może walidować schemat według reguł Prisma 7 i zgłaszać fałszywy błąd.
+
+**Rozwiązanie:** Otwórz Command Palette (Ctrl+Shift+P) → wpisz `Prisma` → uruchom **„Prisma: Pin to Prisma 6”** (lub podobną opcję przypięcia wersji). To wyłączy walidację v7.
+
 ## Produkcja (Hetzner)
 
 **Deploy odbywa się TYLKO przez git:**

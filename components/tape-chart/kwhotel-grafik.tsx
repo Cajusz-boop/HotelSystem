@@ -1020,7 +1020,7 @@ export function KwhotelGrafik({
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <span className="inline-block h-3 w-1 rounded-full" style={{ backgroundColor: RÓŻEK_STATUS_BG.NO_SHOW }} />
-                    No-show
+                    Nie przyjechał
                   </span>
                 </div>
                 <div className="font-semibold text-gray-700 mt-2 mb-1">Źródła rezerwacji</div>

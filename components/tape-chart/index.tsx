@@ -423,7 +423,7 @@ const RESERVATION_STATUS_LABELS: Record<Reservation["status"], string> = {
   CHECKED_IN: "Zameldowany",
   CHECKED_OUT: "Wymeldowany",
   CANCELLED: "Anulowana",
-  NO_SHOW: "No-show",
+  NO_SHOW: "Nie przyjechał",
 };
 
 const RESERVATION_STATUS_DESCRIPTIONS: Record<Reservation["status"], string> = {
