@@ -1679,19 +1679,101 @@ model GroupQuote {
   updatedAt   DateTime  @updatedAt
 }
 
-// MICE – zlecenia realizacji (konferencje, bankiety, wesela)
+// MICE – zlecenia realizacji (imprezy, bankiety, wesela) – rozbudowany formularz imprezy
 model EventOrder {
   id          String   @id @default(cuid())
-  name        String   // np. "Sala A – 15.03.2026"
-  eventType   String   @default("OTHER")  // WEDDING, CONFERENCE, BANQUET, OTHER
-  quoteId     String?  // powiązanie z GroupQuote
-  roomIds     Json?    // id sal/pokojow
-  dateFrom    DateTime @db.Date
-  dateTo      DateTime @db.Date
-  status      String   @default("DRAFT")  // DRAFT, CONFIRMED, DONE, CANCELLED
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  name        String   // np. "Wesele Kowalski – 15.06.2026"
+
+  // Dane podstawowe
+  eventType   String   @default("INNE")  // WESELE | KOMUNIA | CHRZCINY | URODZINY | STYPA | FIRMOWA | INNE
+  clientName  String?
+  clientPhone String?
+  eventDate   DateTime? @db.Date
+  timeStart   String?   // HH:mm
+  timeEnd     String?   // HH:mm
+  roomName    String?   // Sala Duża | Sala Mała | Ogród
+
+  // Goście
+  guestCount        Int?
+  adultsCount       Int?
+  children03        Int?   // dzieci 0-3 lat
+  children47        Int?   // dzieci 4-7 lat
+  orchestraCount    Int?
+  cameramanCount    Int?
+  photographerCount Int?
+
+  // Wesele – pola specyficzne
+  churchTime       String?  // HH:mm
+  brideGroomTable  String?
+  orchestraTable   String?
+
+  // Menu
+  packageId        String?  // ID pakietu menu (opcjonalne)
+  cakesAndDesserts String?  @db.Text
+
+  // Tort
+  cakeOrderedAt   String?  // gdzie zamówiony
+  cakeArrivalTime String?  // HH:mm
+  cakeServedAt    String?  // HH:mm
+
+  // Napoje i alkohol
+  drinksArrival      String?
+  drinksStorage      String?
+  champagneStorage   String?
+  alcoholUnderStairs Boolean @default(false)
+  firstBottlesBy     String?
+  coolersWithIce     String?
+  alcoholServiceBy   String?
+  wineLocation       String?
+  beerWhen           String?
+  alcoholAtTeamTable Boolean @default(false)
+
+  // Dekoracje i układ
+  cakesSwedishTable  Boolean @default(false)
+  fruitsSwedishTable Boolean @default(false)
+  ownFlowers         Boolean @default(false)
+  ownVases           Boolean @default(false)
+  decorationColor    String?
+  placeCards         Boolean @default(false)
+  placeCardsLayout   String?
+  tableLayout        String?
+  breadWelcomeBy     String?
+
+  // Dodatkowe
+  extraAttractions  String?  @db.Text
+  specialRequests   String?  @db.Text
+  facebookConsent   Boolean  @default(false)
+  ownNapkins        Boolean  @default(false)
+  dutyPerson        String?
+
+  // Afterparty (WESELE i URODZINY)
+  afterpartyEnabled  Boolean @default(false)
+  afterpartyTimeFrom String?
+  afterpartyTimeTo   String?
+  afterpartyGuests   Int?
+  afterpartyMenu     String?  @db.Text
+  afterpartyMusic    String?
+
+  // Google integracje
+  googleCalendarEventId String?
+  checklistDocId        String?
+  menuDocId             String?
+  checklistDocUrl       String?
+  menuDocUrl            String?
+
+  // Status i meta (zachowane z oryginalnego modelu)
+  quoteId   String?
+  roomIds   Json?
+  dateFrom  DateTime @db.Date
+  dateTo    DateTime @db.Date
+  status    String   @default("DRAFT")  // DRAFT, CONFIRMED, DONE, CANCELLED
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([dateFrom])
+  @@index([status])
+  @@index([eventType])
 }
 
 // Camping – miejsca (działki, przyczepy)

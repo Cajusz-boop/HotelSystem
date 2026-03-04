@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { getSession, createSessionToken, createPending2FAToken, COOKIE_NAME } from "@/lib/auth";
 import { getClientIp } from "@/lib/audit";
+import { getAuthDisabledCache } from "@/lib/auth-disabled-cache";
 import { isPasswordExpired } from "@/lib/password-policy";
 
 export type AuthResult =
@@ -170,7 +171,7 @@ export async function changePassword(
   return { success: true };
 }
 
-/** Wylogowanie – usunięcie cookie sesji */
+/** Wylogowanie – usunięcie cookie sesji. Zawsze przekierowuje na /login (w trybie Demo middleware przekieruje /login → /). */
 export async function logout(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(COOKIE_NAME);

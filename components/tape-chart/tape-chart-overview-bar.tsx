@@ -16,6 +16,8 @@ interface TapeChartOverviewBarProps {
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   /** Callback gdy użytkownik kliknie datę spoza bieżącego widoku – przewiń TapeChart */
   onDateClick?: (dateStr: string) => void;
+  /** Obłożenie % na minimapie dla pełnego roku (12 mies.) – gdy podane, używane zamiast liczenia z reservations */
+  minimapOccupancyByDate?: number[] | null;
 }
 
 const MONTH_SHORT_PL = ["STY", "LUT", "MAR", "KWI", "MAJ", "CZE", "LIP", "SIE", "WRZ", "PAŹ", "LIS", "GRU"];
@@ -62,6 +64,7 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
   columnWidthPx,
   scrollContainerRef,
   onDateClick,
+  minimapOccupancyByDate,
 }: TapeChartOverviewBarProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
@@ -72,6 +75,9 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
   const displayDates = useMemo(() => getMinimapDates(todayStr), [todayStr]);
 
   const occupancyByDate = useMemo(() => {
+    if (minimapOccupancyByDate && minimapOccupancyByDate.length === displayDates.length) {
+      return minimapOccupancyByDate;
+    }
     const active = reservations.filter(
       (r) => r.status !== "CANCELLED" && r.status !== "NO_SHOW"
     );
@@ -81,7 +87,7 @@ export const TapeChartOverviewBar = memo(function TapeChartOverviewBar({
       ).length;
       return roomsCount > 0 ? Math.min(100, Math.round((count / roomsCount) * 100)) : 0;
     });
-  }, [displayDates, reservations, roomsCount]);
+  }, [displayDates, reservations, roomsCount, minimapOccupancyByDate]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;

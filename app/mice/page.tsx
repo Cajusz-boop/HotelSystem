@@ -16,8 +16,11 @@ export default function MicePage() {
         <Link href="/mice/kosztorysy" className="text-sm text-primary hover:underline">Lista kosztorysów</Link>
       </section>
       <section className="rounded-lg border bg-card p-6 shadow-sm mb-6">
-        <h2 className="text-lg font-semibold mb-4">Eventy (wesela, konferencje, bankiety)</h2>
-        <Link href="/mice/eventy" className="text-sm text-primary hover:underline">Moduł eventów</Link>
+        <h2 className="text-lg font-semibold mb-4">Imprezy (wesela, komunie, bankiety)</h2>
+        <div className="flex flex-wrap gap-4">
+          <Link href="/events" className="text-sm text-primary hover:underline">Lista imprez</Link>
+          <Link href="/mice/eventy" className="text-sm text-primary hover:underline">Moduł eventów</Link>
+        </div>
       </section>
       <section className="rounded-lg border bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold mb-4">Zlecenia realizacji</h2>

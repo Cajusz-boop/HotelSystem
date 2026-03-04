@@ -23,7 +23,7 @@ import {
   createParkingBooking,
   deleteParkingBookingsByReservation,
 } from "@/app/actions/parking";
-import { postRoomChargeOnCheckout, chargeLocalTax, createVatInvoice } from "@/app/actions/finance";
+import { postRoomChargeOnCheckout, chargeLocalTax, createVatInvoice, syncRoomChargeToReservationPrice } from "@/app/actions/finance";
 import { blockRoomExtensionAfterCheckout } from "@/lib/telephony";
 import { generateRoomAccessCode } from "@/app/actions/digital-keys";
 import { sendWelcomeToTv } from "@/lib/hotel-tv";
@@ -3079,6 +3079,12 @@ export async function updateReservation(
       data: data as Prisma.ReservationUpdateInput,
       include: { guest: true, room: true, rateCode: true },
     });
+
+    if (input.rateCodePrice !== undefined) {
+      await syncRoomChargeToReservationPrice(reservationId).catch((err) =>
+        console.error("[syncRoomChargeToReservationPrice on rateCodePrice change]", err)
+      );
+    }
 
     if (data.status === "CHECKED_IN" && prev.status !== "CHECKED_IN") {
       await generateRoomAccessCode(reservationId).catch((err) =>

@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Building2, User, Bell } from "lucide-react";
+import { Building2, User, Bell, LogOut } from "lucide-react";
 import { getProperties, getSelectedPropertyId } from "@/app/actions/properties";
+import { logout } from "@/app/actions/auth";
 import type { SessionPayload } from "@/lib/auth";
 import { requestNotificationPermission } from "@/lib/notifications";
+import { useI18n } from "@/components/i18n-provider";
 
 export function StatusBar({ session }: { session: SessionPayload | null }) {
+  const { t } = useI18n();
   const [mounted, setMounted] = useState(false);
   const [propertyName, setPropertyName] = useState<string | null>(null);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | null>(null);
@@ -48,10 +51,22 @@ export function StatusBar({ session }: { session: SessionPayload | null }) {
         </span>
       )}
       {session && (
-        <span className="flex items-center gap-1.5">
-          <User className="h-4 w-4" />
-          <span>{session.name}</span>
-        </span>
+        <>
+          <span className="flex items-center gap-1.5">
+            <User className="h-4 w-4" />
+            <span>{session.name}</span>
+          </span>
+          <form action={logout}>
+            <button
+              type="submit"
+              className="flex items-center gap-1.5 rounded px-2 py-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label={t("sidebar.logout")}
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">{t("sidebar.logout")}</span>
+            </button>
+          </form>
+        </>
       )}
       {mounted && typeof window !== "undefined" && "Notification" in window && (
         <button

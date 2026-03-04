@@ -693,14 +693,14 @@ export function TapeChart({
     return () => observer.disconnect();
   }, [extendDateRange]);
 
-  /** Doładowanie rezerwacji z przeszłości przy nawigacji wstecz (strzałka w lewo). */
-  const loadingPastRef = useRef(false);
+  /** Doładowanie rezerwacji przy zmianie zakresu dat (minimapa, strzałki, zmiana widoku). */
+  const loadingRangeRef = useRef(false);
   useEffect(() => {
     const firstDate = dates[0];
     const lastDate = dates[dates.length - 1];
-    if (!firstDate || !lastDate || firstDate >= todayStr) return;
-    if (loadingPastRef.current) return;
-    loadingPastRef.current = true;
+    if (!firstDate || !lastDate) return;
+    if (loadingRangeRef.current) return;
+    loadingRangeRef.current = true;
     getTapeChartData({ dateFrom: firstDate, dateTo: lastDate })
       .then((res) => {
         setReservations((prevRes) => {
@@ -712,9 +712,39 @@ export function TapeChart({
         });
       })
       .finally(() => {
-        loadingPastRef.current = false;
+        loadingRangeRef.current = false;
       });
-  }, [dates, todayStr, setReservations]);
+  }, [dates, setReservations]);
+
+  /** Zakres 12 miesięcy dla minimapy (pierwszy dzień bieżącego miesiąca → ostatni dzień za 11 miesięcy). */
+  const minimapDateRange = useMemo(() => {
+    const [y, m] = todayStr.split("-").map(Number);
+    const start = new Date(y, m - 1, 1);
+    const end = new Date(y, m - 1 + 12, 0);
+    return getDateRange(start, end);
+  }, [todayStr]);
+
+  const [minimapOccupancyByDate, setMinimapOccupancyByDate] = useState<number[] | null>(null);
+  useEffect(() => {
+    const first = minimapDateRange[0];
+    const last = minimapDateRange[minimapDateRange.length - 1];
+    if (!first || !last || allRooms.length === 0) return;
+    getTapeChartData({ dateFrom: first, dateTo: last })
+      .then((res) => {
+        const active = (res.reservations as Reservation[]).filter(
+          (r) => r.status !== "CANCELLED" && r.status !== "NO_SHOW"
+        );
+        const roomsCount = allRooms.length;
+        const occupancy = minimapDateRange.map((dateStr) => {
+          const count = active.filter(
+            (r) => dateStr >= r.checkIn && dateStr < r.checkOut
+          ).length;
+          return roomsCount > 0 ? Math.min(100, Math.round((count / roomsCount) * 100)) : 0;
+        });
+        setMinimapOccupancyByDate(occupancy);
+      })
+      .catch(() => setMinimapOccupancyByDate(null));
+  }, [minimapDateRange, allRooms.length]);
 
   const allAvailableFeatures = useMemo(() => {
     const set = new Set<string>();
@@ -2862,6 +2892,7 @@ export function TapeChart({
               columnWidthPx={effectiveColumnWidthPx}
               scrollContainerRef={scrollContainerRef}
               onDateClick={handleMinimapDateClick}
+              minimapOccupancyByDate={minimapOccupancyByDate}
             />
           </div>
         )}
