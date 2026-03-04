@@ -125,6 +125,7 @@ function mapReservationToTapeChart(r: {
   advanceDueDate?: Date | null;
   paymentStatus?: string | null;
   rateCode?: { id: string; code: string; name: string; price: unknown } | null;
+  rateCodePrice?: unknown; // Decimal | null – nadpisanie ceny za dobę (ręczna cena)
   group?: { id: string; name: string | null } | null;
   parkingBookings?: Array<{ parkingSpotId: string; parkingSpot: { number: string } }>;
 }) {
@@ -149,7 +150,7 @@ function mapReservationToTapeChart(r: {
     rateCodeId: r.rateCode?.id ?? undefined,
     rateCode: r.rateCode?.code ?? undefined,
     rateCodeName: r.rateCode?.name ?? undefined,
-    rateCodePrice: r.rateCode?.price != null ? Number(r.rateCode.price) : undefined,
+    rateCodePrice: r.rateCodePrice != null ? Number(r.rateCodePrice) : (r.rateCode?.price != null ? Number(r.rateCode.price) : undefined),
     groupId: r.group?.id ?? undefined,
     groupName: r.group?.name ?? undefined,
     parkingSpotId: firstParking?.parkingSpotId ?? undefined,
