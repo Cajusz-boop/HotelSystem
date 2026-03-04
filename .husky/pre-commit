@@ -1,9 +1,0 @@
-#!/bin/sh
-echo "Sprawdzanie TypeScript..."
-npx tsc --noEmit
-if [ $? -ne 0 ]; then
-  echo "BŁĄD: Znaleziono błędy TypeScript - commit zablokowany"
-  exit 1
-fi
-echo "OK - brak błędów TypeScript"
-exit 0

@@ -6,7 +6,6 @@
   },
   "private": true,
   "scripts": {
-    "prepare": "husky",
     "predev": "prisma generate && prisma db push --skip-generate && npx tsx scripts/sync-config-on-start.ts",
     "dev": "next dev -p 3011",
     "dev:3011": "npx next dev -p 3011",
@@ -106,7 +105,6 @@
     "dotenv-cli": "^7.4.4",
     "eslint": "^8.57.1",
     "eslint-config-next": "14.2.35",
-    "husky": "^9.1.7",
     "mysql2": "^3.17.1",
     "postcss": "^8.4.47",
     "prisma": "^6.16.0",

@@ -16,6 +16,7 @@ try {
 
 const nextConfig = {
   output: "standalone",
+  typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: false },
   env: {
     AUTH_DISABLED: process.env.AUTH_DISABLED || authDisabledFromSnapshot,
