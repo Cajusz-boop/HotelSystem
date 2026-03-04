@@ -10,6 +10,7 @@ import { GroupReservationSheet } from "./group-reservation-sheet";
 import { RoomBlockSheet } from "./room-block-sheet";
 import { MonthlyOverviewDialog } from "./monthly-overview-dialog";
 import type { Room, Reservation, ReservationGroupSummary, ReservationStatus } from "@/lib/tape-chart-types";
+import { RESERVATION_STATUS_BG } from "@/lib/tape-chart-types";
 import { cn } from "@/lib/utils";
 import { shortGuestLabel, ensureOpaque } from "./reservation-bar";
 import { createPortal } from "react-dom";
@@ -44,14 +45,15 @@ const MONTHS_PL = [
   "lipiec", "sierpień", "wrzesień", "październik", "listopad", "grudzień",
 ];
 
-/** Kolory pasków w stylu KWHotel Pro – Status rezerwacji / Źródła */
-const KWHOTEL_STATUS_BG: Record<ReservationStatus, string> = {
-  NO_SHOW: "rgb(185 28 28)",          // Klient nie przyjechał
-  CHECKED_OUT: "rgb(71 85 105)",      // Pobyt zakończony
-  CANCELLED: "rgb(55 65 81)",         // Zakończony
-  CONFIRMED: "rgb(29 78 216)",        // Rezerwacja potwierdzona (dark blue)
-  CHECKED_IN: "rgb(124 58 237)",      // Pobyt nierozliczony (violet)
-};
+/** Kolory różka (pasek z lewej) – status rezerwacji */
+const RÓŻEK_STATUS_BG = RESERVATION_STATUS_BG;
+
+/** Kolory całego paska – status płatności (jak w głównym TapeChart) */
+const PAYMENT_BAR_BG = {
+  PAID: "rgb(20 184 166)",    // Opłacona – turkusowy
+  PARTIAL: "rgb(234 179 8)",  // Częściowo opłacona – żółty
+  UNPAID: "rgb(139 92 246)",  // Nieopłacona – fioletowy
+} as const;
 
 function formatDateHeaderKwhotel(dateStr: string, todayStr: string): { weekday: string; day: number; isToday: boolean; isSunday: boolean } {
   const d = new Date(dateStr + "Z");
@@ -664,8 +666,15 @@ export function KwhotelGrafik({
               >
                 <div className="absolute inset-0 pointer-events-none">
                   {reservationPlacements.map(({ reservation, left, width, top }) => {
-                    const bg = ensureOpaque(KWHOTEL_STATUS_BG[reservation.status] ?? KWHOTEL_STATUS_BG.CONFIRMED);
-                    const contrast = getContrastStyles(bg);
+                    const paymentBg = ensureOpaque(
+                      reservation.paymentStatus === "PAID"
+                        ? PAYMENT_BAR_BG.PAID
+                        : reservation.paymentStatus === "PARTIAL"
+                          ? PAYMENT_BAR_BG.PARTIAL
+                          : PAYMENT_BAR_BG.UNPAID
+                    );
+                    const różekColor = ensureOpaque(RÓŻEK_STATUS_BG[reservation.status as keyof typeof RÓŻEK_STATUS_BG] ?? RÓŻEK_STATUS_BG.CONFIRMED);
+                    const contrast = getContrastStyles(paymentBg);
                     const padH = dayDivisionStyle ? BAR_PADDING_PX : 0;
                     const barLeft = Math.round(left + padH);
                     const barTop = Math.round(top) - (top > HEADER_ROW_PX ? 1 : 0);
@@ -690,7 +699,7 @@ export function KwhotelGrafik({
                           top: barTop,
                           width: barWidth,
                           height: barHeight,
-                          backgroundColor: bg,
+                          backgroundColor: paymentBg,
                           clipPath: barClipPath(barWidth),
                           WebkitClipPath: barClipPath(barWidth),
                           color: contrast.textColor,
@@ -721,6 +730,12 @@ export function KwhotelGrafik({
                           }
                         }}
                       >
+                        {/* Różek – pasek z lewej, status rezerwacji */}
+                        <div
+                          className="absolute left-0 top-0 bottom-0 w-[4px]"
+                          style={{ backgroundColor: różekColor }}
+                          aria-hidden
+                        />
                         <span
                           className="truncate px-1.5 tabular-nums rounded-sm max-w-full"
                         >
@@ -968,36 +983,44 @@ export function KwhotelGrafik({
                 </div>
               </div>
 
-              {/* Legenda – Status rezerwacji */}
+              {/* Legenda – Płatność (cały pasek) + Status (różek z lewej) */}
               <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-xs">
-                <div className="font-semibold text-gray-700 mb-1.5">Status rezerwacji</div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <div className="font-semibold text-gray-700 mb-1.5">Pasek – płatność</div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mb-2">
                   <span className="inline-flex items-center gap-1">
-                    <span className="inline-block h-3 w-3 rounded-full bg-red-500" />
-                    Klient nie przyjechał
+                    <span className="inline-block h-3 w-6 rounded-sm" style={{ backgroundColor: PAYMENT_BAR_BG.PAID }} />
+                    Opłacona
                   </span>
                   <span className="inline-flex items-center gap-1">
-                    <span className="inline-block h-3 w-3 rounded-full bg-green-700" />
-                    Zakończony nierozliczony
+                    <span className="inline-block h-3 w-6 rounded-sm" style={{ backgroundColor: PAYMENT_BAR_BG.PARTIAL }} />
+                    Częściowo opłacona
                   </span>
                   <span className="inline-flex items-center gap-1">
-                    <span className="inline-block h-3 w-3 rounded-full bg-gray-500" />
-                    Pobyt zakończony
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="inline-block h-3 w-3 rounded-full bg-black" />
-                    Zakończony
+                    <span className="inline-block h-3 w-6 rounded-sm" style={{ backgroundColor: PAYMENT_BAR_BG.UNPAID }} />
+                    Nieopłacona
                   </span>
                 </div>
-                <div className="font-semibold text-gray-700 mt-2 mb-1">Dodatkowy status</div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <div className="font-semibold text-gray-700 mb-1">Różek – status rezerwacji</div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mb-2">
                   <span className="inline-flex items-center gap-1">
-                    <span className="inline-block h-3 w-3 rounded-full bg-pink-500" />
-                    Pobyt nierozliczony
+                    <span className="inline-block h-3 w-1 rounded-full" style={{ backgroundColor: RÓŻEK_STATUS_BG.CONFIRMED }} />
+                    Potwierdzona
                   </span>
                   <span className="inline-flex items-center gap-1">
-                    <span className="inline-block h-3 w-3 rounded-full bg-purple-500" />
-                    Pobyt + zaliczka
+                    <span className="inline-block h-3 w-1 rounded-full" style={{ backgroundColor: RÓŻEK_STATUS_BG.CHECKED_IN }} />
+                    Zameldowany
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block h-3 w-1 rounded-full" style={{ backgroundColor: RÓŻEK_STATUS_BG.CHECKED_OUT }} />
+                    Wymeldowany
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block h-3 w-1 rounded-full" style={{ backgroundColor: RÓŻEK_STATUS_BG.CANCELLED }} />
+                    Anulowana
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block h-3 w-1 rounded-full" style={{ backgroundColor: RÓŻEK_STATUS_BG.NO_SHOW }} />
+                    No-show
                   </span>
                 </div>
                 <div className="font-semibold text-gray-700 mt-2 mb-1">Źródła rezerwacji</div>

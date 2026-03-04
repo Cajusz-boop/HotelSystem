@@ -189,14 +189,13 @@ export function ReservationBar({
             ? [shortName, nightsShort].filter(Boolean).join(" · ")
             : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ")
         : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ");
+  // Cały pasek = tylko Opłacona / Częściowo opłacona / Nieopłacona (bez szarego)
   const defaultPaymentBg =
     reservation.paymentStatus === "PAID"
       ? "rgb(20 184 166)"
       : reservation.paymentStatus === "PARTIAL"
         ? "rgb(234 179 8)"
-        : reservation.paymentStatus === "UNPAID"
-          ? "rgb(139 92 246)"
-          : "rgb(148 163 184)"; // brak statusu płatności – neutralny szary
+        : "rgb(139 92 246)"; // UNPAID lub brak statusu – traktuj jak Nieopłacona
   const bgColor = ensureOpaque(defaultPaymentBg);
   const bgGradient = `linear-gradient(to bottom, ${lightenColor(bgColor)} 0%, ${bgColor} 100%)`;
   const barShadow = "0 1px 3px rgba(0,0,0,0.1), inset 0 0 0 1px rgba(255,255,255,0.15)";
