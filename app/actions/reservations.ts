@@ -705,6 +705,7 @@ export async function createReservation(
     const overlapping = await prisma.reservation.findMany({
       where: {
         roomId: room.id,
+        status: { notIn: ["CANCELLED", "NO_SHOW"] },
         checkIn: { lt: checkOutDate },
         checkOut: { gt: checkInDate },
       },
@@ -3015,6 +3016,7 @@ export async function updateReservation(
         where: {
           roomId: roomIdForPlan,
           id: { not: reservationId },
+          status: { notIn: ["CANCELLED", "NO_SHOW"] },
           checkIn: { lt: effCheckOut },
           checkOut: { gt: effCheckIn },
         },
