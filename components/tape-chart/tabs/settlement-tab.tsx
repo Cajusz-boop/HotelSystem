@@ -748,7 +748,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
               {renderSuggestionsDropdown("email")}
             </div>
             <div>
-              <Label className="text-xs text-muted-foreground">NIP firmy (dla faktury VAT)</Label>
+              <Label className="text-xs text-muted-foreground">NIP / Numer VAT (UE) firmy (dla faktury VAT)</Label>
               <div className="flex gap-1 mt-0.5">
                 <Input id="uni-nip" type="text" inputMode="numeric" className={`${inputCompact} flex-1`} value={form.nipInput}
                   onChange={(e) => {

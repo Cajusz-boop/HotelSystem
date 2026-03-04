@@ -118,7 +118,7 @@ export function ReceiptDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="buyerNip">NIP (opcjonalnie)</Label>
+              <Label htmlFor="buyerNip">NIP / Numer VAT (UE) (opcjonalnie)</Label>
               <Input
                 id="buyerNip"
                 value={buyerNip}

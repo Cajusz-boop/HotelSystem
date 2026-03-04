@@ -55,24 +55,20 @@ export function validateOptionalEmail(
   return { ok: false, error: msg ?? "Nieprawidłowy email" };
 }
 
-import { isValidNipChecksum } from "@/lib/nip-checksum";
+import { validateNipOrVat } from "@/lib/nip-vat-validate";
 
-// --- Firma (NIP, nazwa, adres – do meldunku / faktury) ---
+// --- Firma (NIP / numer VAT UE, nazwa, adres – do meldunku / faktury) ---
 export const companyDataSchema = z
   .object({
-    nip: z.string().min(1, "NIP wymagany"),
+    nip: z.string().min(1, "NIP lub numer VAT jest wymagany"),
     name: z.string().min(1, "Nazwa firmy wymagana").max(200),
     address: z.string().max(200).optional().nullable(),
     postalCode: z.string().max(20).optional().nullable(),
     city: z.string().max(100).optional().nullable(),
     country: z.string().max(10).optional(),
   })
-  .refine((d) => d.nip.replace(/\D/g, "").length === 10, {
-    message: "NIP musi mieć 10 cyfr",
-    path: ["nip"],
-  })
-  .refine((d) => isValidNipChecksum(d.nip.replace(/\D/g, "")), {
-    message: "NIP ma błędną sumę kontrolną",
+  .refine((d) => validateNipOrVat(d.nip).ok, {
+    message: "Nieprawidłowy NIP lub numer VAT UE (np. 5711640854 lub DE123456789)",
     path: ["nip"],
   });
 export type CompanyDataInput = z.infer<typeof companyDataSchema>;

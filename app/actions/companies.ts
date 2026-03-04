@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { lookupCompanyByNip as lookupFromWL } from "@/lib/nip-lookup";
+import { validateNipOrVat, isEuVat } from "@/lib/nip-vat-validate";
 import { generateNextDocumentNumber } from "@/app/actions/finance";
 
 export type ActionResult<T = void> =
@@ -89,27 +90,24 @@ export interface CompanyFromNip {
 }
 
 /**
- * NIP lookup: local database first, then external VAT API (WL).
+ * NIP lookup: local database first, then external VAT API (WL) dla polskiego NIP.
  *
- * 1. Check local Company table by NIP. If found, return that record (includes
- *    manually edited full trading name, e.g. "Karczma Łabędź Łukasz Wojenkowski").
- * 2. If not found locally, call WL (VAT registry) API – returns legal name only.
- *
- * Frontend keeps Company name (and address) editable; on "Save Reservation"
- * createOrUpdateCompany is called with the edited data, so the next lookup
- * returns the full name from the database.
+ * 1. Check local Company table. If found, return that record.
+ * 2. Dla polskiego NIP (10 cyfr): call WL (VAT registry) API.
+ * 3. Dla numeru VAT UE: brak automatycznego pobierania – użytkownik wypełnia dane ręcznie.
  */
 export async function lookupCompanyByNip(
   nip: string
 ): Promise<ActionResult<CompanyFromNip>> {
-  const raw = nip.replace(/\D/g, "");
-  if (raw.length !== 10) {
-    return { success: false, error: "NIP musi mieć 10 cyfr" };
+  const validation = validateNipOrVat(nip);
+  if (!validation.ok) {
+    return { success: false, error: validation.error };
   }
+  const normalized = validation.normalized;
 
   try {
     const fromDb = await prisma.company.findUnique({
-      where: { nip: raw },
+      where: { nip: normalized },
     });
     if (fromDb) {
       return {
@@ -128,13 +126,34 @@ export async function lookupCompanyByNip(
     // On DB error, fall through to WL
   }
 
+  // Dla numeru VAT UE nie ma WL – zwracamy szablon z NIP, użytkownik wypełnia resztę
+  if (isEuVat(nip)) {
+    const countryFromPrefix: Record<string, string> = {
+      DE: "DEU", AT: "AUT", BE: "BEL", BG: "BGR", CY: "CYP", CZ: "CZE", DK: "DNK",
+      EE: "EST", EL: "GRC", ES: "ESP", FI: "FIN", FR: "FRA", HR: "HRV", HU: "HUN",
+      IE: "IRL", IT: "ITA", LT: "LTU", LU: "LUX", LV: "LVA", MT: "MLT", NL: "NLD",
+      PL: "POL", PT: "PRT", RO: "ROU", SE: "SWE", SI: "SVN", SK: "SVK", XI: "GBR",
+    };
+    const prefix = normalized.slice(0, 2);
+    return {
+      success: true,
+      data: {
+        nip: normalized,
+        name: "",
+        address: null,
+        postalCode: null,
+        city: null,
+        country: countryFromPrefix[prefix] ?? prefix,
+      },
+    };
+  }
+
   const result = await lookupFromWL(nip);
   if (!result.success) {
     return { success: false, error: result.error };
   }
 
   // Znane pełne nazwy (NIP → nazwa handlowa) – gdy WL zwraca tylko nazwę z rejestru VAT.
-  // Można rozszerzyć przez env NIP_KNOWN_FULL_NAMES (JSON: {"5711640854":"KARCZMA ŁABĘDŹ ŁUKASZ WOJENKOWSKI"}).
   const knownFullNames: Record<string, string> = { "5711640854": "KARCZMA ŁABĘDŹ ŁUKASZ WOJENKOWSKI" };
   try {
     const fromEnv = process.env.NIP_KNOWN_FULL_NAMES;
@@ -145,7 +164,7 @@ export async function lookupCompanyByNip(
   } catch {
     // ignoruj błędny JSON w env
   }
-  const fullName = knownFullNames[raw];
+  const fullName = knownFullNames[normalized];
   const data = fullName
     ? { ...result.data, name: fullName }
     : result.data;
@@ -154,7 +173,7 @@ export async function lookupCompanyByNip(
 }
 
 /**
- * Tworzy lub aktualizuje firmę w bazie (po NIP).
+ * Tworzy lub aktualizuje firmę w bazie (po NIP / numer VAT UE).
  * Zwraca id firmy.
  */
 export async function createOrUpdateCompany(data: {
@@ -165,10 +184,11 @@ export async function createOrUpdateCompany(data: {
   city?: string | null;
   country?: string;
 }): Promise<ActionResult<{ companyId: string }>> {
-  const nip = data.nip.replace(/\D/g, "");
-  if (nip.length !== 10) {
-    return { success: false, error: "NIP musi mieć 10 cyfr" };
+  const validation = validateNipOrVat(data.nip);
+  if (!validation.ok) {
+    return { success: false, error: validation.error };
   }
+  const nip = validation.normalized;
 
   try {
     const company = await prisma.company.upsert({
@@ -199,18 +219,19 @@ export async function createOrUpdateCompany(data: {
 }
 
 /**
- * Zwraca firmę z bazy po NIP (do wyświetlania / faktury).
+ * Zwraca firmę z bazy po NIP / numerze VAT UE (do wyświetlania / faktury).
  */
 export async function getCompanyByNip(
   nip: string
 ): Promise<ActionResult<{ id: string; nip: string; name: string; address: string | null; postalCode: string | null; city: string | null }>> {
-  const raw = nip.replace(/\D/g, "");
-  if (raw.length !== 10) {
-    return { success: false, error: "NIP musi mieć 10 cyfr" };
+  const validation = validateNipOrVat(nip);
+  if (!validation.ok) {
+    return { success: false, error: validation.error };
   }
+  const normalized = validation.normalized;
   try {
     const company = await prisma.company.findUnique({
-      where: { nip: raw },
+      where: { nip: normalized },
     });
     if (!company) {
       return { success: false, error: "Brak firmy o podanym NIP w bazie" };

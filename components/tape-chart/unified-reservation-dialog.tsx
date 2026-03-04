@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { createReservation, updateReservation, updateReservationStatus, getCheckoutBalanceWarning, findGuestsForCheckIn, getReservationCompany, getReservationEditData, deleteReservation, type GuestCheckInSuggestion } from "@/app/actions/reservations";
 import { postRoomChargeOnCheckout, createVatInvoice, printFiscalReceiptForReservation, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates } from "@/app/actions/finance";
 import { lookupCompanyByNip } from "@/app/actions/companies";
+import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { getEffectivePriceForRoomOnDate, getRatePlanInfoForRoomDate } from "@/app/actions/rooms";
 import { getRateCodes, type RateCodeForUi } from "@/app/actions/rate-codes";
 import { getParkingSpotsForSelect } from "@/app/actions/parking";
@@ -379,13 +380,13 @@ export function UnifiedReservationDialog({
     [suggestionsOpen, guestSuggestions, highlightedIdx, selectGuest]
   );
 
-  // NIP lookup
+  // NIP / numer VAT UE lookup
   const handleNipLookup = useCallback(async () => {
-    const raw = form.nipInput.replace(/\D/g, "");
-    if (raw.length !== 10) return;
+    const validation = validateNipOrVat(form.nipInput.trim());
+    if (!validation.ok) return;
     setNipLookupLoading(true);
     try {
-      const result = await lookupCompanyByNip(raw);
+      const result = await lookupCompanyByNip(form.nipInput.trim());
       if (result.success && result.data) {
         setForm((prev) => ({
           ...prev,
@@ -400,10 +401,11 @@ export function UnifiedReservationDialog({
     finally { setNipLookupLoading(false); }
   }, [form.nipInput]);
 
-  // Auto-lookup NIP
+  // Auto-lookup NIP (tylko polski – WL)
   useEffect(() => {
-    const raw = form.nipInput.replace(/\D/g, "");
-    if (raw.length === 10 && !form.companyFound) handleNipLookup();
+    const validation = validateNipOrVat(form.nipInput.trim());
+    if (!validation.ok || form.companyFound) return;
+    if (validation.normalized.length === 10) handleNipLookup();
   }, [form.nipInput, form.companyFound, handleNipLookup]);
 
   const openRegistrationCard = useCallback((reservationId: string, triggerPrint = false) => {
@@ -428,8 +430,8 @@ export function UnifiedReservationDialog({
       if (isEdit && reservation) {
         const roomData = rooms.find((r) => r.number === form.room.trim());
         const roomBeds = roomData?.beds ?? 1;
-        const nipRaw = form.nipInput.replace(/\D/g, "");
-        const hasCompany = nipRaw.length === 10 && form.companyName.trim();
+        const nipValidation = validateNipOrVat(form.nipInput.trim());
+        const hasCompany = nipValidation.ok && form.companyName.trim();
         const adultsVal = form.adults !== "" ? parseInt(form.adults, 10) : 1;
         const childrenVal = form.children !== "" ? parseInt(form.children, 10) : 0;
         const paxVal = form.pax !== "" ? parseInt(form.pax, 10) : (adultsVal + childrenVal);
@@ -466,7 +468,7 @@ export function UnifiedReservationDialog({
           invoiceSingleLine: form.invoiceSingleLine,
           ...(hasCompany ? {
             companyData: {
-              nip: nipRaw,
+              nip: nipValidation!.normalized,
               name: form.companyName.trim(),
               address: form.companyAddress.trim() || undefined,
               postalCode: form.companyPostalCode.trim() || undefined,
@@ -494,8 +496,8 @@ export function UnifiedReservationDialog({
         const adultsVal = form.adults !== "" ? parseInt(form.adults, 10) : 1;
         const childrenVal = form.children !== "" ? parseInt(form.children, 10) : 0;
         const paxVal = adultsVal + childrenVal;
-        const nipRaw = form.nipInput.replace(/\D/g, "");
-        const hasCompany = nipRaw.length === 10 && form.companyName.trim();
+        const nipValidation = validateNipOrVat(form.nipInput.trim());
+        const hasCompany = nipValidation.ok && form.companyName.trim();
 
         const result = await createReservation({
           guestName: form.guestName.trim(),
@@ -524,7 +526,7 @@ export function UnifiedReservationDialog({
           mealPlan: (form.mealPlan || undefined) as MealPlan | undefined,
           ...(hasCompany ? {
             companyData: {
-              nip: nipRaw,
+              nip: nipValidation!.normalized,
               name: form.companyName.trim(),
               address: form.companyAddress.trim() || undefined,
               postalCode: form.companyPostalCode.trim() || undefined,

@@ -31,6 +31,7 @@ import type {
 } from "@/lib/fiscal/types";
 import { getCennikConfig } from "@/app/actions/cennik-config";
 import { getSession } from "@/lib/auth";
+import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { can } from "@/lib/permissions";
 import { getEffectivePricesBatch } from "@/app/actions/rooms";
 import {
@@ -1439,6 +1440,9 @@ export async function submitBlindDrop(countedCash: number): Promise<
     console.error("[submitBlindDrop] getSession error:", error instanceof Error ? error.message : String(error));
   }
 
+  // W trybie Demo userId "anonymous" nie istnieje w User — nie ustawiaj FK
+  const performedByUserId = session?.userId && session.userId !== "anonymous" ? session.userId : undefined;
+
   try {
     await prisma.blindDropRecord.create({
       data: {
@@ -1446,7 +1450,7 @@ export async function submitBlindDrop(countedCash: number): Promise<
         expectedCash,
         difference: absDifference,
         isShortage,
-        performedByUserId: session?.userId ?? undefined,
+        performedByUserId,
       },
     });
   } catch (e) {
@@ -1857,10 +1861,12 @@ export async function openCashShift(openingBalance: number): Promise<ActionResul
     } catch (error) {
       console.error("[openCashShift] getSession error:", error instanceof Error ? error.message : String(error));
     }
+    // W trybie Demo userId "anonymous" nie istnieje w User — nie ustawiaj FK
+    const openedByUserId = session?.userId && session.userId !== "anonymous" ? session.userId : undefined;
     const shift = await prisma.cashShift.create({
       data: {
         openingBalance,
-        openedByUserId: session?.userId ?? undefined,
+        openedByUserId,
       },
     });
     return { success: true, data: { shiftId: shift.id } };
@@ -1913,6 +1919,7 @@ export async function closeCashShift(
     } catch (error) {
       console.error("[closeCashShift] getSession error:", error instanceof Error ? error.message : String(error));
     }
+    const closedByUserId = session?.userId && session.userId !== "anonymous" ? session.userId : undefined;
 
     await prisma.cashShift.update({
       where: { id: shift.id },
@@ -1921,7 +1928,7 @@ export async function closeCashShift(
         closingBalance: parsed.data.countedCash,
         expectedCashAtClose: expectedCash,
         difference,
-        closedByUserId: session?.userId ?? undefined,
+        closedByUserId,
         notes: notes?.trim() || undefined,
       },
     });
@@ -4415,8 +4422,9 @@ export async function createSalesInvoice(
       buyerPostalCode = company.postalCode ?? null;
       buyerCity = company.city ?? null;
     } else {
-      buyerNip = (buyer.nip ?? "").trim().replace(/\s/g, "");
-      if (!buyerNip || buyerNip.length !== 10) return { success: false, error: "Podaj prawidłowy NIP (10 cyfr)." };
+      const nipValidation = validateNipOrVat((buyer.nip ?? "").trim());
+      if (!nipValidation.ok) return { success: false, error: nipValidation.error };
+      buyerNip = nipValidation.normalized;
       buyerName = (buyer.name ?? "").trim();
       if (!buyerName) return { success: false, error: "Podaj nazwę nabywcy." };
       buyerAddress = buyer.address?.trim() || null;

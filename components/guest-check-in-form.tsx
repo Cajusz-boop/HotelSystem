@@ -10,7 +10,7 @@ import { lookupCompanyByNip, createOrUpdateCompany, type CompanyFromNip } from "
 import { getFormFieldsForForm } from "@/app/actions/hotel-config";
 import type { CustomFormField } from "@/lib/hotel-config-types";
 import { parseMRZ } from "@/lib/mrz";
-import { isValidNipChecksum } from "@/lib/nip-checksum";
+import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { toast } from "sonner";
 import { ScanLine, Upload, UserCheck, Search, Save } from "lucide-react";
 
@@ -61,6 +61,8 @@ export function GuestCheckInForm() {
     return toDateStr(d);
   });
   const [room, setRoom] = useState("101");
+  const [adults, setAdults] = useState(1);
+  const [children, setChildren] = useState(0);
   const [rooms, setRooms] = useState<Array<{ number: string; type: string; status: string }>>([]);
   const [uploadStatus, setUploadStatus] = useState<"idle" | "processing" | "done" | "error">("idle");
   const [guestSuggestions, setGuestSuggestions] = useState<GuestCheckInSuggestion[]>([]);
@@ -169,14 +171,14 @@ export function GuestCheckInForm() {
   };
 
   const fetchCompanyByNip = useCallback(async (nipRaw: string) => {
-    const nip = nipRaw.replace(/\D/g, "").trim();
-    if (nip.length !== 10) return;
+    const validation = validateNipOrVat(nipRaw.trim());
+    if (!validation.ok) return;
     setNipLoading(true);
-    const result = await lookupCompanyByNip(nip);
+    const result = await lookupCompanyByNip(nipRaw.trim());
     setNipLoading(false);
     if (result.success && result.data) {
       setCompanyData(result.data);
-      toast.success("Dane firmy wczytane.");
+      toast.success(result.data.name ? "Dane firmy wczytane." : "Wprowadź nazwę i adres firmy.");
     } else {
       setCompanyData(null);
       if ("error" in result) toast.error(result.error);
@@ -184,27 +186,25 @@ export function GuestCheckInForm() {
   }, []);
 
   useEffect(() => {
-    const nip = nipInput.replace(/\D/g, "").trim();
-    if (nip.length !== 10 || !isValidNipChecksum(nip)) return;
-    const t = setTimeout(() => fetchCompanyByNip(nip), 500);
+    const validation = validateNipOrVat(nipInput.trim());
+    if (!validation.ok) return;
+    const t = setTimeout(() => fetchCompanyByNip(nipInput.trim()), 500);
     return () => clearTimeout(t);
   }, [nipInput, fetchCompanyByNip]);
 
   const handleFetchCompany = () => {
-    const nip = nipInput.replace(/\D/g, "").trim();
-    if (nip.length !== 10) { toast.error("NIP musi mieć 10 cyfr."); return; }
-    if (!isValidNipChecksum(nip)) { toast.error("NIP ma błędną sumę kontrolną."); return; }
-    fetchCompanyByNip(nip);
+    const validation = validateNipOrVat(nipInput.trim());
+    if (!validation.ok) { toast.error(validation.error); return; }
+    fetchCompanyByNip(nipInput.trim());
   };
 
   const handleSaveCompany = async () => {
     if (!companyData) return;
-    const nip = companyData.nip.replace(/\D/g, "");
-    if (nip.length !== 10) { toast.error("NIP musi mieć 10 cyfr."); return; }
-    if (!isValidNipChecksum(nip)) { toast.error("NIP ma błędną sumę kontrolną."); return; }
+    const validation = validateNipOrVat(companyData.nip);
+    if (!validation.ok) { toast.error(validation.error); return; }
     setCompanySaveLoading(true);
     const result = await createOrUpdateCompany({
-      nip,
+      nip: companyData.nip,
       name: companyData.name.trim(),
       address: companyData.address ?? undefined,
       postalCode: companyData.postalCode ?? undefined,
@@ -243,12 +243,14 @@ export function GuestCheckInForm() {
       checkIn: checkInStr,
       checkOut: checkOutStr,
       status: "CONFIRMED",
+      adults,
+      children,
       mrz: mrz.trim() || undefined,
       guestDateOfBirth: dateOfBirth.trim() || undefined,
       ...(Object.keys(customFormData).length > 0 ? { customFormData } : {}),
       ...(companyData ? {
         companyData: {
-          nip: companyData.nip.replace(/\D/g, ""),
+          nip: companyData.nip,
           name: companyData.name,
           address: companyData.address ?? undefined,
           postalCode: companyData.postalCode ?? undefined,
@@ -260,6 +262,7 @@ export function GuestCheckInForm() {
     if (result.success) {
       toast.success("Rezerwacja utworzona.");
       setName(""); setEmail(""); setPhone(""); setDateOfBirth(""); setMrz("");
+      setAdults(1); setChildren(0);
       setSelectedGuest(null); setCompanyData(null); setNipInput("");
       setCustomFieldValues((prev) => {
         const next = { ...prev };
@@ -366,6 +369,17 @@ export function GuestCheckInForm() {
             <Label className="text-xs text-muted-foreground">🎂 Data urodzenia</Label>
             <Input id="dateOfBirth" type="date" className={inputCls} value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
           </div>
+          <div className="grid grid-cols-[80px_1fr_1fr] items-center gap-x-2 gap-y-1">
+            <Label className="text-xs text-muted-foreground text-right">👥 Goście</Label>
+            <div className="flex items-center gap-1">
+              <Label htmlFor="adults" className="text-[10px] text-muted-foreground shrink-0">Dorośli</Label>
+              <Input id="adults" type="number" min={1} max={20} className={`${inputCls} w-14`} value={adults} onChange={(e) => setAdults(Math.max(1, Math.min(20, Number(e.target.value) || 1)))} data-testid="check-in-adults" />
+            </div>
+            <div className="flex items-center gap-1">
+              <Label htmlFor="children" className="text-[10px] text-muted-foreground shrink-0">Dzieci</Label>
+              <Input id="children" type="number" min={0} max={20} className={`${inputCls} w-14`} value={children} onChange={(e) => setChildren(Math.max(0, Math.min(20, Number(e.target.value) || 0)))} data-testid="check-in-children" />
+            </div>
+          </div>
 
           {customFormFields.length > 0 && (
             <div className="mt-1 space-y-1 border-t pt-1">
@@ -408,9 +422,9 @@ export function GuestCheckInForm() {
         <div className="space-y-1.5">
           <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground border-b pb-1">🏢 Firma / Faktura</h3>
           <div>
-            <Label className="text-xs text-muted-foreground">🏢 NIP</Label>
+            <Label className="text-xs text-muted-foreground">🏢 NIP / Numer VAT (UE)</Label>
             <div className="flex gap-1">
-              <Input id="nip" className={`${inputCls} flex-1`} value={nipInput} onChange={(e) => setNipInput(e.target.value)} placeholder="5261040828" maxLength={14} />
+              <Input id="nip" className={`${inputCls} flex-1`} value={nipInput} onChange={(e) => setNipInput(e.target.value.toUpperCase())} placeholder="5261040828 lub DE123456789" maxLength={14} />
               <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] px-2 shrink-0" onClick={handleFetchCompany} disabled={nipLoading}>
                 <Search className="mr-1 h-3 w-3" />
                 {nipLoading ? "…" : "Sprawdź"}

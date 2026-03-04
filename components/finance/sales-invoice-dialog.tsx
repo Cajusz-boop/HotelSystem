@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { createSalesInvoice, type SalesInvoiceLineItem } from "@/app/actions/finance";
 import { getAllCompanies } from "@/app/actions/companies";
+import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 
@@ -115,9 +116,9 @@ export function SalesInvoiceDialog({
       }
       buyer = { companyId };
     } else {
-      const nipClean = nip.replace(/\s/g, "");
-      if (nipClean.length !== 10) {
-        toast.error("NIP musi mieć 10 cyfr.");
+      const nipValidation = validateNipOrVat(nip.trim());
+      if (!nipValidation.ok) {
+        toast.error(nipValidation.error);
         return;
       }
       if (!buyerName.trim()) {
@@ -125,7 +126,7 @@ export function SalesInvoiceDialog({
         return;
       }
       buyer = {
-        nip: nipClean,
+        nip: nipValidation.normalized,
         name: buyerName.trim(),
         address: buyerAddress.trim() || undefined,
         postalCode: buyerPostalCode.trim() || undefined,
@@ -223,12 +224,12 @@ export function SalesInvoiceDialog({
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
                 <div>
-                  <Label htmlFor="nip">NIP *</Label>
+                  <Label htmlFor="nip">NIP / Numer VAT (UE) *</Label>
                   <Input
                     id="nip"
                     value={nip}
-                    onChange={(e) => setNip(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                    placeholder="1234567890"
+                    onChange={(e) => setNip(e.target.value.toUpperCase().replace(/\s/g, "").slice(0, 14))}
+                    placeholder="1234567890 lub DE123456789"
                   />
                 </div>
                 <div>

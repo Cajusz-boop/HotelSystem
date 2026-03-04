@@ -17,6 +17,7 @@ import {
   type GuestExportEntry,
 } from "@/app/actions/reservations";
 import { exportToExcel } from "@/lib/export-excel";
+import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import {
   getAllCompanies,
   lookupCompanyByNip,
@@ -719,12 +720,12 @@ function CompaniesSection() {
   }, [_statsData, statsQueryLoading]);
 
   const handleNipLookup = async () => {
-    const nip = nipInput.replace(/\D/g, "");
-    if (nip.length !== 10) { setAddError("NIP musi mieć 10 cyfr"); return; }
+    const validation = validateNipOrVat(nipInput.trim());
+    if (!validation.ok) { setAddError(validation.error); return; }
     setNipLookupLoading(true);
     setAddError(null);
     setAddSuccess(null);
-    const res = await lookupCompanyByNip(nip);
+    const res = await lookupCompanyByNip(nipInput.trim());
     setNipLookupLoading(false);
     if (res.success) {
       setCompanyName(res.data.name);
@@ -732,21 +733,21 @@ function CompaniesSection() {
       setCompanyPostalCode(res.data.postalCode ?? "");
       setCompanyCity(res.data.city ?? "");
       setCompanyCountry(res.data.country);
-      setAddSuccess("Dane pobrane pomyślnie");
+      setAddSuccess(res.data.name ? "Dane pobrane pomyślnie" : "Wprowadź nazwę i adres firmy");
     } else {
       setAddError(res.error);
     }
   };
 
   const handleSaveCompany = async () => {
-    const nip = nipInput.replace(/\D/g, "");
-    if (nip.length !== 10) { setAddError("NIP musi mieć 10 cyfr"); return; }
+    const validation = validateNipOrVat(nipInput.trim());
+    if (!validation.ok) { setAddError(validation.error); return; }
     if (!companyName.trim()) { setAddError("Nazwa firmy jest wymagana"); return; }
     setSaveLoading(true);
     setAddError(null);
     setAddSuccess(null);
     const res = await createOrUpdateCompany({
-      nip, name: companyName,
+      nip: nipInput.trim(), name: companyName,
       address: companyAddress || null,
       postalCode: companyPostalCode || null,
       city: companyCity || null,
@@ -1122,15 +1123,15 @@ function CompaniesSection() {
             <div>
               <h2 className="text-lg font-semibold mb-4">Dodaj nową firmę</h2>
               <p className="text-sm text-muted-foreground mb-4">
-                Wpisz NIP i pobierz dane z bazy VAT, lub wypełnij formularz ręcznie.
+                Wpisz NIP lub numer VAT UE (np. DE123456789) i pobierz dane z bazy VAT, lub wypełnij formularz ręcznie.
               </p>
             </div>
             {addError && <div className="p-3 bg-destructive/10 text-destructive rounded-md text-sm">{addError}</div>}
             {addSuccess && <div className="p-3 bg-green-100 text-green-800 rounded-md text-sm">{addSuccess}</div>}
             <div>
-              <Label htmlFor="nip">NIP *</Label>
+              <Label htmlFor="nip">NIP / Numer VAT (UE) *</Label>
               <div className="mt-1 flex gap-2">
-                <Input id="nip" value={nipInput} onChange={(e) => setNipInput(e.target.value)} placeholder="np. 5711640854" maxLength={13} />
+                <Input id="nip" value={nipInput} onChange={(e) => setNipInput(e.target.value.toUpperCase().replace(/\s/g, ""))} placeholder="np. 5711640854 lub DE123456789" maxLength={14} />
                 <Button variant="outline" onClick={handleNipLookup} disabled={nipLookupLoading}>
                   {nipLookupLoading ? "Pobieranie..." : "Pobierz dane"}
                 </Button>

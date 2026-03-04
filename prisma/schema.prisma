@@ -511,7 +511,7 @@ model GuestRelation {
 
 model Company {
   id              String   @id @default(cuid())
-  nip             String   @unique  // NIP (10 znaków)
+  nip             String   @unique  // NIP (10 cyfr) lub numer VAT UE (np. DE123456789)
   name            String   // nazwa firmy
   address         String?  // ulica, nr
   postalCode      String?  // np. 00-925
