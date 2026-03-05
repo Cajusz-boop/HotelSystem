@@ -380,7 +380,7 @@ export default function NumeracjaPage() {
                   id={`sequenceStart-${config.documentType}`}
                   type="number"
                   min={1}
-                  value={getConfigValue(config, "sequenceStart") ?? 1}
+                  value={typeof getConfigValue(config, "sequenceStart") === "number" ? getConfigValue(config, "sequenceStart") : 1}
                   onChange={(e) => {
                     const v = parseInt(e.target.value, 10);
                     if (!isNaN(v) && v >= 1) {
