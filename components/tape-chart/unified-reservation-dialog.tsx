@@ -476,7 +476,7 @@ export function UnifiedReservationDialog({
           extraStatus: form.extraStatus?.trim() || undefined,
           advanceDueDate: form.depositDueDate?.trim() || undefined,
           invoiceSingleLine: form.invoiceSingleLine,
-          invoiceScope: form.invoiceScope || "ALL",
+          invoiceScope: (form.invoiceScope || "ALL") as "ALL" | "HOTEL_ONLY" | "GASTRONOMY_ONLY",
           paidAmountOverride: (() => {
             const v = form.paidAmountOverride.trim();
             if (!v) return null;

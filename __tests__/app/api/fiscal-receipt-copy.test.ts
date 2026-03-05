@@ -62,7 +62,7 @@ describe("GET /api/finance/fiscal-receipt-copy", () => {
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       id: "res-1",
       transactions: [],
-      guests: [],
+      guest: null,
     } as never);
     const req = makeRequest("res-1");
     const res = await GET(req);
@@ -74,11 +74,10 @@ describe("GET /api/finance/fiscal-receipt-copy", () => {
   it("zwraca HTML z kopią paragonu – kwota z transakcji", async () => {
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       id: "res-1",
-      guestName: "Jan Kowalski",
       transactions: [
         { id: "tx-1", type: "ROOM", amount: 300, status: "ACTIVE" },
       ],
-      guests: [{ fullName: "Jan Kowalski", isPrimary: true }],
+      guest: { name: "Jan Kowalski" },
     } as never);
 
     const req = makeRequest("res-1");
@@ -98,11 +97,10 @@ describe("GET /api/finance/fiscal-receipt-copy", () => {
   it("zwraca HTML z kwotą override (split) gdy podano amount", async () => {
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       id: "res-1",
-      guestName: "Anna Nowak",
       transactions: [
         { id: "tx-1", type: "ROOM", amount: 300, status: "ACTIVE" },
       ],
-      guests: [{ fullName: "Anna Nowak", isPrimary: true }],
+      guest: { name: "Anna Nowak" },
     } as never);
 
     const req = makeRequest("res-1", 100);
@@ -120,7 +118,7 @@ describe("GET /api/finance/fiscal-receipt-copy", () => {
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       id: "res-1",
       transactions: [],
-      guests: [],
+      guest: null,
     } as never);
 
     const req = makeRequest("res-1", 50);

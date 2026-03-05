@@ -383,6 +383,7 @@ const reservationBaseSchema = z.object({
   reminderAt: z.string().datetime().optional().nullable(), // przypomnienie do rezerwacji (ISO datetime)
   advanceDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(), // termin wpłaty zaliczki (YYYY-MM-DD)
   invoiceSingleLine: z.boolean().optional(), // faktura: jedna linia "Usługa hotelowa" z całą sumą (nocleg+gastronomia+inne)
+  invoiceScope: z.enum(["ALL", "HOTEL_ONLY", "GASTRONOMY_ONLY"]).optional(), // zakres faktury
   paidAmountOverride: z.number().min(0).optional().nullable(), // nadpisana kwota wpłat (widoczna na fakturze)
   externalReservationNumber: z.string().max(100).optional().nullable(), // nr rezerwacji w OTA/Booking
   currency: z.string().max(3).optional().nullable(), // waluta (PLN, EUR, USD)

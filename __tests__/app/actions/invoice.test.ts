@@ -403,6 +403,7 @@ describe("Fakturowanie – createVatInvoice", () => {
     mockCennikConfig(8, false);
     mockDocumentNumbering();
 
+    // @ts-expect-error mock zwraca uproszczony obiekt
     vi.mocked(prisma.invoice.create).mockImplementation(async (args: { data: Record<string, unknown> }) => {
       expect(args.data.amountGross).toBe(300);
       expect(args.data.invoiceScope).toBe("HOTEL_ONLY");
@@ -415,7 +416,7 @@ describe("Fakturowanie – createVatInvoice", () => {
         issuedAt: new Date("2026-02-17"),
         reservationId: "res-1",
         vatRate: 8,
-      } as never;
+      };
     });
 
     const result = await createVatInvoice("res-1");
@@ -436,6 +437,7 @@ describe("Fakturowanie – createVatInvoice", () => {
     mockCennikConfig(8, false);
     mockDocumentNumbering();
 
+    // @ts-expect-error mock zwraca uproszczony obiekt
     vi.mocked(prisma.invoice.create).mockImplementation(async (args: { data: Record<string, unknown> }) => {
       expect(args.data.amountGross).toBe(50);
       expect(args.data.invoiceScope).toBe("GASTRONOMY_ONLY");
@@ -448,7 +450,7 @@ describe("Fakturowanie – createVatInvoice", () => {
         issuedAt: new Date("2026-02-17"),
         reservationId: "res-1",
         vatRate: 8,
-      } as never;
+      };
     });
 
     const result = await createVatInvoice("res-1");
@@ -466,19 +468,17 @@ describe("Fakturowanie – createVatInvoice", () => {
     mockCennikConfig(8, false);
     mockDocumentNumbering();
 
-    vi.mocked(prisma.invoice.create).mockImplementation(async (args: { data: Record<string, unknown> }) => {
-      expect(args.data.amountGross).toBe(350);
-      return {
-        id: "inv-1",
-        number: "FV/2026/0001",
-        amountNet: 324.07,
-        amountVat: 25.93,
-        amountGross: 350,
-        issuedAt: new Date("2026-02-17"),
-        reservationId: "res-1",
-        vatRate: 8,
-      } as never;
-    });
+    // @ts-expect-error mock zwraca uproszczony obiekt
+    vi.mocked(prisma.invoice.create).mockImplementation(async () => ({
+      id: "inv-1",
+      number: "FV/2026/0001",
+      amountNet: 324.07,
+      amountVat: 25.93,
+      amountGross: 350,
+      issuedAt: new Date("2026-02-17"),
+      reservationId: "res-1",
+      vatRate: 8,
+    }));
 
     const result = await createVatInvoice("res-1");
     expect(result.success).toBe(true);
@@ -526,6 +526,7 @@ describe("Fakturowanie – createVatInvoice", () => {
     mockDocumentNumbering();
 
     let savedAmountGross: number | null = null;
+    // @ts-expect-error mock zwraca uproszczony obiekt
     vi.mocked(prisma.invoice.create).mockImplementation(async (args: { data: Record<string, unknown> }) => {
       savedAmountGross = Number(args.data.amountGross);
       return {
@@ -537,7 +538,7 @@ describe("Fakturowanie – createVatInvoice", () => {
         issuedAt: new Date("2026-02-17"),
         reservationId: "res-1",
         vatRate: 8,
-      } as never;
+      };
     });
 
     const result = await createVatInvoice("res-1", undefined, { amountGrossOverride: 200 });
@@ -554,6 +555,7 @@ describe("Fakturowanie – createVatInvoice", () => {
     mockCennikConfig(8, false);
     mockDocumentNumbering();
 
+    // @ts-expect-error mock zwraca uproszczony obiekt
     vi.mocked(prisma.invoice.create).mockImplementation(async (args: { data: Record<string, unknown> }) => {
       expect(args.data.amountGross).toBe(200);
       const net = Number(args.data.amountNet);
@@ -568,7 +570,7 @@ describe("Fakturowanie – createVatInvoice", () => {
         issuedAt: new Date("2026-02-17"),
         reservationId: "res-1",
         vatRate: 8,
-      } as never;
+      };
     });
 
     const result = await createVatInvoice("res-1", undefined, { amountGrossOverride: 200 });

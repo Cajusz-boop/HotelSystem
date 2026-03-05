@@ -29,18 +29,20 @@ export async function GET(request: NextRequest) {
   try {
     const reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
-      include: { transactions: true, guests: { where: { isPrimary: true }, take: 1 } },
+      include: { transactions: true, guest: { select: { name: true } } },
     });
 
     if (!reservation) {
       return new NextResponse("Rezerwacja nie istnieje", { status: 404 });
     }
 
+    const res = reservation as typeof reservation & { transactions: Array<{ type: string; amount: unknown; status: string | null }>; guest: { name: string } | null };
     const chargeTypes = ["ROOM", "LOCAL_TAX", "MINIBAR", "GASTRONOMY", "SPA", "PARKING", "RENTAL", "PHONE", "LAUNDRY", "TRANSPORT", "ATTRACTION", "OTHER"];
-    const chargeTransactions = reservation.transactions.filter(
-      (t) => chargeTypes.includes(t.type) && Number(t.amount) > 0 && (t.status === "ACTIVE" || t.status == null)
+    const chargeTransactions = res.transactions.filter(
+      (t: { type: string; amount: unknown; status: string | null }) =>
+        chargeTypes.includes(t.type) && Number(t.amount) > 0 && (t.status === "ACTIVE" || t.status == null)
     );
-    let totalAmount = chargeTransactions.reduce((s, t) => s + Number(t.amount), 0);
+    let totalAmount = chargeTransactions.reduce((s: number, t: { amount: unknown }) => s + Number(t.amount), 0);
 
     const amountOverride = amountParam ? parseFloat(amountParam) : null;
     const useOverride = amountOverride != null && Number.isFinite(amountOverride) && amountOverride > 0;
@@ -69,7 +71,7 @@ export async function GET(request: NextRequest) {
       totalAmount = Math.round(amountOverride * 100) / 100;
       items = [{ name: "Usługa hotelowa", quantity: 1, unitPrice: totalAmount, vatRate: 8 }];
     } else {
-      items = chargeTransactions.map((t) => ({
+      items = chargeTransactions.map((t: { type: string; amount: unknown }) => ({
         name: typeToName[t.type] ?? t.type,
         quantity: 1,
         unitPrice: Number(t.amount),
@@ -98,7 +100,7 @@ export async function GET(request: NextRequest) {
       hour: "2-digit",
       minute: "2-digit",
     });
-    const guestName = reservation.guests?.[0]?.fullName ?? reservation.guestName ?? "—";
+    const guestName = res.guest?.name ?? "—";
 
     const itemsHtml = items
       .map(
@@ -135,7 +137,7 @@ export async function GET(request: NextRequest) {
   ${headerLines.map((l) => `<div class="header">${escapeHtml(l)}</div>`).join("")}
   <h1>Paragon</h1>
   <p style="font-size: 11px; margin: 0 0 0.5rem;">Data: ${escapeHtml(issuedAt)} · Gość: ${escapeHtml(guestName)}</p>
-  <p style="font-size: 11px; margin: 0 0 0.75rem;">Rezerwacja: ${escapeHtml(reservation.id.slice(0, 8))}</p>
+  <p style="font-size: 11px; margin: 0 0 0.75rem;">Rezerwacja: ${escapeHtml(reservationId.slice(0, 8))}</p>
   <table>
     <thead>
       <tr>

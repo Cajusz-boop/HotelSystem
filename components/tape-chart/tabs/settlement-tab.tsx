@@ -2020,7 +2020,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
                       disabled={overridePriceLoading}
                       onClick={async () => {
                         if (!reservation?.id) return;
-                        const val = overridePriceInput.trim() ? parseFloat(overridePriceInput) : (roomChargesFromTx || totalAmount ?? 0);
+                        const val = overridePriceInput.trim() ? parseFloat(overridePriceInput) : (roomChargesFromTx ?? totalAmount ?? 0);
                         if (!Number.isFinite(val) || val <= 0) {
                           toast.error("Podaj kwotę większą od zera");
                           return;
