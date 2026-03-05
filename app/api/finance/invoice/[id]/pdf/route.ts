@@ -618,26 +618,14 @@ async function generateInvoiceHtml(id: string): Promise<string> {
     </tbody>
   </table>
 
-  ${(() => {
-    const customValues = invoice.customFieldValues as { paidAmountDisplay?: number } | null;
-    const paidDisplay = customValues?.paidAmountDisplay;
-    const paidHtml = paidDisplay != null && paidDisplay >= 0
-      ? `<div><strong>Zapłacono:</strong><br><span style="font-size: 1.1rem; font-weight: 600;">${paidDisplay.toFixed(2)} zł</span></div>`
-      : "";
-    return `<div class="payment-box">
-    <div>
-      <strong>Do zapłaty:</strong><br>
-      <span style="font-size: 1.1rem; font-weight: 600;">${gross.toFixed(2)} zł</span>
-    </div>
-    ${paidHtml}
+  <div class="payment-box">
     <div>
       <strong>Forma płatności:</strong><br>
       ${["CASH", "CARD", "BLIK", "VOUCHER", "PREPAID"].includes(rawPaymentMethod.toUpperCase())
         ? `${escapeHtml(paymentMethod)} – zapłacono`
         : `${escapeHtml(paymentMethod)} w terminie ${paymentDays} dni = ${escapeHtml(dueDateStr)}`}
     </div>
-  </div>`;
-  })()}
+  </div>
 
   <div class="amount-words">
     <strong>Słownie zł:</strong> ${amountToWords(gross)}

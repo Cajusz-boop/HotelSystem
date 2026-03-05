@@ -747,7 +747,7 @@ export function UnifiedReservationDialog({
       if (choice === "vat" || (choice === "both" && amtInv > 0)) {
         const result = await createVatInvoice(docChoiceResId, undefined, {
           notes: invoiceNotes.trim() || undefined,
-          amountGrossOverride: isSplit ? amtInv : undefined,
+          amountGrossOverride: amtInv > 0 ? amtInv : undefined,
         });
         if (result.success && result.data) {
           toast.success(`Faktura VAT ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);
@@ -764,14 +764,14 @@ export function UnifiedReservationDialog({
         }
       }
       if (choice === "posnet" || (choice === "both" && amtRec > 0)) {
-        const result = await printFiscalReceiptForReservation(docChoiceResId, "CASH", isSplit ? amtRec : undefined);
+        const result = await printFiscalReceiptForReservation(docChoiceResId, "CASH", amtRec > 0 ? amtRec : undefined);
         if (result.success) {
           window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
           toast.success(result.data?.receiptNumber
             ? `Paragon wydrukowany: ${result.data.receiptNumber}`
             : "Paragon wysłany do kasy fiskalnej (POSNET)");
           // Kopia paragonu do wydruku (recepcja)
-          const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(docChoiceResId)}${isSplit && amtRec > 0 ? `&amount=${amtRec}` : ""}`;
+          const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(docChoiceResId)}${amtRec > 0 ? `&amount=${amtRec}` : ""}`;
           const copyWindow = window.open(copyUrl, "_blank");
           if (copyWindow) {
             copyWindow.addEventListener("load", () => {
