@@ -407,11 +407,14 @@ async function generateInvoiceHtml(id: string): Promise<string> {
         : "https://ksef.mf.gov.pl") + `/web/verify/${encodeURIComponent(ksefUuid)}`
     : "";
 
+  const isProforma = invoice.number.toUpperCase().startsWith("PRO");
+  const docLabel = isProforma ? "Proforma" : "Faktura VAT";
+
   const html = `<!DOCTYPE html>
 <html lang="pl">
 <head>
   <meta charset="utf-8" />
-  <title>Faktura VAT ${escapeHtml(invoice.number)}</title>
+  <title>${docLabel} ${escapeHtml(invoice.number)}</title>
   <style>
     * { box-sizing: border-box; }
     body { 
@@ -534,7 +537,7 @@ async function generateInvoiceHtml(id: string): Promise<string> {
     </div>
   </div>
 
-  <h1>Faktura Vat ${escapeHtml(invoice.number)} oryginał</h1>
+  <h1>${docLabel} ${escapeHtml(invoice.number)} oryginał</h1>
 
   ${headerHtml}
 
@@ -601,18 +604,26 @@ async function generateInvoiceHtml(id: string): Promise<string> {
     </tbody>
   </table>
 
-  <div class="payment-box">
+  ${(() => {
+    const customValues = invoice.customFieldValues as { paidAmountDisplay?: number } | null;
+    const paidDisplay = customValues?.paidAmountDisplay;
+    const paidHtml = paidDisplay != null && paidDisplay >= 0
+      ? `<div><strong>Zapłacono:</strong><br><span style="font-size: 1.1rem; font-weight: 600;">${paidDisplay.toFixed(2)} zł</span></div>`
+      : "";
+    return `<div class="payment-box">
     <div>
       <strong>Do zapłaty:</strong><br>
       <span style="font-size: 1.1rem; font-weight: 600;">${gross.toFixed(2)} zł</span>
     </div>
+    ${paidHtml}
     <div>
       <strong>Forma płatności:</strong><br>
       ${["CASH", "CARD", "BLIK", "VOUCHER", "PREPAID"].includes(rawPaymentMethod.toUpperCase())
         ? `${escapeHtml(paymentMethod)} – zapłacono`
         : `${escapeHtml(paymentMethod)} w terminie ${paymentDays} dni = ${escapeHtml(dueDateStr)}`}
     </div>
-  </div>
+  </div>`;
+  })()}
 
   <div class="amount-words">
     <strong>Słownie zł:</strong> ${amountToWords(gross)}

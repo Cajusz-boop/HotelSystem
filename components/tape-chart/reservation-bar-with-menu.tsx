@@ -323,6 +323,9 @@ export function ReservationBarWithMenu({
     const result = await createProforma(reservation.id);
     if (result.success && result.data) {
       toast.success(`Proforma ${result.data.number} – ${result.data.amount.toFixed(2)} PLN`);
+      if (typeof window !== "undefined") {
+        window.open(`/api/finance/proforma/${result.data.id}/pdf`, "_blank", "noopener,noreferrer");
+      }
     } else {
       toast.error("error" in result ? result.error : "Błąd");
     }

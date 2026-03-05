@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createReservation, updateReservation, updateReservationStatus, getCheckoutBalanceWarning, findGuestsForCheckIn, getReservationCompany, getReservationEditData, deleteReservation, type GuestCheckInSuggestion } from "@/app/actions/reservations";
-import { postRoomChargeOnCheckout, createVatInvoice, printFiscalReceiptForReservation, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates } from "@/app/actions/finance";
+import { postRoomChargeOnCheckout, createVatInvoice, createProforma, printFiscalReceiptForReservation, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates } from "@/app/actions/finance";
 import { lookupCompanyByNip } from "@/app/actions/companies";
 import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { getEffectivePriceForRoomOnDate, getRatePlanInfoForRoomDate } from "@/app/actions/rooms";
@@ -142,6 +142,7 @@ const INITIAL_FORM: SettlementTabFormState = {
   voucherType: "BON_TURYSTYCZNY",
   advanceAmount: "",
   invoiceSingleLine: true,
+  paidAmountOverride: "",
 };
 
 export function UnifiedReservationDialog({
@@ -196,6 +197,7 @@ export function UnifiedReservationDialog({
   const justSelectedRef = useRef(false);
   const guestInputRef = useRef<HTMLInputElement>(null);
   const saveAndPrintRef = useRef(false);
+  const proformaAfterCreateRef = useRef(false);
   const saveBtnRef = useRef<HTMLButtonElement>(null);
   const searchGuestRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -249,6 +251,7 @@ export function UnifiedReservationDialog({
             extraStatus: d.extraStatus ?? "",
             depositDueDate: d.advanceDueDate ?? "",
             invoiceSingleLine: d.invoiceSingleLine ?? true,
+            paidAmountOverride: d.paidAmountOverride != null ? String(d.paidAmountOverride) : "",
           }));
           setIsInClosedPeriod(d.isInClosedPeriod ?? false);
           setCanEditClosedPeriod(d.canEditClosedPeriod ?? false);
@@ -466,6 +469,12 @@ export function UnifiedReservationDialog({
           extraStatus: form.extraStatus?.trim() || undefined,
           advanceDueDate: form.depositDueDate?.trim() || undefined,
           invoiceSingleLine: form.invoiceSingleLine,
+          paidAmountOverride: (() => {
+            const v = form.paidAmountOverride.trim();
+            if (!v) return null;
+            const n = parseFloat(v);
+            return Number.isNaN(n) || n < 0 ? null : n;
+          })(),
           ...(hasCompany ? {
             companyData: {
               nip: nipValidation!.normalized,
@@ -550,6 +559,19 @@ export function UnifiedReservationDialog({
             saveAndPrintRef.current = false;
             openRegistrationCard(createdRes.id, true);
           }
+          if (proformaAfterCreateRef.current) {
+            proformaAfterCreateRef.current = false;
+            const nights = computeNights(form.checkIn, form.checkOut);
+            const proformaAmount = (effectivePricePerNight ?? 0) * Math.max(1, nights);
+            createProforma(createdRes.id, proformaAmount > 0 ? proformaAmount : undefined).then((proRes) => {
+              if (proRes.success && proRes.data) {
+                toast.success(`Proforma ${proRes.data.number} – ${proRes.data.amount.toFixed(2)} PLN`);
+                window.open(`/api/finance/proforma/${proRes.data.id}/pdf`, "_blank");
+              } else {
+                toast.error(proRes.success === false ? proRes.error : "Błąd wystawiania proformy");
+              }
+            });
+          }
           onOpenChange(false);
         } else {
           setError("error" in result ? (result.error ?? null) : null);
@@ -560,7 +582,7 @@ export function UnifiedReservationDialog({
     } finally {
       setSaving(false);
     }
-  }, [form, isEdit, reservation, rooms, onSaved, onCreated, onOpenChange, openRegistrationCard, hasUnsavedChanges]);
+  }, [form, isEdit, reservation, rooms, onSaved, onCreated, onOpenChange, openRegistrationCard, hasUnsavedChanges, effectivePricePerNight]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -682,12 +704,33 @@ export function UnifiedReservationDialog({
   }, [docChoiceResId, invoiceNotes, onOpenChange]);
 
   const handleIssueDoc = useCallback(async (choice: "vat" | "posnet" | "proforma" | "potwierdzenie") => {
-    if (!reservation?.id) return;
-    if (choice === "proforma" || choice === "potwierdzenie") {
-      toast.info("Funkcja w przygotowaniu (Proforma / Potwierdzenie rezerwacji)");
+    if (choice === "potwierdzenie") {
+      toast.info("Funkcja w przygotowaniu (Potwierdzenie rezerwacji)");
       setIssueDocMenuOpen(false);
       return;
     }
+    if (choice === "proforma") {
+      setIssueDocMenuOpen(false);
+      if (isEdit && reservation?.id) {
+        setDocIssuing(true);
+        try {
+          const result = await createProforma(reservation.id);
+          if (result.success && result.data) {
+            toast.success(`Proforma ${result.data.number} – ${result.data.amount.toFixed(2)} PLN`);
+            window.open(`/api/finance/proforma/${result.data.id}/pdf`, "_blank");
+          } else {
+            toast.error(result.success === false ? result.error : "Błąd wystawiania proformy");
+          }
+        } finally {
+          setDocIssuing(false);
+        }
+      } else if (!isEdit) {
+        proformaAfterCreateRef.current = true;
+        handleSubmit();
+      }
+      return;
+    }
+    if (!reservation?.id) return;
     if (choice === "vat") {
       setDocChoiceResId(reservation.id);
       setDocChoiceGuestName(reservation.guestName);
@@ -706,7 +749,7 @@ export function UnifiedReservationDialog({
     } finally {
       setDocIssuing(false);
     }
-  }, [reservation?.id, reservation?.guestName]);
+  }, [reservation?.id, reservation?.guestName, isEdit, handleSubmit]);
 
   if (isEdit && !reservation) return null;
   if (!isEdit && !createContext) return null;
@@ -904,11 +947,11 @@ export function UnifiedReservationDialog({
                 Towary
               </Button>
             )}
-            {isEdit && reservation && (
+            {(isEdit && reservation) || !isEdit ? (
               <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => setIssueDocMenuOpen(true)}>
                 Wystaw dokument <ChevronDown className="ml-0.5 h-3 w-3 inline" />
               </Button>
-            )}
+            ) : null}
             {isEdit && reservation && (
               <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => {
                 setDayRatesDialogOpen(true);
@@ -1061,8 +1104,8 @@ export function UnifiedReservationDialog({
             <Button variant="secondary" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => handleIssueDoc("posnet")}>
               🧾 Paragon
             </Button>
-            <Button variant="outline" size="sm" className="h-8 text-xs justify-start text-muted-foreground" onClick={() => handleIssueDoc("proforma")}>
-              Proforma (w przygotowaniu)
+            <Button variant="outline" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => handleIssueDoc("proforma")}>
+              Faktura proforma
             </Button>
             <Button variant="outline" size="sm" className="h-8 text-xs justify-start text-muted-foreground" onClick={() => handleIssueDoc("potwierdzenie")}>
               Potwierdzenie rezerwacji (w przygotowaniu)

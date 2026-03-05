@@ -459,7 +459,11 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
         else if (documentType === "CONSOLIDATED_INVOICE") existingMax = await runQuery((o) => tx.consolidatedInvoice.findMany(o));
         else if (documentType === "RECEIPT") existingMax = await runQuery((o) => tx.receipt.findMany(o));
         else if (documentType === "ACCOUNTING_NOTE") existingMax = await runQuery((o) => tx.accountingNote.findMany(o));
-        else if (documentType === "PROFORMA") existingMax = await runQuery((o) => tx.proforma.findMany(o));
+        else if (documentType === "PROFORMA") {
+          const proformaMax = await runQuery((o) => tx.proforma.findMany(o));
+          const invoiceProformaMax = await runQuery((o) => tx.invoice.findMany(o));
+          existingMax = Math.max(proformaMax, invoiceProformaMax);
+        }
 
         const seqStart = config.sequenceStart ?? 1;
         const initialSeq = Math.max(existingMax, seqStart - 1);
@@ -4348,6 +4352,10 @@ export async function createVatInvoice(
     }
 
     const buyerCompany = reservation.company!;
+    const paidAmountDisplay =
+      reservation.paidAmountOverride != null && Number(reservation.paidAmountOverride) >= 0
+        ? Number(reservation.paidAmountOverride)
+        : null;
     const invoice = await prisma.invoice.create({
       data: {
         reservationId,
@@ -4366,6 +4374,7 @@ export async function createVatInvoice(
         buyerCity: buyerCompany.city ?? null,
         notes: options?.notes?.trim() || null,
         paymentMethod: invoicePaymentMethod,
+        customFieldValues: paidAmountDisplay != null ? ({ paidAmountDisplay } as object) : undefined,
       },
     });
     revalidatePath("/finance");
@@ -4413,6 +4422,7 @@ export async function createSalesInvoice(
     notes?: string;
     sourceType?: "MANUAL" | "EVENT" | "VOUCHER";
     sourceId?: string;
+    asProforma?: boolean;
   }
 ): Promise<
   ActionResult<{
@@ -4509,7 +4519,9 @@ export async function createSalesInvoice(
     totalVat = Math.round(totalVat * 100) / 100;
     totalGross = Math.round(totalGross * 100) / 100;
 
-    const numberResult = await generateNextDocumentNumber("INVOICE");
+    const numberResult = await generateNextDocumentNumber(
+      options?.asProforma ? "PROFORMA" : "INVOICE"
+    );
     if (!numberResult.success) return { success: false, error: numberResult.error };
 
     const paymentDays = options?.paymentDays ?? 14;

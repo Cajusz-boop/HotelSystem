@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +22,7 @@ import { createSalesInvoice, type SalesInvoiceLineItem } from "@/app/actions/fin
 import { getAllCompanies } from "@/app/actions/companies";
 import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ChevronDown } from "lucide-react";
 
 type BuyerMode = "company" | "manual";
 
@@ -30,6 +30,12 @@ interface CompanyOption {
   id: string;
   name: string;
   nip: string | null;
+}
+
+type PriceMode = "net" | "gross";
+
+interface LineItemWithMode extends SalesInvoiceLineItem {
+  priceMode?: PriceMode;
 }
 
 export function SalesInvoiceDialog({
@@ -43,14 +49,17 @@ export function SalesInvoiceDialog({
 }) {
   const [buyerMode, setBuyerMode] = useState<BuyerMode>("company");
   const [companyId, setCompanyId] = useState("");
+  const [companySearchQuery, setCompanySearchQuery] = useState("");
+  const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
+  const companyInputRef = useRef<HTMLInputElement>(null);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [nip, setNip] = useState("");
   const [buyerName, setBuyerName] = useState("");
   const [buyerAddress, setBuyerAddress] = useState("");
   const [buyerPostalCode, setBuyerPostalCode] = useState("");
   const [buyerCity, setBuyerCity] = useState("");
-  const [lineItems, setLineItems] = useState<SalesInvoiceLineItem[]>([
-    { description: "", quantity: 1, unit: "szt.", unitPrice: 0, vatRate: 8 },
+  const [lineItems, setLineItems] = useState<LineItemWithMode[]>([
+    { description: "", quantity: 1, unit: "szt.", unitPrice: 0, vatRate: 8, priceMode: "net" },
   ]);
   const [paymentMethod, setPaymentMethod] = useState("TRANSFER");
   const [paymentDays, setPaymentDays] = useState(14);
@@ -76,7 +85,7 @@ export function SalesInvoiceDialog({
   const addLine = () => {
     setLineItems((prev) => [
       ...prev,
-      { description: "", quantity: 1, unit: "szt.", unitPrice: 0, vatRate: 8 },
+      { description: "", quantity: 1, unit: "szt.", unitPrice: 0, vatRate: 8, priceMode: "net" as PriceMode },
     ]);
   };
 
@@ -85,24 +94,53 @@ export function SalesInvoiceDialog({
     setLineItems((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const updateLine = (idx: number, field: keyof SalesInvoiceLineItem, value: string | number) => {
+  const updateLine = (idx: number, field: keyof LineItemWithMode, value: string | number) => {
     setLineItems((prev) =>
-      prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item))
+      prev.map((item, i) => {
+        if (i !== idx) return item;
+        const next = { ...item, [field]: value } as LineItemWithMode;
+        if (field === "priceMode" && typeof value === "string") {
+          const vat = (item.vatRate ?? 8) / 100;
+          const curr = Number(item.unitPrice) || 0;
+          const currentMode = item.priceMode ?? "net";
+          if (value === "gross" && currentMode === "net") {
+            next.unitPrice = Math.round(curr * (1 + vat) * 100) / 100;
+          } else if (value === "net" && currentMode === "gross") {
+            next.unitPrice = curr > 0 ? Math.round((curr / (1 + vat)) * 100) / 100 : 0;
+          }
+        }
+        return next;
+      })
     );
+  };
+
+  const getNetUnitPrice = (li: LineItemWithMode): number => {
+    const vat = (li.vatRate ?? 8) / 100;
+    const val = Number(li.unitPrice) || 0;
+    return li.priceMode === "gross" ? val / (1 + vat) : val;
   };
 
   const totalGross = lineItems.reduce((sum, li) => {
     const qty = Number(li.quantity) || 0;
-    const price = Number(li.unitPrice) || 0;
     const vat = (li.vatRate ?? 8) / 100;
-    return sum + qty * price * (1 + vat);
+    const netPrice = getNetUnitPrice(li);
+    return sum + qty * netPrice * (1 + vat);
   }, 0);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const buildLineItemsForApi = (): SalesInvoiceLineItem[] =>
+    lineItems
+      .filter((li) => li.description?.trim() && Number(li.quantity) > 0 && (Number(li.unitPrice) > 0 || getNetUnitPrice(li) > 0))
+      .map((li) => ({
+        description: li.description,
+        quantity: li.quantity,
+        unit: li.unit,
+        unitPrice: getNetUnitPrice(li),
+        vatRate: li.vatRate,
+      }));
+
+  const handleSubmit = async (e: React.FormEvent, asProforma = false) => {
     e.preventDefault();
-    const filtered = lineItems.filter(
-      (li) => li.description?.trim() && Number(li.quantity) > 0 && Number(li.unitPrice) > 0
-    );
+    const filtered = buildLineItemsForApi();
     if (filtered.length === 0) {
       toast.error("Dodaj co najmniej jedną pozycję z opisem, ilością i ceną.");
       return;
@@ -134,15 +172,19 @@ export function SalesInvoiceDialog({
       };
     }
 
+    const effectivePaymentDays = ["CARD", "BLIK", "CASH"].includes(paymentMethod) ? 0 : paymentDays;
+
     setLoading(true);
     try {
       const result = await createSalesInvoice(buyer, filtered, {
         paymentMethod,
-        paymentDays,
+        paymentDays: effectivePaymentDays,
         notes: notes.trim() || undefined,
+        asProforma,
       });
       if (result.success && result.data) {
-        toast.success(`Faktura ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);
+        const label = asProforma ? "Proforma" : "Faktura";
+        toast.success(`${label} ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);
         onOpenChange(false);
         onSuccess?.();
         if (typeof window !== "undefined") {
@@ -159,12 +201,14 @@ export function SalesInvoiceDialog({
   const resetForm = () => {
     setBuyerMode("company");
     setCompanyId("");
+    setCompanySearchQuery("");
+    setCompanyDropdownOpen(false);
     setNip("");
     setBuyerName("");
     setBuyerAddress("");
     setBuyerPostalCode("");
     setBuyerCity("");
-    setLineItems([{ description: "", quantity: 1, unit: "szt.", unitPrice: 0, vatRate: 8 }]);
+    setLineItems([{ description: "", quantity: 1, unit: "szt.", unitPrice: 0, vatRate: 8, priceMode: "net" }]);
     setPaymentMethod("TRANSFER");
     setPaymentDays(14);
     setNotes("");
@@ -207,20 +251,58 @@ export function SalesInvoiceDialog({
               </label>
             </div>
             {buyerMode === "company" ? (
-              <Select value={companyId} onValueChange={setCompanyId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Wybierz firmę…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {companies
-                    .filter((c) => c.nip)
-                    .map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name} ({c.nip})
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <Input
+                  ref={companyInputRef}
+                  value={companyDropdownOpen || companySearchQuery ? companySearchQuery : (companyId ? (() => {
+                    const c = companies.find((x) => x.id === companyId);
+                    return c ? `${c.name}${c.nip ? ` (${c.nip})` : ""}` : "";
+                  })() : "")}
+                  onChange={(e) => {
+                    setCompanySearchQuery(e.target.value);
+                    setCompanyId("");
+                    setCompanyDropdownOpen(true);
+                  }}
+                  onFocus={() => {
+                    setCompanyDropdownOpen(true);
+                    if (companyId) {
+                      const c = companies.find((x) => x.id === companyId);
+                      setCompanySearchQuery(c ? `${c.name} ${c.nip ?? ""}`.trim() : "");
+                      setCompanyId("");
+                    }
+                  }}
+                  onBlur={() => setTimeout(() => setCompanyDropdownOpen(false), 200)}
+                  placeholder="Wpisz nazwę lub NIP firmy…"
+                  className="pr-8"
+                />
+                <ChevronDown className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50 pointer-events-none" />
+                {companyDropdownOpen && (
+                  <div className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border bg-popover p-1 shadow-lg">
+                    {companies
+                      .filter((c) => c.nip && (!companySearchQuery.trim() || [c.name, c.nip].some((s) => s?.toLowerCase().includes(companySearchQuery.toLowerCase()))))
+                      .slice(0, 50)
+                      .map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setCompanyId(c.id);
+                            setCompanySearchQuery("");
+                            setCompanyDropdownOpen(false);
+                            companyInputRef.current?.blur();
+                          }}
+                        >
+                          {c.name} ({c.nip})
+                        </button>
+                      ))}
+                    {companies.filter((c) => c.nip && (!companySearchQuery.trim() || [c.name, c.nip].some((s) => s?.toLowerCase().includes(companySearchQuery.toLowerCase())))).length === 0 && (
+                      <p className="px-2 py-3 text-sm text-muted-foreground">Brak firm z NIP</p>
+                    )}
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
                 <div>
@@ -288,7 +370,8 @@ export function SalesInvoiceDialog({
                     <th className="p-1.5 text-left font-medium">Opis</th>
                     <th className="p-1.5 w-16 text-right">Ilość</th>
                     <th className="p-1.5 w-14 text-left">j.m.</th>
-                    <th className="p-1.5 w-24 text-right">Cena netto</th>
+                    <th className="p-1.5 w-20 text-right">Typ ceny</th>
+                    <th className="p-1.5 w-24 text-right">Kwota</th>
                     <th className="p-1.5 w-14 text-right">VAT %</th>
                     <th className="p-1.5 w-8" />
                   </tr>
@@ -324,6 +407,16 @@ export function SalesInvoiceDialog({
                         />
                       </td>
                       <td className="p-1.5">
+                        <select
+                          value={li.priceMode ?? "net"}
+                          onChange={(e) => updateLine(idx, "priceMode", e.target.value as PriceMode)}
+                          className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                          <option value="net">Netto</option>
+                          <option value="gross">Brutto</option>
+                        </select>
+                      </td>
+                      <td className="p-1.5">
                         <Input
                           type="number"
                           min={0}
@@ -333,20 +426,21 @@ export function SalesInvoiceDialog({
                             updateLine(idx, "unitPrice", parseFloat(e.target.value) || 0)
                           }
                           className="h-8 text-right"
+                          placeholder={li.priceMode === "gross" ? "Brutto" : "Netto"}
                         />
                       </td>
                       <td className="p-1.5">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={1}
-                          value={li.vatRate ?? 8}
+                        <select
+                          value={[5, 8, 23].includes(Number(li.vatRate)) ? Number(li.vatRate) : 8}
                           onChange={(e) =>
                             updateLine(idx, "vatRate", parseFloat(e.target.value) || 8)
                           }
-                          className="h-8 text-right"
-                        />
+                          className="h-8 w-full min-w-[4rem] rounded-md border border-input bg-background px-2 text-right text-sm"
+                        >
+                          <option value={5}>5%</option>
+                          <option value={8}>8%</option>
+                          <option value={23}>23%</option>
+                        </select>
                       </td>
                       <td className="p-1.5">
                         <Button
@@ -386,16 +480,18 @@ export function SalesInvoiceDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label htmlFor="paymentDays">Termin płatności (dni)</Label>
-              <Input
-                id="paymentDays"
-                type="number"
-                min={1}
-                value={paymentDays}
-                onChange={(e) => setPaymentDays(parseInt(e.target.value, 10) || 14)}
-              />
-            </div>
+            {!["CARD", "BLIK", "CASH"].includes(paymentMethod) && (
+              <div>
+                <Label htmlFor="paymentDays">Termin płatności (dni)</Label>
+                <Input
+                  id="paymentDays"
+                  type="number"
+                  min={1}
+                  value={paymentDays}
+                  onChange={(e) => setPaymentDays(parseInt(e.target.value, 10) || 14)}
+                />
+              </div>
+            )}
           </div>
           <div>
             <Label htmlFor="notes">Uwagi (opcjonalnie)</Label>
@@ -411,6 +507,14 @@ export function SalesInvoiceDialog({
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Anuluj
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={loading}
+              onClick={(e) => handleSubmit(e as unknown as React.FormEvent, true)}
+            >
+              {loading ? "Wystawianie…" : "Proforma faktura"}
             </Button>
             <Button type="submit" disabled={loading}>
               {loading ? "Wystawianie…" : "Wystaw fakturę"}

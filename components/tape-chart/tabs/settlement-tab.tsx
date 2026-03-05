@@ -245,6 +245,8 @@ export interface SettlementTabFormState {
   advanceAmount: string;
   /** Faktura: jedna linia „Usługa hotelowa” z całą sumą (nocleg + gastronomia + inne) */
   invoiceSingleLine: boolean;
+  /** Nadpisana kwota wpłat (widoczna na fakturze) – puste = użyj sumy z transakcji */
+  paidAmountOverride: string;
 }
 
 interface SettlementTabProps {
@@ -568,6 +570,10 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
 
   /** Lewa kolumna: tylko formularz w 4 sekcjach (KWHotel) */
   if (layout === "form") {
+    const roomTotalForm = (totalAmount ?? 0) || roomChargesFromTx;
+    const naliczono = roomTotalForm + mealsAmount + otherChargesAmount + localTaxAmount;
+    const effectivePaid = form.paidAmountOverride.trim() ? (parseFloat(form.paidAmountOverride) || totalPaid) : totalPaid;
+    const pozostalo = naliczono - effectivePaid;
     const sectionHeader = "text-xs font-medium uppercase tracking-wider text-gray-500 border-b border-gray-100 pb-1.5 mb-2";
     const _selectedRoomData = rooms.find((r) => r.number === form.room);
     const filteredRooms = filteredRoomsByType;
@@ -924,7 +930,8 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   if (layout === "rozliczenie") {
     const roomTotal = (totalAmount ?? 0) || roomChargesFromTx;
     const naliczono = roomTotal + mealsAmount + otherChargesAmount + localTaxAmount;
-    const pozostalo = naliczono - totalPaid;
+    const effectivePaidRozl = form.paidAmountOverride.trim() ? (parseFloat(form.paidAmountOverride) || totalPaid) : totalPaid;
+    const pozostalo = naliczono - effectivePaidRozl;
     const adultsNum = parseInt(form.adults, 10) || 0;
     const child1 = parseInt(form.children, 10) || 0;
     const child2 = 0;
@@ -942,7 +949,23 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
         <div className="rounded border bg-muted/20 p-3 text-xs space-y-1">
           <h3 className="font-semibold text-muted-foreground border-b pb-1 mb-1">Podsumowanie salda</h3>
           <div className="flex justify-between"><span>Do zapłaty (naliczono)</span><span className="tabular-nums">{naliczono.toFixed(2)} PLN</span></div>
-          <div className="flex justify-between"><span>Zapłacono</span><span className="tabular-nums">{totalPaid.toFixed(2)} PLN</span></div>
+          <div className="flex justify-between items-center gap-2">
+            <span>Zapłacono</span>
+            {isEdit && reservation?.id ? (
+              <Input
+                type="number"
+                min={0}
+                step={0.01}
+                className="h-6 w-20 text-right text-xs tabular-nums"
+                value={form.paidAmountOverride !== "" ? form.paidAmountOverride : totalPaid.toFixed(2)}
+                onChange={(e) => onFormChange({ paidAmountOverride: e.target.value })}
+                placeholder={totalPaid.toFixed(2)}
+                title="Edytuj kwotę wpłat (widoczna na fakturze)"
+              />
+            ) : (
+              <span className="tabular-nums">{effectivePaidRozl.toFixed(2)} PLN</span>
+            )}
+          </div>
           <div className="flex justify-between font-bold border-t pt-1 mt-1"><span>Saldo</span><span className="tabular-nums">{pozostalo >= 0 ? `${pozostalo.toFixed(2)} PLN` : `(${Math.abs(pozostalo).toFixed(2)}) PLN`}</span></div>
           {folioSummaries.length > 1 && (
             <div className="mt-2 pt-2 border-t border-border/50 space-y-0.5">
@@ -1117,7 +1140,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
 
         {/* Podsumowanie kosztów (KWHotel) */}
         <div className="rounded border bg-muted/10 p-3 text-xs space-y-1">
-          <div className="flex justify-between"><span>Cena za noclegi</span><span className="tabular-nums">{roomTotal.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span>Cena za noclegi</span><span className="tabular-nums">{roomTotalForm.toFixed(2)}</span></div>
           <div className="flex justify-between"><span>Cena za posiłki</span><span className="tabular-nums">{mealsAmount.toFixed(2)}</span></div>
           <div className="flex justify-between"><span>Dodatkowe towary i usługi</span><span className="tabular-nums">{otherChargesAmount.toFixed(2)}</span></div>
           <div className="flex justify-between items-center gap-2">
@@ -1143,7 +1166,23 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
           <div className="border-t pt-1 mt-1" />
           <div className="flex justify-between font-medium"><span>Naliczono</span><span className="tabular-nums">{naliczono.toFixed(2)}</span></div>
           <div className="flex justify-between"><span>Kwota do zapłaty</span><span className="tabular-nums">{naliczono.toFixed(2)}</span></div>
-          <div className="flex justify-between"><span>Wpłaty</span><span className="tabular-nums">{totalPaid.toFixed(2)}</span></div>
+          <div className="flex justify-between items-center gap-2">
+            <span>Wpłaty</span>
+            {isEdit && reservation?.id ? (
+              <Input
+                type="number"
+                min={0}
+                step={0.01}
+                className="h-6 w-20 text-right text-xs tabular-nums"
+                value={form.paidAmountOverride !== "" ? form.paidAmountOverride : totalPaid.toFixed(2)}
+                onChange={(e) => onFormChange({ paidAmountOverride: e.target.value })}
+                placeholder={totalPaid.toFixed(2)}
+                title="Edytuj kwotę wpłat (widoczna na fakturze)"
+              />
+            ) : (
+              <span className="tabular-nums">{totalPaid.toFixed(2)}</span>
+            )}
+          </div>
           <div className="border-t pt-1 mt-1" />
           <div className="flex justify-between font-bold text-sm"><span>POZOSTAŁO DO ZAPŁATY</span><span className="tabular-nums">{Math.max(0, pozostalo).toFixed(2)} PLN</span></div>
         </div>

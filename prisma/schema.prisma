@@ -747,6 +747,8 @@ model Reservation {
   digitalKeyCode Json?        // cyfrowy klucz do drzwi { code, validFrom, validTo, generatedAt }
   /** Gdy true: faktura pokazuje jedną linię „Usługa hotelowa” z całą sumą (nocleg + gastronomia + inne) */
   invoiceSingleLine Boolean   @default(true)
+  /** Nadpisana kwota wpłat (widoczna na fakturze) – gdy null, używana suma z transakcji */
+  paidAmountOverride Decimal? @db.Decimal(12, 2)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 

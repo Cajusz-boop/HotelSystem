@@ -504,6 +504,7 @@ export async function getReservationEditData(
   extraStatus: string | null;
   advanceDueDate: string | null;
   invoiceSingleLine: boolean;
+  paidAmountOverride: number | null;
   isInClosedPeriod: boolean;
   canEditClosedPeriod: boolean;
 }>> {
@@ -515,6 +516,7 @@ export async function getReservationEditData(
         checkIn: true,
         checkOut: true,
         invoiceSingleLine: true,
+        paidAmountOverride: true,
         source: true,
         channel: true,
         mealPlan: true,
@@ -563,6 +565,7 @@ export async function getReservationEditData(
         extraStatus: res.extraStatus ?? null,
         advanceDueDate: res.advanceDueDate ? res.advanceDueDate.toISOString().slice(0, 10) : null,
         invoiceSingleLine: res.invoiceSingleLine ?? true,
+        paidAmountOverride: res.paidAmountOverride != null ? Number(res.paidAmountOverride) : null,
         isInClosedPeriod,
         canEditClosedPeriod,
       },
@@ -2868,6 +2871,10 @@ export async function updateReservation(
     if (input.advanceDueDate !== undefined) (data as Record<string, unknown>).advanceDueDate = input.advanceDueDate ? new Date(input.advanceDueDate) : null;
     if ((input as { invoiceSingleLine?: boolean }).invoiceSingleLine !== undefined) {
       (data as Record<string, unknown>).invoiceSingleLine = (input as { invoiceSingleLine?: boolean }).invoiceSingleLine;
+    }
+    if ((input as { paidAmountOverride?: number | null }).paidAmountOverride !== undefined) {
+      const v = (input as { paidAmountOverride?: number | null }).paidAmountOverride;
+      (data as Record<string, unknown>).paidAmountOverride = v != null && v >= 0 ? v : null;
     }
 
     // Firma / NIP (dla faktury VAT)
