@@ -90,6 +90,8 @@ export default function CennikPage() {
   const [newCodeCode, setNewCodeCode] = useState("");
   const [newCodeName, setNewCodeName] = useState("");
   const [newCodePrice, setNewCodePrice] = useState("");
+  const [newCodeBasePrice, setNewCodeBasePrice] = useState("");
+  const [newCodePricePerPerson, setNewCodePricePerPerson] = useState("");
   const [addingCode, setAddingCode] = useState(false);
   const [cennikConfig, setCennikConfig] = useState<CennikConfigForUi | null>(null);
   const [configCurrency, setConfigCurrency] = useState("PLN");
@@ -187,18 +189,30 @@ export default function CennikPage() {
       return;
     }
     const price = newCodePrice.trim() ? parseFloat(newCodePrice.replace(",", ".")) : undefined;
+    const basePrice = newCodeBasePrice.trim() ? parseFloat(newCodeBasePrice.replace(",", ".")) : undefined;
+    const pricePerPerson = newCodePricePerPerson.trim() ? parseFloat(newCodePricePerPerson.replace(",", ".")) : undefined;
     if (price !== undefined && (Number.isNaN(price) || price < 0)) {
       toast.error("Cena musi być liczbą nieujemną.");
       return;
     }
+    if (basePrice !== undefined && (Number.isNaN(basePrice) || basePrice < 0)) {
+      toast.error("Cena bazowa musi być liczbą nieujemną.");
+      return;
+    }
+    if (pricePerPerson !== undefined && (Number.isNaN(pricePerPerson) || pricePerPerson < 0)) {
+      toast.error("Cena za osobę musi być liczbą nieujemną.");
+      return;
+    }
     setAddingCode(true);
-    const result = await createRateCode({ code, name, price });
+    const result = await createRateCode({ code, name, price, basePrice, pricePerPerson });
     setAddingCode(false);
     if (result.success && result.data) {
       setRateCodes((prev) => [...prev, result.data!]);
       setNewCodeCode("");
       setNewCodeName("");
       setNewCodePrice("");
+      setNewCodeBasePrice("");
+      setNewCodePricePerPerson("");
       toast.success("Kod stawki dodany.");
     } else {
       toast.error("error" in result ? result.error : "Błąd dodawania kodu stawki");
@@ -708,7 +722,7 @@ export default function CennikPage() {
       <div className="rounded-lg border bg-card p-4 print:hidden">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
           <Tag className="h-4 w-4" />
-          Kody stawek (BB, RO, Net…)
+          Kody stawek (BB, RO, Stały, Weselny…)
         </h2>
         {rateCodes.length > 0 && (
           <div className="mb-3 overflow-x-auto">
@@ -717,7 +731,7 @@ export default function CennikPage() {
                 <tr className="border-b">
                   <th className="py-1 font-medium">Kod</th>
                   <th className="py-1 font-medium">Nazwa</th>
-                  <th className="py-1 font-medium">Cena (PLN/dobę)</th>
+                  <th className="py-1 font-medium">Cena / wzór (PLN/dobę)</th>
                   <th className="w-10" />
                 </tr>
               </thead>
@@ -726,7 +740,13 @@ export default function CennikPage() {
                   <tr key={c.id} className="border-b last:border-0">
                     <td className="py-1 font-medium">{c.code}</td>
                     <td className="py-1">{c.name}</td>
-                    <td className="py-1">{c.price != null ? c.price.toFixed(2) : "–"}</td>
+                    <td className="py-1">
+                      {c.basePrice != null && c.pricePerPerson != null
+                        ? `${c.basePrice} + ${c.pricePerPerson}×osoby`
+                        : c.price != null
+                          ? c.price.toFixed(2)
+                          : "–"}
+                    </td>
                     <td className="py-1">
                       <Button
                         type="button"
@@ -746,14 +766,14 @@ export default function CennikPage() {
         )}
         <form onSubmit={handleAddRateCode} className="flex flex-wrap items-end gap-2">
           <Input
-            placeholder="Kod (np. BB)"
+            placeholder="Kod (np. STALY)"
             value={newCodeCode}
             onChange={(e) => setNewCodeCode(e.target.value.toUpperCase())}
             className="w-24"
             maxLength={10}
           />
           <Input
-            placeholder="Nazwa (np. Śniadanie)"
+            placeholder="Nazwa (np. Gość stały)"
             value={newCodeName}
             onChange={(e) => setNewCodeName(e.target.value)}
             className="w-40"
@@ -761,10 +781,30 @@ export default function CennikPage() {
           <Input
             type="text"
             inputMode="decimal"
-            placeholder="Cena (opcjonalnie)"
+            placeholder="Cena stała (opcjonalnie)"
             value={newCodePrice}
             onChange={(e) => setNewCodePrice(e.target.value)}
             className="w-24"
+            title="Stała cena za dobę – gdy brak wzoru"
+          />
+          <span className="text-muted-foreground text-xs">lub wzór:</span>
+          <Input
+            type="text"
+            inputMode="decimal"
+            placeholder="Baza (np. 185)"
+            value={newCodeBasePrice}
+            onChange={(e) => setNewCodeBasePrice(e.target.value)}
+            className="w-20"
+            title="Cena bazowa (np. 185 + 50×osoby)"
+          />
+          <Input
+            type="text"
+            inputMode="decimal"
+            placeholder="Za osobę (np. 50)"
+            value={newCodePricePerPerson}
+            onChange={(e) => setNewCodePricePerPerson(e.target.value)}
+            className="w-24"
+            title="Dopłata za osobę (basePrice + pricePerPerson × pax)"
           />
           <Button type="submit" size="sm" disabled={addingCode}>
             {addingCode ? "…" : "Dodaj"}

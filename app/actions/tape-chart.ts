@@ -1,6 +1,7 @@
 "use server";
 
 import { ReservationStatus } from "@prisma/client";
+import { computeRateCodePricePerNight } from "@/app/actions/rate-codes";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getEffectivePropertyId, getPropertyReservationColors } from "@/app/actions/properties";
@@ -150,7 +151,21 @@ function mapReservationToTapeChart(r: {
     rateCodeId: r.rateCode?.id ?? undefined,
     rateCode: r.rateCode?.code ?? undefined,
     rateCodeName: r.rateCode?.name ?? undefined,
-    rateCodePrice: r.rateCodePrice != null ? Number(r.rateCodePrice) : (r.rateCode?.price != null ? Number(r.rateCode.price) : undefined),
+    rateCodePrice: (() => {
+      if (r.rateCodePrice != null) return Number(r.rateCodePrice);
+      if (r.rateCode) {
+        const pax = Math.max(1, (r.adults ?? 0) + (r.children ?? 0) || r.pax ?? 1);
+        return computeRateCodePricePerNight(
+          {
+            price: r.rateCode.price != null ? Number(r.rateCode.price) : null,
+            basePrice: r.rateCode.basePrice != null ? Number(r.rateCode.basePrice) : null,
+            pricePerPerson: r.rateCode.pricePerPerson != null ? Number(r.rateCode.pricePerPerson) : null,
+          },
+          pax
+        ) ?? undefined;
+      }
+      return undefined;
+    })(),
     groupId: r.group?.id ?? undefined,
     groupName: r.group?.name ?? undefined,
     parkingSpotId: firstParking?.parkingSpotId ?? undefined,
@@ -242,7 +257,7 @@ async function fetchTapeChartDataUncached(
         include: {
           guest: { select: { name: true, isBlacklisted: true } },
           room: { select: { number: true } },
-          rateCode: { select: { id: true, code: true, name: true, price: true } },
+          rateCode: { select: { id: true, code: true, name: true, price: true, basePrice: true, pricePerPerson: true } },
           group: { select: { id: true, name: true } },
           parkingBookings: { take: 1, include: { parkingSpot: { select: { number: true } } } },
         },

@@ -638,12 +638,14 @@ model TravelAgent {
 }
 
 model RateCode {
-  id        String   @id @default(cuid())
-  code      String   @unique  // np. "BB", "RO", "NET"
-  name      String   // np. "Śniadanie", "Tylko nocleg"
-  price     Decimal? @db.Decimal(10, 2)  // cena za dobę przy tej stawce (opcjonalnie – może nadpisywać cenę pokoju)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(cuid())
+  code           String   @unique  // np. "BB", "RO", "NET", "STALY", "WESELNY"
+  name           String   // np. "Śniadanie", "Gość stały"
+  price          Decimal? @db.Decimal(10, 2)  // stała cena za dobę (gdy bez wzoru)
+  basePrice      Decimal? @db.Decimal(10, 2)  // wzór: basePrice + pricePerPerson × pax (np. 185 + 50×osoby)
+  pricePerPerson Decimal? @db.Decimal(10, 2)  // dopłata za osobę przy wzorze
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
   reservations Reservation[]
   corporateContracts CorporateContract[]
   travelAgents TravelAgent[]  // agenci korzystający z tego kodu

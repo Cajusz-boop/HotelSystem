@@ -1,5 +1,5 @@
 {
-  "_exportedAt": "2026-03-05T14:47:58.065Z",
+  "_exportedAt": "2026-03-05T14:57:46.873Z",
   "_description": "Snapshot konfiguracji bazy. Generowany przez: npm run db:config:export",
   "hotelConfig": {
     "id": "default",

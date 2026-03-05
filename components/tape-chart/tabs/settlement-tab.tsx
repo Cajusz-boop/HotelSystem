@@ -10,6 +10,7 @@ import { type FolioBillTo } from "@/lib/finance-constants";
 import { searchCompanies } from "@/app/actions/companies";
 import type { Reservation } from "@/lib/tape-chart-types";
 import type { RateCodeForUi } from "@/app/actions/rate-codes";
+import { computeRateCodePricePerNight } from "@/app/actions/rate-codes";
 import { toast } from "sonner";
 import { SplitSquareVertical, User, Building2, Plus, ArrowRightLeft, Percent, Banknote, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { AddChargeDialog } from "@/components/add-charge-dialog";
@@ -380,8 +381,13 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   }, [rooms]);
   const dateError = form.checkIn && form.checkOut && nights <= 0;
   const priceFromForm = form.rateCodePrice.trim() ? parseFloat(form.rateCodePrice) : null;
+  const paxForRate = Math.max(1, (parseInt(form.adults || "1", 10) || 1) + (parseInt(form.children || "0", 10) || 0));
+  const selectedRateCode = rateCodes.find((r) => r.id === form.rateCodeId);
+  const priceFromRateCode = selectedRateCode
+    ? computeRateCodePricePerNight(selectedRateCode, paxForRate)
+    : null;
   const priceFromRate = effectivePricePerNight
-    ?? rateCodes.find((r) => r.id === form.rateCodeId)?.price
+    ?? priceFromRateCode
     ?? rooms.find((r) => r.number === form.room)?.price;
   const pricePerNight = (priceFromForm != null && !Number.isNaN(priceFromForm) && priceFromForm > 0)
     ? priceFromForm
@@ -449,6 +455,20 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   const [voidItemReason, setVoidItemReason] = useState("");
   const [overridePriceInput, setOverridePriceInput] = useState("");
   const [overridePriceLoading, setOverridePriceLoading] = useState(false);
+
+  // Aktualizuj rateCodePrice przy zmianie liczby osób – gdy wybrany kod ma wzór (basePrice + pricePerPerson × pax)
+  useEffect(() => {
+    if (!form.rateCodeId) return;
+    const c = rateCodes.find((r) => r.id === form.rateCodeId);
+    if (!c || c.basePrice == null || c.pricePerPerson == null) return;
+    const pax = Math.max(1, (parseInt(form.adults || "1", 10) || 1) + (parseInt(form.children || "0", 10) || 0));
+    const computed = computeRateCodePricePerNight(c, pax);
+    if (computed == null) return;
+    const current = form.rateCodePrice.trim() ? parseFloat(form.rateCodePrice) : null;
+    if (current == null || Math.abs(current - computed) >= 0.01) {
+      onFormChange({ rateCodePrice: String(computed) });
+    }
+  }, [form.rateCodeId, form.adults, form.children, form.rateCodePrice, rateCodes, onFormChange]);
 
   // Load edit-mode data
   useEffect(() => {
@@ -675,7 +695,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
               {parkingSpots.map((s) => <option key={s.id} value={s.id}>{s.number}</option>)}
             </select>
             <Label className="text-xs text-muted-foreground text-right">Stawka</Label>
-            <select id="uni-rateCode" value={form.rateCodeId} onChange={(e) => onFormChange({ rateCodeId: e.target.value })} className={selectClass}>
+            <select id="uni-rateCode" value={form.rateCodeId} onChange={(e) => { const c = rateCodes.find((r) => r.id === e.target.value); const computed = c ? computeRateCodePricePerNight(c, paxForRate) : null; onFormChange({ rateCodeId: e.target.value, rateCodePrice: computed != null ? String(computed) : "" }); }} className={selectClass}>
               <option value="">— brak —</option>
               {rateCodes.map((c) => <option key={c.id} value={c.id}>{c.code} – {c.name}</option>)}
             </select>
@@ -1040,9 +1060,13 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
           {billingMode === "plan" && (
             <div className="mt-2 pt-2 border-t border-border/50">
               <Label className="text-xs text-muted-foreground">Stawka (cennik)</Label>
-              <select value={form.rateCodeId} onChange={(e) => { const c = rateCodes.find((r) => r.id === e.target.value); onFormChange({ rateCodeId: e.target.value, rateCodePrice: c?.price != null ? String(c.price) : "" }); }} className={selectClass}>
+              <select value={form.rateCodeId} onChange={(e) => { const c = rateCodes.find((r) => r.id === e.target.value); const computed = c ? computeRateCodePricePerNight(c, paxForRate) : null; onFormChange({ rateCodeId: e.target.value, rateCodePrice: computed != null ? String(computed) : "" }); }} className={selectClass}>
                 <option value="">— wybierz —</option>
-                {rateCodes.map((c) => <option key={c.id} value={c.id}>{c.code} – {c.name}{c.price != null ? ` (${c.price.toFixed(2)} PLN)` : ""}</option>)}
+                {rateCodes.map((c) => {
+                  const samplePrice = computeRateCodePricePerNight(c, 2);
+                  const label = samplePrice != null ? ` (np. 2 os: ${samplePrice.toFixed(0)} PLN)` : (c.price != null ? ` (${c.price.toFixed(2)} PLN)` : "");
+                  return <option key={c.id} value={c.id}>{c.code} – {c.name}{label}</option>;
+                })}
               </select>
             </div>
           )}
@@ -1056,13 +1080,17 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
           <summary className="cursor-pointer px-2 py-1.5 font-medium text-muted-foreground hover:text-foreground">▶ Rozwiń cennik (klik)</summary>
           <div className="border-t px-2 py-1.5 space-y-0.5">
             {rateCodes.length > 0 ? (
-              rateCodes.map((c) => (
-                <button key={c.id} type="button" className="w-full flex justify-between items-center text-left px-1.5 py-0.5 rounded hover:bg-muted/50"
-                  onClick={() => { onFormChange({ rateCodeId: c.id, rateCodePrice: c.price != null ? String(c.price) : "" }); priceInputRef.current?.focus(); }}>
-                  <span>{c.code} – {c.name}</span>
-                  <span className="tabular-nums text-muted-foreground">{c.price != null ? `${c.price.toFixed(2)} PLN` : "—"}</span>
-                </button>
-              ))
+              rateCodes.map((c) => {
+                const computed = computeRateCodePricePerNight(c, paxForRate);
+                const priceLabel = computed != null ? `${computed.toFixed(2)} PLN` : (c.basePrice != null && c.pricePerPerson != null ? `${c.basePrice}+${c.pricePerPerson}×os` : "—");
+                return (
+                  <button key={c.id} type="button" className="w-full flex justify-between items-center text-left px-1.5 py-0.5 rounded hover:bg-muted/50"
+                    onClick={() => { onFormChange({ rateCodeId: c.id, rateCodePrice: computed != null ? String(computed) : "" }); priceInputRef.current?.focus(); }}>
+                    <span>{c.code} – {c.name}</span>
+                    <span className="tabular-nums text-muted-foreground">{priceLabel}</span>
+                  </button>
+                );
+              })
             ) : fallbackPricesFromRooms.length > 0 ? (
               fallbackPricesFromRooms.map((f) => (
                 <button key={f.key} type="button" className="w-full flex justify-between items-center text-left px-1.5 py-0.5 rounded hover:bg-muted/50"
@@ -1715,7 +1743,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
           </select>
 
           <Label className="text-xs text-right text-muted-foreground">💰 Stawka</Label>
-          <select id="uni-rateCode" value={form.rateCodeId} onChange={(e) => onFormChange({ rateCodeId: e.target.value })} className={selectClass}>
+          <select id="uni-rateCode" value={form.rateCodeId} onChange={(e) => { const c = rateCodes.find((r) => r.id === e.target.value); const computed = c ? computeRateCodePricePerNight(c, paxForRate) : null; onFormChange({ rateCodeId: e.target.value, rateCodePrice: computed != null ? String(computed) : "" }); }} className={selectClass}>
             <option value="">— brak —</option>
             {rateCodes.map((c) => <option key={c.id} value={c.id}>{c.code} – {c.name}</option>)}
           </select>
@@ -2070,23 +2098,27 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
           </summary>
           <div className="border-t px-2 py-1.5 space-y-0.5">
             {rateCodes.length > 0 ? (
-              rateCodes.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className="w-full flex justify-between items-center text-left px-1.5 py-0.5 rounded hover:bg-muted/50"
-                  onClick={() => {
-                    onFormChange({
-                      rateCodeId: c.id,
-                      rateCodePrice: c.price != null ? String(c.price) : "",
-                    });
-                    priceInputRef.current?.focus();
-                  }}
-                >
-                  <span>{c.code} – {c.name}</span>
-                  <span className="tabular-nums text-muted-foreground">{c.price != null ? `${c.price.toFixed(2)} PLN` : "—"}</span>
-                </button>
-              ))
+              rateCodes.map((c) => {
+                const computed = computeRateCodePricePerNight(c, paxForRate);
+                const priceLabel = computed != null ? `${computed.toFixed(2)} PLN` : (c.basePrice != null && c.pricePerPerson != null ? `${c.basePrice}+${c.pricePerPerson}×os` : "—");
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="w-full flex justify-between items-center text-left px-1.5 py-0.5 rounded hover:bg-muted/50"
+                    onClick={() => {
+                      onFormChange({
+                        rateCodeId: c.id,
+                        rateCodePrice: computed != null ? String(computed) : "",
+                      });
+                      priceInputRef.current?.focus();
+                    }}
+                  >
+                    <span>{c.code} – {c.name}</span>
+                    <span className="tabular-nums text-muted-foreground">{priceLabel}</span>
+                  </button>
+                );
+              })
             ) : fallbackPricesFromRooms.length > 0 ? (
               fallbackPricesFromRooms.map((f) => (
                 <button

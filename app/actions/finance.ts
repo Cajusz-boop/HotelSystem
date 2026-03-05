@@ -34,6 +34,7 @@ import { getSession } from "@/lib/auth";
 import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { can } from "@/lib/permissions";
 import { getEffectivePricesBatch } from "@/app/actions/rooms";
+import { computeRateCodePricePerNight } from "@/app/actions/rate-codes";
 import {
   VALID_PAYMENT_METHODS,
   type PaymentMethod,
@@ -3629,7 +3630,7 @@ export async function postRoomChargeOnCheckout(
   try {
     const reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
-      include: { room: true },
+      include: { room: true, rateCode: true },
     });
     if (!reservation) return { success: false, error: "Rezerwacja nie istnieje" };
 
@@ -3669,8 +3670,21 @@ export async function postRoomChargeOnCheckout(
       savedDayRates.map((r) => [r.date.toISOString().slice(0, 10), Number(r.rate)])
     );
 
-    // 2. Ręcznie nadpisana cena za dobę (rateCodePrice) - drugi priorytet
-    const manualPricePerNight = reservation.rateCodePrice != null ? Number(reservation.rateCodePrice) : null;
+    // 2. Ręcznie nadpisana cena za dobę (rateCodePrice) lub wzór rateCode - drugi priorytet
+    let manualPricePerNight: number | null =
+      reservation.rateCodePrice != null ? Number(reservation.rateCodePrice) : null;
+    if (manualPricePerNight == null && reservation.rateCode && reservation.rateCodeId) {
+      const pax = Math.max(1, (reservation.adults ?? 0) + (reservation.children ?? 0) || reservation.pax ?? 1);
+      const rc = reservation.rateCode;
+      manualPricePerNight = computeRateCodePricePerNight(
+        {
+          price: rc.price != null ? Number(rc.price) : null,
+          basePrice: rc.basePrice != null ? Number(rc.basePrice) : null,
+          pricePerPerson: rc.pricePerPerson != null ? Number(rc.pricePerPerson) : null,
+        },
+        pax
+      );
+    }
 
     // 3. Cennik pokoju (getEffectivePricesBatch) - trzeci priorytet (fallback)
     const priceMap = await getEffectivePricesBatch(
@@ -3858,7 +3872,7 @@ export async function syncRoomChargeToReservationPrice(
 
     const reservation = await prisma.reservation.findUnique({
       where: { id: reservationId },
-      include: { room: true },
+      include: { room: true, rateCode: true },
     });
     if (!reservation || !reservation.room) {
       return { success: true, data: { updated: false } };
@@ -3886,7 +3900,20 @@ export async function syncRoomChargeToReservationPrice(
     const dayRateMap = new Map(
       savedDayRates.map((r) => [r.date.toISOString().slice(0, 10), Number(r.rate)])
     );
-    const manualPricePerNight = reservation.rateCodePrice != null ? Number(reservation.rateCodePrice) : null;
+    let manualPricePerNight: number | null =
+      reservation.rateCodePrice != null ? Number(reservation.rateCodePrice) : null;
+    if (manualPricePerNight == null && reservation.rateCode && reservation.rateCodeId) {
+      const pax = Math.max(1, (reservation.adults ?? 0) + (reservation.children ?? 0) || reservation.pax ?? 1);
+      const rc = reservation.rateCode;
+      manualPricePerNight = computeRateCodePricePerNight(
+        {
+          price: rc.price != null ? Number(rc.price) : null,
+          basePrice: rc.basePrice != null ? Number(rc.basePrice) : null,
+          pricePerPerson: rc.pricePerPerson != null ? Number(rc.pricePerPerson) : null,
+        },
+        pax
+      );
+    }
     const priceMap = await getEffectivePricesBatch(
       dateStrs.map((dateStr) => ({ roomNumber, dateStr }))
     );

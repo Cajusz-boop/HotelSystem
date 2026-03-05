@@ -24,6 +24,7 @@ import {
   deleteParkingBookingsByReservation,
 } from "@/app/actions/parking";
 import { postRoomChargeOnCheckout, chargeLocalTax, createVatInvoice, syncRoomChargeToReservationPrice } from "@/app/actions/finance";
+import { computeRateCodePricePerNight } from "@/app/actions/rate-codes";
 import { blockRoomExtensionAfterCheckout } from "@/lib/telephony";
 import { generateRoomAccessCode } from "@/app/actions/digital-keys";
 import { sendWelcomeToTv } from "@/lib/hotel-tv";
@@ -127,7 +128,7 @@ function toUiReservation(r: {
   notes?: string | null;
   internalNotes?: string | null;
   specialRequests?: string | null;
-  rateCode?: { id: string; code: string; name: string; price: unknown } | null;
+  rateCode?: { id: string; code: string; name: string; price?: unknown; basePrice?: unknown; pricePerPerson?: unknown } | null;
   rateCodePrice?: unknown; // Decimal | null – nadpisanie ceny za dobę
   parkingBookings?: Array<{ parkingSpotId: string; parkingSpot: { number: string } }>;
   group?: { id: string; name: string | null } | null;
@@ -176,7 +177,21 @@ function toUiReservation(r: {
     rateCodeId: r.rateCode?.id ?? undefined,
     rateCode: r.rateCode?.code ?? undefined,
     rateCodeName: r.rateCode?.name ?? undefined,
-    rateCodePrice: r.rateCodePrice != null ? Number(r.rateCodePrice) : (r.rateCode?.price != null ? Number(r.rateCode.price) : undefined),
+    rateCodePrice: (() => {
+      if (r.rateCodePrice != null) return Number(r.rateCodePrice);
+      if (r.rateCode) {
+        const pax = Math.max(1, (r.adults ?? 0) + (r.children ?? 0) || r.pax ?? 1);
+        return computeRateCodePricePerNight(
+          {
+            price: r.rateCode.price != null ? Number(r.rateCode.price) : null,
+            basePrice: r.rateCode.basePrice != null ? Number(r.rateCode.basePrice) : null,
+            pricePerPerson: r.rateCode.pricePerPerson != null ? Number(r.rateCode.pricePerPerson) : null,
+          },
+          pax
+        ) ?? undefined;
+      }
+      return undefined;
+    })(),
     groupId: r.group?.id ?? undefined,
     groupName: r.group?.name ?? undefined,
     parkingSpotId: firstParking?.parkingSpotId ?? undefined,
@@ -4101,9 +4116,20 @@ export async function generateReservationVoucher(
       },
       payment: includePrice
         ? {
-            totalPrice: reservation.rateCode?.price
-              ? Number(reservation.rateCode.price) * nights
-              : undefined,
+            totalPrice: (() => {
+              const rc = reservation.rateCode;
+              if (!rc) return undefined;
+              const pax = Math.max(1, (reservation.adults ?? 0) + (reservation.children ?? 0) || reservation.pax ?? 1);
+              const pricePerNight = computeRateCodePricePerNight(
+                {
+                  price: rc.price != null ? Number(rc.price) : null,
+                  basePrice: rc.basePrice != null ? Number(rc.basePrice) : null,
+                  pricePerPerson: rc.pricePerPerson != null ? Number(rc.pricePerPerson) : null,
+                },
+                pax
+              );
+              return pricePerNight != null ? pricePerNight * nights : undefined;
+            })(),
             currency: "PLN",
             paymentStatus: reservation.paymentStatus ?? undefined,
             advancePayment: advancePayment
@@ -5263,8 +5289,17 @@ export async function createWalkIn(
 
     // Oblicz szacunkową cenę
     let totalEstimate: number | undefined;
-    if (rateCode?.price) {
-      totalEstimate = Number(rateCode.price) * nights;
+    if (rateCode) {
+      const pax = Math.max(1, input.pax ?? input.adults ?? input.pax ?? 1);
+      const pricePerNight = computeRateCodePricePerNight(
+        {
+          price: rateCode.price != null ? Number(rateCode.price) : null,
+          basePrice: rateCode.basePrice != null ? Number(rateCode.basePrice) : null,
+          pricePerPerson: rateCode.pricePerPerson != null ? Number(rateCode.pricePerPerson) : null,
+        },
+        pax
+      );
+      if (pricePerNight != null) totalEstimate = pricePerNight * nights;
     }
 
     return {
