@@ -11716,6 +11716,7 @@ export async function getFolioSummary(
   folioNumber?: number
 ): Promise<ActionResult<FolioSummary & {
   folios: FolioSummary[];
+  paymentsByMethod: Array<{ method: string; amount: number }>;
 }>> {
   try {
     if (!reservationId || typeof reservationId !== "string") {
@@ -11751,6 +11752,8 @@ export async function getFolioSummary(
       lastActivity: Date | null;
     }>();
     
+    const paymentsByMethodMap = new Map<string, number>();
+
     for (const tx of transactions) {
       const fn = tx.folioNumber;
       const current = folioMap.get(fn) || { charges: 0, discounts: 0, payments: 0, count: 0, lastActivity: null };
@@ -11761,7 +11764,33 @@ export async function getFolioSummary(
       } else if (tx.type === "DISCOUNT") {
         current.discounts += Math.abs(amount);
       } else {
-        current.payments += Math.abs(amount);
+        const paymentAmt = Math.abs(amount);
+        current.payments += paymentAmt;
+        if (tx.paymentMethod === "SPLIT" && tx.paymentDetails) {
+          try {
+            const details = typeof tx.paymentDetails === "string" ? JSON.parse(tx.paymentDetails) : tx.paymentDetails;
+            const methods = details?.methods as Array<{ method: string; amount: number }> | undefined;
+            if (Array.isArray(methods)) {
+              for (const m of methods) {
+                const method = (m?.method ?? "INNA").toString().toUpperCase();
+                const existing = paymentsByMethodMap.get(method) ?? 0;
+                paymentsByMethodMap.set(method, existing + (Number(m?.amount) || 0));
+              }
+            } else {
+              const method = (tx.paymentMethod ?? "INNA").toString().toUpperCase();
+              const existing = paymentsByMethodMap.get(method) ?? 0;
+              paymentsByMethodMap.set(method, existing + paymentAmt);
+            }
+          } catch {
+            const method = (tx.paymentMethod ?? "INNA").toString().toUpperCase();
+            const existing = paymentsByMethodMap.get(method) ?? 0;
+            paymentsByMethodMap.set(method, existing + paymentAmt);
+          }
+        } else {
+          const method = (tx.paymentMethod ?? "INNA").toString().toUpperCase();
+          const existing = paymentsByMethodMap.get(method) ?? 0;
+          paymentsByMethodMap.set(method, existing + paymentAmt);
+        }
       }
       current.count++;
       if (!current.lastActivity || tx.postedAt > current.lastActivity) {
@@ -11853,6 +11882,11 @@ export async function getFolioSummary(
       return f.lastActivity > max ? f.lastActivity : max;
     }, null as Date | null);
     
+    const paymentsByMethod = Array.from(paymentsByMethodMap.entries())
+      .filter(([, amt]) => amt > 0)
+      .map(([method, amount]) => ({ method, amount: Math.round(amount * 100) / 100 }))
+      .sort((a, b) => b.amount - a.amount);
+
     return {
       success: true,
       data: {
@@ -11865,6 +11899,7 @@ export async function getFolioSummary(
         itemCount: totalCount,
         lastActivity,
         folios,
+        paymentsByMethod,
       },
     };
   } catch (e) {

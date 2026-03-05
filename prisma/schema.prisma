@@ -235,6 +235,8 @@ model RoomType {
   bedsDescription String? @db.VarChar(200)  // opis łóżek (np. "1 queen + 1 sofa")
   photoUrl       String?  @db.VarChar(500)  // zdjęcie typu pokoju
   translations   Json?    // tłumaczenia nazwy/opisu: { en: { name, description }, de: { ... } }
+  rateCodeId     String?  // domyślny kod stawki (np. COMFORT-WIDOK) – auto przy wyborze pokoju
+  rateCode       RateCode? @relation(fields: [rateCodeId], references: [id], onDelete: SetNull)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   ratePlans       RatePlan[]
@@ -649,6 +651,7 @@ model RateCode {
   reservations Reservation[]
   corporateContracts CorporateContract[]
   travelAgents TravelAgent[]  // agenci korzystający z tego kodu
+  roomTypes   RoomType[]  // typy pokoi z tym domyślnym kodem
 }
 
 // Kontrakty korporacyjne – umowy z firmami na specjalne ceny

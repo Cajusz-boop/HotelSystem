@@ -1094,6 +1094,9 @@ export interface RoomTypeForCennik {
   name: string;
   basePrice: number | null;
   sortOrder: number;
+  /** Domyślny kod stawki – auto przy wyborze pokoju tego typu */
+  rateCodeId?: string | null;
+  rateCode?: { id: string; code: string; name: string } | null;
   /** Opis typu (KWHotel) */
   description?: string | null;
   /** Czy uwzględniać w raportach obłożenia */
@@ -1121,6 +1124,8 @@ export async function getRoomTypes(): Promise<ActionResult<RoomTypeForCennik[]>>
         translations: true,
         maxOccupancy: true,
         bedsDescription: true,
+        rateCodeId: true,
+        rateCode: { select: { id: true, code: true, name: true } },
       },
     });
     return {
@@ -1130,6 +1135,8 @@ export async function getRoomTypes(): Promise<ActionResult<RoomTypeForCennik[]>>
         name: t.name,
         basePrice: t.basePrice != null ? Number(t.basePrice) : null,
         sortOrder: t.sortOrder ?? 0,
+        rateCodeId: t.rateCodeId ?? undefined,
+        rateCode: t.rateCode ?? undefined,
         description: t.description ?? undefined,
         visibleInStats: t.visibleInStats ?? true,
         translations: t.translations as Record<string, string> | null ?? undefined,
@@ -1255,7 +1262,33 @@ export async function updateRoomTypeSortOrder(
   }
 }
 
-/** Aktualizuje pola typu pokoju: opis, visibleInStats, tłumaczenia, maxOccupancy, bedsDescription */
+/** Aktualizuje domyślny kod stawki typu pokoju */
+export async function updateRoomTypeRateCode(
+  roomTypeId: string,
+  rateCodeId: string | null
+): Promise<ActionResult> {
+  try {
+    if (rateCodeId) {
+      const exists = await prisma.rateCode.findUnique({ where: { id: rateCodeId } });
+      if (!exists) return { success: false, error: "Kod stawki nie istnieje." };
+    }
+    await prisma.roomType.update({
+      where: { id: roomTypeId },
+      data: { rateCodeId: rateCodeId || null },
+    });
+    autoExportConfigSnapshot();
+    revalidatePath("/cennik");
+    revalidatePath("/front-office");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd aktualizacji kodu stawki typu",
+    };
+  }
+}
+
+/** Aktualizuje pola typu pokoju: opis, visibleInStats, tłumaczenia, maxOccupancy, bedsDescription, rateCodeId */
 export async function updateRoomType(
   roomTypeId: string,
   data: {
@@ -1264,6 +1297,7 @@ export async function updateRoomType(
     translations?: Record<string, string> | null;
     maxOccupancy?: number | null;
     bedsDescription?: string | null;
+    rateCodeId?: string | null;
   }
 ): Promise<ActionResult> {
   try {
@@ -1273,6 +1307,7 @@ export async function updateRoomType(
     if (data.translations !== undefined) updateData.translations = data.translations === null ? Prisma.JsonNull : (data.translations as Prisma.InputJsonValue);
     if (data.maxOccupancy !== undefined) updateData.maxOccupancy = data.maxOccupancy ?? null;
     if (data.bedsDescription !== undefined) updateData.bedsDescription = data.bedsDescription || null;
+    if (data.rateCodeId !== undefined) updateData.rateCodeId = data.rateCodeId || null;
     if (Object.keys(updateData).length === 0) return { success: true, data: undefined };
     await prisma.roomType.update({
       where: { id: roomTypeId },

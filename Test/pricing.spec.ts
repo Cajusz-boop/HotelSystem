@@ -60,7 +60,27 @@ test.describe("Cennik i plany taryfowe", () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
-  test("PRC-07: cena ujemna — walidacja", async ({ page }) => {
+  test("PRC-07: kody stawek — pola Baza / Za osobę", async ({ page }) => {
+    await page.goto("/cennik");
+    await expect(page.getByText(/Cennik/i).first()).toBeVisible({ timeout: 10000 });
+    const rateCodesSection = page.getByText(/Kody stawek|Kod stawki|Rate code/i).first();
+    if (!(await rateCodesSection.isVisible().catch(() => false))) {
+      test.skip(true, "Brak sekcji kodów stawek");
+      return;
+    }
+    const addBtn = page.getByRole("button", { name: /Dodaj kod|Nowy kod|\+/i }).first();
+    if (!(await addBtn.isVisible().catch(() => false))) {
+      test.skip(true, "Brak przycisku dodawania kodu stawki");
+      return;
+    }
+    await addBtn.click();
+    await page.waitForTimeout(500);
+    const baseInput = page.locator('input[name*="basePrice"], input[placeholder*="Baza"], input[placeholder*="baza"]').first();
+    const perPersonInput = page.locator('input[name*="pricePerPerson"], input[placeholder*="osob"], input[placeholder*="Za oso"]').first();
+    expect(await baseInput.isVisible().catch(() => false) || await perPersonInput.isVisible().catch(() => false)).toBeTruthy();
+  });
+
+  test("PRC-08: cena ujemna — walidacja", async ({ page }) => {
     await page.goto("/cennik");
     await expect(page.getByText(/Cennik/i).first()).toBeVisible({ timeout: 10000 });
     const priceInput = page.locator('input[type="number"]').first();

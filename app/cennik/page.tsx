@@ -79,6 +79,7 @@ export default function CennikPage() {
   const [typeDetailsTransDe, setTypeDetailsTransDe] = useState("");
   const [typeDetailsMaxOccupancy, setTypeDetailsMaxOccupancy] = useState("");
   const [typeDetailsBeds, setTypeDetailsBeds] = useState("");
+  const [typeDetailsRateCodeId, setTypeDetailsRateCodeId] = useState("");
   const [savingTypeDetails, setSavingTypeDetails] = useState(false);
   const [ratePlans, setRatePlans] = useState<RatePlanForCennik[]>([]);
   const [newPlanRoomTypeId, setNewPlanRoomTypeId] = useState("");
@@ -526,6 +527,11 @@ export default function CennikPage() {
                   {savingTypeSortOrderId === t.id ? "…" : "Zapisz"}
                 </Button>
                 <span className="w-20 font-medium">{t.name}</span>
+                {t.rateCode && (
+                  <span className="text-xs text-muted-foreground" title="Domyślna stawka przy rezerwacji">
+                    {t.rateCode.code}
+                  </span>
+                )}
                 <Input
                   type="text"
                   inputMode="decimal"
@@ -590,6 +596,7 @@ export default function CennikPage() {
                     setTypeDetailsTransDe((t.translations as Record<string, string>)?.["de"] ?? "");
                     setTypeDetailsMaxOccupancy(t.maxOccupancy != null ? String(t.maxOccupancy) : "");
                     setTypeDetailsBeds(t.bedsDescription ?? "");
+                    setTypeDetailsRateCodeId(t.rateCodeId ?? t.rateCode?.id ?? "");
                   }}
                   title="Opis, statystyki, tłumaczenia"
                 >
@@ -649,6 +656,29 @@ export default function CennikPage() {
                 </div>
               </div>
               <div>
+                <Label className="text-xs">Domyślny kod stawki (auto przy rezerwacji)</Label>
+                <select
+                  className="mt-1 w-full rounded border border-input bg-background px-3 py-2 text-sm"
+                  value={typeDetailsRateCodeId}
+                  onChange={(e) => setTypeDetailsRateCodeId(e.target.value)}
+                >
+                  <option value="">— brak —</option>
+                  {rateCodes.map((rc) => (
+                    <option key={rc.id} value={rc.id}>
+                      {rc.code} – {rc.name}
+                      {rc.basePrice != null && rc.pricePerPerson != null
+                        ? ` (${rc.basePrice}+${rc.pricePerPerson}×os)`
+                        : rc.price != null
+                          ? ` (${rc.price} PLN)`
+                          : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Gdy wybierzesz pokój tego typu, kod i cena ustawią się automatycznie.
+                </p>
+              </div>
+              <div>
                 <Label className="text-xs">Tłumaczenia nazwy</Label>
                 <div className="mt-1 flex gap-2">
                   <Input
@@ -682,6 +712,7 @@ export default function CennikPage() {
                   visibleInStats: typeDetailsVisibleInStats,
                   maxOccupancy: maxOcc != null && !Number.isNaN(maxOcc) ? maxOcc : null,
                   bedsDescription: typeDetailsBeds.trim() || null,
+                  rateCodeId: typeDetailsRateCodeId.trim() || null,
                   translations:
                     typeDetailsTransEn.trim() || typeDetailsTransDe.trim()
                       ? { en: typeDetailsTransEn.trim(), de: typeDetailsTransDe.trim() }
@@ -699,6 +730,10 @@ export default function CennikPage() {
                             visibleInStats: typeDetailsVisibleInStats,
                             maxOccupancy: maxOcc != null && !Number.isNaN(maxOcc) ? maxOcc : undefined,
                             bedsDescription: typeDetailsBeds.trim() || undefined,
+                            rateCodeId: typeDetailsRateCodeId.trim() || undefined,
+                            rateCode: typeDetailsRateCodeId.trim()
+                              ? rateCodes.find((rc) => rc.id === typeDetailsRateCodeId) ?? undefined
+                              : undefined,
                             translations:
                               typeDetailsTransEn.trim() || typeDetailsTransDe.trim()
                                 ? { en: typeDetailsTransEn.trim(), de: typeDetailsTransDe.trim() }

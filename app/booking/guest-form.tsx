@@ -111,7 +111,7 @@ export function GuestForm({
           value={guestPhone}
           onChange={(e) => setGuestPhone(e.target.value)}
           required
-          placeholder="+48 600 123 456"
+          placeholder=""
           className="mt-1"
         />
       </div>

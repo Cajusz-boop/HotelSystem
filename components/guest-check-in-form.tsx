@@ -363,7 +363,7 @@ export function GuestCheckInForm() {
           </div>
           <div>
             <Label className="text-xs text-muted-foreground">📞 Telefon</Label>
-            <Input id="phone" className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+48 600 123 456" />
+            <Input id="phone" className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="" />
           </div>
           <div>
             <Label className="text-xs text-muted-foreground">🎂 Data urodzenia</Label>

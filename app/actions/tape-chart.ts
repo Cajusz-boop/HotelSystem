@@ -384,7 +384,14 @@ async function fetchTapeChartDataUncached(
 
   const [colorsRes, roomTypes, eventsRaw] = await Promise.all([
     getPropertyReservationColors(propertyId),
-    prisma.roomType.findMany({ select: { name: true, basePrice: true } }).catch(() => [] as { name: string; basePrice: unknown }[]),
+    prisma.roomType.findMany({
+      select: {
+        name: true,
+        basePrice: true,
+        rateCodeId: true,
+        rateCode: { select: { id: true, code: true, name: true, price: true, basePrice: true, pricePerPerson: true } },
+      },
+    }).catch(() => [] as Array<{ name: string; basePrice: unknown; rateCodeId: string | null; rateCode: { id: string; code: string; name: string; price: unknown; basePrice: unknown; pricePerPerson: unknown } | null }>),
     prisma.hotelEvent.findMany({
       where: {
         ...(propertyId ? { propertyId } : {}),
@@ -407,6 +414,11 @@ async function fetchTapeChartDataUncached(
       .filter((t) => t.basePrice != null)
       .map((t) => [t.name, Number(t.basePrice)])
   );
+  const typeToRateCode = new Map(
+    roomTypes
+      .filter((t) => t.rateCodeId && t.rateCode)
+      .map((t) => [t.name, { id: t.rateCode!.id, code: t.rateCode!.code, name: t.rateCode!.name, price: t.rateCode!.price, basePrice: t.rateCode!.basePrice, pricePerPerson: t.rateCode!.pricePerPerson }])
+  );
   const events: TapeChartEvent[] = eventsRaw.map((e) => ({
     id: e.id,
     name: e.title,
@@ -422,6 +434,7 @@ async function fetchTapeChartDataUncached(
     reservations: reservations.map(mapReservationToTapeChart),
     rooms: rooms.map((r) => {
       const roomPrice = r.price != null ? Number(r.price) : typePriceMap.get(r.type);
+      const defaultRateCode = typeToRateCode.get(r.type);
       return {
         id: r.id,
         number: r.number,
@@ -429,6 +442,8 @@ async function fetchTapeChartDataUncached(
         status: r.status as string,
         floor: r.floor ?? undefined,
         price: roomPrice,
+        defaultRateCodeId: defaultRateCode?.id,
+        defaultRateCode: defaultRateCode ?? undefined,
         reason: r.reason ?? undefined,
         roomFeatures: Array.isArray(r.roomFeatures)
           ? (r.roomFeatures as string[])

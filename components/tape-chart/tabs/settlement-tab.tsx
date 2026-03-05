@@ -85,6 +85,18 @@ function getAvailableStatuses(reservation: { checkIn: string; checkOut: string; 
   return ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED", "NO_SHOW"];
 }
 
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  CASH: "Gotówka",
+  CARD: "Karta",
+  TRANSFER: "Przelew",
+  PREPAID: "Przedpłata",
+  VOUCHER: "Voucher",
+  BLIK: "BLIK",
+  SPLIT: "Podzielona",
+  OTHER: "Inna",
+  INNA: "Inna",
+};
+
 const VOUCHER_TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "BON_TURYSTYCZNY", label: "Bon turystyczny" },
   { value: "VOUCHER_FIRMOWY", label: "Voucher firmowy" },
@@ -257,7 +269,7 @@ interface SettlementTabProps {
   form: SettlementTabFormState;
   onFormChange: (patch: Partial<SettlementTabFormState>) => void;
   reservation?: Reservation | null;
-  rooms: Array<{ number: string; type?: string; price?: number; beds?: number }>;
+  rooms: Array<{ number: string; type?: string; price?: number; beds?: number; defaultRateCodeId?: string; defaultRateCode?: { id: string; code: string; name: string; price?: unknown; basePrice?: unknown; pricePerPerson?: unknown } }>;
   rateCodes: RateCodeForUi[];
   parkingSpots: Array<{ id: string; number: string }>;
   effectivePricePerNight?: number;
@@ -409,6 +421,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   const [togglingBlacklist, setTogglingBlacklist] = useState(false);
   const [transactions, setTransactions] = useState<Array<{ id: string; amount: number; type: string; createdAt: string; isReadOnly: boolean; isManualOverride?: boolean; originalAmount?: number }>>([]);
   const [folioSummaries, setFolioSummaries] = useState<FolioSummaryItem[]>([]);
+  const [paymentsByMethod, setPaymentsByMethod] = useState<Array<{ method: string; amount: number }>>([]);
   const [editingFolioNumber, setEditingFolioNumber] = useState<number | null>(null);
   const [editBillTo, setEditBillTo] = useState<FolioBillTo>("GUEST");
   const [editGuestId, setEditGuestId] = useState("");
@@ -455,6 +468,31 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   const [voidItemReason, setVoidItemReason] = useState("");
   const [overridePriceInput, setOverridePriceInput] = useState("");
   const [overridePriceLoading, setOverridePriceLoading] = useState(false);
+
+  // Auto-ustaw kod stawki przy wyborze pokoju (tylko create) – gdy typ pokoju ma domyślny kod
+  useEffect(() => {
+    if (isEdit || !form.room || !rooms.length) return;
+    const room = rooms.find((r) => r.number === form.room);
+    if (!room?.defaultRateCodeId || !room.defaultRateCode) return;
+    if (form.rateCodeId === room.defaultRateCodeId) return; // już ustawiony
+    const rc = room.defaultRateCode;
+    const rcForUi = rateCodes.find((r) => r.id === room.defaultRateCodeId);
+    const pax = Math.max(1, (parseInt(form.adults || "1", 10) || 1) + (parseInt(form.children || "0", 10) || 0));
+    const computed = rcForUi
+      ? computeRateCodePricePerNight(rcForUi, pax)
+      : computeRateCodePricePerNight(
+          {
+            price: rc.price != null ? Number(rc.price) : null,
+            basePrice: rc.basePrice != null ? Number(rc.basePrice) : null,
+            pricePerPerson: rc.pricePerPerson != null ? Number(rc.pricePerPerson) : null,
+          },
+          pax
+        );
+    onFormChange({
+      rateCodeId: room.defaultRateCodeId,
+      rateCodePrice: computed != null ? String(computed) : "",
+    });
+  }, [form.room, rooms]);
 
   // Aktualizuj rateCodePrice przy zmianie liczby osób – gdy wybrany kod ma wzór (basePrice + pricePerPerson × pax)
   useEffect(() => {
@@ -514,10 +552,15 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   }, [isEdit, reservation?.id]);
 
   useEffect(() => {
-    if (!isEdit || !reservation?.id) { setFolioSummaries([]); setReservationGuests([]); return; }
+    if (!isEdit || !reservation?.id) { setFolioSummaries([]); setPaymentsByMethod([]); setReservationGuests([]); return; }
     getFolioSummary(reservation.id).then((r) => {
-      if (r.success && r.data?.folios) setFolioSummaries(parseFolios(r.data.folios));
-      else setFolioSummaries([]);
+      if (r.success && r.data?.folios) {
+        setFolioSummaries(parseFolios(r.data.folios));
+        setPaymentsByMethod(r.data.paymentsByMethod ?? []);
+      } else {
+        setFolioSummaries([]);
+        setPaymentsByMethod([]);
+      }
     });
     getReservationGuestsForFolio(reservation.id).then((r) => {
       if (r.success && r.data) setReservationGuests(r.data);
@@ -537,7 +580,10 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   const refreshFolios = useCallback(async () => {
     if (!reservation?.id) return;
     const r = await getFolioSummary(reservation.id);
-    if (r.success && r.data?.folios) setFolioSummaries(parseFolios(r.data.folios));
+    if (r.success && r.data?.folios) {
+      setFolioSummaries(parseFolios(r.data.folios));
+      setPaymentsByMethod(r.data.paymentsByMethod ?? []);
+    }
   }, [reservation?.id]);
 
   const loadFolioItems = useCallback(async (folioNum: number) => {
@@ -781,7 +827,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
                 onChange={(e) => { onFormChange({ guestPhone: e.target.value }); onSearchGuest(e.target.value, "phone"); }}
                 onBlur={() => { setTimeout(() => { if (suggestionsField === "phone") onSuggestionsOpenChange(false); }, 250); }}
                 onFocus={() => { if (guestSuggestions.length > 0 && suggestionsField === "phone") onSuggestionsOpenChange(true); }}
-                onKeyDown={onGuestKeyDown} placeholder="+48 600 123 456" autoComplete="off" />
+                onKeyDown={onGuestKeyDown} placeholder="" autoComplete="off" />
               {renderSuggestionsDropdown("phone")}
             </div>
             <div className="relative">
@@ -990,6 +1036,16 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
               <span className="tabular-nums">{effectivePaidRozl.toFixed(2)} PLN</span>
             )}
           </div>
+          {paymentsByMethod.length > 0 && (
+            <div className="pl-2 space-y-0.5 text-muted-foreground">
+              {paymentsByMethod.map(({ method, amount }) => (
+                <div key={method} className="flex justify-between text-[10px]">
+                  <span>{PAYMENT_METHOD_LABELS[method] ?? method}</span>
+                  <span className="tabular-nums">{amount.toFixed(2)} PLN</span>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex justify-between font-bold border-t pt-1 mt-1"><span>Saldo</span><span className="tabular-nums">{pozostalo >= 0 ? `${pozostalo.toFixed(2)} PLN` : `(${Math.abs(pozostalo).toFixed(2)}) PLN`}</span></div>
           {folioSummaries.length > 1 && (
             <div className="mt-2 pt-2 border-t border-border/50 space-y-0.5">
@@ -1215,6 +1271,16 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
               <span className="tabular-nums">{totalPaid.toFixed(2)}</span>
             )}
           </div>
+          {paymentsByMethod.length > 0 && (
+            <div className="pl-2 space-y-0.5 text-muted-foreground">
+              {paymentsByMethod.map(({ method, amount }) => (
+                <div key={method} className="flex justify-between text-[10px]">
+                  <span>{PAYMENT_METHOD_LABELS[method] ?? method}</span>
+                  <span className="tabular-nums">{amount.toFixed(2)} PLN</span>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="border-t pt-1 mt-1" />
           <div className="flex justify-between font-bold text-sm"><span>POZOSTAŁO DO ZAPŁATY</span><span className="tabular-nums">{Math.max(0, pozostalo).toFixed(2)} PLN</span></div>
         </div>
@@ -1884,7 +1950,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
               onChange={(e) => { onFormChange({ guestPhone: e.target.value }); onSearchGuest(e.target.value, "phone"); }}
               onBlur={() => { setTimeout(() => { if (suggestionsField === "phone") onSuggestionsOpenChange(false); }, 250); }}
               onFocus={() => { if (guestSuggestions.length > 0 && suggestionsField === "phone") onSuggestionsOpenChange(true); }}
-              onKeyDown={onGuestKeyDown} placeholder="+48 600 123 456" autoComplete="off" />
+              onKeyDown={onGuestKeyDown} placeholder="" autoComplete="off" />
             {renderSuggestionsDropdown("phone")}
           </div>
 

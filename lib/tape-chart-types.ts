@@ -11,6 +11,9 @@ export interface Room {
   status: RoomStatus;
   floor?: string; // piętro (np. "1", "Parter")
   price?: number;
+  /** Domyślny kod stawki z typu pokoju – auto przy wyborze pokoju */
+  defaultRateCodeId?: string;
+  defaultRateCode?: { id: string; code: string; name: string; price?: unknown; basePrice?: unknown; pricePerPerson?: unknown };
   reason?: string; // np. "Broken AC" dla OOO
   roomFeatures?: string[]; // np. ["balkon", "widok"] – cechy do filtrowania
   beds?: number; // liczba łóżek (1 = cały pokój, >1 = sprzedaż po łóżku)
