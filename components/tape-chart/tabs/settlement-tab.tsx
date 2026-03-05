@@ -1140,7 +1140,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
 
         {/* Podsumowanie kosztów (KWHotel) */}
         <div className="rounded border bg-muted/10 p-3 text-xs space-y-1">
-          <div className="flex justify-between"><span>Cena za noclegi</span><span className="tabular-nums">{roomTotalForm.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span>Cena za noclegi</span><span className="tabular-nums">{roomTotal.toFixed(2)}</span></div>
           <div className="flex justify-between"><span>Cena za posiłki</span><span className="tabular-nums">{mealsAmount.toFixed(2)}</span></div>
           <div className="flex justify-between"><span>Dodatkowe towary i usługi</span><span className="tabular-nums">{otherChargesAmount.toFixed(2)}</span></div>
           <div className="flex justify-between items-center gap-2">
