@@ -101,6 +101,9 @@ export default function NumeracjaPage() {
           yearFormat: edited.yearFormat as "YYYY" | "YY" | undefined,
           sequencePadding: edited.sequencePadding as number | undefined,
           resetYearly: edited.resetYearly as boolean | undefined,
+          includeMonth: edited.includeMonth as boolean | undefined,
+          seriesLetter: edited.seriesLetter as string | undefined,
+          sequenceStart: edited.sequenceStart as number | undefined,
         }
       );
 
@@ -146,11 +149,19 @@ export default function NumeracjaPage() {
     const separator = getConfigValue(config, "separator") as string;
     const yearFormat = getConfigValue(config, "yearFormat") as string;
     const padding = getConfigValue(config, "sequencePadding") as number;
+    const includeMonth = getConfigValue(config, "includeMonth") as boolean;
+    const seriesLetter = ((getConfigValue(config, "seriesLetter") as string) || "A").toUpperCase().slice(0, 1);
+    const seqStart = (getConfigValue(config, "sequenceStart") as number) ?? 1;
 
     const year = new Date().getFullYear();
+    const month = new Date().getMonth() + 1;
     const yearStr = yearFormat === "YY" ? String(year).slice(-2) : String(year);
-    const seqStr = "1".padStart(padding, "0");
+    const monthStr = String(month).padStart(2, "0");
+    const seqStr = String(seqStart).padStart(padding, "0");
 
+    if (includeMonth) {
+      return `${prefix}${separator}${seqStr}${separator}${monthStr}${separator}${seriesLetter}`;
+    }
     return `${prefix}${separator}${yearStr}${separator}${seqStr}`;
   };
 
@@ -263,24 +274,26 @@ export default function NumeracjaPage() {
                 </Select>
               </div>
 
-              {/* Format roku */}
-              <div>
-                <Label htmlFor={`yearFormat-${config.documentType}`}>Format roku</Label>
-                <Select
-                  value={getConfigValue(config, "yearFormat") as string}
-                  onValueChange={(value) =>
-                    handleFieldChange(config.documentType, "yearFormat", value)
-                  }
-                >
-                  <SelectTrigger id={`yearFormat-${config.documentType}`} className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="YYYY">YYYY (2026)</SelectItem>
-                    <SelectItem value="YY">YY (26)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Format roku – tylko gdy format z miesiącem jest wyłączony */}
+              {!(getConfigValue(config, "includeMonth") as boolean) && (
+                <div>
+                  <Label htmlFor={`yearFormat-${config.documentType}`}>Format roku</Label>
+                  <Select
+                    value={getConfigValue(config, "yearFormat") as string}
+                    onValueChange={(value) =>
+                      handleFieldChange(config.documentType, "yearFormat", value)
+                    }
+                  >
+                    <SelectTrigger id={`yearFormat-${config.documentType}`} className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="YYYY">YYYY (2026)</SelectItem>
+                      <SelectItem value="YY">YY (26)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* Długość sekwencji */}
               <div>
@@ -324,6 +337,61 @@ export default function NumeracjaPage() {
                     Reset roczny
                   </Label>
                 </div>
+              </div>
+            </div>
+
+            {/* Format z miesiącem i literą serii */}
+            <div className="grid gap-4 md:grid-cols-2 mt-4 pt-4 border-t">
+              <div className="flex items-center gap-2">
+                <Switch
+                  id={`includeMonth-${config.documentType}`}
+                  checked={getConfigValue(config, "includeMonth") as boolean}
+                  onCheckedChange={(checked) =>
+                    handleFieldChange(config.documentType, "includeMonth", checked)
+                  }
+                />
+                <Label
+                  htmlFor={`includeMonth-${config.documentType}`}
+                  className="text-sm cursor-pointer"
+                >
+                  Format z miesiącem (numer/miesiąc/litera, np. FVZ/0001/03/A)
+                </Label>
+              </div>
+              {(getConfigValue(config, "includeMonth") as boolean) && (
+                <div>
+                  <Label htmlFor={`seriesLetter-${config.documentType}`}>Litera serii</Label>
+                  <Input
+                    id={`seriesLetter-${config.documentType}`}
+                    value={(getConfigValue(config, "seriesLetter") as string) || "A"}
+                    onChange={(e) => {
+                      const v = e.target.value.toUpperCase().slice(0, 1);
+                      handleFieldChange(config.documentType, "seriesLetter", v || "A");
+                    }}
+                    placeholder="A"
+                    maxLength={1}
+                    className="mt-1 w-16"
+                  />
+                  <p className="text-xs text-muted-foreground mt-0.5">Pojedyncza litera (A–Z)</p>
+                </div>
+              )}
+              <div>
+                <Label htmlFor={`sequenceStart-${config.documentType}`}>Początek numeracji</Label>
+                <Input
+                  id={`sequenceStart-${config.documentType}`}
+                  type="number"
+                  min={1}
+                  value={getConfigValue(config, "sequenceStart") ?? 1}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!isNaN(v) && v >= 1) {
+                      handleFieldChange(config.documentType, "sequenceStart", v);
+                    }
+                  }}
+                  className="mt-1 w-24"
+                />
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Zapis resetuje licznik — następny numer będzie równy tej wartości
+                </p>
               </div>
             </div>
 

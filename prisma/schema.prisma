@@ -2437,6 +2437,7 @@ model DocumentNumberingConfig {
   resetYearly    Boolean  @default(true)  // czy resetować sekwencję na początku roku
   includeMonth   Boolean  @default(false)  // format numer/miesiąc/rok/literka (np. 1/03/2025/A)
   seriesLetter   String   @default("A")   // litera serii przy includeMonth (np. A, B, C)
+  sequenceStart  Int      @default(1)     // od jakiej liczby zaczyna się numeracja; zapis resetuje licznik
   description    String?  // opis konfiguracji (dla UI)
   exampleNumber  String?  // przykładowy numer (generowany automatycznie przy zapisie)
   createdAt      DateTime @default(now())

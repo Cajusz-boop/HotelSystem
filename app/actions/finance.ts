@@ -120,6 +120,7 @@ export interface DocumentNumberingConfigData {
   resetYearly: boolean;
   includeMonth: boolean;
   seriesLetter: string;
+  sequenceStart: number;
   description: string | null;
   exampleNumber: string | null;
 }
@@ -162,6 +163,7 @@ export async function getDocumentNumberingConfig(
           resetYearly: true,
           includeMonth: false,
           seriesLetter: "A",
+          sequenceStart: 1,
           description: defaultConfig.description,
           exampleNumber,
         },
@@ -180,6 +182,7 @@ export async function getDocumentNumberingConfig(
         resetYearly: config.resetYearly,
         includeMonth: config.includeMonth ?? false,
         seriesLetter: config.seriesLetter ?? "A",
+        sequenceStart: config.sequenceStart ?? 1,
         description: config.description,
         exampleNumber: config.exampleNumber,
       },
@@ -217,6 +220,7 @@ export async function getAllDocumentNumberingConfigs(): Promise<ActionResult<Doc
             resetYearly: true,
             includeMonth: false,
             seriesLetter: "A",
+            sequenceStart: 1,
             description: defaultConfig.description,
             exampleNumber,
           },
@@ -240,6 +244,7 @@ export async function getAllDocumentNumberingConfigs(): Promise<ActionResult<Doc
         resetYearly: c.resetYearly,
         includeMonth: c.includeMonth ?? false,
         seriesLetter: c.seriesLetter ?? "A",
+        sequenceStart: c.sequenceStart ?? 1,
         description: c.description,
         exampleNumber: c.exampleNumber,
       })),
@@ -268,6 +273,7 @@ export async function updateDocumentNumberingConfig(
     resetYearly?: boolean;
     includeMonth?: boolean;
     seriesLetter?: string;
+    sequenceStart?: number;
   }
 ): Promise<ActionResult<DocumentNumberingConfigData>> {
   try {
@@ -283,6 +289,9 @@ export async function updateDocumentNumberingConfig(
     }
     if (data.seriesLetter !== undefined && data.seriesLetter.length > 1) {
       return { success: false, error: "Litera serii musi być pojedynczą literą (A-Z)" };
+    }
+    if (data.sequenceStart !== undefined && (data.sequenceStart < 1 || !Number.isInteger(data.sequenceStart))) {
+      return { success: false, error: "Początek numeracji musi być liczbą całkowitą ≥ 1" };
     }
 
     // Upewnij się, że konfiguracja istnieje
@@ -314,6 +323,7 @@ export async function updateDocumentNumberingConfig(
     if (data.resetYearly !== undefined) updateData.resetYearly = data.resetYearly;
     if (data.includeMonth !== undefined) updateData.includeMonth = data.includeMonth;
     if (data.seriesLetter !== undefined) updateData.seriesLetter = (data.seriesLetter || "A").toUpperCase().slice(0, 1);
+    if (data.sequenceStart !== undefined) updateData.sequenceStart = data.sequenceStart;
 
     // Wygeneruj przykładowy numer
     const prefix = (updateData.prefix as string) ?? config.prefix;
@@ -329,13 +339,28 @@ export async function updateDocumentNumberingConfig(
     const monthStr = String(month).padStart(2, "0");
     const exampleSeq = "1".padStart(padding, "0");
     updateData.exampleNumber = includeMonth
-      ? `${prefix}${separator}${exampleSeq}${separator}${monthStr}${separator}${yearStr}${separator}${seriesLetter}`
+      ? `${prefix}${separator}${exampleSeq}${separator}${monthStr}${separator}${seriesLetter}`
       : `${prefix}${separator}${yearStr}${separator}${exampleSeq}`;
 
     const updated = await prisma.documentNumberingConfig.update({
       where: { id: config.id },
       data: updateData,
     });
+
+    // Przy zapisie sequenceStart resetujemy licznik bieżącego okresu (rok/miesiąc), żeby następny numer był = sequenceStart
+    const seqStart = data.sequenceStart;
+    if (seqStart !== undefined) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const useMonthly = (updateData.includeMonth as boolean) ?? (config.includeMonth ?? false);
+      const month = useMonthly ? now.getMonth() + 1 : 0;
+      const newLastSeq = Math.max(0, seqStart - 1);
+      await prisma.documentNumberCounter.upsert({
+        where: { documentType_year_month: { documentType, year, month } },
+        create: { documentType, year, month, lastSequence: newLastSeq },
+        update: { lastSequence: newLastSeq },
+      });
+    }
 
     revalidatePath("/finance");
     revalidatePath("/ustawienia");
@@ -353,6 +378,7 @@ export async function updateDocumentNumberingConfig(
         resetYearly: updated.resetYearly,
         includeMonth: updated.includeMonth ?? false,
         seriesLetter: updated.seriesLetter ?? "A",
+        sequenceStart: updated.sequenceStart ?? 1,
         description: updated.description,
         exampleNumber: updated.exampleNumber,
       },
@@ -407,11 +433,11 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
         const searchPrefix = useMonthly
           ? `${config.prefix}${config.separator}`
           : `${config.prefix}${config.separator}${yearStr}${config.separator}`;
-        const searchContains = useMonthly ? `${config.separator}${monthStr}${config.separator}${yearStr}${config.separator}${letter}` : null;
+        const searchContains = useMonthly ? `${config.separator}${monthStr}${config.separator}${letter}` : null;
 
         const parseSeqFromNumber = (num: string): number => {
           const parts = num.split(config.separator);
-          if (useMonthly && parts.length >= 5) {
+          if (useMonthly && parts.length >= 4) {
             return parseInt(parts[1], 10) || 0;
           }
           const lastSeq = parseInt(parts[parts.length - 1], 10);
@@ -435,8 +461,10 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
         else if (documentType === "ACCOUNTING_NOTE") existingMax = await runQuery((o) => tx.accountingNote.findMany(o));
         else if (documentType === "PROFORMA") existingMax = await runQuery((o) => tx.proforma.findMany(o));
 
+        const seqStart = config.sequenceStart ?? 1;
+        const initialSeq = Math.max(existingMax, seqStart - 1);
         counter = await tx.documentNumberCounter.create({
-          data: { documentType, year, month: counterMonth, lastSequence: existingMax },
+          data: { documentType, year, month: counterMonth, lastSequence: initialSeq },
         });
       }
 
@@ -454,7 +482,7 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
     if (useMonthly) {
       const monthStr = String(month).padStart(2, "0");
       const letter = (config.seriesLetter ?? "A").toUpperCase().slice(0, 1);
-      const num = `${config.prefix}${config.separator}${seqStr}${config.separator}${monthStr}${config.separator}${yearStr}${config.separator}${letter}`;
+      const num = `${config.prefix}${config.separator}${seqStr}${config.separator}${monthStr}${config.separator}${letter}`;
       return { success: true, data: num };
     }
 
