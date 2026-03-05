@@ -5,13 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updateGuestBlacklist, getReservationsByGuestId, searchGuests, updateReservationStatus, getActiveGuestDiscount } from "@/app/actions/reservations";
-import { getTransactionsForReservation, getFolioSummary, setFolioAssignment, createNewFolio, getFolioItems, transferFolioItem, addFolioDiscount, collectSecurityDeposit, refundSecurityDeposit, getReservationGuestsForFolio, addReservationOccupant, removeReservationOccupant, postRoomChargeOnCheckout, chargeLocalTax, addFolioPayment, voidFolioItem, type ReservationGuestForFolio } from "@/app/actions/finance";
+import { getTransactionsForReservation, getFolioSummary, setFolioAssignment, createNewFolio, getFolioItems, transferFolioItem, addFolioDiscount, collectSecurityDeposit, refundSecurityDeposit, getReservationGuestsForFolio, addReservationOccupant, removeReservationOccupant, postRoomChargeOnCheckout, chargeLocalTax, addFolioPayment, voidFolioItem, overrideRoomPrice, type ReservationGuestForFolio } from "@/app/actions/finance";
 import { type FolioBillTo } from "@/lib/finance-constants";
 import { searchCompanies } from "@/app/actions/companies";
 import type { Reservation } from "@/lib/tape-chart-types";
 import type { RateCodeForUi } from "@/app/actions/rate-codes";
 import { toast } from "sonner";
-import { SplitSquareVertical, User, Building2, Plus, ArrowRightLeft, Percent, Banknote, Pencil, Trash2 } from "lucide-react";
+import { SplitSquareVertical, User, Building2, Plus, ArrowRightLeft, Percent, Banknote, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { AddChargeDialog } from "@/components/add-charge-dialog";
 import {
   AlertDialog,
@@ -245,6 +245,8 @@ export interface SettlementTabFormState {
   advanceAmount: string;
   /** Faktura: jedna linia „Usługa hotelowa” z całą sumą (nocleg + gastronomia + inne) */
   invoiceSingleLine: boolean;
+  /** Zakres faktury: ALL | HOTEL_ONLY | GASTRONOMY_ONLY */
+  invoiceScope: string;
   /** Nadpisana kwota wpłat (widoczna na fakturze) – puste = użyj sumy z transakcji */
   paidAmountOverride: string;
 }
@@ -399,7 +401,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   const [guestHistoryLoading, setGuestHistoryLoading] = useState(false);
   const [localGuestBlacklisted, setLocalGuestBlacklisted] = useState(false);
   const [togglingBlacklist, setTogglingBlacklist] = useState(false);
-  const [transactions, setTransactions] = useState<Array<{ id: string; amount: number; type: string; createdAt: string; isReadOnly: boolean }>>([]);
+  const [transactions, setTransactions] = useState<Array<{ id: string; amount: number; type: string; createdAt: string; isReadOnly: boolean; isManualOverride?: boolean; originalAmount?: number }>>([]);
   const [folioSummaries, setFolioSummaries] = useState<FolioSummaryItem[]>([]);
   const [editingFolioNumber, setEditingFolioNumber] = useState<number | null>(null);
   const [editBillTo, setEditBillTo] = useState<FolioBillTo>("GUEST");
@@ -445,6 +447,8 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   const [openKaucjaDetails, setOpenKaucjaDetails] = useState(false);
   const [voidItemId, setVoidItemId] = useState<string | null>(null);
   const [voidItemReason, setVoidItemReason] = useState("");
+  const [overridePriceInput, setOverridePriceInput] = useState("");
+  const [overridePriceLoading, setOverridePriceLoading] = useState(false);
 
   // Load edit-mode data
   useEffect(() => {
@@ -1967,26 +1971,98 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
               placeholder={priceFromRate != null ? String(priceFromRate) : "—"}
             />
           </div>
-          {(pricePerNight != null && pricePerNight > 0) ? (
+          {(pricePerNight != null && pricePerNight > 0) || roomChargesFromTx > 0 ? (
             <>
               {nights > 0 && (
                 <>
                   <div className="flex justify-between"><span className="text-muted-foreground">Liczba dób</span><span className="tabular-nums">{nights}</span></div>
-                  <div className="flex justify-between border-t pt-0.5 font-bold"><span>Suma za pokój</span><span className="tabular-nums">{totalAmount?.toFixed(2)}</span></div>
+                  <div className="flex justify-between border-t pt-0.5 font-bold items-center gap-1">
+                    <span>Suma za pokój</span>
+                    <span className="tabular-nums flex items-center gap-1">
+                      {(roomChargesFromTx > 0 ? roomChargesFromTx : (totalAmount ?? 0)).toFixed(2)} PLN
+                      {transactions.find((t) => t.type === "ROOM")?.isManualOverride && (
+                        <span className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-500" title={`Nadpisana ręcznie (cennik: ${transactions.find((t) => t.type === "ROOM")?.originalAmount?.toFixed(2) ?? "—"} PLN)`}>
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          <span className="text-[10px]">nadpisana</span>
+                        </span>
+                      )}
+                    </span>
+                  </div>
                 </>
               )}
               {isEdit && transactions.length > 0 && (
                 <>
                   <div className="flex justify-between border-t pt-0.5"><span className="text-muted-foreground">Wpłaty</span><span className="tabular-nums">{transactions.filter((t) => t.type === "DEPOSIT" || t.type === "ROOM").reduce((s, t) => s + t.amount, 0).toFixed(2)}</span></div>
-                  {totalAmount != null && totalAmount > 0 && (
-                    <div className="flex justify-between font-medium"><span>Pozostało</span><span className="tabular-nums">{(totalAmount - transactions.filter((t) => t.type === "DEPOSIT" || t.type === "ROOM").reduce((s, t) => s + t.amount, 0)).toFixed(2)}</span></div>
+                  {((roomChargesFromTx > 0 ? roomChargesFromTx : totalAmount ?? 0) > 0) && (
+                    <div className="flex justify-between font-medium"><span>Pozostało</span><span className="tabular-nums">{((roomChargesFromTx > 0 ? roomChargesFromTx : totalAmount ?? 0) - transactions.filter((t) => t.type === "DEPOSIT" || t.type === "ROOM").reduce((s, t) => s + t.amount, 0)).toFixed(2)}</span></div>
                   )}
                 </>
+              )}
+              {/* Nadpisana cena noclegu */}
+              {isEdit && reservation?.id && nights > 0 && (
+                <div className="mt-2 pt-2 border-t space-y-1">
+                  <Label className="text-xs text-muted-foreground">Nadpisana cena noclegu [PLN]</Label>
+                  <div className="flex gap-1 items-center">
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      placeholder="np. 250.00"
+                      className="h-7 text-xs w-24"
+                      value={overridePriceInput !== "" ? overridePriceInput : (roomChargesFromTx > 0 ? String(roomChargesFromTx) : totalAmount != null ? String(totalAmount) : "")}
+                      onChange={(e) => setOverridePriceInput(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs shrink-0"
+                      disabled={overridePriceLoading}
+                      onClick={async () => {
+                        if (!reservation?.id) return;
+                        const val = overridePriceInput.trim() ? parseFloat(overridePriceInput) : (roomChargesFromTx || totalAmount ?? 0);
+                        if (!Number.isFinite(val) || val <= 0) {
+                          toast.error("Podaj kwotę większą od zera");
+                          return;
+                        }
+                        setOverridePriceLoading(true);
+                        const result = await overrideRoomPrice(reservation.id, val);
+                        setOverridePriceLoading(false);
+                        if (result.success) {
+                          toast.success(`Cena nadpisana: ${result.data?.amount.toFixed(2)} PLN`);
+                          setOverridePriceInput("");
+                          getTransactionsForReservation(reservation.id).then((r) => r.success && r.data && setTransactions(r.data));
+                        } else {
+                          toast.error(result.error ?? "Błąd nadpisania ceny");
+                        }
+                      }}
+                    >
+                      {overridePriceLoading ? "…" : "Zastosuj"}
+                    </Button>
+                  </div>
+                  {(priceFromRate ?? 0) > 0 && (
+                    <p className="text-[10px] text-muted-foreground">Kwota z cennika: {((priceFromRate ?? 0) * nights).toFixed(2)} PLN</p>
+                  )}
+                </div>
               )}
             </>
           ) : null}
         </div>
 
+        {isEdit && (
+          <div className="mt-2 space-y-1">
+            <Label className="text-xs text-muted-foreground">Zakres faktury</Label>
+            <select
+              className="w-full h-7 text-xs rounded border border-input bg-background px-2"
+              value={form.invoiceScope || "ALL"}
+              onChange={(e) => onFormChange({ invoiceScope: e.target.value })}
+            >
+              <option value="ALL">Całość (hotel + gastronomia)</option>
+              <option value="HOTEL_ONLY">Tylko usługa hotelowa</option>
+              <option value="GASTRONOMY_ONLY">Tylko usługa gastronomiczna</option>
+            </select>
+          </div>
+        )}
         {/* Podgląd cennika – kliknij stawkę, aby ustawić cenę */}
         <details className="rounded border bg-muted/10 text-xs" open>
           <summary className="cursor-pointer px-2 py-1 font-medium text-muted-foreground hover:text-foreground">

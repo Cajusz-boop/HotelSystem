@@ -504,6 +504,7 @@ export async function getReservationEditData(
   extraStatus: string | null;
   advanceDueDate: string | null;
   invoiceSingleLine: boolean;
+  invoiceScope: string;
   paidAmountOverride: number | null;
   isInClosedPeriod: boolean;
   canEditClosedPeriod: boolean;
@@ -516,6 +517,7 @@ export async function getReservationEditData(
         checkIn: true,
         checkOut: true,
         invoiceSingleLine: true,
+        invoiceScope: true,
         paidAmountOverride: true,
         source: true,
         channel: true,
@@ -565,6 +567,7 @@ export async function getReservationEditData(
         extraStatus: res.extraStatus ?? null,
         advanceDueDate: res.advanceDueDate ? res.advanceDueDate.toISOString().slice(0, 10) : null,
         invoiceSingleLine: res.invoiceSingleLine ?? true,
+        invoiceScope: res.invoiceScope ?? "ALL",
         paidAmountOverride: res.paidAmountOverride != null ? Number(res.paidAmountOverride) : null,
         isInClosedPeriod,
         canEditClosedPeriod,
@@ -2871,6 +2874,9 @@ export async function updateReservation(
     if (input.advanceDueDate !== undefined) (data as Record<string, unknown>).advanceDueDate = input.advanceDueDate ? new Date(input.advanceDueDate) : null;
     if ((input as { invoiceSingleLine?: boolean }).invoiceSingleLine !== undefined) {
       (data as Record<string, unknown>).invoiceSingleLine = (input as { invoiceSingleLine?: boolean }).invoiceSingleLine;
+    }
+    if ((input as { invoiceScope?: string }).invoiceScope !== undefined) {
+      (data as Record<string, unknown>).invoiceScope = (input as { invoiceScope?: string }).invoiceScope;
     }
     if ((input as { paidAmountOverride?: number | null }).paidAmountOverride !== undefined) {
       const v = (input as { paidAmountOverride?: number | null }).paidAmountOverride;

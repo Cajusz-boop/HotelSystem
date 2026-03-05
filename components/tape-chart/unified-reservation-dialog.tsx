@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createReservation, updateReservation, updateReservationStatus, getCheckoutBalanceWarning, findGuestsForCheckIn, getReservationCompany, getReservationEditData, deleteReservation, type GuestCheckInSuggestion } from "@/app/actions/reservations";
-import { postRoomChargeOnCheckout, createVatInvoice, createProforma, printFiscalReceiptForReservation, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates } from "@/app/actions/finance";
+import { postRoomChargeOnCheckout, createVatInvoice, createProforma, printFiscalReceiptForReservation, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates, overrideRoomPrice } from "@/app/actions/finance";
 import { lookupCompanyByNip } from "@/app/actions/companies";
 import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { getEffectivePriceForRoomOnDate, getRatePlanInfoForRoomDate } from "@/app/actions/rooms";
@@ -142,6 +142,7 @@ const INITIAL_FORM: SettlementTabFormState = {
   voucherType: "BON_TURYSTYCZNY",
   advanceAmount: "",
   invoiceSingleLine: true,
+  invoiceScope: "ALL",
   paidAmountOverride: "",
 };
 
@@ -178,6 +179,11 @@ export function UnifiedReservationDialog({
   const [_docChoiceGuestName, setDocChoiceGuestName] = useState("");
   const [docIssuing, setDocIssuing] = useState(false);
   const [invoiceNotes, setInvoiceNotes] = useState("");
+  const [docAmountOverride, setDocAmountOverride] = useState("");
+  const [docRoomTotal, setDocRoomTotal] = useState<number | null>(null);
+  const [docTotalAmount, setDocTotalAmount] = useState<number | null>(null);
+  const [docAmountInvoice, setDocAmountInvoice] = useState("");
+  const [docAmountReceipt, setDocAmountReceipt] = useState("");
   const [issueDocMenuOpen, setIssueDocMenuOpen] = useState(false);
   const [paymentsDialogOpen, setPaymentsDialogOpen] = useState(false);
   const [paymentsList, setPaymentsList] = useState<Array<{ id: string; amount: number; type: string; createdAt: string }>>([]);
@@ -251,6 +257,7 @@ export function UnifiedReservationDialog({
             extraStatus: d.extraStatus ?? "",
             depositDueDate: d.advanceDueDate ?? "",
             invoiceSingleLine: d.invoiceSingleLine ?? true,
+            invoiceScope: d.invoiceScope ?? "ALL",
             paidAmountOverride: d.paidAmountOverride != null ? String(d.paidAmountOverride) : "",
           }));
           setIsInClosedPeriod(d.isInClosedPeriod ?? false);
@@ -469,6 +476,7 @@ export function UnifiedReservationDialog({
           extraStatus: form.extraStatus?.trim() || undefined,
           advanceDueDate: form.depositDueDate?.trim() || undefined,
           invoiceSingleLine: form.invoiceSingleLine,
+          invoiceScope: form.invoiceScope || "ALL",
           paidAmountOverride: (() => {
             const v = form.paidAmountOverride.trim();
             if (!v) return null;
@@ -662,17 +670,85 @@ export function UnifiedReservationDialog({
     }
   }, [reservation?.id, reservation?.status, reservation?.guestName, onSaved]);
 
-  const handleDocChoice = useCallback(async (choice: "vat" | "posnet" | "none") => {
+  const CHARGE_TYPES = ["ROOM", "LOCAL_TAX", "MINIBAR", "GASTRONOMY", "SPA", "PARKING", "RENTAL", "PHONE", "LAUNDRY", "TRANSPORT", "ATTRACTION", "OTHER"];
+  // Fetch charge total when doc choice dialog opens
+  useEffect(() => {
+    if (!docChoiceOpen || !docChoiceResId) {
+      setDocRoomTotal(null);
+      setDocTotalAmount(null);
+      setDocAmountOverride("");
+      setDocAmountInvoice("");
+      setDocAmountReceipt("");
+      return;
+    }
+    getTransactionsForReservation(docChoiceResId).then((r) => {
+      if (r.success && r.data) {
+        const roomTotal = r.data
+          .filter((t) => t.type === "ROOM")
+          .reduce((s, t) => s + t.amount, 0);
+        const totalCharges = r.data
+          .filter((t) => CHARGE_TYPES.includes(t.type))
+          .reduce((s, t) => s + t.amount, 0);
+        setDocRoomTotal(roomTotal);
+        setDocTotalAmount(Math.round(totalCharges * 100) / 100);
+        setDocAmountOverride("");
+        setDocAmountInvoice(totalCharges > 0 ? totalCharges.toFixed(2) : "");
+        setDocAmountReceipt("");
+      } else {
+        setDocRoomTotal(null);
+        setDocTotalAmount(null);
+        setDocAmountInvoice("");
+        setDocAmountReceipt("");
+      }
+    });
+  }, [docChoiceOpen, docChoiceResId]);
+
+  const handleDocChoice = useCallback(async (choice: "vat" | "posnet" | "both" | "none") => {
     if (choice === "none" || !docChoiceResId) {
       setDocChoiceOpen(false);
       setInvoiceNotes("");
+      setDocAmountOverride("");
+      setDocAmountInvoice("");
+      setDocAmountReceipt("");
+      setDocRoomTotal(null);
+      setDocTotalAmount(null);
       onOpenChange(false);
       return;
     }
     setDocIssuing(true);
     try {
-      if (choice === "vat") {
-        const result = await createVatInvoice(docChoiceResId, undefined, { notes: invoiceNotes.trim() || undefined });
+      const amtInv = docAmountInvoice.trim() ? parseFloat(docAmountInvoice) : 0;
+      const amtRec = docAmountReceipt.trim() ? parseFloat(docAmountReceipt) : 0;
+      const overrideVal = docAmountOverride.trim() ? parseFloat(docAmountOverride) : null;
+      const effectiveTotal =
+        overrideVal != null && Number.isFinite(overrideVal) && overrideVal > 0
+          ? Math.round(overrideVal * 100) / 100
+          : (docTotalAmount ?? 0);
+      const total = effectiveTotal;
+      const isSplit = choice === "both" && amtInv > 0 && amtRec > 0;
+      const sumSplit = Math.round((amtInv + amtRec) * 100) / 100;
+      if (isSplit) {
+        if (Math.abs(sumSplit - total) > 0.01) {
+          toast.error(`Suma (${sumSplit.toFixed(2)} PLN) musi być równa kwocie do zapłaty (${total.toFixed(2)} PLN).`);
+          setDocIssuing(false);
+          return;
+        }
+      } else {
+        if (overrideVal != null && Number.isFinite(overrideVal) && overrideVal > 0) {
+          const or = await overrideRoomPrice(docChoiceResId, overrideVal);
+          if (!or.success) {
+            toast.error(or.error ?? "Błąd nadpisania ceny");
+            setDocIssuing(false);
+            return;
+          }
+          toast.success(`Cena nadpisana: ${or.data?.amount.toFixed(2)} PLN`);
+        }
+      }
+      if (choice === "vat" || (choice === "both" && amtInv > 0)) {
+        const result = await createVatInvoice(docChoiceResId, undefined, {
+          notes: invoiceNotes.trim() || undefined,
+          amountGrossOverride: isSplit ? amtInv : undefined,
+        });
         if (result.success && result.data) {
           toast.success(`Faktura VAT ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);
           const printWindow = window.open(`/api/finance/invoice/${result.data.id}/pdf`, "_blank");
@@ -683,14 +759,25 @@ export function UnifiedReservationDialog({
           }
         } else {
           toast.error("error" in result ? result.error : "Błąd wystawiania faktury");
+          setDocIssuing(false);
+          return;
         }
-      } else {
-        const result = await printFiscalReceiptForReservation(docChoiceResId);
+      }
+      if (choice === "posnet" || (choice === "both" && amtRec > 0)) {
+        const result = await printFiscalReceiptForReservation(docChoiceResId, "CASH", isSplit ? amtRec : undefined);
         if (result.success) {
           window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
           toast.success(result.data?.receiptNumber
             ? `Paragon wydrukowany: ${result.data.receiptNumber}`
             : "Paragon wysłany do kasy fiskalnej (POSNET)");
+          // Kopia paragonu do wydruku (recepcja)
+          const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(docChoiceResId)}${isSplit && amtRec > 0 ? `&amount=${amtRec}` : ""}`;
+          const copyWindow = window.open(copyUrl, "_blank");
+          if (copyWindow) {
+            copyWindow.addEventListener("load", () => {
+              setTimeout(() => copyWindow.print(), 500);
+            });
+          }
         } else {
           toast.error("error" in result ? result.error : "Błąd druku paragonu");
         }
@@ -699,9 +786,14 @@ export function UnifiedReservationDialog({
       setDocIssuing(false);
       setDocChoiceOpen(false);
       setInvoiceNotes("");
+      setDocAmountOverride("");
+      setDocAmountInvoice("");
+      setDocAmountReceipt("");
+      setDocRoomTotal(null);
+      setDocTotalAmount(null);
       onOpenChange(false);
     }
-  }, [docChoiceResId, invoiceNotes, onOpenChange]);
+  }, [docChoiceResId, docAmountOverride, docAmountInvoice, docAmountReceipt, docTotalAmount, invoiceNotes, onOpenChange]);
 
   const handleIssueDoc = useCallback(async (choice: "vat" | "posnet" | "proforma" | "potwierdzenie") => {
     if (choice === "potwierdzenie") {
@@ -731,23 +823,12 @@ export function UnifiedReservationDialog({
       return;
     }
     if (!reservation?.id) return;
-    if (choice === "vat") {
+    if (choice === "vat" || choice === "posnet") {
       setDocChoiceResId(reservation.id);
       setDocChoiceGuestName(reservation.guestName);
       setIssueDocMenuOpen(false);
       setDocChoiceOpen(true);
       return;
-    }
-    setDocIssuing(true);
-    setIssueDocMenuOpen(false);
-    try {
-      const result = await printFiscalReceiptForReservation(reservation.id);
-      if (result.success) {
-        window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
-        toast.success(result.data?.receiptNumber ? `Paragon: ${result.data.receiptNumber}` : "Paragon wysłany do kasy");
-      } else toast.error("error" in result ? result.error : "Błąd druku paragonu");
-    } finally {
-      setDocIssuing(false);
     }
   }, [reservation?.id, reservation?.guestName, isEdit, handleSubmit]);
 
@@ -895,6 +976,16 @@ export function UnifiedReservationDialog({
                       if (r.success) {
                         setForm((prev) => ({ ...prev, invoiceSingleLine: value }));
                         toast.success("Zapisano ustawienie faktury");
+                      } else {
+                        toast.error(r.error ?? "Błąd zapisu");
+                      }
+                    }}
+                    invoiceScope={form.invoiceScope || "ALL"}
+                    onInvoiceScopeChange={async (value) => {
+                      const r = await updateReservation(reservation.id, { invoiceScope: value } as Parameters<typeof updateReservation>[1]);
+                      if (r.success) {
+                        setForm((prev) => ({ ...prev, invoiceScope: value }));
+                        toast.success("Zapisano zakres faktury");
                       } else {
                         toast.error(r.error ?? "Błąd zapisu");
                       }
@@ -1066,6 +1157,68 @@ export function UnifiedReservationDialog({
           </p>
           <div className="space-y-3 mt-2">
             <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Kwota noclegu na paragonie/fakturze [PLN]</label>
+              <Input
+                type="number"
+                min={0}
+                step={0.01}
+                placeholder={docRoomTotal != null ? String(docRoomTotal.toFixed(2)) : "suma z transakcji"}
+                className="h-8 text-sm"
+                value={docAmountOverride}
+                onChange={(e) => setDocAmountOverride(e.target.value)}
+              />
+              {docRoomTotal != null && (
+                <p className="text-[10px] text-muted-foreground mt-0.5">Aktualna suma noclegu: {docRoomTotal.toFixed(2)} PLN</p>
+              )}
+            </div>
+            <div className="rounded border bg-muted/30 p-2 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Podział na fakturę i paragon</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-0.5 block">Kwota na fakturę [PLN]</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    className="h-8 text-sm"
+                    value={docAmountInvoice}
+                    onChange={(e) => setDocAmountInvoice(e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground mb-0.5 block">Kwota na paragon [PLN]</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    className="h-8 text-sm"
+                    value={docAmountReceipt}
+                    onChange={(e) => setDocAmountReceipt(e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+              {(docTotalAmount != null || (docAmountOverride.trim() && parseFloat(docAmountOverride) > 0)) && (() => {
+                const override = docAmountOverride.trim() ? parseFloat(docAmountOverride) : null;
+                const effective = override != null && Number.isFinite(override) && override > 0
+                  ? Math.round(override * 100) / 100
+                  : (docTotalAmount ?? 0);
+                return (
+                  <p className="text-[10px] text-muted-foreground">
+                    Kwota do zapłaty: {effective.toFixed(2)} PLN
+                    {docAmountInvoice && docAmountReceipt && (() => {
+                      const inv = parseFloat(docAmountInvoice) || 0;
+                      const rec = parseFloat(docAmountReceipt) || 0;
+                      const sum = Math.round((inv + rec) * 100) / 100;
+                      const ok = Math.abs(sum - effective) < 0.01;
+                      return ok ? " ✓" : ` (suma ${sum.toFixed(2)} – musi być równa)`;
+                    })()}
+                  </p>
+                );
+              })()}
+            </div>
+            <div>
               <label className="text-xs text-muted-foreground mb-1 block">Uwagi na fakturze (opcjonalnie)</label>
               <Textarea
                 value={invoiceNotes}
@@ -1076,6 +1229,21 @@ export function UnifiedReservationDialog({
               />
             </div>
             <div className="flex flex-col gap-2">
+              {docAmountInvoice && docAmountReceipt && (() => {
+                const inv = parseFloat(docAmountInvoice) || 0;
+                const rec = parseFloat(docAmountReceipt) || 0;
+                const sum = Math.round((inv + rec) * 100) / 100;
+                const override = docAmountOverride.trim() ? parseFloat(docAmountOverride) : null;
+                const effective = override != null && Number.isFinite(override) && override > 0
+                  ? Math.round(override * 100) / 100
+                  : (docTotalAmount ?? 0);
+                const canBoth = inv > 0 && rec > 0 && effective > 0 && Math.abs(sum - effective) < 0.01;
+                return canBoth ? (
+                  <Button variant="default" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => handleDocChoice("both")}>
+                    📄 Faktura ({inv.toFixed(2)} PLN) + 🧾 Paragon ({rec.toFixed(2)} PLN) — Wystaw oba
+                  </Button>
+                ) : null;
+              })()}
               <Button variant="default" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => handleDocChoice("vat")}>
                 📄 Faktura VAT (PDF) — drukuj
               </Button>

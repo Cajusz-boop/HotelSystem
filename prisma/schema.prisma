@@ -747,6 +747,8 @@ model Reservation {
   digitalKeyCode Json?        // cyfrowy klucz do drzwi { code, validFrom, validTo, generatedAt }
   /** Gdy true: faktura pokazuje jedną linię „Usługa hotelowa” z całą sumą (nocleg + gastronomia + inne) */
   invoiceSingleLine Boolean   @default(true)
+  /** Zakres faktury: ALL (wszystkie), HOTEL_ONLY (tylko hotel), GASTRONOMY_ONLY (tylko gastronomia) */
+  invoiceScope     String    @default("ALL")
   /** Nadpisana kwota wpłat (widoczna na fakturze) – gdy null, używana suma z transakcji */
   paidAmountOverride Decimal? @db.Decimal(12, 2)
   createdAt   DateTime         @default(now())
@@ -1050,6 +1052,10 @@ model Transaction {
   postedBy       String?  // kto wprowadził
   postedAt       DateTime @default(now())
   
+  // Nadpisanie ceny noclegu przez recepcjonistę (nie nadpisuj ceną z cennika)
+  isManualOverride  Boolean   @default(false)
+  originalAmount    Decimal?  @db.Decimal(12, 2) // oryginalna kwota przed nadpisaniem (do audytu)
+
   // Rabat na pozycję vs na rezerwację: dla type=DISCOUNT – jeśli ustawione, rabat dotyczy tej jednej pozycji
   appliesToTransactionId String?
   appliesToTransaction   Transaction?  @relation("LineItemDiscount", fields: [appliesToTransactionId], references: [id], onDelete: SetNull)
@@ -1138,6 +1144,8 @@ model Invoice {
   paymentBreakdown Json?    // rozbicie płatności: [{ type: "CASH", amount: 100 }, { type: "CARD", amount: 50 }]
   customFieldValues Json?   // własne pola faktury (np. zamówienie, projekt)
   notes         String?  @db.Text  // uwagi widoczne na fakturze
+  /** Zakres użyty przy tworzeniu: ALL, HOTEL_ONLY, GASTRONOMY_ONLY (dla faktur z rezerwacji) */
+  invoiceScope  String?  // ALL | HOTEL_ONLY | GASTRONOMY_ONLY
 
   corrections   InvoiceCorrection[]
   cashDocuments CashDocument[]

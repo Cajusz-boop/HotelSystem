@@ -4,6 +4,13 @@ import { useState, useEffect } from "react";
 import { getRestaurantChargesForReservation } from "@/app/actions/gastronomy";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 function InvoiceSingleLineCheckbox({
   checked,
@@ -26,13 +33,21 @@ function InvoiceSingleLineCheckbox({
   );
 }
 
+const INVOICE_SCOPE_OPTIONS = [
+  { value: "ALL", label: "Całość (hotel + gastronomia)" },
+  { value: "HOTEL_ONLY", label: "Tylko usługa hotelowa" },
+  { value: "GASTRONOMY_ONLY", label: "Tylko usługa gastronomiczna" },
+] as const;
+
 interface MealsTabProps {
   reservationId: string;
   invoiceSingleLine: boolean;
   onInvoiceSingleLineChange: (value: boolean) => void | Promise<void>;
+  invoiceScope: string;
+  onInvoiceScopeChange: (value: string) => void | Promise<void>;
 }
 
-export function MealsTab({ reservationId, invoiceSingleLine, onInvoiceSingleLineChange }: MealsTabProps) {
+export function MealsTab({ reservationId, invoiceSingleLine, onInvoiceSingleLineChange, invoiceScope, onInvoiceScopeChange }: MealsTabProps) {
   const [charges, setCharges] = useState<
     Array<{
       id: string;
@@ -78,6 +93,19 @@ export function MealsTab({ reservationId, invoiceSingleLine, onInvoiceSingleLine
         </p>
       </div>
       <InvoiceSingleLineCheckbox checked={invoiceSingleLine} onCheckedChange={onInvoiceSingleLineChange} />
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">Zakres faktury</Label>
+        <Select value={invoiceScope || "ALL"} onValueChange={(v) => onInvoiceScopeChange(v)}>
+          <SelectTrigger className="h-8 text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {INVOICE_SCOPE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   );
 
@@ -88,6 +116,19 @@ export function MealsTab({ reservationId, invoiceSingleLine, onInvoiceSingleLine
   return (
     <div className="space-y-3">
       <InvoiceSingleLineCheckbox checked={invoiceSingleLine} onCheckedChange={onInvoiceSingleLineChange} />
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">Zakres faktury</Label>
+        <Select value={invoiceScope || "ALL"} onValueChange={(v) => onInvoiceScopeChange(v)}>
+          <SelectTrigger className="h-8 text-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {INVOICE_SCOPE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">
           Dania nabite na pokój

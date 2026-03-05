@@ -3728,9 +3728,115 @@ export async function postRoomChargeOnCheckout(
 }
 
 /**
+ * Nadpisuje kwotę noclegu ręcznie (Price Override).
+ * Aktualizuje ReservationDayRate/rateCodePrice oraz transakcję ROOM.
+ * Paragon, faktura i folio będą spójne z nową kwotą.
+ */
+export async function overrideRoomPrice(
+  reservationId: string,
+  newTotalPrice: number
+): Promise<ActionResult<{ amount: number }>> {
+  try {
+    if (newTotalPrice <= 0) {
+      return { success: false, error: "Kwota musi być większa od zera" };
+    }
+    const reservation = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      include: { room: true },
+    });
+    if (!reservation || !reservation.room) {
+      return { success: false, error: "Rezerwacja nie istnieje lub brak pokoju" };
+    }
+
+    const checkInDate = reservation.checkIn instanceof Date ? reservation.checkIn : new Date(reservation.checkIn);
+    const checkOutDate = reservation.checkOut instanceof Date ? reservation.checkOut : new Date(reservation.checkOut);
+    const checkInStr = checkInDate.toISOString().slice(0, 10);
+    const checkOutStr = checkOutDate.toISOString().slice(0, 10);
+    const checkIn = new Date(checkInStr + "T12:00:00Z");
+    const checkOut = new Date(checkOutStr + "T12:00:00Z");
+    const nights = Math.max(1, Math.round((checkOut.getTime() - checkIn.getTime()) / (24 * 60 * 60 * 1000)));
+    const newRatePerNight = Math.round((newTotalPrice / nights) * 100) / 100;
+
+    // Zaktualizuj ReservationDayRate proporcjonalnie
+    const dateStrs: string[] = [];
+    for (let i = 0; i < nights; i++) {
+      const d = new Date(checkIn);
+      d.setUTCDate(d.getUTCDate() + i);
+      dateStrs.push(d.toISOString().slice(0, 10));
+    }
+    let remainder = Math.round(newTotalPrice * 100) / 100 - newRatePerNight * (nights - 1);
+    for (let i = 0; i < dateStrs.length; i++) {
+      const rate = i === dateStrs.length - 1 ? remainder : newRatePerNight;
+      if (rate <= 0) continue;
+      await prisma.reservationDayRate.upsert({
+        where: {
+          reservationId_date: { reservationId, date: new Date(dateStrs[i] + "T12:00:00Z") },
+        },
+        create: { reservationId, date: new Date(dateStrs[i] + "T12:00:00Z"), rate },
+        update: { rate },
+      });
+    }
+
+    // Zaktualizuj rateCodePrice jako fallback
+    await prisma.reservation.update({
+      where: { id: reservationId },
+      data: { rateCodePrice: newRatePerNight },
+    });
+
+    const existingTx = await prisma.transaction.findFirst({
+      where: { reservationId, type: "ROOM", status: "ACTIVE" },
+    });
+
+    if (existingTx) {
+      const prevAmount = Number(existingTx.amount);
+      const origAmount = existingTx.isManualOverride ? existingTx.originalAmount : prevAmount;
+      await prisma.transaction.update({
+        where: { id: existingTx.id },
+        data: {
+          amount: newTotalPrice,
+          unitPrice: newTotalPrice,
+          isManualOverride: true,
+          originalAmount: origAmount ?? prevAmount,
+        },
+      });
+    } else {
+      const description = `Nocleg ${checkInStr} - ${checkOutStr}`;
+      await prisma.transaction.create({
+        data: {
+          reservationId,
+          amount: newTotalPrice,
+          type: "ROOM",
+          description,
+          quantity: 1,
+          unitPrice: newTotalPrice,
+          vatRate: 8,
+          folioNumber: 1,
+          status: "ACTIVE",
+          gtuCode: "GTU_11",
+          isManualOverride: true,
+        },
+      });
+    }
+
+    revalidatePath("/finance");
+    revalidatePath("/reports");
+    revalidatePath("/front-office");
+    await updateReservationPaymentStatus(reservationId).catch((err) =>
+      console.error("[updateReservationPaymentStatus]", err)
+    );
+    return { success: true, data: { amount: newTotalPrice } };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd nadpisania ceny noclegu",
+    };
+  }
+}
+
+/**
  * Synchronizuje kwotę transakcji ROOM z aktualną ceną rezerwacji (rateCodePrice / ReservationDayRate).
  * Wywołaj po zapisie rateCodePrice lub ReservationDayRate, gdy istnieje już transakcja ROOM.
- * Dzięki temu faktura będzie zawierać poprawną kwotę po zmianie ceny.
+ * Pomija transakcje z ręcznym nadpisaniem (isManualOverride).
  */
 export async function syncRoomChargeToReservationPrice(
   reservationId: string
@@ -3744,6 +3850,9 @@ export async function syncRoomChargeToReservationPrice(
       },
     });
     if (!existingTx) {
+      return { success: true, data: { updated: false } };
+    }
+    if (existingTx.isManualOverride) {
       return { success: true, data: { updated: false } };
     }
 
@@ -3901,7 +4010,8 @@ export async function voidTransaction(
 /** Druk paragonu fiskalnego (kasa POSNET) dla rezerwacji – bez wymogu NIP. */
 export async function printFiscalReceiptForReservation(
   reservationId: string,
-  paymentType: string = "CASH"
+  paymentType: string = "CASH",
+  amountOverride?: number
 ): Promise<ActionResult<{ receiptNumber?: string }>> {
   try {
     let reservation = await prisma.reservation.findUnique({
@@ -3931,13 +4041,18 @@ export async function printFiscalReceiptForReservation(
     const chargeTransactions = reservation.transactions.filter(
       (t) => chargeTypes.includes(t.type) && Number(t.amount) > 0 && (t.status === "ACTIVE" || t.status == null)
     );
-    const totalAmount = chargeTransactions.reduce((s, t) => s + Number(t.amount), 0);
+    let totalAmount = chargeTransactions.reduce((s, t) => s + Number(t.amount), 0);
 
-    if (totalAmount <= 0) {
+    if (totalAmount <= 0 && (amountOverride == null || amountOverride <= 0)) {
       return { success: false, error: "Brak pozycji do wydrukowania na paragonie" };
     }
 
-    const typeToName: Record<string, string> = {
+    let items: Array<{ name: string; quantity: number; unitPrice: number; vatRate: number }>;
+    if (amountOverride != null && Number.isFinite(amountOverride) && amountOverride > 0) {
+      totalAmount = Math.round(amountOverride * 100) / 100;
+      items = [{ name: "Usługa hotelowa", quantity: 1, unitPrice: totalAmount, vatRate: 8 }];
+    } else {
+      const typeToName: Record<string, string> = {
       ROOM: "Nocleg",
       LOCAL_TAX: "Opłata miejscowa",
       MINIBAR: "Minibar",
@@ -3951,13 +4066,13 @@ export async function printFiscalReceiptForReservation(
       ATTRACTION: "Atrakcje",
       OTHER: "Inne",
     };
-
-    const items = chargeTransactions.map((t) => ({
-      name: typeToName[t.type] ?? t.type,
-      quantity: 1,
-      unitPrice: Number(t.amount),
-      vatRate: 8,
-    }));
+      items = chargeTransactions.map((t) => ({
+        name: typeToName[t.type] ?? t.type,
+        quantity: 1,
+        unitPrice: Number(t.amount),
+        vatRate: 8,
+      }));
+    }
 
     const templateResult = await getFiscalReceiptTemplate();
     const headerLines: string[] = [];
@@ -4214,7 +4329,15 @@ export async function getTransactionsForReservation(
   reservationId: string
 ): Promise<
   ActionResult<
-    Array<{ id: string; amount: number; type: string; createdAt: string; isReadOnly: boolean }>
+    Array<{
+      id: string;
+      amount: number;
+      type: string;
+      createdAt: string;
+      isReadOnly: boolean;
+      isManualOverride?: boolean;
+      originalAmount?: number;
+    }>
   >
 > {
   try {
@@ -4230,6 +4353,8 @@ export async function getTransactionsForReservation(
         type: t.type,
         createdAt: t.createdAt.toISOString(),
         isReadOnly: t.isReadOnly,
+        isManualOverride: t.isManualOverride ?? false,
+        originalAmount: t.originalAmount != null ? Number(t.originalAmount) : undefined,
       })),
     };
   } catch (e) {
@@ -4244,7 +4369,7 @@ export async function getTransactionsForReservation(
 export async function createVatInvoice(
   reservationId: string,
   marginMode?: boolean,
-  options?: { invoiceType?: "NORMAL" | "ADVANCE" | "FINAL"; advanceInvoiceId?: string; notes?: string }
+  options?: { invoiceType?: "NORMAL" | "ADVANCE" | "FINAL"; advanceInvoiceId?: string; notes?: string; amountGrossOverride?: number }
 ): Promise<
   ActionResult<{
     id: string;
@@ -4293,9 +4418,23 @@ export async function createVatInvoice(
       }
     }
 
-    // Rozliczenie końcowe: obciążenia minus rabaty minus zaliczki (faktura za przedpłatę z późniejszym rozliczeniem)
-    const chargeTypes = ["ROOM", "LOCAL_TAX", "MINIBAR", "GASTRONOMY", "SPA", "PARKING", "RENTAL", "PHONE", "LAUNDRY", "TRANSPORT", "ATTRACTION", "OTHER"];
-    const totalCharges = reservation.transactions
+    // Zakres faktury: ALL | HOTEL_ONLY | GASTRONOMY_ONLY
+    const GASTRONOMY_TYPES = ["GASTRONOMY", "RESTAURANT", "POSTING"];
+    const HOTEL_TYPES = ["ROOM", "LOCAL_TAX", "MINIBAR", "SPA", "PARKING", "RENTAL", "PHONE", "LAUNDRY", "TRANSPORT", "ATTRACTION", "OTHER"];
+    const chargeTypes = [...new Set([...HOTEL_TYPES, ...GASTRONOMY_TYPES])];
+    const invoiceScope = (reservation.invoiceScope ?? "ALL") as string;
+
+    let chargeTransactions = reservation.transactions.filter(
+      (t) => chargeTypes.includes(t.type) && Number(t.amount) > 0 && (t.status === "ACTIVE" || t.status == null)
+    );
+    if (invoiceScope === "HOTEL_ONLY") {
+      chargeTransactions = chargeTransactions.filter((t) => !GASTRONOMY_TYPES.includes(t.type));
+    } else if (invoiceScope === "GASTRONOMY_ONLY") {
+      chargeTransactions = chargeTransactions.filter((t) => GASTRONOMY_TYPES.includes(t.type));
+    }
+
+    const totalCharges = chargeTransactions.reduce((s, t) => s + Number(t.amount), 0);
+    const allChargesTotal = reservation.transactions
       .filter((t) => chargeTypes.includes(t.type) && Number(t.amount) > 0)
       .reduce((s, t) => s + Number(t.amount), 0);
     const totalDiscounts = reservation.transactions
@@ -4304,8 +4443,17 @@ export async function createVatInvoice(
     const totalDeposits = reservation.transactions
       .filter((t) => t.type === "DEPOSIT" && Number(t.amount) > 0)
       .reduce((s, t) => s + Number(t.amount), 0);
-    const totalGross = Math.round((totalCharges - totalDiscounts - totalDeposits) * 100) / 100;
+    // Proporcjonalny podział rabatów i zaliczek według zakresu
+    const ratio = allChargesTotal > 0 ? totalCharges / allChargesTotal : 1;
+    const scopeDiscounts = Math.round(totalDiscounts * ratio * 100) / 100;
+    const scopeDeposits = Math.round(totalDeposits * ratio * 100) / 100;
+    let totalGross = Math.round((totalCharges - scopeDiscounts - scopeDeposits) * 100) / 100;
     if (totalGross <= 0) return { success: false, error: "Suma do faktury (obciążenia minus zaliczki) musi być większa od zera. Sprawdź, czy pokój ma przypisaną cenę." };
+
+    const amountGrossOverride = options?.amountGrossOverride;
+    if (amountGrossOverride != null && Number.isFinite(amountGrossOverride) && amountGrossOverride > 0) {
+      totalGross = Math.round(amountGrossOverride * 100) / 100;
+    }
 
     const configResult = await getCennikConfig();
     if (!configResult.success || !configResult.data) {
@@ -4367,6 +4515,7 @@ export async function createVatInvoice(
         amountGross,
         vatRate: vatPercent,
         marginMode: marginMode ?? false,
+        invoiceScope: invoiceScope !== "ALL" ? invoiceScope : null,
         buyerNip,
         buyerName: buyerCompany.name,
         buyerAddress: buyerCompany.address ?? null,

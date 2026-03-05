@@ -80,7 +80,8 @@ async function generateInvoiceHtml(id: string): Promise<string> {
   }
 
   // Pobierz transakcje rezerwacji
-  const transactions = invoice.reservationId
+  const GASTRONOMY_TYPES = ["GASTRONOMY", "RESTAURANT", "POSTING"];
+  let transactions = invoice.reservationId
     ? await prisma.transaction.findMany({
         where: {
           reservationId: invoice.reservationId,
@@ -91,6 +92,18 @@ async function generateInvoiceHtml(id: string): Promise<string> {
         orderBy: { createdAt: "asc" },
       })
     : [];
+  // Filtruj według invoiceScope (z faktury lub rezerwacji)
+  const invoiceScope = invoice.invoiceScope ?? (invoice.reservationId
+    ? (await prisma.reservation.findUnique({
+        where: { id: invoice.reservationId },
+        select: { invoiceScope: true },
+      }))?.invoiceScope ?? "ALL"
+    : "ALL");
+  if (invoiceScope === "HOTEL_ONLY") {
+    transactions = transactions.filter((t) => !GASTRONOMY_TYPES.includes(t.type));
+  } else if (invoiceScope === "GASTRONOMY_ONLY") {
+    transactions = transactions.filter((t) => GASTRONOMY_TYPES.includes(t.type));
+  }
 
   // Pobierz transakcje płatności (do ustalenia metody płatności jeśli nie zapisana w fakturze)
   let detectedPaymentMethod: string | null = null;
@@ -517,6 +530,7 @@ async function generateInvoiceHtml(id: string): Promise<string> {
     .bank-info { font-size: 0.8rem; margin-top: 0.5rem; }
     .ksef-qr { margin-top: 1rem; padding: 0.5rem; border: 1px solid #eee; border-radius: 4px; display: inline-block; }
     .invoice-notes { margin: 1rem 0; padding: 0.5rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; background: #fafafa; }
+    .invoice-page-copy { page-break-before: always; }
     @media print { 
       body { margin: 0; padding: 0.5rem; font-size: 11px; } 
       .no-print { display: none; }
@@ -658,7 +672,12 @@ async function generateInvoiceHtml(id: string): Promise<string> {
   </p>
 </body>
 </html>`;
-  return html;
+  // Druga strona: kopia (oryginał dla gościa, kopia dla recepcji)
+  const noPrintIdx = html.indexOf('  <p class="mt-2 no-print"');
+  const bodyContent = html.substring(html.indexOf('  <div class="header-row">'), noPrintIdx);
+  const kopiaContent = bodyContent.replace('oryginał</h1>', 'kopia</h1>');
+  const htmlWithCopy = html.substring(0, noPrintIdx) + '\n  <div class="invoice-page-copy">\n' + kopiaContent + '  </div>\n  ' + html.substring(noPrintIdx);
+  return htmlWithCopy;
 }
 
 function escapeHtml(s: string): string {

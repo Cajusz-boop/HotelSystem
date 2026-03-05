@@ -19,10 +19,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createSalesInvoice, type SalesInvoiceLineItem } from "@/app/actions/finance";
-import { getAllCompanies } from "@/app/actions/companies";
+import { getAllCompanies, lookupCompanyByNip } from "@/app/actions/companies";
 import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { toast } from "sonner";
-import { Plus, Trash2, ChevronDown } from "lucide-react";
+import { Plus, Trash2, ChevronDown, Search } from "lucide-react";
 
 type BuyerMode = "company" | "manual";
 
@@ -65,6 +65,37 @@ export function SalesInvoiceDialog({
   const [paymentDays, setPaymentDays] = useState(14);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
+  const [nipLoading, setNipLoading] = useState(false);
+
+  const handleFetchByNip = async () => {
+    const trimmed = nip.trim();
+    if (!trimmed) {
+      toast.error("Podaj NIP.");
+      return;
+    }
+    const validation = validateNipOrVat(trimmed);
+    if (!validation.ok) {
+      toast.error(validation.error);
+      return;
+    }
+    setNipLoading(true);
+    try {
+      const result = await lookupCompanyByNip(trimmed);
+      if (result.success && result.data) {
+        const d = result.data;
+        setNip(d.nip ?? trimmed);
+        setBuyerName(d.name ?? "");
+        setBuyerAddress(d.address ?? "");
+        setBuyerPostalCode(d.postalCode ?? "");
+        setBuyerCity(d.city ?? "");
+        toast.success("Dane firmy pobrane z Wykazu VAT.");
+      } else {
+        toast.error(result.success === false ? result.error : "Nie udało się pobrać danych.");
+      }
+    } finally {
+      setNipLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -307,12 +338,27 @@ export function SalesInvoiceDialog({
               <div className="grid gap-2 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="nip">NIP / Numer VAT (UE) *</Label>
-                  <Input
-                    id="nip"
-                    value={nip}
-                    onChange={(e) => setNip(e.target.value.toUpperCase().replace(/\s/g, "").slice(0, 14))}
-                    placeholder="1234567890 lub DE123456789"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="nip"
+                      value={nip}
+                      onChange={(e) => setNip(e.target.value.toUpperCase().replace(/\s/g, "").slice(0, 14))}
+                      placeholder="1234567890 lub DE123456789"
+                      className="flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="default"
+                      onClick={handleFetchByNip}
+                      disabled={nipLoading || !nip.trim()}
+                      title="Pobierz dane z Wykazu podatników VAT"
+                    >
+                      <Search className="mr-1.5 h-4 w-4" />
+                      {nipLoading ? "…" : "Pobierz dane"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">Dla polskiego NIP – dane z Wykazu VAT</p>
                 </div>
                 <div>
                   <Label htmlFor="buyerName">Nazwa *</Label>

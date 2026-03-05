@@ -22,9 +22,11 @@ vi.mock("@/lib/db", () => {
     },
     transaction: {
       findMany: vi.fn(),
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
       aggregate: vi.fn(),
       updateMany: vi.fn(),
+      update: vi.fn(),
       create: vi.fn(),
       count: vi.fn(),
     },
@@ -50,6 +52,10 @@ vi.mock("@/lib/db", () => {
       create: vi.fn(),
       update: vi.fn(),
     },
+    reservationDayRate: {
+      findMany: vi.fn().mockResolvedValue([]),
+      upsert: vi.fn(),
+    },
     room: {
       findMany: vi.fn(),
     },
@@ -68,6 +74,10 @@ vi.mock("@/lib/db", () => {
     },
     blindDropRecord: { create: vi.fn(), findMany: vi.fn() },
     auditLog: { findFirst: vi.fn(), create: vi.fn() },
+    fiscalReceiptTemplate: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+    },
   };
   mockPrisma.$transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(mockPrisma));
   return { prisma: mockPrisma };
@@ -95,6 +105,7 @@ vi.mock("@/lib/fiscal", () => ({
     Promise.resolve({ enabled: false, driver: "mock", taxId: null, pointName: null })
   ),
   printFiscalInvoice: vi.fn(() => Promise.resolve({ success: true, invoiceNumber: "FV-MOCK" })),
+  printFiscalReceipt: vi.fn(() => Promise.resolve({ success: true, receiptNumber: "PAR-001" })),
   supportsFiscalReports: vi.fn(() =>
     Promise.resolve({
       supportsXReport: false,
@@ -118,10 +129,13 @@ vi.mock("@/app/actions/rooms", () => ({
 // ─── Importy po mockach ─────────────────────────────────────────────────────
 
 import { prisma } from "@/lib/db";
+import { printFiscalReceipt } from "@/lib/fiscal";
 import {
   createVatInvoice,
   postRoomChargeOnCheckout,
   printInvoiceForReservation,
+  printFiscalReceiptForReservation,
+  overrideRoomPrice,
 } from "@/app/actions/finance";
 import { getCennikConfig } from "@/app/actions/cennik-config";
 import { getEffectivePricesBatch } from "@/app/actions/rooms";
@@ -378,6 +392,101 @@ describe("Fakturowanie – createVatInvoice", () => {
     expect(result.success).toBe(true);
   });
 
+  it("invoiceScope HOTEL_ONLY: tylko transakcje hotelowe (bez gastronomii)", async () => {
+    const roomTx = makeRoomTransaction(300, "ROOM");
+    const gastronomyTx = makeRoomTransaction(50, "GASTRONOMY");
+    const res = makeReservation({
+      transactions: [roomTx, gastronomyTx],
+      invoiceScope: "HOTEL_ONLY",
+    });
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+    mockCennikConfig(8, false);
+    mockDocumentNumbering();
+
+    vi.mocked(prisma.invoice.create).mockImplementation(async (args: { data: Record<string, unknown> }) => {
+      expect(args.data.amountGross).toBe(300);
+      expect(args.data.invoiceScope).toBe("HOTEL_ONLY");
+      return {
+        id: "inv-1",
+        number: "FV/2026/0001",
+        amountNet: 277.78,
+        amountVat: 22.22,
+        amountGross: 300,
+        issuedAt: new Date("2026-02-17"),
+        reservationId: "res-1",
+        vatRate: 8,
+      } as never;
+    });
+
+    const result = await createVatInvoice("res-1");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.amountGross).toBe(300);
+    }
+  });
+
+  it("invoiceScope GASTRONOMY_ONLY: tylko transakcje gastronomiczne", async () => {
+    const roomTx = makeRoomTransaction(300, "ROOM");
+    const gastronomyTx = makeRoomTransaction(50, "GASTRONOMY");
+    const res = makeReservation({
+      transactions: [roomTx, gastronomyTx],
+      invoiceScope: "GASTRONOMY_ONLY",
+    });
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+    mockCennikConfig(8, false);
+    mockDocumentNumbering();
+
+    vi.mocked(prisma.invoice.create).mockImplementation(async (args: { data: Record<string, unknown> }) => {
+      expect(args.data.amountGross).toBe(50);
+      expect(args.data.invoiceScope).toBe("GASTRONOMY_ONLY");
+      return {
+        id: "inv-1",
+        number: "FV/2026/0001",
+        amountNet: 46.3,
+        amountVat: 3.7,
+        amountGross: 50,
+        issuedAt: new Date("2026-02-17"),
+        reservationId: "res-1",
+        vatRate: 8,
+      } as never;
+    });
+
+    const result = await createVatInvoice("res-1");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.amountGross).toBe(50);
+    }
+  });
+
+  it("invoiceScope ALL (domyślny): wszystkie obciążenia", async () => {
+    const roomTx = makeRoomTransaction(300, "ROOM");
+    const gastronomyTx = makeRoomTransaction(50, "GASTRONOMY");
+    const res = makeReservation({ transactions: [roomTx, gastronomyTx] });
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+    mockCennikConfig(8, false);
+    mockDocumentNumbering();
+
+    vi.mocked(prisma.invoice.create).mockImplementation(async (args: { data: Record<string, unknown> }) => {
+      expect(args.data.amountGross).toBe(350);
+      return {
+        id: "inv-1",
+        number: "FV/2026/0001",
+        amountNet: 324.07,
+        amountVat: 25.93,
+        amountGross: 350,
+        issuedAt: new Date("2026-02-17"),
+        reservationId: "res-1",
+        vatRate: 8,
+      } as never;
+    });
+
+    const result = await createVatInvoice("res-1");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.amountGross).toBe(350);
+    }
+  });
+
   it("Dane nabywcy: faktura zawiera NIP, nazwę i adres firmy", async () => {
     const roomTx = makeRoomTransaction(300);
     const res = makeReservation({ transactions: [roomTx] });
@@ -407,6 +516,92 @@ describe("Fakturowanie – createVatInvoice", () => {
 
     const result = await createVatInvoice("res-1");
     expect(result.success).toBe(true);
+  });
+
+  it("Weryfikacja kwot: wpisana kwota na fakturze (amountGrossOverride 200) zapisana w Invoice.amountGross", async () => {
+    const roomTx = makeRoomTransaction(300);
+    const res = makeReservation({ transactions: [roomTx] });
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+    mockCennikConfig(8, false);
+    mockDocumentNumbering();
+
+    let savedAmountGross: number | null = null;
+    vi.mocked(prisma.invoice.create).mockImplementation(async (args: { data: Record<string, unknown> }) => {
+      savedAmountGross = Number(args.data.amountGross);
+      return {
+        id: "inv-1",
+        number: "FV/2026/0001",
+        amountNet: args.data.amountNet,
+        amountVat: args.data.amountVat,
+        amountGross: args.data.amountGross,
+        issuedAt: new Date("2026-02-17"),
+        reservationId: "res-1",
+        vatRate: 8,
+      } as never;
+    });
+
+    const result = await createVatInvoice("res-1", undefined, { amountGrossOverride: 200 });
+
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.amountGross).toBe(200);
+    expect(savedAmountGross).toBe(200);
+  });
+
+  it("Happy path: amountGrossOverride – faktura na podaną kwotę (split 200/100)", async () => {
+    const roomTx = makeRoomTransaction(300);
+    const res = makeReservation({ transactions: [roomTx] });
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+    mockCennikConfig(8, false);
+    mockDocumentNumbering();
+
+    vi.mocked(prisma.invoice.create).mockImplementation(async (args: { data: Record<string, unknown> }) => {
+      expect(args.data.amountGross).toBe(200);
+      const net = Number(args.data.amountNet);
+      const vat = Number(args.data.amountVat);
+      expect(net + vat).toBeCloseTo(200, 2);
+      return {
+        id: "inv-1",
+        number: "FV/2026/0001",
+        amountNet: args.data.amountNet,
+        amountVat: args.data.amountVat,
+        amountGross: 200,
+        issuedAt: new Date("2026-02-17"),
+        reservationId: "res-1",
+        vatRate: 8,
+      } as never;
+    });
+
+    const result = await createVatInvoice("res-1", undefined, { amountGrossOverride: 200 });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.amountGross).toBe(200);
+    }
+  });
+
+  it("Edge case: amountGrossOverride 0 – ignorowane (używana suma z transakcji)", async () => {
+    const roomTx = makeRoomTransaction(300);
+    const res = makeReservation({ transactions: [roomTx] });
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+    mockCennikConfig(8, false);
+    mockDocumentNumbering();
+    vi.mocked(prisma.invoice.create).mockResolvedValue({
+      id: "inv-1",
+      number: "FV/2026/0001",
+      amountNet: 277.78,
+      amountVat: 22.22,
+      amountGross: 300,
+      issuedAt: new Date("2026-02-17"),
+      reservationId: "res-1",
+      vatRate: 8,
+    } as never);
+
+    const result = await createVatInvoice("res-1", undefined, { amountGrossOverride: 0 });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.amountGross).toBe(300);
+    }
   });
 
   it("Auto-naliczanie: bez transakcji ROOM wywołuje postRoomChargeOnCheckout", async () => {
@@ -694,6 +889,93 @@ describe("Konfiguracja VAT – getCennikConfig", () => {
   });
 });
 
+// ─── overrideRoomPrice ──────────────────────────────────────────────────────
+
+describe("Nadpisanie ceny noclegu – overrideRoomPrice", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("Błąd: kwota <= 0", async () => {
+    const res = makeReservation();
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+
+    const result = await overrideRoomPrice("res-1", 0);
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error).toContain("większa od zera");
+
+    const result2 = await overrideRoomPrice("res-1", -100);
+    expect(result2.success).toBe(false);
+  });
+
+  it("Happy path: nadpisuje cenę gdy istnieje transakcja ROOM", async () => {
+    const roomTx = makeRoomTransaction(300, "ROOM");
+    const res = makeReservation({
+      transactions: [roomTx],
+      room: { id: "room-1", number: "5", price: 300 },
+    });
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+    vi.mocked(prisma.reservationDayRate.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.reservation.update).mockResolvedValue(res as never);
+    vi.mocked(prisma.transaction.findFirst).mockResolvedValue({
+      ...roomTx,
+      id: "tx-room-1",
+      isManualOverride: false,
+      originalAmount: null,
+    } as never);
+    vi.mocked(prisma.transaction.update).mockResolvedValue({} as never);
+
+    const result = await overrideRoomPrice("res-1", 250);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.amount).toBe(250);
+    }
+    expect(prisma.transaction.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "tx-room-1" },
+        data: expect.objectContaining({
+          amount: 250,
+          unitPrice: 250,
+          isManualOverride: true,
+        }),
+      })
+    );
+  });
+
+  it("Happy path: tworzy transakcję ROOM gdy nie istnieje", async () => {
+    const res = makeReservation({
+      transactions: [],
+      room: { id: "room-1", number: "5", price: 300 },
+    });
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+    vi.mocked(prisma.reservationDayRate.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.reservation.update).mockResolvedValue(res as never);
+    vi.mocked(prisma.transaction.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.transaction.create).mockResolvedValue({
+      id: "tx-new",
+      amount: 250,
+      type: "ROOM",
+    } as never);
+
+    const result = await overrideRoomPrice("res-1", 250);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.amount).toBe(250);
+    }
+    expect(prisma.transaction.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: "ROOM",
+          amount: 250,
+          isManualOverride: true,
+        }),
+      })
+    );
+  });
+});
+
 // ─── printInvoiceForReservation ─────────────────────────────────────────────
 
 describe("Druk faktury POSNET – printInvoiceForReservation", () => {
@@ -729,19 +1011,142 @@ describe("Druk faktury POSNET – printInvoiceForReservation", () => {
 
   it("Auto-naliczanie: bez transakcji ROOM próbuje naliczyć nocleg", async () => {
     const res = makeReservation({ transactions: [] });
-    vi.mocked(prisma.reservation.findUnique)
-      .mockResolvedValueOnce(res as never)
-      .mockResolvedValueOnce(res as never)
-      .mockResolvedValueOnce({
-        ...res,
-        transactions: [makeRoomTransaction(300)],
-      } as never);
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
     vi.mocked(prisma.transaction.count).mockResolvedValue(0);
+    vi.mocked(prisma.reservationDayRate.findMany).mockResolvedValue([]);
     vi.mocked(getEffectivePricesBatch).mockResolvedValue({ "5-2026-02-18": 300 });
     vi.mocked(prisma.transaction.create).mockResolvedValue(makeRoomTransaction(300) as never);
 
-    const result = await printInvoiceForReservation("res-1");
+    await printInvoiceForReservation("res-1");
 
     expect(prisma.transaction.create).toHaveBeenCalled();
+  });
+});
+
+// ─── printFiscalReceiptForReservation ───────────────────────────────────────
+
+describe("Paragon fiskalny – printFiscalReceiptForReservation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(prisma.fiscalReceiptTemplate.findFirst).mockResolvedValue({
+      id: "tpl-1",
+      headerLine1: "Hotel",
+      headerLine2: null,
+      headerLine3: null,
+      footerLine1: "Dziękujemy",
+      footerLine2: null,
+      footerLine3: null,
+      itemNameRoom: null,
+      itemNameDeposit: null,
+      itemNameMinibar: null,
+      itemNameService: null,
+      itemNameLocalTax: null,
+      itemNameParking: null,
+      defaultVatRate: 8,
+      includeRoomNumber: false,
+      includeStayDates: false,
+      roomNumberFormat: null,
+    } as never);
+  });
+
+  it("Błąd: rezerwacja nie istnieje", async () => {
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(null);
+
+    const result = await printFiscalReceiptForReservation("non-existent");
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toContain("nie istnieje");
+    }
+  });
+
+  it("Błąd: brak obciążeń (bez amountOverride)", async () => {
+    const res = makeReservation({ transactions: [] });
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+    vi.mocked(prisma.transaction.count).mockResolvedValue(0);
+
+    const result = await printFiscalReceiptForReservation("res-1");
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toContain("Brak pozycji");
+    }
+  });
+
+  it("Happy path: paragon na pełną kwotę z transakcji", async () => {
+    const roomTx = makeRoomTransaction(300);
+    const res = makeReservation({ transactions: [roomTx] });
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+
+    const result = await printFiscalReceiptForReservation("res-1");
+
+    expect(result.success).toBe(true);
+    expect(vi.mocked(printFiscalReceipt)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        totalAmount: 300,
+        items: expect.arrayContaining([
+          expect.objectContaining({ name: "Nocleg", unitPrice: 300 }),
+        ]),
+      })
+    );
+  });
+
+  it("Happy path: amountOverride – paragon na podaną kwotę (split 100 PLN)", async () => {
+    const roomTx = makeRoomTransaction(300);
+    const res = makeReservation({ transactions: [roomTx] });
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+
+    const result = await printFiscalReceiptForReservation("res-1", "CASH", 100);
+
+    expect(result.success).toBe(true);
+    expect(vi.mocked(printFiscalReceipt)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        totalAmount: 100,
+        items: [
+          expect.objectContaining({
+            name: "Usługa hotelowa",
+            quantity: 1,
+            unitPrice: 100,
+            vatRate: 8,
+          }),
+        ],
+      })
+    );
+  });
+
+  it("Weryfikacja kwot: wpisana kwota na paragonie (amountOverride 100) pojawia się w request do kasy", async () => {
+    const roomTx = makeRoomTransaction(300);
+    const res = makeReservation({ transactions: [roomTx] });
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+
+    const result = await printFiscalReceiptForReservation("res-1", "CASH", 100);
+
+    expect(result.success).toBe(true);
+    expect(vi.mocked(printFiscalReceipt)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        totalAmount: 100,
+        items: [
+          expect.objectContaining({
+            name: "Usługa hotelowa",
+            quantity: 1,
+            unitPrice: 100,
+            vatRate: 8,
+          }),
+        ],
+      })
+    );
+  });
+
+  it("Edge case: amountOverride 0 – ignorowany (używana suma z transakcji)", async () => {
+    const roomTx = makeRoomTransaction(300);
+    const res = makeReservation({ transactions: [roomTx] });
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+
+    const result = await printFiscalReceiptForReservation("res-1", "CASH", 0);
+
+    expect(result.success).toBe(true);
+    expect(vi.mocked(printFiscalReceipt)).toHaveBeenCalledWith(
+      expect.objectContaining({ totalAmount: 300 })
+    );
   });
 });
