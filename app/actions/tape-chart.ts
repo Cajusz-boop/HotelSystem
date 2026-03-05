@@ -154,12 +154,12 @@ function mapReservationToTapeChart(r: {
     rateCodePrice: (() => {
       if (r.rateCodePrice != null) return Number(r.rateCodePrice);
       if (r.rateCode) {
-        const pax = Math.max(1, (r.adults ?? 0) + (r.children ?? 0) || r.pax ?? 1);
+        const pax = Math.max(1, r.pax ?? 1);
         return computeRateCodePricePerNight(
           {
             price: r.rateCode.price != null ? Number(r.rateCode.price) : null,
-            basePrice: r.rateCode.basePrice != null ? Number(r.rateCode.basePrice) : null,
-            pricePerPerson: r.rateCode.pricePerPerson != null ? Number(r.rateCode.pricePerPerson) : null,
+            basePrice: null,
+            pricePerPerson: null,
           },
           pax
         ) ?? undefined;

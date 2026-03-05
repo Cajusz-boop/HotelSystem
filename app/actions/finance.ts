@@ -3674,7 +3674,7 @@ export async function postRoomChargeOnCheckout(
     let manualPricePerNight: number | null =
       reservation.rateCodePrice != null ? Number(reservation.rateCodePrice) : null;
     if (manualPricePerNight == null && reservation.rateCode && reservation.rateCodeId) {
-      const pax = Math.max(1, (reservation.adults ?? 0) + (reservation.children ?? 0) || reservation.pax ?? 1);
+      const pax = Math.max(1, ((reservation.adults ?? 0) + (reservation.children ?? 0)) || (reservation.pax ?? 1));
       const rc = reservation.rateCode;
       manualPricePerNight = computeRateCodePricePerNight(
         {
@@ -3903,7 +3903,7 @@ export async function syncRoomChargeToReservationPrice(
     let manualPricePerNight: number | null =
       reservation.rateCodePrice != null ? Number(reservation.rateCodePrice) : null;
     if (manualPricePerNight == null && reservation.rateCode && reservation.rateCodeId) {
-      const pax = Math.max(1, (reservation.adults ?? 0) + (reservation.children ?? 0) || reservation.pax ?? 1);
+      const pax = Math.max(1, ((reservation.adults ?? 0) + (reservation.children ?? 0)) || (reservation.pax ?? 1));
       const rc = reservation.rateCode;
       manualPricePerNight = computeRateCodePricePerNight(
         {

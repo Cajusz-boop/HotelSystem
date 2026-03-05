@@ -180,7 +180,7 @@ function toUiReservation(r: {
     rateCodePrice: (() => {
       if (r.rateCodePrice != null) return Number(r.rateCodePrice);
       if (r.rateCode) {
-        const pax = Math.max(1, (r.adults ?? 0) + (r.children ?? 0) || r.pax ?? 1);
+        const pax = Math.max(1, ((r.adults ?? 0) + (r.children ?? 0)) || (r.pax ?? 1));
         return computeRateCodePricePerNight(
           {
             price: r.rateCode.price != null ? Number(r.rateCode.price) : null,
@@ -4119,7 +4119,7 @@ export async function generateReservationVoucher(
             totalPrice: (() => {
               const rc = reservation.rateCode;
               if (!rc) return undefined;
-              const pax = Math.max(1, (reservation.adults ?? 0) + (reservation.children ?? 0) || reservation.pax ?? 1);
+              const pax = Math.max(1, ((reservation.adults ?? 0) + (reservation.children ?? 0)) || (reservation.pax ?? 1));
               const pricePerNight = computeRateCodePricePerNight(
                 {
                   price: rc.price != null ? Number(rc.price) : null,
