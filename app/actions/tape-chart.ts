@@ -1,7 +1,7 @@
 "use server";
 
 import { ReservationStatus } from "@prisma/client";
-import { computeRateCodePricePerNight } from "@/app/actions/rate-codes";
+import { computeRateCodePricePerNight } from "@/lib/rate-code-utils";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getEffectivePropertyId, getPropertyReservationColors } from "@/app/actions/properties";

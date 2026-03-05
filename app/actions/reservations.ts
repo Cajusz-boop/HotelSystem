@@ -24,7 +24,7 @@ import {
   deleteParkingBookingsByReservation,
 } from "@/app/actions/parking";
 import { postRoomChargeOnCheckout, chargeLocalTax, createVatInvoice, syncRoomChargeToReservationPrice } from "@/app/actions/finance";
-import { computeRateCodePricePerNight } from "@/app/actions/rate-codes";
+import { computeRateCodePricePerNight } from "@/lib/rate-code-utils";
 import { blockRoomExtensionAfterCheckout } from "@/lib/telephony";
 import { generateRoomAccessCode } from "@/app/actions/digital-keys";
 import { sendWelcomeToTv } from "@/lib/hotel-tv";

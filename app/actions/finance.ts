@@ -34,7 +34,7 @@ import { getSession } from "@/lib/auth";
 import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { can } from "@/lib/permissions";
 import { getEffectivePricesBatch } from "@/app/actions/rooms";
-import { computeRateCodePricePerNight } from "@/app/actions/rate-codes";
+import { computeRateCodePricePerNight } from "@/lib/rate-code-utils";
 import {
   VALID_PAYMENT_METHODS,
   type PaymentMethod,

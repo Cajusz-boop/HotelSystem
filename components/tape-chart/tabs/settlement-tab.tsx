@@ -10,7 +10,7 @@ import { type FolioBillTo } from "@/lib/finance-constants";
 import { searchCompanies } from "@/app/actions/companies";
 import type { Reservation } from "@/lib/tape-chart-types";
 import type { RateCodeForUi } from "@/app/actions/rate-codes";
-import { computeRateCodePricePerNight } from "@/app/actions/rate-codes";
+import { computeRateCodePricePerNight } from "@/lib/rate-code-utils";
 import { toast } from "sonner";
 import { SplitSquareVertical, User, Building2, Plus, ArrowRightLeft, Percent, Banknote, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { AddChargeDialog } from "@/components/add-charge-dialog";
