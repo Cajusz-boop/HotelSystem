@@ -438,7 +438,7 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
 
     const seqStart = config.sequenceStart ?? 1;
 
-    /** Wypełnianie luk (tylko INVOICE): zwraca najmniejszy wolny numer. */
+    /** Wypełnianie luk (INVOICE): zwraca najmniejszy wolny numer. */
     const findSmallestFreeSequenceInvoice = async (
       tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
     ): Promise<number> => {
@@ -446,6 +446,20 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
         ? { number: { contains: searchContains } }
         : { number: { startsWith: searchPrefix } };
       const invoices = await tx.invoice.findMany({ where, select: { number: true } });
+      const used = new Set(invoices.map((i) => parseSeqFromNumber(i.number)).filter((n) => n > 0));
+      let n = seqStart;
+      while (used.has(n)) n++;
+      return n;
+    };
+
+    /** Wypełnianie luk (CONSOLIDATED_INVOICE): zwraca najmniejszy wolny numer (numer będzie dostępny po usunięciu). */
+    const findSmallestFreeSequenceConsolidatedInvoice = async (
+      tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+    ): Promise<number> => {
+      const where = searchContains
+        ? { number: { contains: searchContains } }
+        : { number: { startsWith: searchPrefix } };
+      const invoices = await tx.consolidatedInvoice.findMany({ where, select: { number: true } });
       const used = new Set(invoices.map((i) => parseSeqFromNumber(i.number)).filter((n) => n > 0));
       let n = seqStart;
       while (used.has(n)) n++;
@@ -472,8 +486,9 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
 
         if (documentType === "INVOICE") {
           existingMax = await findSmallestFreeSequenceInvoice(tx) - 1;
+        } else if (documentType === "CONSOLIDATED_INVOICE") {
+          existingMax = await findSmallestFreeSequenceConsolidatedInvoice(tx) - 1;
         } else if (documentType === "CORRECTION") existingMax = await runQuery((o) => tx.invoiceCorrection.findMany(o));
-        else if (documentType === "CONSOLIDATED_INVOICE") existingMax = await runQuery((o) => tx.consolidatedInvoice.findMany(o));
         else if (documentType === "RECEIPT") existingMax = await runQuery((o) => tx.receipt.findMany(o));
         else if (documentType === "ACCOUNTING_NOTE") existingMax = await runQuery((o) => tx.accountingNote.findMany(o));
         else if (documentType === "PROFORMA") {
@@ -490,13 +505,21 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
 
       let nextSeq: number;
       if (documentType === "INVOICE") {
-        // Zablokuj wiersz, żeby uniknąć duplikatów przy równoległych wywołaniach
         await tx.documentNumberCounter.update({
           where: { id: counter.id },
           data: { lastSequence: counter.lastSequence },
         });
-        // Wypełnianie luk: następna faktura dostaje najmniejszy wolny numer
         nextSeq = await findSmallestFreeSequenceInvoice(tx);
+        await tx.documentNumberCounter.update({
+          where: { id: counter.id },
+          data: { lastSequence: Math.max(counter.lastSequence, nextSeq) },
+        });
+      } else if (documentType === "CONSOLIDATED_INVOICE") {
+        await tx.documentNumberCounter.update({
+          where: { id: counter.id },
+          data: { lastSequence: counter.lastSequence },
+        });
+        nextSeq = await findSmallestFreeSequenceConsolidatedInvoice(tx);
         await tx.documentNumberCounter.update({
           where: { id: counter.id },
           data: { lastSequence: Math.max(counter.lastSequence, nextSeq) },
@@ -4627,6 +4650,7 @@ export async function createVatInvoice(
         notes: options?.notes?.trim() || null,
         paymentMethod: invoicePaymentMethod,
         customFieldValues: paidAmountDisplay != null ? ({ paidAmountDisplay } as object) : undefined,
+        deliveryDate: reservation.checkOut ? new Date(reservation.checkOut) : undefined,
       },
     });
     revalidatePath("/finance");
@@ -5312,6 +5336,8 @@ export async function updateInvoice(
     buyerPostalCode?: string | null;
     buyerCity?: string | null;
     issuedAt?: Date;
+    /** Data dostawy/wykonania usługi */
+    deliveryDate?: Date | null;
     /** A1: dwa typy płatności [{ type: "CASH", amount: 100 }, { type: "CARD", amount: 50 }] */
     paymentBreakdown?: Array<{ type: string; amount: number }> | null;
     /** B3: pola własne na fakturze { "orderNo": "Z-123", "project": "Projekt X" } */
@@ -5336,6 +5362,7 @@ export async function updateInvoice(
     if (data.buyerPostalCode !== undefined) updatePayload.buyerPostalCode = data.buyerPostalCode;
     if (data.buyerCity !== undefined) updatePayload.buyerCity = data.buyerCity;
     if (data.issuedAt != null) updatePayload.issuedAt = data.issuedAt;
+    if (data.deliveryDate !== undefined) updatePayload.deliveryDate = data.deliveryDate;
     if (data.paymentBreakdown !== undefined) updatePayload.paymentBreakdown = data.paymentBreakdown === null ? Prisma.JsonNull : (data.paymentBreakdown as Prisma.InputJsonValue);
     if (data.customFieldValues !== undefined) updatePayload.customFieldValues = data.customFieldValues === null ? Prisma.JsonNull : (data.customFieldValues as Prisma.InputJsonValue);
     if (data.notes !== undefined) updatePayload.notes = data.notes;
@@ -5426,6 +5453,8 @@ export async function getInvoiceById(
     buyerPostalCode: string | null;
     buyerCity: string | null;
     issuedAt: string;
+    /** Data dostawy/wykonania usługi (opcjonalna) */
+    deliveryDate: string | null;
     isEditable: boolean;
     invoiceType: string;
     advanceInvoiceId: string | null;
@@ -5460,6 +5489,7 @@ export async function getInvoiceById(
         buyerPostalCode: invoice.buyerPostalCode,
         buyerCity: invoice.buyerCity,
         issuedAt: invoice.issuedAt.toISOString(),
+        deliveryDate: invoice.deliveryDate?.toISOString() ?? null,
         isEditable,
         invoiceType: invoice.invoiceType ?? "NORMAL",
         advanceInvoiceId: invoice.advanceInvoiceId,

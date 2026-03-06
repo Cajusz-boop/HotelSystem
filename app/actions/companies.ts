@@ -4,10 +4,7 @@ import { prisma } from "@/lib/db";
 import { lookupCompanyByNip as lookupFromWL } from "@/lib/nip-lookup";
 import { validateNipOrVat, isEuVat } from "@/lib/nip-vat-validate";
 import { generateNextDocumentNumber } from "@/app/actions/finance";
-import {
-  reservationDisplayAmount,
-  sumChargeAmountFromTransactions,
-} from "@/lib/reservation-display-amount";
+import { reservationDisplayAmount } from "@/lib/reservation-display-amount";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
@@ -1467,7 +1464,7 @@ export async function createConsolidatedInvoice(data: {
       const nights = Math.ceil(
         (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)
       );
-      const amountGross = sumChargeAmountFromTransactions(r.transactions);
+      const amountGross = reservationDisplayAmount(r);
       const amountNet = amountGross / (1 + vatRate / 100);
       const amountVat = amountGross - amountNet;
 
@@ -1666,6 +1663,34 @@ export async function updateConsolidatedInvoiceNotes(
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd aktualizacji uwag",
+    };
+  }
+}
+
+/**
+ * Usuwa fakturę zbiorczą (pozycje usuwane kaskadowo).
+ * Numer faktury będzie dostępny do ponownego użycia przy następnym tworzeniu.
+ */
+export async function deleteConsolidatedInvoice(invoiceId: string): Promise<ActionResult<void>> {
+  try {
+    const invoice = await prisma.consolidatedInvoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true },
+    });
+
+    if (!invoice) {
+      return { success: false, error: "Faktura nie istnieje" };
+    }
+
+    await prisma.consolidatedInvoice.delete({
+      where: { id: invoiceId },
+    });
+
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd usuwania faktury",
     };
   }
 }

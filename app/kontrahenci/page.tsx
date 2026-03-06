@@ -40,6 +40,7 @@ import {
   getConsolidatedInvoiceById,
   updateConsolidatedInvoiceStatus,
   updateConsolidatedInvoiceNotes,
+  deleteConsolidatedInvoice,
   type CompanyForList,
   type CompanyDetails,
   type CorporateContractForList,
@@ -674,6 +675,8 @@ function CompaniesSection() {
   const [invoiceDetailsLoading, setInvoiceDetailsLoading] = useState(false);
   const [docDialogInvoice, setDocDialogInvoice] = useState<ConsolidatedInvoiceForList | null>(null);
   const [cancelInvoiceConfirm, setCancelInvoiceConfirm] = useState<string | null>(null);
+  const [deleteInvoiceConfirmId, setDeleteInvoiceConfirmId] = useState<string | null>(null);
+  const [deleteInvoiceLoading, setDeleteInvoiceLoading] = useState(false);
 
   // === STATYSTYKI ===
   const [stats, setStats] = useState<{
@@ -818,6 +821,7 @@ function CompaniesSection() {
       setSelectedInvoiceDetails(null);
       setDocDialogInvoice(null);
       setCancelInvoiceConfirm(null);
+      setDeleteInvoiceConfirmId(null);
     } else {
       setError(res.error);
       setTab("lista");
@@ -860,6 +864,18 @@ function CompaniesSection() {
     setInvoiceDetailsLoading(false);
     if (res.success) setSelectedInvoiceDetails(res.data);
     else setError(res.error ?? "Błąd pobierania faktury");
+  };
+
+  const handleDeleteConsolidatedInvoice = async (invoiceId: string) => {
+    setDeleteInvoiceLoading(true);
+    const res = await deleteConsolidatedInvoice(invoiceId);
+    setDeleteInvoiceLoading(false);
+    if (res.success && selectedCompany) {
+      const invoicesRes = await getCompanyConsolidatedInvoices(selectedCompany.id);
+      if (invoicesRes.success) setConsolidatedInvoices(invoicesRes.data);
+      setSelectedInvoiceDetails(null);
+      setDeleteInvoiceConfirmId(null);
+    } else setError(res.error ?? "Błąd usuwania faktury");
   };
 
   const handleCancelInvoice = async (invoiceId: string) => {
@@ -1719,6 +1735,7 @@ function CompaniesSection() {
                                       <Button size="sm" variant="outline" onClick={() => setCancelInvoiceConfirm(inv.id)}>Anuluj</Button>
                                     </>
                                   )}
+                                  <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteInvoiceConfirmId(inv.id)}>Usuń</Button>
                                   </div>
                                 </td>
                               </tr>
@@ -1777,6 +1794,20 @@ function CompaniesSection() {
                       <AlertDialogFooter>
                         <AlertDialogCancel>Nie</AlertDialogCancel>
                         <AlertDialogAction onClick={() => cancelInvoiceConfirm && handleCancelInvoice(cancelInvoiceConfirm)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Tak, anuluj</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+
+                  {/* Potwierdzenie usunięcia faktury */}
+                  <AlertDialog open={!!deleteInvoiceConfirmId} onOpenChange={(o) => !o && setDeleteInvoiceConfirmId(null)}>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Usunąć fakturę zbiorczą?</AlertDialogTitle>
+                        <AlertDialogDescription>Ta operacja jest nieodwracalna. Faktura zostanie trwale usunięta. Numer faktury będzie dostępny do ponownego użycia.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Nie</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => deleteInvoiceConfirmId && handleDeleteConsolidatedInvoice(deleteInvoiceConfirmId)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={deleteInvoiceLoading}>{deleteInvoiceLoading ? "Usuwanie…" : "Tak, usuń"}</AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>

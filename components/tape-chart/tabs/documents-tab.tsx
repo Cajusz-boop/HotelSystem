@@ -61,6 +61,7 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
     buyerPostalCode: string | null;
     buyerCity: string | null;
     issuedAt: string;
+    deliveryDate: string | null;
     isEditable: boolean;
     paymentBreakdown: Array<{ type: string; amount: number }> | null;
     customFieldValues: Record<string, string> | null;
@@ -85,6 +86,7 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
   const [editAmountGross, setEditAmountGross] = useState("");
   const [editVatRate, setEditVatRate] = useState("8");
   const [editIssuedAt, setEditIssuedAt] = useState("");
+  const [editDeliveryDate, setEditDeliveryDate] = useState("");
 
   useEffect(() => {
     getTransactionsForReservation(reservationId).then((r) => r.success && r.data && setTransactions(r.data));
@@ -112,6 +114,7 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
           buyerPostalCode: d.buyerPostalCode,
           buyerCity: d.buyerCity,
           issuedAt: d.issuedAt,
+          deliveryDate: d.deliveryDate,
           isEditable: d.isEditable,
           paymentBreakdown: d.paymentBreakdown ?? null,
           customFieldValues: d.customFieldValues ?? null,
@@ -126,6 +129,7 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
         setEditAmountGross(d.amountGross.toFixed(2));
         setEditVatRate(String(d.vatRate));
         setEditIssuedAt(d.issuedAt.slice(0, 10));
+        setEditDeliveryDate(d.deliveryDate ? d.deliveryDate.slice(0, 10) : "");
         setCustomFields(d.customFieldValues && typeof d.customFieldValues === "object" ? { ...d.customFieldValues } : {});
         setInvoiceNotes(d.notes ?? "");
         const pb = d.paymentBreakdown;
@@ -206,6 +210,7 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
     const amountNet = Math.round((gross / (1 + vatRate / 100)) * 100) / 100;
     const amountVat = Math.round((gross - amountNet) * 100) / 100;
     const issuedAt = editIssuedAt.trim() ? new Date(editIssuedAt) : undefined;
+    const deliveryDate = editDeliveryDate.trim() ? new Date(editDeliveryDate) : null;
     setSavingInvoice(true);
     try {
       const result = await updateInvoice(invoiceSheetId, {
@@ -220,6 +225,7 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
         amountGross: gross,
         vatRate,
         issuedAt,
+        deliveryDate,
       });
       if (result.success) {
         toast.success("Zapisano dane faktury");
@@ -240,6 +246,7 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
               buyerPostalCode: d.buyerPostalCode,
               buyerCity: d.buyerCity,
               issuedAt: d.issuedAt,
+              deliveryDate: d.deliveryDate,
             } : null);
             setEditNumber(d.number);
             setEditBuyerNip(d.buyerNip);
@@ -250,6 +257,7 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
             setEditAmountGross(d.amountGross.toFixed(2));
             setEditVatRate(String(d.vatRate));
             setEditIssuedAt(d.issuedAt.slice(0, 10));
+            setEditDeliveryDate(d.deliveryDate ? d.deliveryDate.slice(0, 10) : "");
           }
         });
       } else toast.error(result.error);
@@ -437,6 +445,15 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
                       />
                     </div>
                     <div>
+                      <Label className="text-xs">Data dostawy/wykonania usługi</Label>
+                      <Input
+                        type="date"
+                        className="h-8 mt-1"
+                        value={editDeliveryDate}
+                        onChange={(e) => setEditDeliveryDate(e.target.value)}
+                      />
+                    </div>
+                    <div>
                       <Label className="text-xs">Nabywca – NIP</Label>
                       <div className="flex gap-2 mt-1">
                         <Input
@@ -535,6 +552,9 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
                 <div className="text-sm text-muted-foreground space-y-1">
                   <p>Kwota brutto: <span className="font-medium text-foreground">{invoiceDetail.amountGross.toFixed(2)} PLN</span></p>
                   <p>Nabywca: {invoiceDetail.buyerName} ({invoiceDetail.buyerNip})</p>
+                  {invoiceDetail.deliveryDate && (
+                    <p>Data wykonania usługi: {new Date(invoiceDetail.deliveryDate).toLocaleDateString("pl-PL")}</p>
+                  )}
                   <p className="text-xs">Faktury wystawionej / wysłanej do KSeF nie można edytować – użyj korekty faktury.</p>
                 </div>
               )}
