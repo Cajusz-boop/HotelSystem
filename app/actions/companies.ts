@@ -25,6 +25,23 @@ function sumChargeAmountFromTransactions(
     .reduce((s, t) => s + (t.amount != null ? Number(t.amount) : 0), 0);
 }
 
+/**
+ * Kwota rezerwacji do wyświetlenia (np. w kontrahentach): z transakcji, a gdy brak naliczeń – z rateCodePrice × noce.
+ */
+function reservationDisplayAmount(res: {
+  transactions: Array<{ amount: unknown; type: string }> | undefined;
+  rateCodePrice?: unknown;
+  checkIn: Date;
+  checkOut: Date;
+}): number {
+  const fromTx = sumChargeAmountFromTransactions(res.transactions);
+  if (fromTx > 0) return fromTx;
+  const price = res.rateCodePrice != null ? Number(res.rateCodePrice) : null;
+  if (price == null || price <= 0 || !(res.checkIn instanceof Date) || !(res.checkOut instanceof Date)) return 0;
+  const nights = Math.round((res.checkOut.getTime() - res.checkIn.getTime()) / (24 * 60 * 60 * 1000));
+  return nights > 0 ? price * nights : 0;
+}
+
 // ===== TYPY =====
 
 export interface CompanyForList {
@@ -420,7 +437,7 @@ export async function getCompanyById(
       updatedAt: company.updatedAt,
       reservationCount: company._count.reservations,
       reservations: company.reservations.map((r) => {
-        const totalAmount = sumChargeAmountFromTransactions(r.transactions);
+        const totalAmount = reservationDisplayAmount(r);
         return {
           id: r.id,
           confirmationNumber: r.confirmationNumber,
@@ -1127,7 +1144,7 @@ export async function getCompanyBalance(
     const recentReservations: CompanyBalance["recentReservations"] = [];
 
     for (const res of company.reservations) {
-      const resAmount = sumChargeAmountFromTransactions(res.transactions);
+      const resAmount = reservationDisplayAmount(res);
 
       // Oblicz sumę płatności dla tej rezerwacji
       const paidForRes = res.transactions
@@ -1370,7 +1387,7 @@ export async function getReservationsForConsolidatedInvoice(
       const checkIn = new Date(r.checkIn);
       const checkOut = new Date(r.checkOut);
       const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
-      const totalAmount = sumChargeAmountFromTransactions(r.transactions);
+      const totalAmount = reservationDisplayAmount(r);
 
       return {
         id: r.id,
