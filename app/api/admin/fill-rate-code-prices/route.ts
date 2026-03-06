@@ -7,9 +7,8 @@ import { getEffectivePriceForRoomOnDate } from "@/app/actions/rooms";
 /**
  * POST /api/admin/fill-rate-code-prices
  *
- * Jednorazowa akcja zbiorcza: dla rezerwacji z rateCodePrice = null pobiera cenę
- * z cennika (getEffectivePriceForRoomOnDate) i zapisuje jako rateCodePrice.
- * Po odświeżeniu strony ceny będą widoczne w dialogu edycji i u kontrahentów.
+ * Uzupełnia rateCodePrice dla rezerwacji z checkIn w zakresie: od 7 dni w przeszłość do przyszłości.
+ * Cofa błędne uzupełnienia dla bardzo starych rezerwacji (checkIn < 2022).
  *
  * Wymaga admin.settings permission.
  */
@@ -20,17 +19,41 @@ export async function POST() {
   if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+    const cutoffOld = "2022-01-01";
+    const daysAgo7 = new Date(today);
+    daysAgo7.setUTCDate(daysAgo7.getUTCDate() - 7);
+    const fromDateStr = daysAgo7.toISOString().slice(0, 10);
+
+    // Cofnij błędne uzupełnienia tylko dla bardzo starych rezerwacji (np. 2017) – bez naruszania ostatnich lat
+    const revertPast = await prisma.reservation.updateMany({
+      where: {
+        checkIn: { lt: new Date(cutoffOld + "T00:00:00.000Z") },
+        rateCodePrice: { not: null },
+      },
+      data: { rateCodePrice: null },
+    });
+
+    // Uzupełnij tylko: 7 dni w przeszłość ≤ checkIn oraz przyszłość
     const reservations = await prisma.reservation.findMany({
       where: {
         rateCodePrice: null,
+        checkIn: { gte: new Date(fromDateStr + "T00:00:00.000Z") },
       },
       include: {
         room: { select: { number: true } },
       },
     });
 
+    const paxFor = (r: { adults?: number | null; children?: number | null }) =>
+      Math.max(1, (r.adults ?? 1) + (r.children ?? 0));
+
     const logs: string[] = [];
-    logs.push(`Znaleziono ${reservations.length} rezerwacji bez zapisanej ceny (rateCodePrice = null)`);
+    if (revertPast.count > 0) {
+      logs.push(`Cofnięto rateCodePrice dla ${revertPast.count} rezerwacji ze starych dat (checkIn < ${cutoffOld}).`);
+    }
+    logs.push(`Znaleziono ${reservations.length} rezerwacji bez ceny (checkIn od ${fromDateStr} w przód)`);
 
     let updated = 0;
     let skipped = 0;
@@ -41,7 +64,8 @@ export async function POST() {
         ? res.checkIn.toISOString().slice(0, 10)
         : String(res.checkIn).slice(0, 10);
 
-      const price = await getEffectivePriceForRoomOnDate(res.room.number, checkInStr);
+      const pax = paxFor(res);
+      const price = await getEffectivePriceForRoomOnDate(res.room.number, checkInStr, pax);
 
       if (price != null && price > 0) {
         await prisma.reservation.update({

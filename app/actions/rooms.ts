@@ -17,6 +17,7 @@ import {
 } from "@/lib/validations/schemas";
 import type { RoomStatus } from "@prisma/client";
 import { Prisma } from "@prisma/client";
+import { computeRateCodePricePerNight } from "@/lib/rate-code-utils";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
@@ -41,14 +42,16 @@ function toUiRoom(r: {
 }
 
 /**
- * Cena efektywna na datę: RatePlan (jeśli data w okresie) → Room.price → RoomType.basePrice.
+ * Cena efektywna na datę: RatePlan → Room.price → RoomType.basePrice → RoomType.rateCode (domyślna stawka typu).
  * @param roomNumber - numer pokoju
  * @param dateStr - data YYYY-MM-DD
+ * @param pax - liczba osób (do wzoru stawki basePrice + pricePerPerson × pax); domyślnie 1
  * @returns cena (number) lub undefined gdy brak pokoju/nieprawidłowa data
  */
 export async function getEffectivePriceForRoomOnDate(
   roomNumber: string,
-  dateStr: string
+  dateStr: string,
+  pax: number = 1
 ): Promise<number | undefined> {
   if (!roomNumber?.trim() || !dateStr?.trim()) return undefined;
   const date = new Date(dateStr.trim() + "T12:00:00Z");
@@ -57,7 +60,12 @@ export async function getEffectivePriceForRoomOnDate(
   if (!room) return undefined;
   let roomType: Awaited<ReturnType<typeof prisma.roomType.findUnique>> = null;
   try {
-    roomType = await prisma.roomType.findUnique({ where: { name: room.type } });
+    roomType = await prisma.roomType.findUnique({
+      where: { name: room.type },
+      include: {
+        rateCode: { select: { price: true, basePrice: true, pricePerPerson: true } },
+      },
+    });
   } catch (error) {
     console.error("[getEffectivePriceForRoom] roomType.findUnique error:", error instanceof Error ? error.message : String(error));
   }
@@ -77,6 +85,18 @@ export async function getEffectivePriceForRoomOnDate(
   if (ratePlan?.price != null) return Number(ratePlan.price);
   if (room.price != null) return Number(room.price);
   if (roomType?.basePrice != null) return Number(roomType.basePrice);
+  if (roomType?.rateCode) {
+    const rc = roomType.rateCode as { price?: unknown; basePrice?: unknown; pricePerPerson?: unknown };
+    const price = computeRateCodePricePerNight(
+      {
+        price: rc.price != null ? Number(rc.price) : null,
+        basePrice: rc.basePrice != null ? Number(rc.basePrice) : null,
+        pricePerPerson: rc.pricePerPerson != null ? Number(rc.pricePerPerson) : null,
+      },
+      Math.max(1, pax)
+    );
+    if (price != null && price > 0) return price;
+  }
   return undefined;
 }
 
@@ -96,11 +116,21 @@ export async function getEffectivePricesBatch(
   });
   const roomByNumber = new Map(rooms.map((r) => [r.number, r]));
   const typeNames = Array.from(new Set(rooms.map((r) => r.type)));
-  let roomTypes: Array<{ id: string; name: string; basePrice: Prisma.Decimal | null }> = [];
+  let roomTypes: Array<{
+    id: string;
+    name: string;
+    basePrice: Prisma.Decimal | null;
+    rateCode: { price: Prisma.Decimal | null; basePrice: Prisma.Decimal | null; pricePerPerson: Prisma.Decimal | null } | null;
+  }> = [];
   try {
     roomTypes = await prisma.roomType.findMany({
       where: { name: { in: typeNames } },
-      select: { id: true, name: true, basePrice: true },
+      select: {
+        id: true,
+        name: true,
+        basePrice: true,
+        rateCode: { select: { price: true, basePrice: true, pricePerPerson: true } },
+      },
     });
   } catch (error) {
     console.error("[getEffectivePricesBatch] roomType.findMany error:", error instanceof Error ? error.message : String(error));
@@ -126,13 +156,26 @@ export async function getEffectivePricesBatch(
     const plan = ratePlans.find(
       (p) => p.roomTypeId === type?.id && date >= p.validFrom && date <= p.validTo
     );
-    const price = plan?.price != null
-      ? Number(plan.price)
-      : room.price != null
-        ? Number(room.price)
-        : type?.basePrice != null
-          ? Number(type.basePrice)
-          : undefined;
+    let price: number | undefined =
+      plan?.price != null
+        ? Number(plan.price)
+        : room.price != null
+          ? Number(room.price)
+          : type?.basePrice != null
+            ? Number(type.basePrice)
+            : undefined;
+    if (price == null && type?.rateCode) {
+      const rc = type.rateCode;
+      const fromRateCode = computeRateCodePricePerNight(
+        {
+          price: rc.price != null ? Number(rc.price) : null,
+          basePrice: rc.basePrice != null ? Number(rc.basePrice) : null,
+          pricePerPerson: rc.pricePerPerson != null ? Number(rc.pricePerPerson) : null,
+        },
+        1
+      );
+      if (fromRateCode != null && fromRateCode > 0) price = fromRateCode;
+    }
     if (price != null && price >= 0) result[key] = price;
   }
   return result;
