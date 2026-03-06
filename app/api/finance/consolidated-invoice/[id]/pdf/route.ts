@@ -151,15 +151,14 @@ async function generateConsolidatedInvoiceHtml(id: string, amountOverride: numbe
   const useOverride = amountOverride != null && Number.isFinite(amountOverride) && amountOverride > 0;
   const lineItems = useOverride
     ? [{ name: "Usługa hotelowa", net, vat, gross }]
-    : inv.items.map((item) => {
-        const desc = item.description?.trim() || `Nocleg – ${item.guestName}, pokój ${item.roomNumber}, ${new Date(item.checkIn).toLocaleDateString("pl-PL")}–${new Date(item.checkOut).toLocaleDateString("pl-PL")} (${item.nights} nocy)`;
-        return {
-          name: desc,
-          net: Number(item.amountNet),
-          vat: Number(item.amountVat),
-          gross: Number(item.amountGross),
-        };
-      });
+    : [
+        {
+          name: "Usługa hotelowa",
+          net,
+          vat,
+          gross,
+        },
+      ];
 
   const defaultUnit = template.defaultUnit || "szt.";
   const tableRows = lineItems.map((item, idx) => ({
