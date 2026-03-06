@@ -310,7 +310,7 @@ export async function getOrders(
 /**
  * Pobiera obciążenia gastronomiczne (dania na pokój) dla rezerwacji.
  * Zwraca transakcje z kategorii F_B oraz z type RESTAURANT/GASTRONOMY/POSTING.
- * Jeśli transakcja ma externalRef z items (z Bistro), zwraca też pozycje.
+ * Jeśli transakcja ma externalRef z items (z POS-Karczma), zwraca też pozycje.
  */
 export async function getRestaurantChargesForReservation(
   reservationId: string
@@ -545,7 +545,7 @@ export async function getGuestRestaurantHistory(
 }
 
 // =============================================================================
-// NIEPRZYPISANE OBCIĄŻENIA GASTRONOMICZNE (z Bistro gdy brak rezerwacji)
+// NIEPRZYPISANE OBCIĄŻENIA GASTRONOMICZNE (z POS-Karczma gdy brak rezerwacji)
 // =============================================================================
 
 export interface UnassignedChargeForUi {
@@ -654,7 +654,7 @@ export async function assignGastronomyChargeToReservation(
         reservationId,
         amount: charge.amount,
         type: "RESTAURANT",
-        description: charge.description ?? `Obciążenie gastronomiczne (${charge.posSystem ?? "POS"})`,
+        description: charge.description ?? `Obciążenie gastronomiczne (${charge.posSystem ?? "POS-Karczma"})`,
         category: "F_B",
         subcategory: "RESTAURANT",
         externalRef: Object.keys(externalRefData).length > 0 ? JSON.stringify(externalRefData) : undefined,

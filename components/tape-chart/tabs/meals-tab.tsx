@@ -89,7 +89,7 @@ export function MealsTab({ reservationId, invoiceSingleLine, onInvoiceSingleLine
           Brak obciążeń gastronomicznych dla tej rezerwacji.
         </p>
         <p className="mt-1 text-xs text-muted-foreground/70">
-          Dania nabite na pokój z systemu Symplex Bistro pojawią się tutaj automatycznie.
+          Dania nabite na pokój z POS-Karczma (restauracja) pojawią się tutaj automatycznie.
         </p>
       </div>
       <InvoiceSingleLineCheckbox checked={invoiceSingleLine} onCheckedChange={onInvoiceSingleLineChange} />

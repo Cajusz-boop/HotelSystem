@@ -4,7 +4,7 @@ import { requireExternalApiKey } from "@/lib/api-auth";
 import { checkApiRateLimit } from "@/lib/rate-limit";
 
 interface MenuSyncItem {
-  externalId: string; // np. AssortmentID z Bistro
+  externalId: string; // np. AssortmentID z POS-Karczma
   name: string;
   price: number;
   category: string;
@@ -16,7 +16,7 @@ interface MenuSyncBody {
 
 /**
  * POST /api/v1/external/menu-sync
- * Synchronizacja karty dań z Bistro (assortment → MenuItem).
+ * Synchronizacja karty dań z POS-Karczma (assortment → MenuItem).
  * Tworzy lub aktualizuje pozycje według externalId.
  *
  * Body: { items: [{ externalId, name, price, category }] }

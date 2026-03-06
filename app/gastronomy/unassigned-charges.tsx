@@ -111,7 +111,7 @@ export function UnassignedChargesSection() {
   return (
     <div className="mb-8">
       <div className="flex items-center gap-3 mb-4">
-        <h2 className="text-lg font-semibold">Nieprzypisane obciążenia z Bistro</h2>
+        <h2 className="text-lg font-semibold">Nieprzypisane obciążenia z POS-Karczma</h2>
         <Badge variant="destructive">{charges.length}</Badge>
       </div>
       <p className="text-sm text-muted-foreground mb-4">
@@ -153,7 +153,7 @@ export function UnassignedChargesSection() {
                   )}
                 </td>
                 <td className="p-2 text-xs text-muted-foreground">
-                  {c.posSystem ?? "POS"}
+                  {c.posSystem ?? "POS-Karczma"}
                 </td>
                 <td className="p-2">
                   <div className="flex gap-2">

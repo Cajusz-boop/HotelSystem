@@ -17,9 +17,9 @@ interface PostingBody {
   amount: number;
   type?: string;
   description?: string;
-  /** Szczegolowe pozycje (np. dania z restauracji Bistro) */
+  /** Szczegółowe pozycje (np. dania z POS-Karczma) */
   items?: PostingItem[];
-  /** Numer rachunku POS (np. numer rachunku z Bistro) */
+  /** Numer rachunku POS (np. numer rachunku z POS-Karczma) */
   receiptNumber?: string;
   /** Nazwa kelnera / kasjera */
   cashierName?: string;
@@ -31,7 +31,7 @@ interface PostingBody {
 
 /**
  * POST /api/v1/external/posting
- * Dla systemów POS (restauracja Bistro, Symplex) i zewnętrznych softów:
+ * Dla systemów POS (np. POS-Karczma) i zewnętrznych softów:
  * obciążenie pokoju/rezerwacji kwotą z opcjonalną listą pozycji.
  *
  * Body (JSON):
@@ -42,7 +42,7 @@ interface PostingBody {
  *   items[] – opcjonalna lista pozycji: { name, quantity, unitPrice, category? }
  *   receiptNumber – numer rachunku POS
  *   cashierName – kelner/kasjer
- *   posSystem – nazwa systemu (np. "Symplex Bistro")
+ *   posSystem – nazwa systemu (np. "POS-Karczma")
  *
  * Autoryzacja: nagłówek X-API-Key lub Authorization: Bearer <key>
  * Rate limit: 100 req/min na klucz API lub IP.

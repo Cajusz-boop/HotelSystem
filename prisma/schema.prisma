@@ -1888,7 +1888,7 @@ model SpaBooking {
 // Gastronomia – pozycja w karcie dań
 model MenuItem {
   id         String   @id @default(cuid())
-  externalId String?  @unique // np. AssortmentID z Bistro – do synchronizacji
+  externalId String?  @unique // np. AssortmentID z POS-Karczma – do synchronizacji
   name       String   // np. "Zupa dnia", "Kawa"
   price      Decimal  @db.Decimal(10, 2)
   category   String   // np. "Dania główne", "Napoje", "Desery"
@@ -2840,7 +2840,7 @@ model FiscalJob {
   @@index([status, createdAt])
 }
 
-// Nieprzypisane obciążenia gastronomiczne (z Bistro/POS gdy brak rezerwacji)
+// Nieprzypisane obciążenia gastronomiczne (z POS-Karczma gdy brak rezerwacji)
 model UnassignedGastronomyCharge {
   id            String   @id @default(cuid())
   
@@ -2848,7 +2848,7 @@ model UnassignedGastronomyCharge {
   roomNumber    String              // numer pokoju (np. "004")
   amount        Decimal  @db.Decimal(12, 2)
   description   String?  @db.Text
-  posSystem     String?             // "KWHotel Bistro", "Symplex"
+  posSystem     String?             // np. "POS-Karczma"
   receiptNumber String?             // numer rachunku POS
   cashierName   String?             // kelner/kasjer
   

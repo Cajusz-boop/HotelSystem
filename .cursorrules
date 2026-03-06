@@ -62,9 +62,9 @@ A) KWHotel Sync (dwukierunkowa synchronizacja):
    - Mapowanie: pokoje, goście, rezerwacje, płatności
    - Cron: automatyczna synchronizacja
 
-B) Bistro/POS Integration:
-   - Plik: scripts/sync-bistro-to-hetzner.py
-   - Sync zamówień z restauracji do rachunków gości
+B) POS-Karczma Integration:
+   - Plik: scripts/sync-bistro-to-hetzner.py (legacy: folder bistro-sync)
+   - Sync zamówień z POS-Karczma (restauracja) do rachunków gości
    - Posting na pokój (room charge)
 
 C) Channel Manager:

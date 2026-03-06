@@ -202,8 +202,8 @@ LIMIT 100
             roomNumber    = $roomNumber
             amount        = $totalAmount
             type          = "RESTAURANT"
-            description   = "Zamówienie z Bistro (KWHotel)"
-            posSystem     = "KWHotel Bistro"
+            description   = "Zamówienie z POS-Karczma"
+            posSystem     = "POS-Karczma"
             items         = $items | ForEach-Object {
                 @{
                     name      = $_.name

@@ -38,7 +38,7 @@ symplex-bridge/run-sync.bat
 symplex-bridge/incoming
 symplex-bridge/processed
 
-# Bistro sync config
+# POS-Karczma sync config (bistro-sync)
 bistro-sync/.env
 
 # Manager agent state (manager.py)

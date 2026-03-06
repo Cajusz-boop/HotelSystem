@@ -419,6 +419,39 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
     const useMonthly = config.includeMonth ?? false;
     const counterMonth = useMonthly ? month : 0;
 
+    const yearStr = config.yearFormat === "YY" ? String(year).slice(-2) : String(year);
+    const monthStr = String(month).padStart(2, "0");
+    const letter = (config.seriesLetter ?? "A").toUpperCase().slice(0, 1);
+    const searchPrefix = useMonthly
+      ? `${config.prefix}${config.separator}`
+      : `${config.prefix}${config.separator}${yearStr}${config.separator}`;
+    const searchContains = useMonthly ? `${config.separator}${monthStr}${config.separator}${letter}` : null;
+
+    const parseSeqFromNumber = (num: string): number => {
+      const parts = num.split(config.separator);
+      if (useMonthly && parts.length >= 4) {
+        return parseInt(parts[1], 10) || 0;
+      }
+      const lastSeq = parseInt(parts[parts.length - 1], 10);
+      return !isNaN(lastSeq) ? lastSeq : 0;
+    };
+
+    const seqStart = config.sequenceStart ?? 1;
+
+    /** Wypełnianie luk (tylko INVOICE): zwraca najmniejszy wolny numer. */
+    const findSmallestFreeSequenceInvoice = async (
+      tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+    ): Promise<number> => {
+      const where = searchContains
+        ? { number: { contains: searchContains } }
+        : { number: { startsWith: searchPrefix } };
+      const invoices = await tx.invoice.findMany({ where, select: { number: true } });
+      const used = new Set(invoices.map((i) => parseSeqFromNumber(i.number)).filter((n) => n > 0));
+      let n = seqStart;
+      while (used.has(n)) n++;
+      return n;
+    };
+
     // Atomowa operacja na liczniku
     const counter = await prisma.$transaction(async (tx) => {
       let counter = await tx.documentNumberCounter.findUnique({
@@ -427,24 +460,6 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
 
       if (!counter) {
         let existingMax = 0;
-        const yearStr = config.yearFormat === "YY" ? String(year).slice(-2) : String(year);
-        const monthStr = String(month).padStart(2, "0");
-        const letter = (config.seriesLetter ?? "A").toUpperCase().slice(0, 1);
-
-        const searchPrefix = useMonthly
-          ? `${config.prefix}${config.separator}`
-          : `${config.prefix}${config.separator}${yearStr}${config.separator}`;
-        const searchContains = useMonthly ? `${config.separator}${monthStr}${config.separator}${letter}` : null;
-
-        const parseSeqFromNumber = (num: string): number => {
-          const parts = num.split(config.separator);
-          if (useMonthly && parts.length >= 4) {
-            return parseInt(parts[1], 10) || 0;
-          }
-          const lastSeq = parseInt(parts[parts.length - 1], 10);
-          return !isNaN(lastSeq) ? lastSeq : 0;
-        };
-
         const runQuery = async <T extends { number: string }>(
           fn: (opts: { where: { number: { contains?: string; startsWith?: string } }; orderBy: { number: "desc" }; take: number }) => Promise<T[]>
         ): Promise<number> => {
@@ -455,8 +470,9 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
           return existing.length > 0 ? parseSeqFromNumber(existing[0].number) : 0;
         };
 
-        if (documentType === "INVOICE") existingMax = await runQuery((o) => tx.invoice.findMany(o));
-        else if (documentType === "CORRECTION") existingMax = await runQuery((o) => tx.invoiceCorrection.findMany(o));
+        if (documentType === "INVOICE") {
+          existingMax = await findSmallestFreeSequenceInvoice(tx) - 1;
+        } else if (documentType === "CORRECTION") existingMax = await runQuery((o) => tx.invoiceCorrection.findMany(o));
         else if (documentType === "CONSOLIDATED_INVOICE") existingMax = await runQuery((o) => tx.consolidatedInvoice.findMany(o));
         else if (documentType === "RECEIPT") existingMax = await runQuery((o) => tx.receipt.findMany(o));
         else if (documentType === "ACCOUNTING_NOTE") existingMax = await runQuery((o) => tx.accountingNote.findMany(o));
@@ -466,22 +482,35 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
           existingMax = Math.max(proformaMax, invoiceProformaMax);
         }
 
-        const seqStart = config.sequenceStart ?? 1;
         const initialSeq = Math.max(existingMax, seqStart - 1);
         counter = await tx.documentNumberCounter.create({
           data: { documentType, year, month: counterMonth, lastSequence: initialSeq },
         });
       }
 
-      const nextSeq = counter.lastSequence + 1;
-      await tx.documentNumberCounter.update({
-        where: { id: counter.id },
-        data: { lastSequence: nextSeq },
-      });
+      let nextSeq: number;
+      if (documentType === "INVOICE") {
+        // Zablokuj wiersz, żeby uniknąć duplikatów przy równoległych wywołaniach
+        await tx.documentNumberCounter.update({
+          where: { id: counter.id },
+          data: { lastSequence: counter.lastSequence },
+        });
+        // Wypełnianie luk: następna faktura dostaje najmniejszy wolny numer
+        nextSeq = await findSmallestFreeSequenceInvoice(tx);
+        await tx.documentNumberCounter.update({
+          where: { id: counter.id },
+          data: { lastSequence: Math.max(counter.lastSequence, nextSeq) },
+        });
+      } else {
+        nextSeq = counter.lastSequence + 1;
+        await tx.documentNumberCounter.update({
+          where: { id: counter.id },
+          data: { lastSequence: nextSeq },
+        });
+      }
       return { ...counter, lastSequence: nextSeq };
     });
 
-    const yearStr = config.yearFormat === "YY" ? String(year).slice(-2) : String(year);
     const seqStr = String(counter.lastSequence).padStart(config.sequencePadding, "0");
 
     if (useMonthly) {

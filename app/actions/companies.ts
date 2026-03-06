@@ -356,6 +356,9 @@ export async function getCompanyById(
           include: {
             guest: { select: { name: true } },
             room: { select: { number: true } },
+            transactions: {
+              select: { amount: true, type: true },
+            },
           },
           orderBy: { checkIn: "desc" },
           take: 100,
@@ -400,16 +403,22 @@ export async function getCompanyById(
       createdAt: company.createdAt,
       updatedAt: company.updatedAt,
       reservationCount: company._count.reservations,
-      reservations: company.reservations.map((r) => ({
-        id: r.id,
-        confirmationNumber: r.confirmationNumber,
-        guestName: r.guest.name,
-        roomNumber: r.room.number,
-        checkIn: r.checkIn,
-        checkOut: r.checkOut,
-        status: r.status,
-        totalAmount: 0, // TODO: Reservation nie ma totalAmount – obliczyć z Transaction/ReservationFolio gdy potrzebne
-      })),
+      reservations: company.reservations.map((r) => {
+        const totalAmount =
+          r.transactions
+            ?.filter((t) => t.type === "CHARGE" || t.type === "CHARGE_ADJUSTMENT")
+            .reduce((s, t) => s + (t.amount?.toNumber?.() ?? Number(t.amount) ?? 0), 0) ?? 0;
+        return {
+          id: r.id,
+          confirmationNumber: r.confirmationNumber,
+          guestName: r.guest.name,
+          roomNumber: r.room.number,
+          checkIn: r.checkIn,
+          checkOut: r.checkOut,
+          status: r.status,
+          totalAmount,
+        };
+      }),
       contracts: company.corporateContracts.map((c) => ({
         id: c.id,
         name: c.name,
@@ -1332,6 +1341,9 @@ export async function getReservationsForConsolidatedInvoice(
         guest: { select: { name: true } },
         room: { select: { number: true } },
         invoices: { select: { id: true } },
+        transactions: {
+          select: { amount: true, type: true },
+        },
       },
       orderBy: { checkIn: "asc" },
     });
@@ -1349,6 +1361,10 @@ export async function getReservationsForConsolidatedInvoice(
       const checkIn = new Date(r.checkIn);
       const checkOut = new Date(r.checkOut);
       const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+      const totalAmount =
+        r.transactions
+          ?.filter((t) => t.type === "CHARGE" || t.type === "CHARGE_ADJUSTMENT")
+          .reduce((s, t) => s + (t.amount?.toNumber?.() ?? Number(t.amount) ?? 0), 0) ?? 0;
 
       return {
         id: r.id,
@@ -1358,7 +1374,7 @@ export async function getReservationsForConsolidatedInvoice(
         checkIn: r.checkIn,
         checkOut: r.checkOut,
         nights,
-        totalAmount: 0, // TODO: Reservation nie ma totalAmount – obliczyć z Transaction/Folio gdy potrzebne
+        totalAmount,
         status: r.status,
         hasInvoice: invoicedReservationIds.has(r.id) || r.invoices.length > 0,
       };
@@ -1418,6 +1434,9 @@ export async function createConsolidatedInvoice(data: {
       include: {
         guest: { select: { name: true } },
         room: { select: { number: true } },
+        transactions: {
+          select: { amount: true, type: true },
+        },
       },
     });
 
@@ -1454,7 +1473,10 @@ export async function createConsolidatedInvoice(data: {
       const nights = Math.ceil(
         (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)
       );
-      const amountGross = 0; // TODO: Reservation nie ma totalAmount – obliczyć z Transaction/Folio gdy potrzebne
+      const amountGross =
+        r.transactions
+          ?.filter((t) => t.type === "CHARGE" || t.type === "CHARGE_ADJUSTMENT")
+          .reduce((s, t) => s + (t.amount?.toNumber?.() ?? Number(t.amount) ?? 0), 0) ?? 0;
       const amountNet = amountGross / (1 + vatRate / 100);
       const amountVat = amountGross - amountNet;
 

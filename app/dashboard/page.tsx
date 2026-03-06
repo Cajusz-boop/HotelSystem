@@ -353,7 +353,7 @@ export default async function DashboardPage() {
         </section>
       </div>
 
-      {/* Restauracja – dzisiejsze obciążenia z Bistro */}
+      {/* Restauracja – dzisiejsze obciążenia z POS-Karczma */}
       {restaurantSummary && restaurantSummary.count > 0 && (
         <section className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 shadow-sm dark:border-amber-800 dark:bg-amber-950/20">
           <div className="flex items-center justify-between">

@@ -97,7 +97,7 @@ async function postToApi(row) {
     amount: row.amount,
     type: "RESTAURANT",
     description: row.description,
-    posSystem: "Symplex Bistro",
+    posSystem: "POS-Karczma",
   };
   if (row.items?.length > 0) payload.items = row.items;
   if (row.receiptNumber) payload.receiptNumber = row.receiptNumber;

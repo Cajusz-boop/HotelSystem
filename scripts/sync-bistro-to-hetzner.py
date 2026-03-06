@@ -238,8 +238,8 @@ def main():
                 "roomNumber": room_number,
                 "amount": total_amount,
                 "type": "RESTAURANT",
-                "description": "Zamówienie z Bistro (KWHotel)",
-                "posSystem": "KWHotel Bistro",
+                "description": "Zamówienie z POS-Karczma",
+                "posSystem": "POS-Karczma",
                 "items": [
                     {"name": it["name"], "quantity": it["quantity"], "unitPrice": it["unitPrice"]}
                     for it in items

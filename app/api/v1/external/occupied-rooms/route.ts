@@ -7,7 +7,7 @@ import { checkApiRateLimit } from "@/lib/rate-limit";
  * GET /api/v1/external/occupied-rooms
  *
  * Lista aktualnie zajętych pokoi z danymi gościa — do użycia przez
- * systemy POS (Symplex Bistro), żeby kelner mógł wybrać pokój
+ * systemy POS (np. POS-Karczma), żeby kelner mógł wybrać pokój
  * przy nabijaniu rachunku "na pokój".
  *
  * Odpowiedź:
