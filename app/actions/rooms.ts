@@ -90,9 +90,9 @@ export async function getEffectivePriceForRoomOnDate(
   } catch (error) {
     console.error("[getEffectivePriceForRoom] ratePlan.findFirst error:", error instanceof Error ? error.message : String(error));
   }
-  if (ratePlan?.price != null) return Number(ratePlan.price);
-  if (room.price != null) return Number(room.price);
-  if (roomType?.basePrice != null) return Number(roomType.basePrice);
+  if (ratePlan?.price != null && Number(ratePlan.price) > 0) return Number(ratePlan.price);
+  if (room.price != null && Number(room.price) > 0) return Number(room.price);
+  if (roomType?.basePrice != null && Number(roomType.basePrice) > 0) return Number(roomType.basePrice);
   const rtWithCode = roomType as typeof roomType & { rateCode?: { price: unknown; basePrice: unknown; pricePerPerson: unknown } | null };
   if (rtWithCode?.rateCode) {
     const rc = rtWithCode.rateCode;
@@ -168,14 +168,11 @@ export async function getEffectivePricesBatch(
     const plan = ratePlans.find(
       (p) => p.roomTypeId === type?.id && date >= p.validFrom && date <= p.validTo
     );
+    const planVal = plan?.price != null ? Number(plan.price) : 0;
+    const roomVal = room.price != null ? Number(room.price) : 0;
+    const baseVal = type?.basePrice != null ? Number(type.basePrice) : 0;
     let price: number | undefined =
-      plan?.price != null
-        ? Number(plan.price)
-        : room.price != null
-          ? Number(room.price)
-          : type?.basePrice != null
-            ? Number(type.basePrice)
-            : undefined;
+      planVal > 0 ? planVal : roomVal > 0 ? roomVal : baseVal > 0 ? baseVal : undefined;
     if (price == null && type?.rateCode) {
       const rc = type.rateCode;
       const fromRateCode = computeRateCodePricePerNight(
