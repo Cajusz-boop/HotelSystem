@@ -244,7 +244,7 @@ export function UnifiedReservationDialog({
             source: d.source ?? "PHONE",
             channel: d.channel ?? "DIRECT",
             mealPlan: d.mealPlan ?? "BB",
-            adults: d.adults != null ? String(d.adults) : "1",
+            adults: (d.adults != null && d.adults > 0) ? String(d.adults) : "1",
             children: d.children != null ? String(d.children) : "0",
             eta: d.eta ?? "14:00",
             internalNotes: d.internalNotes ?? "",
@@ -335,6 +335,18 @@ export function UnifiedReservationDialog({
     }
     getEffectivePriceForRoomOnDate(form.room.trim(), form.checkIn).then(setEffectivePricePerNight);
   }, [form.room, form.checkIn, effectivePriceProp]);
+
+  // Gdy rezerwacja nie ma zapisanej ceny (rateCodePrice), uzupełnij z cennika – żeby "Do zapłaty" i Suma za pokój pokazywały kwotę tak jak w innych pokojach
+  useEffect(() => {
+    if (!open || !isEdit || !reservation) return;
+    const hasSavedPrice = reservation.rateCodePrice != null && reservation.rateCodePrice > 0;
+    if (hasSavedPrice) return;
+    if (effectivePricePerNight == null || effectivePricePerNight <= 0) return;
+    setForm((prev) => {
+      if (prev.rateCodePrice.trim() !== "") return prev;
+      return { ...prev, rateCodePrice: String(effectivePricePerNight) };
+    });
+  }, [open, isEdit, reservation?.id, reservation?.rateCodePrice, effectivePricePerNight]);
 
   // Fetch non-refundable flag
   useEffect(() => {
