@@ -869,7 +869,9 @@ function CompaniesSection() {
       if (invoicesRes.success) setConsolidatedInvoices(invoicesRes.data);
       setSelectedInvoiceDetails(null);
       setCancelInvoiceConfirm(null);
-    } else setError(res.error ?? "Błąd anulowania");
+    } else if (!res.success) {
+      setError(res.error ?? "Błąd anulowania");
+    }
   };
 
   const handleDocVatPdf = async (amountOverride: number | null, notes: string) => {
