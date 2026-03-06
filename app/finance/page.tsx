@@ -36,6 +36,7 @@ import {
   getVatSalesRegister,
   getVatPurchasesRegister,
   getKpirReport,
+  deleteInvoice,
 } from "@/app/actions/finance";
 import { sendInvoiceToKsef, sendBatchToKsef, downloadUpo, checkKsefInvoiceStatus, getKsefConfig } from "@/app/actions/ksef";
 import type { TransactionForList, AccountingNoteData, CommissionReportData, CashShiftData, BlindDropHistoryItem, VatRegisterData, KpirData, CashShiftHistoryItem, CashShiftReportDetail } from "@/app/actions/finance";
@@ -142,6 +143,7 @@ export default function FinancePage() {
   const [kpirData, setKpirData] = useState<KpirData | null>(null);
   const [kpirLoading, setKpirLoading] = useState(false);
   const [ksefSendingId, setKsefSendingId] = useState<string | null>(null);
+  const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null);
   const [ksefSelectedIds, setKsefSelectedIds] = useState<Set<string>>(new Set());
   const [ksefBatchSending, setKsefBatchSending] = useState(false);
   const [ksefCheckStatusId, setKsefCheckStatusId] = useState<string | null>(null);
@@ -1290,6 +1292,35 @@ export default function FinancePage() {
                                   }}
                                 >
                                   Pobierz UPO
+                                </Button>
+                              )}
+                              {r.invoiceId && (status === "DRAFT" || !status) && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="ml-1 h-7 text-xs text-destructive hover:text-destructive"
+                                  title="Usuń fakturę (przed wysłaniem do KSeF)"
+                                  disabled={deleteInvoiceId !== null}
+                                  onClick={async () => {
+                                    if (!r.invoiceId) return;
+                                    if (!confirm(`Czy na pewno usunąć fakturę ${r.documentNumber} (${r.contractorName})? Operacja jest nieodwracalna.`)) return;
+                                    setDeleteInvoiceId(r.invoiceId);
+                                    const res = await deleteInvoice(r.invoiceId);
+                                    setDeleteInvoiceId(null);
+                                    if (res.success) {
+                                      toast.success("Faktura usunięta");
+                                      const [salesRes] = await Promise.all([
+                                        getVatSalesRegister(vatRegisterFrom, vatRegisterTo),
+                                        getVatPurchasesRegister(vatRegisterFrom, vatRegisterTo),
+                                      ]);
+                                      if (salesRes.success && salesRes.data) setVatSalesData(salesRes.data);
+                                    } else {
+                                      toast.error(res.error ?? "Błąd usuwania faktury");
+                                    }
+                                  }}
+                                >
+                                  {deleteInvoiceId === r.invoiceId ? "…" : "Usuń"}
                                 </Button>
                               )}
                             </td>

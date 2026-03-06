@@ -5282,6 +5282,58 @@ export async function updateInvoice(
   }
 }
 
+/**
+ * Usuwa fakturę (tylko gdy ksefStatus jest null lub DRAFT – przed wysłaniem do KSeF).
+ * Odłącza powiązania (Transaction, CashDocument), usuwa korekty i pozycje.
+ */
+export async function deleteInvoice(invoiceId: string): Promise<ActionResult<void>> {
+  const editable = await ensureInvoiceEditable(invoiceId);
+  if (!editable.success) return editable;
+  try {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true, number: true, buyerName: true, reservationId: true },
+    });
+    if (!invoice) return { success: false, error: "Faktura nie istnieje" };
+
+    await prisma.$transaction(async (tx) => {
+      const id = invoice.id;
+
+      await tx.ksefPendingSend.deleteMany({ where: { invoiceId: id } });
+      await tx.cashDocument.updateMany({ where: { invoiceId: id }, data: { invoiceId: null } });
+      await tx.transaction.updateMany({ where: { invoiceId: id }, data: { invoiceId: null } });
+      await tx.invoice.updateMany({
+        where: { advanceInvoiceId: id },
+        data: { advanceInvoiceId: null },
+      });
+      await tx.invoiceCorrection.deleteMany({ where: { invoiceId: id } });
+      await tx.invoiceLineItem.deleteMany({ where: { invoiceId: id } });
+      await tx.invoice.delete({ where: { id } });
+    });
+
+    const hdrs = await headers();
+    const ip = getClientIp(hdrs);
+    await createAuditLog({
+      actionType: "DELETE",
+      entityType: "Invoice",
+      entityId: invoiceId,
+      oldValue: { number: invoice.number, buyerName: invoice.buyerName, reservationId: invoice.reservationId },
+      newValue: null,
+      ipAddress: ip,
+    });
+
+    revalidatePath("/finance");
+    revalidatePath("/reports");
+    revalidatePath("/front-office");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd usuwania faktury",
+    };
+  }
+}
+
 /** Pobiera fakturę VAT do wyświetlenia/PDF (np. do druku). Zwraca też isEditable (false gdy faktura wysłana do KSeF). */
 export async function getInvoiceById(
   id: string

@@ -7,7 +7,10 @@ import {
   getTransactionsForReservation,
   getInvoiceById,
   updateInvoice,
+  deleteInvoice,
 } from "@/app/actions/finance";
+import { lookupCompanyByNip } from "@/app/actions/companies";
+import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { DocumentHistoryPanel } from "@/components/finance/document-history-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,7 +51,16 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
   const [invoiceSheetId, setInvoiceSheetId] = useState<string | null>(null);
   const [invoiceDetail, setInvoiceDetail] = useState<{
     number: string;
+    amountNet: number;
+    amountVat: number;
     amountGross: number;
+    vatRate: number;
+    buyerNip: string;
+    buyerName: string;
+    buyerAddress: string | null;
+    buyerPostalCode: string | null;
+    buyerCity: string | null;
+    issuedAt: string;
     isEditable: boolean;
     paymentBreakdown: Array<{ type: string; amount: number }> | null;
     customFieldValues: Record<string, string> | null;
@@ -61,6 +73,18 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
   const [payment2Type, setPayment2Type] = useState("CARD");
   const [payment2Amount, setPayment2Amount] = useState("");
   const [savingInvoice, setSavingInvoice] = useState(false);
+  const [deletingInvoice, setDeletingInvoice] = useState(false);
+  const [nipLoading, setNipLoading] = useState(false);
+  // Pola edycji głównych danych faktury (gdy isEditable)
+  const [editNumber, setEditNumber] = useState("");
+  const [editBuyerNip, setEditBuyerNip] = useState("");
+  const [editBuyerName, setEditBuyerName] = useState("");
+  const [editBuyerAddress, setEditBuyerAddress] = useState("");
+  const [editBuyerPostalCode, setEditBuyerPostalCode] = useState("");
+  const [editBuyerCity, setEditBuyerCity] = useState("");
+  const [editAmountGross, setEditAmountGross] = useState("");
+  const [editVatRate, setEditVatRate] = useState("8");
+  const [editIssuedAt, setEditIssuedAt] = useState("");
 
   useEffect(() => {
     getTransactionsForReservation(reservationId).then((r) => r.success && r.data && setTransactions(r.data));
@@ -75,17 +99,36 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
     }
     getInvoiceById(invoiceSheetId).then((r) => {
       if (r.success && r.data) {
+        const d = r.data;
         setInvoiceDetail({
-          number: r.data.number,
-          amountGross: r.data.amountGross,
-          isEditable: r.data.isEditable,
-          paymentBreakdown: r.data.paymentBreakdown ?? null,
-          customFieldValues: r.data.customFieldValues ?? null,
-          notes: r.data.notes ?? null,
+          number: d.number,
+          amountNet: d.amountNet,
+          amountVat: d.amountVat,
+          amountGross: d.amountGross,
+          vatRate: d.vatRate,
+          buyerNip: d.buyerNip,
+          buyerName: d.buyerName,
+          buyerAddress: d.buyerAddress,
+          buyerPostalCode: d.buyerPostalCode,
+          buyerCity: d.buyerCity,
+          issuedAt: d.issuedAt,
+          isEditable: d.isEditable,
+          paymentBreakdown: d.paymentBreakdown ?? null,
+          customFieldValues: d.customFieldValues ?? null,
+          notes: d.notes ?? null,
         });
-        setCustomFields(r.data.customFieldValues && typeof r.data.customFieldValues === "object" ? { ...r.data.customFieldValues } : {});
-        setInvoiceNotes(r.data.notes ?? "");
-        const pb = r.data.paymentBreakdown;
+        setEditNumber(d.number);
+        setEditBuyerNip(d.buyerNip);
+        setEditBuyerName(d.buyerName);
+        setEditBuyerAddress(d.buyerAddress ?? "");
+        setEditBuyerPostalCode(d.buyerPostalCode ?? "");
+        setEditBuyerCity(d.buyerCity ?? "");
+        setEditAmountGross(d.amountGross.toFixed(2));
+        setEditVatRate(String(d.vatRate));
+        setEditIssuedAt(d.issuedAt.slice(0, 10));
+        setCustomFields(d.customFieldValues && typeof d.customFieldValues === "object" ? { ...d.customFieldValues } : {});
+        setInvoiceNotes(d.notes ?? "");
+        const pb = d.paymentBreakdown;
         if (pb && pb.length >= 1) {
           setPayment1Type(pb[0].type);
           setPayment1Amount(String(pb[0].amount));
@@ -103,6 +146,117 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
       } else setInvoiceDetail(null);
     });
   }, [invoiceSheetId]);
+
+  const handleFetchByNip = async () => {
+    const trimmed = editBuyerNip.trim();
+    if (!trimmed) {
+      toast.error("Podaj NIP.");
+      return;
+    }
+    const validation = validateNipOrVat(trimmed);
+    if (!validation.ok) {
+      toast.error(validation.error);
+      return;
+    }
+    setNipLoading(true);
+    try {
+      const result = await lookupCompanyByNip(trimmed);
+      if (result.success && result.data) {
+        const d = result.data;
+        setEditBuyerNip(d.nip ?? trimmed);
+        setEditBuyerName(d.name ?? "");
+        setEditBuyerAddress(d.address ?? "");
+        setEditBuyerPostalCode(d.postalCode ?? "");
+        setEditBuyerCity(d.city ?? "");
+        toast.success("Dane firmy pobrane z Wykazu VAT.");
+      } else {
+        toast.error(result.success === false ? result.error : "Nie udało się pobrać danych.");
+      }
+    } finally {
+      setNipLoading(false);
+    }
+  };
+
+  const handleSaveInvoiceMainData = async () => {
+    if (!invoiceSheetId || !invoiceDetail?.isEditable) return;
+    const num = editNumber.trim();
+    if (!num) {
+      toast.error("Podaj numer faktury.");
+      return;
+    }
+    const nipValidation = validateNipOrVat(editBuyerNip.trim());
+    if (!nipValidation.ok) {
+      toast.error(nipValidation.error);
+      return;
+    }
+    if (!editBuyerName.trim()) {
+      toast.error("Podaj nazwę nabywcy.");
+      return;
+    }
+    const gross = parseFloat(editAmountGross.replace(",", "."));
+    if (isNaN(gross) || gross < 0) {
+      toast.error("Podaj poprawną kwotę brutto.");
+      return;
+    }
+    const vatRate = parseFloat(editVatRate.replace(",", "."));
+    if (isNaN(vatRate) || vatRate < 0 || vatRate > 100) {
+      toast.error("Podaj poprawną stawkę VAT.");
+      return;
+    }
+    const amountNet = Math.round((gross / (1 + vatRate / 100)) * 100) / 100;
+    const amountVat = Math.round((gross - amountNet) * 100) / 100;
+    const issuedAt = editIssuedAt.trim() ? new Date(editIssuedAt) : undefined;
+    setSavingInvoice(true);
+    try {
+      const result = await updateInvoice(invoiceSheetId, {
+        number: num,
+        buyerNip: nipValidation.normalized,
+        buyerName: editBuyerName.trim(),
+        buyerAddress: editBuyerAddress.trim() || null,
+        buyerPostalCode: editBuyerPostalCode.trim() || null,
+        buyerCity: editBuyerCity.trim() || null,
+        amountNet,
+        amountVat,
+        amountGross: gross,
+        vatRate,
+        issuedAt,
+      });
+      if (result.success) {
+        toast.success("Zapisano dane faktury");
+        getInvoicesForReservation(reservationId).then((r) => r.success && r.data && setInvoices(r.data));
+        getInvoiceById(invoiceSheetId).then((r) => {
+          if (r.success && r.data) {
+            const d = r.data;
+            setInvoiceDetail((prev) => prev ? {
+              ...prev,
+              number: d.number,
+              amountNet: d.amountNet,
+              amountVat: d.amountVat,
+              amountGross: d.amountGross,
+              vatRate: d.vatRate,
+              buyerNip: d.buyerNip,
+              buyerName: d.buyerName,
+              buyerAddress: d.buyerAddress,
+              buyerPostalCode: d.buyerPostalCode,
+              buyerCity: d.buyerCity,
+              issuedAt: d.issuedAt,
+            } : null);
+            setEditNumber(d.number);
+            setEditBuyerNip(d.buyerNip);
+            setEditBuyerName(d.buyerName);
+            setEditBuyerAddress(d.buyerAddress ?? "");
+            setEditBuyerPostalCode(d.buyerPostalCode ?? "");
+            setEditBuyerCity(d.buyerCity ?? "");
+            setEditAmountGross(d.amountGross.toFixed(2));
+            setEditVatRate(String(d.vatRate));
+            setEditIssuedAt(d.issuedAt.slice(0, 10));
+          }
+        });
+      } else toast.error(result.error);
+    } finally {
+      setSavingInvoice(false);
+    }
+  };
 
   const handleSaveInvoicePayments = async () => {
     if (!invoiceSheetId || !invoiceDetail?.isEditable) return;
@@ -154,6 +308,22 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
       } else toast.error(result.error);
     } finally {
       setSavingInvoice(false);
+    }
+  };
+
+  const handleDeleteInvoice = async () => {
+    if (!invoiceSheetId || !invoiceDetail?.isEditable) return;
+    if (!confirm(`Czy na pewno usunąć fakturę ${invoiceDetail.number}? Operacja jest nieodwracalna. Numer będzie dostępny do ponownego użycia.`)) return;
+    setDeletingInvoice(true);
+    try {
+      const result = await deleteInvoice(invoiceSheetId);
+      if (result.success) {
+        toast.success("Faktura usunięta");
+        setInvoiceSheetId(null);
+        getInvoicesForReservation(reservationId).then((r) => r.success && r.data && setInvoices(r.data));
+      } else toast.error(result.error ?? "Błąd usuwania faktury");
+    } finally {
+      setDeletingInvoice(false);
     }
   };
 
@@ -227,8 +397,9 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
                   size="sm"
                   className="h-7 text-xs shrink-0 opacity-70 group-hover:opacity-100"
                   onClick={(e) => { e.stopPropagation(); setInvoiceSheetId(i.id); }}
+                  title="Edytuj (szkic) / płatności / historia"
                 >
-                  Płatności / Historia
+                  Edytuj / Szczegóły
                 </Button>
               </li>
             ))
@@ -237,15 +408,136 @@ export function DocumentsTab({ reservationId }: DocumentsTabProps) {
       </div>
 
       <Sheet open={!!invoiceSheetId} onOpenChange={(open) => !open && setInvoiceSheetId(null)}>
-        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Faktura {invoiceDetail?.number ?? ""}</SheetTitle>
           </SheetHeader>
           {invoiceDetail && (
             <div className="mt-4 space-y-4">
-              <div className="text-sm text-muted-foreground">
-                Kwota brutto: <span className="font-medium text-foreground">{invoiceDetail.amountGross.toFixed(2)} PLN</span>
-              </div>
+              {invoiceDetail.isEditable ? (
+                <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+                  <h4 className="text-sm font-medium">Edycja faktury (szkic)</h4>
+                  <div className="grid gap-3 text-sm">
+                    <div>
+                      <Label className="text-xs">Numer faktury</Label>
+                      <Input
+                        className="h-8 mt-1"
+                        value={editNumber}
+                        onChange={(e) => setEditNumber(e.target.value)}
+                        placeholder="FV/2026/0001"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Data wystawienia</Label>
+                      <Input
+                        type="date"
+                        className="h-8 mt-1"
+                        value={editIssuedAt}
+                        onChange={(e) => setEditIssuedAt(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Nabywca – NIP</Label>
+                      <div className="flex gap-2 mt-1">
+                        <Input
+                          className="h-8 flex-1"
+                          value={editBuyerNip}
+                          onChange={(e) => setEditBuyerNip(e.target.value)}
+                          placeholder="1234567890"
+                        />
+                        <Button type="button" variant="outline" size="sm" className="h-8 shrink-0" onClick={handleFetchByNip} disabled={nipLoading}>
+                          {nipLoading ? "…" : "Pobierz dane"}
+                        </Button>
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Nazwa nabywcy</Label>
+                      <Input
+                        className="h-8 mt-1"
+                        value={editBuyerName}
+                        onChange={(e) => setEditBuyerName(e.target.value)}
+                        placeholder="Nazwa firmy"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Adres</Label>
+                      <Input
+                        className="h-8 mt-1"
+                        value={editBuyerAddress}
+                        onChange={(e) => setEditBuyerAddress(e.target.value)}
+                        placeholder="ul. Przykładowa 1"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Kod pocztowy</Label>
+                        <Input
+                          className="h-8 mt-1"
+                          value={editBuyerPostalCode}
+                          onChange={(e) => setEditBuyerPostalCode(e.target.value)}
+                          placeholder="00-000"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Miasto</Label>
+                        <Input
+                          className="h-8 mt-1"
+                          value={editBuyerCity}
+                          onChange={(e) => setEditBuyerCity(e.target.value)}
+                          placeholder="Warszawa"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Kwota brutto (PLN)</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          className="h-8 mt-1"
+                          value={editAmountGross}
+                          onChange={(e) => setEditAmountGross(e.target.value)}
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Stawka VAT (%)</Label>
+                        <Select value={editVatRate} onValueChange={setEditVatRate}>
+                          <SelectTrigger className="h-8 mt-1"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">0%</SelectItem>
+                            <SelectItem value="5">5%</SelectItem>
+                            <SelectItem value="8">8%</SelectItem>
+                            <SelectItem value="23">23%</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 flex-wrap items-center">
+                    <Button type="button" size="sm" disabled={savingInvoice} onClick={handleSaveInvoiceMainData}>
+                      {savingInvoice ? "Zapisywanie…" : "Zapisz dane faktury"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      disabled={savingInvoice || deletingInvoice}
+                      onClick={handleDeleteInvoice}
+                      title="Usuń fakturę (numer będzie dostępny do ponownego użycia)"
+                    >
+                      {deletingInvoice ? "Usuwanie…" : "Usuń fakturę"}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p>Kwota brutto: <span className="font-medium text-foreground">{invoiceDetail.amountGross.toFixed(2)} PLN</span></p>
+                  <p>Nabywca: {invoiceDetail.buyerName} ({invoiceDetail.buyerNip})</p>
+                  <p className="text-xs">Faktury wystawionej / wysłanej do KSeF nie można edytować – użyj korekty faktury.</p>
+                </div>
+              )}
               {invoiceDetail.isEditable && (
                 <div className="rounded border p-3 space-y-3">
                   <Label className="text-sm">Rozbicie płatności (dwa sposoby)</Label>
