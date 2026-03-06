@@ -79,9 +79,8 @@ export function shortGuestLabel(fullName: string, privacyMode: boolean): string 
   }
   const words = fullName.trim().split(/\s+/);
   if (words.length >= 2) {
-    const last = words[words.length - 1];
-    const initial = words[0][0]?.toUpperCase() ?? "";
-    return `${last} ${initial}.`;
+    const prefix = words.slice(0, 2).join(" ");
+    return words.length > 2 ? prefix + "…" : prefix;
   }
   return fullName.length > 12 ? fullName.slice(0, 10) + "…" : fullName;
 }

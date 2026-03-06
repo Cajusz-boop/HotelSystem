@@ -57,17 +57,22 @@ function amountToWords(amount: number): string {
 /**
  * GET /api/finance/consolidated-invoice/[id]/pdf
  * Zwraca fakturę zbiorczą VAT w HTML (do druku / Zapisz jako PDF).
+ * Opcjonalny parametr ?amountOverride=1234.56 – nadpisuje kwotę brutto na dokumencie.
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   if (!id?.trim()) return new NextResponse("Brak ID faktury", { status: 400 });
 
+  const url = new URL(request.url);
+  const amountOverrideParam = url.searchParams.get("amountOverride");
+  const amountOverride = amountOverrideParam ? parseFloat(amountOverrideParam) : null;
+
   try {
     const html = await withTimeout(
-      generateConsolidatedInvoiceHtml(id.trim()),
+      generateConsolidatedInvoiceHtml(id.trim(), amountOverride),
       PDF_GENERATION_TIMEOUT_MS,
       "Timeout generowania PDF faktury zbiorczej."
     );
@@ -86,7 +91,7 @@ export async function GET(
   }
 }
 
-async function generateConsolidatedInvoiceHtml(id: string): Promise<string> {
+async function generateConsolidatedInvoiceHtml(id: string, amountOverride: number | null): Promise<string> {
   const inv = await prisma.consolidatedInvoice.findUnique({
     where: { id },
     include: { items: { orderBy: { checkIn: "asc" } } },
@@ -106,24 +111,30 @@ async function generateConsolidatedInvoiceHtml(id: string): Promise<string> {
     });
   }
 
-  const net = Number(inv.amountNet);
-  const vat = Number(inv.amountVat);
-  const gross = Number(inv.amountGross);
+  const baseGross = Number(inv.amountGross);
+  const gross = amountOverride != null && Number.isFinite(amountOverride) && amountOverride > 0
+    ? Math.round(amountOverride * 100) / 100
+    : baseGross;
   const vatRate = Number(inv.vatRate);
+  const net = Math.round((gross / (1 + vatRate / 100)) * 100) / 100;
+  const vat = Math.round((gross - net) * 100) / 100;
   const issueDate = new Date(inv.issuedAt).toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
   const periodFrom = new Date(inv.periodFrom).toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
   const periodTo = new Date(inv.periodTo).toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
   const dueDateStr = new Date(inv.dueDate).toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
 
-  const lineItems = inv.items.map((item) => {
-    const desc = item.description?.trim() || `Nocleg – ${item.guestName}, pokój ${item.roomNumber}, ${new Date(item.checkIn).toLocaleDateString("pl-PL")}–${new Date(item.checkOut).toLocaleDateString("pl-PL")} (${item.nights} nocy)`;
-    return {
-      name: desc,
-      net: Number(item.amountNet),
-      vat: Number(item.amountVat),
-      gross: Number(item.amountGross),
-    };
-  });
+  const useOverride = amountOverride != null && Number.isFinite(amountOverride) && amountOverride > 0;
+  const lineItems = useOverride
+    ? [{ name: "Usługa hotelowa (kwota skorygowana)", net, vat, gross }]
+    : inv.items.map((item) => {
+        const desc = item.description?.trim() || `Nocleg – ${item.guestName}, pokój ${item.roomNumber}, ${new Date(item.checkIn).toLocaleDateString("pl-PL")}–${new Date(item.checkOut).toLocaleDateString("pl-PL")} (${item.nights} nocy)`;
+        return {
+          name: desc,
+          net: Number(item.amountNet),
+          vat: Number(item.amountVat),
+          gross: Number(item.amountGross),
+        };
+      });
 
   const defaultUnit = template.defaultUnit || "szt.";
   const tableRows = lineItems.map((item, idx) => ({

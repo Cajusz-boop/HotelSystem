@@ -877,8 +877,9 @@ function CompaniesSection() {
   const handleDocVatPdf = async (amountOverride: number | null, notes: string) => {
     if (!docDialogInvoice) return;
     if (notes.trim()) await updateConsolidatedInvoiceNotes(docDialogInvoice.id, notes.trim());
-    const amount = amountOverride ?? docDialogInvoice.amountGross;
-    window.open(`/api/finance/consolidated-invoice/${docDialogInvoice.id}/pdf`, "_blank", "noopener,noreferrer");
+    const baseUrl = `/api/finance/consolidated-invoice/${docDialogInvoice.id}/pdf`;
+    const url = amountOverride != null && amountOverride > 0 ? `${baseUrl}?amountOverride=${encodeURIComponent(amountOverride.toFixed(2))}` : baseUrl;
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const handleDocPosnetReceipt = async (amount: number, _notes: string) => {
@@ -1709,9 +1710,11 @@ function CompaniesSection() {
                                   {inv.status !== "CANCELLED" && (
                                     <Button size="sm" variant="ghost" onClick={() => window.open(`/api/finance/consolidated-invoice/${inv.id}/pdf`, "_blank")}>Pobierz PDF</Button>
                                   )}
+                                  {inv.status !== "CANCELLED" && (
+                                    <Button size="sm" variant="outline" onClick={() => setDocDialogInvoice(inv)}>Wystaw dokument</Button>
+                                  )}
                                   {inv.status !== "PAID" && inv.status !== "CANCELLED" && (
                                     <>
-                                      <Button size="sm" variant="outline" onClick={() => setDocDialogInvoice(inv)}>Wystaw dokument</Button>
                                       <Button size="sm" variant="outline" onClick={() => handleMarkInvoicePaid(inv.id)}>Oznacz jako opłaconą</Button>
                                       <Button size="sm" variant="outline" onClick={() => setCancelInvoiceConfirm(inv.id)}>Anuluj</Button>
                                     </>
