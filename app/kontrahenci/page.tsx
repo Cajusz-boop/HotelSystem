@@ -1427,6 +1427,7 @@ function CompaniesSection() {
                           <th className="px-4 py-2 text-left font-medium">Check-out</th>
                           <th className="px-4 py-2 text-left font-medium">Status</th>
                           <th className="px-4 py-2 text-right font-medium">Kwota</th>
+                          <th className="px-4 py-2 text-center font-medium">Akcje</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -1447,6 +1448,16 @@ function CompaniesSection() {
                               }`}>{res.status}</span>
                             </td>
                             <td className="px-4 py-2 text-right font-medium">{res.totalAmount.toFixed(2)} zł</td>
+                            <td className="px-4 py-2 text-center">
+                              {res.status !== "CANCELLED" && res.status !== "NO_SHOW" && (
+                                <Link
+                                  href={`/front-office?reservationId=${encodeURIComponent(res.id)}`}
+                                  className="text-primary hover:underline text-xs font-medium"
+                                >
+                                  Edytuj
+                                </Link>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

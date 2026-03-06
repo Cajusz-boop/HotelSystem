@@ -70,6 +70,30 @@ test.describe("Goście i kontrahenci", () => {
       ).toBeVisible({ timeout: 10000 });
     });
 
+    test("GC-15: firma → szczegóły → rezerwacje → link Edytuj prowadzi do front-office", async ({ page }) => {
+      await page.goto("/kontrahenci?tab=firmy");
+      await page.waitForLoadState("domcontentloaded");
+      await expect(page.getByText(/Firmy|Kontrahenci/i).first()).toBeVisible({ timeout: 10000 });
+      const szczegolyBtn = page.getByRole("button", { name: /Szczegóły/i }).first();
+      if (!(await szczegolyBtn.isVisible().catch(() => false))) {
+        test.skip(true, "Brak firm na liście");
+        return;
+      }
+      await szczegolyBtn.click();
+      await page.waitForLoadState("domcontentloaded");
+      const edytujLink = page.locator('a[href*="/front-office?reservationId="]').first();
+      await edytujLink.waitFor({ state: "visible", timeout: 5000 }).catch(() => null);
+      if (!(await edytujLink.isVisible().catch(() => false))) {
+        test.skip(true, "Firma nie ma rezerwacji z linkiem Edytuj");
+        return;
+      }
+      await expect(edytujLink).toHaveAttribute("href", /\/front-office\?reservationId=/);
+      await edytujLink.click();
+      await page.waitForLoadState("domcontentloaded");
+      await expect(page).toHaveURL(/\/front-office.*reservationId=/);
+      await expect(page.getByText(/Rezerwacja|Reservation|Plan pobytu|Front office/i).first()).toBeVisible({ timeout: 10000 });
+    });
+
     test("GC-11: formularz dodania firmy — pola NIP, nazwa", async ({ page }) => {
       await page.goto("/firmy");
       await page.waitForLoadState("domcontentloaded");

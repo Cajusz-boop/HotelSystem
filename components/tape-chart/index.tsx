@@ -1126,22 +1126,31 @@ export function TapeChart({
     return { arrivals, departures, dirtyRooms, checkedInNow };
   }, [reservations, todayStr, allRooms]);
 
+  const didOpenEditForHighlightRef = useRef(false);
   useEffect(() => {
-    if (!initialHighlightReservationId || !scrollContainerRef.current) return;
+    if (!initialHighlightReservationId) return;
     const res = reservations.find((r) => r.id === initialHighlightReservationId);
     if (res) {
       const d = new Date(res.checkIn + "Z");
       if (!Number.isNaN(d.getTime())) setViewStartDate(addDays(d, -3));
-    }
-    const t = setTimeout(() => {
-      const bar = scrollContainerRef.current?.querySelector(
-        `[data-reservation-id="${initialHighlightReservationId}"]`
-      );
-      if (bar instanceof HTMLElement) {
-        bar.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+      if (!didOpenEditForHighlightRef.current) {
+        didOpenEditForHighlightRef.current = true;
+        setSelectedReservation(res);
+        setEditInitialTab("rozliczenie");
+        setSheetOpen(true);
       }
-    }, 300);
-    return () => clearTimeout(t);
+    }
+    if (scrollContainerRef.current) {
+      const t = setTimeout(() => {
+        const bar = scrollContainerRef.current?.querySelector(
+          `[data-reservation-id="${initialHighlightReservationId}"]`
+        );
+        if (bar instanceof HTMLElement) {
+          bar.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+        }
+      }, 300);
+      return () => clearTimeout(t);
+    }
   }, [initialHighlightReservationId, reservations]);
 
   // Po kliknięciu "Dziś"/"Tydzień"/"Miesiąc" lub "Wróć do dziś": scroll na 0.
