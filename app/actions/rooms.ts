@@ -58,14 +58,22 @@ export async function getEffectivePriceForRoomOnDate(
   if (Number.isNaN(date.getTime())) return undefined;
   const room = await prisma.room.findUnique({ where: { number: roomNumber.trim() } });
   if (!room) return undefined;
+  const typeNameNormalized = room.type?.trim() ?? "";
   let roomType: Awaited<ReturnType<typeof prisma.roomType.findUnique>> = null;
   try {
     roomType = await prisma.roomType.findUnique({
-      where: { name: room.type },
+      where: { name: typeNameNormalized || room.type },
       include: {
         rateCode: { select: { price: true, basePrice: true, pricePerPerson: true } },
       },
     });
+    if (!roomType && typeNameNormalized) {
+      const allTypes = await prisma.roomType.findMany({
+        include: { rateCode: { select: { price: true, basePrice: true, pricePerPerson: true } } },
+      });
+      const lower = typeNameNormalized.toLowerCase();
+      roomType = allTypes.find((t) => t.name.trim().toLowerCase() === lower) ?? null;
+    }
   } catch (error) {
     console.error("[getEffectivePriceForRoom] roomType.findUnique error:", error instanceof Error ? error.message : String(error));
   }
@@ -116,7 +124,6 @@ export async function getEffectivePricesBatch(
     select: { number: true, type: true, price: true },
   });
   const roomByNumber = new Map(rooms.map((r) => [r.number, r]));
-  const typeNames = Array.from(new Set(rooms.map((r) => r.type)));
   let roomTypes: Array<{
     id: string;
     name: string;
@@ -125,7 +132,6 @@ export async function getEffectivePricesBatch(
   }> = [];
   try {
     roomTypes = await prisma.roomType.findMany({
-      where: { name: { in: typeNames } },
       select: {
         id: true,
         name: true,
@@ -136,12 +142,17 @@ export async function getEffectivePricesBatch(
   } catch (error) {
     console.error("[getEffectivePricesBatch] roomType.findMany error:", error instanceof Error ? error.message : String(error));
   }
-  const typeByName = new Map(roomTypes.map((t) => [t.name, t]));
+  const typeByName = new Map<string, (typeof roomTypes)[number]>();
+  for (const t of roomTypes) {
+    typeByName.set(t.name, t);
+    const key = t.name.trim().toLowerCase();
+    if (!typeByName.has(key)) typeByName.set(key, t);
+  }
   let ratePlans: Array<{ roomTypeId: string; validFrom: Date; validTo: Date; price: Prisma.Decimal }> = [];
-  if (typeNames.length > 0) {
+  if (roomTypes.length > 0) {
     try {
       ratePlans = await prisma.ratePlan.findMany({
-        where: { roomType: { name: { in: typeNames } } },
+        where: { roomTypeId: { in: roomTypes.map((t) => t.id) } },
         select: { roomTypeId: true, validFrom: true, validTo: true, price: true },
       });
     } catch (error) {
@@ -153,7 +164,7 @@ export async function getEffectivePricesBatch(
     const room = roomByNumber.get(roomNumber);
     if (!room) continue;
     const date = new Date(dateStr + "T12:00:00Z");
-    const type = typeByName.get(room.type);
+    const type = typeByName.get(room.type) ?? typeByName.get(room.type.trim().toLowerCase());
     const plan = ratePlans.find(
       (p) => p.roomTypeId === type?.id && date >= p.validFrom && date <= p.validTo
     );
