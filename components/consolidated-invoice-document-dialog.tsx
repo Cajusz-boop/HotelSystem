@@ -9,7 +9,24 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+
+const PAYMENT_TYPES = ["CASH", "CARD", "TRANSFER", "PREPAID", "OTHER"] as const;
+const PAYMENT_LABELS: Record<string, string> = {
+  CASH: "Gotówka",
+  CARD: "Karta",
+  TRANSFER: "Przelew",
+  PREPAID: "Przedpłata",
+  OTHER: "Inna",
+};
 
 export interface ConsolidatedInvoiceDocDialogProps {
   open: boolean;
@@ -17,8 +34,8 @@ export interface ConsolidatedInvoiceDocDialogProps {
   amountGross: number;
   invoiceNumber: string;
   onVatPdf: (amountOverride: number | null, notes: string) => Promise<void>;
-  onPosnetReceipt: (amount: number, notes: string) => Promise<void>;
-  onBoth?: (amountInvoice: number, amountReceipt: number, notes: string) => Promise<void>;
+  onPosnetReceipt: (amount: number, notes: string, paymentType: string) => Promise<void>;
+  onBoth?: (amountInvoice: number, amountReceipt: number, notes: string, paymentType: string) => Promise<void>;
   onNone: () => void;
 }
 
@@ -36,6 +53,7 @@ function ConsolidatedInvoiceDocDialog({
   const [docAmountInvoice, setDocAmountInvoice] = useState("");
   const [docAmountReceipt, setDocAmountReceipt] = useState("");
   const [invoiceNotes, setInvoiceNotes] = useState("");
+  const [paymentType, setPaymentType] = useState("CASH");
   const [docIssuing, setDocIssuing] = useState(false);
 
   const docRoomTotal = amountGross;
@@ -74,9 +92,9 @@ function ConsolidatedInvoiceDocDialog({
         await onVatPdf(amt, invoiceNotes.trim());
       } else if (type === "posnet") {
         const amt = docAmountOverride.trim() && parseFloat(docAmountOverride) > 0 ? parseFloat(docAmountOverride) : amountGross;
-        await onPosnetReceipt(amt, invoiceNotes.trim());
+        await onPosnetReceipt(amt, invoiceNotes.trim(), paymentType);
       } else if (type === "both" && onBoth) {
-        await onBoth(inv, rec, invoiceNotes.trim());
+        await onBoth(inv, rec, invoiceNotes.trim(), paymentType);
       }
       onOpenChange(false);
     } finally {
@@ -127,6 +145,19 @@ function ConsolidatedInvoiceDocDialog({
                 )}
               </p>
             )}
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">Forma zapłaty (paragon)</Label>
+            <Select value={paymentType} onValueChange={setPaymentType}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAYMENT_TYPES.map((t) => (
+                  <SelectItem key={t} value={t}>{PAYMENT_LABELS[t] ?? t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Uwagi na fakturze (opcjonalnie)</label>

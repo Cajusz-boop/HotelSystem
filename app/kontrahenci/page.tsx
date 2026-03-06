@@ -898,17 +898,17 @@ function CompaniesSection() {
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  const handleDocPosnetReceipt = async (amount: number, _notes: string) => {
+  const handleDocPosnetReceipt = async (amount: number, _notes: string, paymentType: string) => {
     if (!docDialogInvoice) return;
-    const res = await printFiscalReceiptForConsolidatedInvoice(docDialogInvoice.id, amount);
+    const res = await printFiscalReceiptForConsolidatedInvoice(docDialogInvoice.id, amount, paymentType);
     if (!res.success) setError(res.error ?? "Błąd druku paragonu");
   };
 
-  const handleDocBoth = async (amountInvoice: number, amountReceipt: number, notes: string) => {
+  const handleDocBoth = async (amountInvoice: number, amountReceipt: number, notes: string, paymentType: string) => {
     if (!docDialogInvoice) return;
     if (notes.trim()) await updateConsolidatedInvoiceNotes(docDialogInvoice.id, notes.trim());
     window.open(`/api/finance/consolidated-invoice/${docDialogInvoice.id}/pdf`, "_blank", "noopener,noreferrer");
-    const res = await printFiscalReceiptForConsolidatedInvoice(docDialogInvoice.id, amountReceipt);
+    const res = await printFiscalReceiptForConsolidatedInvoice(docDialogInvoice.id, amountReceipt, paymentType);
     if (!res.success) setError(res.error ?? "Błąd druku paragonu");
   };
 
