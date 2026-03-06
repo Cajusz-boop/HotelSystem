@@ -123,6 +123,31 @@ async function generateConsolidatedInvoiceHtml(id: string, amountOverride: numbe
   const periodTo = new Date(inv.periodTo).toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
   const dueDateStr = new Date(inv.dueDate).toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
 
+  const paymentMethodNames: Record<string, string> = {
+    CASH: "Gotówka",
+    TRANSFER: "Przelew",
+    CARD: "Karta płatnicza",
+    BLIK: "BLIK",
+    VOUCHER: "Voucher",
+    PREPAID: "Przedpłata",
+    OTHER: "Inna",
+  };
+  const pb = inv.paymentBreakdown as Array<{ type: string; amount: number }> | null;
+  const withAmount = pb && Array.isArray(pb) ? pb.filter((p) => p.amount > 0) : [];
+  let paymentText: string;
+  if (withAmount.length === 1) {
+    const method = paymentMethodNames[withAmount[0].type?.toUpperCase()] ?? withAmount[0].type;
+    paymentText = ["CASH", "CARD", "BLIK", "VOUCHER", "PREPAID"].includes(withAmount[0].type?.toUpperCase())
+      ? `${method} – zapłacono`
+      : `${method} w terminie ${inv.paymentTermDays} dni = ${dueDateStr}`;
+  } else if (withAmount.length > 1) {
+    paymentText = withAmount
+      .map((p) => `${paymentMethodNames[p.type?.toUpperCase()] ?? p.type} ${p.amount.toFixed(2)} PLN`)
+      .join(", ");
+  } else {
+    paymentText = `Przelew w terminie ${inv.paymentTermDays} dni = ${dueDateStr}`;
+  }
+
   const useOverride = amountOverride != null && Number.isFinite(amountOverride) && amountOverride > 0;
   const lineItems = useOverride
     ? [{ name: "Usługa hotelowa", net, vat, gross }]
@@ -225,7 +250,7 @@ async function generateConsolidatedInvoiceHtml(id: string, amountOverride: numbe
       <tr style="font-weight: 600;"><td>Suma:</td><td class="text-right">${net.toFixed(2)}</td><td class="text-right">${vat.toFixed(2)}</td><td class="text-right">${gross.toFixed(2)}</td></tr>
     </tbody>
   </table>
-  <div class="payment-box">Forma płatności: Przelew w terminie ${inv.paymentTermDays} dni = ${dueDateStr}</div>
+  <div class="payment-box">Forma płatności: ${escapeHtml(paymentText)}</div>
   <div class="amount-words"><strong>Słownie zł:</strong> ${amountToWords(gross)}</div>
   ${notesHtml}
   <div style="margin-top: 1rem; font-size: 0.75rem; color: #666;">${template.footerText ? escapeHtml(template.footerText) : ""}</div>

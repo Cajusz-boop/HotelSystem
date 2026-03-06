@@ -1272,6 +1272,7 @@ export interface ConsolidatedInvoiceDetails extends ConsolidatedInvoiceForList {
   paymentTermDays: number;
   paidAt: Date | null;
   notes: string | null;
+  paymentBreakdown: Array<{ type: string; amount: number }> | null;
   createdAt: Date;
   items: Array<{
     id: string;
@@ -1620,6 +1621,7 @@ export async function getConsolidatedInvoiceById(
         status: invoice.status,
         paidAt: invoice.paidAt,
         notes: invoice.notes,
+        paymentBreakdown: (invoice.paymentBreakdown as Array<{ type: string; amount: number }>) ?? null,
         issuedAt: invoice.issuedAt,
         createdAt: invoice.createdAt,
         itemsCount: invoice.items.length,
@@ -1664,6 +1666,7 @@ export async function updateConsolidatedInvoice(data: {
   amountGross?: number;
   vatRate?: number;
   notes?: string | null;
+  paymentBreakdown?: Array<{ type: string; amount: number }> | null;
 }): Promise<ActionResult<void>> {
   try {
     const inv = await prisma.consolidatedInvoice.findUnique({
@@ -1687,6 +1690,7 @@ export async function updateConsolidatedInvoice(data: {
     if (data.buyerPostalCode !== undefined) updateData.buyerPostalCode = data.buyerPostalCode?.trim() || null;
     if (data.buyerCity !== undefined) updateData.buyerCity = data.buyerCity?.trim() || null;
     if (data.notes !== undefined) updateData.notes = data.notes?.trim() || null;
+    if (data.paymentBreakdown !== undefined) updateData.paymentBreakdown = data.paymentBreakdown;
 
     if (data.amountGross !== undefined && data.vatRate !== undefined) {
       const gross = Math.round(data.amountGross * 100) / 100;

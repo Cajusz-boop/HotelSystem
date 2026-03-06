@@ -60,6 +60,8 @@ import { ConsolidatedInvoiceDocumentDialog } from "@/components/consolidated-inv
 type MainTab = "goscie" | "firmy";
 
 const SEARCH_DEBOUNCE_MS = 300;
+const PAYMENT_TYPES = ["CASH", "CARD", "TRANSFER", "PREPAID", "OTHER"] as const;
+const PAYMENT_LABELS: Record<string, string> = { CASH: "Gotówka", CARD: "Karta", TRANSFER: "Przelew", PREPAID: "Przedpłata", OTHER: "Inna" };
 
 export default function KontrahenciPage() {
   const router = useRouter();
@@ -697,6 +699,10 @@ function CompaniesSection() {
   const [editAmountGross, setEditAmountGross] = useState("");
   const [editVatRate, setEditVatRate] = useState("8");
   const [editNotes, setEditNotes] = useState("");
+  const [editPayment1Type, setEditPayment1Type] = useState("CASH");
+  const [editPayment1Amount, setEditPayment1Amount] = useState("");
+  const [editPayment2Type, setEditPayment2Type] = useState("CARD");
+  const [editPayment2Amount, setEditPayment2Amount] = useState("");
   const [cancelInvoiceConfirm, setCancelInvoiceConfirm] = useState<string | null>(null);
   const [deleteInvoiceConfirmId, setDeleteInvoiceConfirmId] = useState<string | null>(null);
   const [deleteInvoiceLoading, setDeleteInvoiceLoading] = useState(false);
@@ -910,6 +916,21 @@ function CompaniesSection() {
       setEditAmountGross(d.amountGross.toFixed(2));
       setEditVatRate(String(d.vatRate ?? 8));
       setEditNotes(d.notes ?? "");
+      const pb = d.paymentBreakdown;
+      if (pb && pb.length >= 1) {
+        setEditPayment1Type(pb[0].type);
+        setEditPayment1Amount(String(pb[0].amount));
+      } else {
+        setEditPayment1Type("CASH");
+        setEditPayment1Amount("");
+      }
+      if (pb && pb.length >= 2) {
+        setEditPayment2Type(pb[1].type);
+        setEditPayment2Amount(String(pb[1].amount));
+      } else {
+        setEditPayment2Type("CARD");
+        setEditPayment2Amount("");
+      }
     } else {
       setEditInvoiceId(null);
       setError(!res.success ? (res.error ?? "Błąd pobierania faktury") : "Błąd pobierania faktury");
@@ -981,6 +1002,29 @@ function CompaniesSection() {
     }
   };
 
+  const handleSaveEditInvoicePayments = async () => {
+    if (!editInvoiceId) return;
+    const amt1 = editPayment1Amount.trim() ? parseFloat(editPayment1Amount.replace(",", ".")) : 0;
+    const amt2 = editPayment2Amount.trim() ? parseFloat(editPayment2Amount.replace(",", ".")) : 0;
+    const paymentBreakdown: Array<{ type: string; amount: number }> = [];
+    if (amt1 > 0) paymentBreakdown.push({ type: editPayment1Type, amount: amt1 });
+    if (amt2 > 0) paymentBreakdown.push({ type: editPayment2Type, amount: amt2 });
+    setEditInvoiceSaving(true);
+    try {
+      const res = await updateConsolidatedInvoice({ id: editInvoiceId, paymentBreakdown: paymentBreakdown.length > 0 ? paymentBreakdown : null });
+      if (res.success) {
+        toast.success("Zapisano rozbicie płatności");
+        if (editInvoiceDetail) setEditInvoiceDetail({ ...editInvoiceDetail, paymentBreakdown: paymentBreakdown.length > 0 ? paymentBreakdown : null });
+        if (selectedCompany) {
+          const invoicesRes = await getCompanyConsolidatedInvoices(selectedCompany.id);
+          if (invoicesRes.success) setConsolidatedInvoices(invoicesRes.data);
+        }
+      } else toast.error(res.error ?? "Błąd zapisu");
+    } finally {
+      setEditInvoiceSaving(false);
+    }
+  };
+
   const handleDeleteConsolidatedInvoice = async (invoiceId: string) => {
     setDeleteInvoiceLoading(true);
     const res = await deleteConsolidatedInvoice(invoiceId);
@@ -1005,9 +1049,10 @@ function CompaniesSection() {
     }
   };
 
-  const handleDocVatPdf = async (amountOverride: number | null, notes: string) => {
+  const handleDocVatPdf = async (amountOverride: number | null, notes: string, paymentType: string) => {
     if (!docDialogInvoice) return;
-    if (notes.trim()) await updateConsolidatedInvoiceNotes(docDialogInvoice.id, notes.trim());
+    const gross = amountOverride != null && amountOverride > 0 ? amountOverride : docDialogInvoice.amountGross;
+    await updateConsolidatedInvoice({ id: docDialogInvoice.id, paymentBreakdown: [{ type: paymentType, amount: gross }], notes: notes.trim() || undefined });
     const baseUrl = `/api/finance/consolidated-invoice/${docDialogInvoice.id}/pdf`;
     const url = amountOverride != null && amountOverride > 0 ? `${baseUrl}?amountOverride=${encodeURIComponent(amountOverride.toFixed(2))}` : baseUrl;
     window.open(url, "_blank", "noopener,noreferrer");
@@ -1021,7 +1066,8 @@ function CompaniesSection() {
 
   const handleDocBoth = async (amountInvoice: number, amountReceipt: number, notes: string, paymentType: string) => {
     if (!docDialogInvoice) return;
-    if (notes.trim()) await updateConsolidatedInvoiceNotes(docDialogInvoice.id, notes.trim());
+    const gross = docDialogInvoice.amountGross;
+    await updateConsolidatedInvoice({ id: docDialogInvoice.id, paymentBreakdown: [{ type: paymentType, amount: gross }], notes: notes.trim() || undefined });
     window.open(`/api/finance/consolidated-invoice/${docDialogInvoice.id}/pdf`, "_blank", "noopener,noreferrer");
     const res = await printFiscalReceiptForConsolidatedInvoice(docDialogInvoice.id, amountReceipt, paymentType);
     if (!res.success) setError(res.error ?? "Błąd druku paragonu");
@@ -1948,6 +1994,44 @@ function CompaniesSection() {
                                 <Label className="text-xs">Uwagi na fakturze</Label>
                                 <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="Wpisz uwagi..." rows={2} className="text-sm mt-1" />
                               </div>
+                            </div>
+                            <div className="rounded border p-3 space-y-3 mt-4">
+                              <Label className="text-sm">Rozbicie płatności (dwa sposoby)</Label>
+                              <div className="grid grid-cols-2 gap-2 text-sm">
+                                <div>
+                                  <Label className="text-xs">1. Typ</Label>
+                                  <Select value={editPayment1Type} onValueChange={setEditPayment1Type}>
+                                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      {PAYMENT_TYPES.map((t) => (
+                                        <SelectItem key={t} value={t}>{PAYMENT_LABELS[t] ?? t}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <Label className="text-xs">Kwota (PLN)</Label>
+                                  <Input type="number" min={0} step={0.01} className="h-8" value={editPayment1Amount} onChange={(e) => setEditPayment1Amount(e.target.value)} placeholder="0" />
+                                </div>
+                                <div>
+                                  <Label className="text-xs">2. Typ</Label>
+                                  <Select value={editPayment2Type} onValueChange={setEditPayment2Type}>
+                                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      {PAYMENT_TYPES.map((t) => (
+                                        <SelectItem key={t} value={t}>{PAYMENT_LABELS[t] ?? t}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <Label className="text-xs">Kwota (PLN)</Label>
+                                  <Input type="number" min={0} step={0.01} className="h-8" value={editPayment2Amount} onChange={(e) => setEditPayment2Amount(e.target.value)} placeholder="0" />
+                                </div>
+                              </div>
+                              <Button type="button" size="sm" disabled={editInvoiceSaving} onClick={handleSaveEditInvoicePayments}>
+                                {editInvoiceSaving ? "Zapisywanie…" : "Zapisz rozbicie płatności"}
+                              </Button>
                             </div>
                             <div className="flex gap-2 flex-wrap">
                               <Button type="button" size="sm" disabled={editInvoiceSaving} onClick={handleSaveEditInvoice}>

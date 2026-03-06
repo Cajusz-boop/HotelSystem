@@ -1206,6 +1206,7 @@ model ConsolidatedInvoice {
   // Termin płatności
   dueDate        DateTime @db.Date
   paymentTermDays Int     @default(14)
+  paymentBreakdown Json?  // rozbicie płatności: [{ type: "CASH", amount: 100 }, { type: "CARD", amount: 50 }]
   
   // Status
   status         String   @default("ISSUED")  // ISSUED, PAID, OVERDUE, CANCELLED

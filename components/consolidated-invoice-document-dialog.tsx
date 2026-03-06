@@ -33,7 +33,7 @@ export interface ConsolidatedInvoiceDocDialogProps {
   onOpenChange: (open: boolean) => void;
   amountGross: number;
   invoiceNumber: string;
-  onVatPdf: (amountOverride: number | null, notes: string) => Promise<void>;
+  onVatPdf: (amountOverride: number | null, notes: string, paymentType: string) => Promise<void>;
   onPosnetReceipt: (amount: number, notes: string, paymentType: string) => Promise<void>;
   onBoth?: (amountInvoice: number, amountReceipt: number, notes: string, paymentType: string) => Promise<void>;
   onNone: () => void;
@@ -89,7 +89,7 @@ function ConsolidatedInvoiceDocDialog({
     try {
       if (type === "vat") {
         const amt = docAmountOverride.trim() && parseFloat(docAmountOverride) > 0 ? parseFloat(docAmountOverride) : amountGross;
-        await onVatPdf(amt, invoiceNotes.trim());
+        await onVatPdf(amt, invoiceNotes.trim(), paymentType);
       } else if (type === "posnet") {
         const amt = docAmountOverride.trim() && parseFloat(docAmountOverride) > 0 ? parseFloat(docAmountOverride) : amountGross;
         await onPosnetReceipt(amt, invoiceNotes.trim(), paymentType);
@@ -147,7 +147,7 @@ function ConsolidatedInvoiceDocDialog({
             )}
           </div>
           <div>
-            <Label className="text-xs text-muted-foreground mb-1 block">Forma zapłaty (paragon)</Label>
+            <Label className="text-xs text-muted-foreground mb-1 block">Forma zapłaty (faktura i paragon)</Label>
             <Select value={paymentType} onValueChange={setPaymentType}>
               <SelectTrigger className="h-8 text-sm">
                 <SelectValue />
