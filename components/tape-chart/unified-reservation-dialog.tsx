@@ -858,7 +858,7 @@ export function UnifiedReservationDialog({
         onKeyDown={handleKeyDown}
       >
         <DialogHeader className="relative px-6 pt-6 pb-2 shrink-0 border-b flex flex-row items-center justify-between gap-2">
-          <DialogTitle className="text-base font-semibold pr-8">{title}</DialogTitle>
+          <DialogTitle className="text-base font-semibold pr-8 min-w-0 truncate" title={title}>{title}</DialogTitle>
           <DialogClose asChild>
             <button type="button" className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0" aria-label="Zamknij">
               <X className="h-4 w-4" />

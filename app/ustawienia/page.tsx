@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Mail, Settings, MessageSquare, FileText, Palette, Receipt, ClipboardList, FileCheck, Users, Shield, Key, Database, Building2, FormInput, BookOpen, CalendarRange, FileX, Upload, Printer, Globe } from "lucide-react";
+import { Mail, Settings, MessageSquare, FileText, Palette, Receipt, ClipboardList, FileCheck, Users, Shield, Key, Database, Building2, FormInput, BookOpen, CalendarRange, FileX, Upload, Printer, Globe, Calculator } from "lucide-react";
 
 const settingsItems = [
   {
@@ -118,6 +118,12 @@ const settingsItems = [
     icon: Database,
     title: "Przywracanie z kopii",
     description: "Przywróć bazę z pliku SQL (zastępuje bieżące dane).",
+  },
+  {
+    href: "/ustawienia/fill-rate-prices",
+    icon: Calculator,
+    title: "Uzupełnij ceny rezerwacji",
+    description: "Zbiorcza akcja: uzupełnij rateCodePrice dla rezerwacji bez ceny z cennika.",
   },
   {
     href: "/ustawienia/import",
