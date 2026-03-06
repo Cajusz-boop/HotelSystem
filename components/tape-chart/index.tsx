@@ -601,12 +601,13 @@ export function TapeChart({
     { id: "prices", label: "Ceny" },
   ] as const;
 
+  const INITIAL_DAYS_BACK = 7; // widok startowy: pierwsza kolumna = dziś minus 7 dni (jak na taśmie recepcji)
   const [viewStartDate, setViewStartDate] = useState<Date>(() => {
     const baseStr = initialTodayStr ?? todayStr ?? "2026-01-01";
     const [y, m, d] = baseStr.split("-").map(Number);
     const base = new Date(y, m - 1, d);
     if (DEFAULT_VIEW_SCALE === "day" || DEFAULT_VIEW_SCALE === "week" || DEFAULT_VIEW_SCALE === "month") {
-      base.setDate(base.getDate() - 1); // wczoraj – druga kolumna = dziś
+      base.setDate(base.getDate() - INITIAL_DAYS_BACK); // 7 dni wstecz – „Dziś” w środku widoku
       return base;
     }
     const days = VIEW_SCALE_CONFIG[DEFAULT_VIEW_SCALE].days;
