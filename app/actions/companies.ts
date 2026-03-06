@@ -1647,6 +1647,95 @@ export async function getConsolidatedInvoiceById(
 }
 
 /**
+ * Aktualizuje dane faktury zbiorczej (edycja). Dostępne dla statusu ISSUED.
+ */
+export async function updateConsolidatedInvoice(data: {
+  id: string;
+  number?: string;
+  issuedAt?: Date;
+  periodFrom?: Date;
+  periodTo?: Date;
+  dueDate?: Date;
+  buyerNip?: string;
+  buyerName?: string;
+  buyerAddress?: string | null;
+  buyerPostalCode?: string | null;
+  buyerCity?: string | null;
+  amountGross?: number;
+  vatRate?: number;
+  notes?: string | null;
+}): Promise<ActionResult<void>> {
+  try {
+    const inv = await prisma.consolidatedInvoice.findUnique({
+      where: { id: data.id },
+      select: { id: true, status: true },
+    });
+    if (!inv) return { success: false, error: "Faktura nie istnieje" };
+    if (inv.status !== "ISSUED") {
+      return { success: false, error: "Edycja możliwa tylko dla faktury ze statusem Wystawiona." };
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (data.number !== undefined) updateData.number = data.number.trim();
+    if (data.issuedAt !== undefined) updateData.issuedAt = data.issuedAt;
+    if (data.periodFrom !== undefined) updateData.periodFrom = data.periodFrom;
+    if (data.periodTo !== undefined) updateData.periodTo = data.periodTo;
+    if (data.dueDate !== undefined) updateData.dueDate = data.dueDate;
+    if (data.buyerNip !== undefined) updateData.buyerNip = data.buyerNip.trim();
+    if (data.buyerName !== undefined) updateData.buyerName = data.buyerName.trim();
+    if (data.buyerAddress !== undefined) updateData.buyerAddress = data.buyerAddress?.trim() || null;
+    if (data.buyerPostalCode !== undefined) updateData.buyerPostalCode = data.buyerPostalCode?.trim() || null;
+    if (data.buyerCity !== undefined) updateData.buyerCity = data.buyerCity?.trim() || null;
+    if (data.notes !== undefined) updateData.notes = data.notes?.trim() || null;
+
+    if (data.amountGross !== undefined && data.vatRate !== undefined) {
+      const gross = Math.round(data.amountGross * 100) / 100;
+      const vatRate = data.vatRate;
+      const net = Math.round((gross / (1 + vatRate / 100)) * 100) / 100;
+      const vat = Math.round((gross - net) * 100) / 100;
+      Object.assign(updateData, { amountGross: gross, amountNet: net, amountVat: vat, vatRate });
+    } else if (data.amountGross !== undefined) {
+      const inv2 = await prisma.consolidatedInvoice.findUnique({
+        where: { id: data.id },
+        select: { vatRate: true },
+      });
+      if (inv2) {
+        const gross = Math.round(data.amountGross * 100) / 100;
+        const vatRate = Number(inv2.vatRate);
+        const net = Math.round((gross / (1 + vatRate / 100)) * 100) / 100;
+        const vat = Math.round((gross - net) * 100) / 100;
+        Object.assign(updateData, { amountGross: gross, amountNet: net, amountVat: vat });
+      }
+    } else if (data.vatRate !== undefined) {
+      const inv2 = await prisma.consolidatedInvoice.findUnique({
+        where: { id: data.id },
+        select: { amountGross: true },
+      });
+      if (inv2) {
+        const gross = Number(inv2.amountGross);
+        const vatRate = data.vatRate;
+        const net = Math.round((gross / (1 + vatRate / 100)) * 100) / 100;
+        const vat = Math.round((gross - net) * 100) / 100;
+        Object.assign(updateData, { vatRate, amountNet: net, amountVat: vat });
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) return { success: true, data: undefined };
+
+    await prisma.consolidatedInvoice.update({
+      where: { id: data.id },
+      data: updateData as object,
+    });
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd aktualizacji faktury",
+    };
+  }
+}
+
+/**
  * Aktualizuje uwagi na fakturze zbiorczej.
  */
 export async function updateConsolidatedInvoiceNotes(

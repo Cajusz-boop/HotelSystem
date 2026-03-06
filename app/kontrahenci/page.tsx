@@ -9,6 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Users, Building2 } from "lucide-react";
 import {
@@ -38,6 +42,7 @@ import {
   createConsolidatedInvoice,
   getCompanyConsolidatedInvoices,
   getConsolidatedInvoiceById,
+  updateConsolidatedInvoice,
   updateConsolidatedInvoiceStatus,
   updateConsolidatedInvoiceNotes,
   deleteConsolidatedInvoice,
@@ -674,6 +679,24 @@ function CompaniesSection() {
   const [selectedInvoiceDetails, setSelectedInvoiceDetails] = useState<ConsolidatedInvoiceDetails | null>(null);
   const [invoiceDetailsLoading, setInvoiceDetailsLoading] = useState(false);
   const [docDialogInvoice, setDocDialogInvoice] = useState<ConsolidatedInvoiceForList | null>(null);
+  const [editInvoiceId, setEditInvoiceId] = useState<string | null>(null);
+  const [editInvoiceDetail, setEditInvoiceDetail] = useState<ConsolidatedInvoiceDetails | null>(null);
+  const [editInvoiceLoading, setEditInvoiceLoading] = useState(false);
+  const [editInvoiceSaving, setEditInvoiceSaving] = useState(false);
+  const [editNipLoading, setEditNipLoading] = useState(false);
+  const [editNumber, setEditNumber] = useState("");
+  const [editIssuedAt, setEditIssuedAt] = useState("");
+  const [editPeriodFrom, setEditPeriodFrom] = useState("");
+  const [editPeriodTo, setEditPeriodTo] = useState("");
+  const [editDueDate, setEditDueDate] = useState("");
+  const [editBuyerNip, setEditBuyerNip] = useState("");
+  const [editBuyerName, setEditBuyerName] = useState("");
+  const [editBuyerAddress, setEditBuyerAddress] = useState("");
+  const [editBuyerPostalCode, setEditBuyerPostalCode] = useState("");
+  const [editBuyerCity, setEditBuyerCity] = useState("");
+  const [editAmountGross, setEditAmountGross] = useState("");
+  const [editVatRate, setEditVatRate] = useState("8");
+  const [editNotes, setEditNotes] = useState("");
   const [cancelInvoiceConfirm, setCancelInvoiceConfirm] = useState<string | null>(null);
   const [deleteInvoiceConfirmId, setDeleteInvoiceConfirmId] = useState<string | null>(null);
   const [deleteInvoiceLoading, setDeleteInvoiceLoading] = useState(false);
@@ -864,6 +887,98 @@ function CompaniesSection() {
     setInvoiceDetailsLoading(false);
     if (res.success) setSelectedInvoiceDetails(res.data);
     else setError(res.error ?? "Błąd pobierania faktury");
+  };
+
+  const handleOpenEditInvoice = async (invoiceId: string) => {
+    setEditInvoiceId(invoiceId);
+    setEditInvoiceLoading(true);
+    const res = await getConsolidatedInvoiceById(invoiceId);
+    setEditInvoiceLoading(false);
+    if (res.success && res.data) {
+      const d = res.data;
+      setEditInvoiceDetail(d);
+      setEditNumber(d.number);
+      setEditIssuedAt(d.issuedAt ? new Date(d.issuedAt).toISOString().slice(0, 10) : "");
+      setEditPeriodFrom(d.periodFrom ? new Date(d.periodFrom).toISOString().slice(0, 10) : "");
+      setEditPeriodTo(d.periodTo ? new Date(d.periodTo).toISOString().slice(0, 10) : "");
+      setEditDueDate(d.dueDate ? new Date(d.dueDate).toISOString().slice(0, 10) : "");
+      setEditBuyerNip(d.buyerNip ?? "");
+      setEditBuyerName(d.buyerName ?? "");
+      setEditBuyerAddress(d.buyerAddress ?? "");
+      setEditBuyerPostalCode(d.buyerPostalCode ?? "");
+      setEditBuyerCity(d.buyerCity ?? "");
+      setEditAmountGross(d.amountGross.toFixed(2));
+      setEditVatRate(String(d.vatRate ?? 8));
+      setEditNotes(d.notes ?? "");
+    } else {
+      setEditInvoiceId(null);
+      setError(res.error ?? "Błąd pobierania faktury");
+    }
+  };
+
+  const handleFetchEditByNip = async () => {
+    const trimmed = editBuyerNip.trim();
+    if (!trimmed) { toast.error("Podaj NIP."); return; }
+    const validation = validateNipOrVat(trimmed);
+    if (!validation.ok) { toast.error(validation.error); return; }
+    setEditNipLoading(true);
+    try {
+      const result = await lookupCompanyByNip(trimmed);
+      if (result.success && result.data) {
+        const d = result.data;
+        setEditBuyerNip(d.nip ?? trimmed);
+        setEditBuyerName(d.name ?? "");
+        setEditBuyerAddress(d.address ?? "");
+        setEditBuyerPostalCode(d.postalCode ?? "");
+        setEditBuyerCity(d.city ?? "");
+        toast.success("Dane firmy pobrane z Wykazu VAT.");
+      } else {
+        toast.error(result.success === false ? result.error : "Nie udało się pobrać danych.");
+      }
+    } finally {
+      setEditNipLoading(false);
+    }
+  };
+
+  const handleSaveEditInvoice = async () => {
+    if (!editInvoiceId || !editInvoiceDetail) return;
+    const nipValidation = validateNipOrVat(editBuyerNip.trim());
+    if (!nipValidation.ok) { toast.error(nipValidation.error); return; }
+    if (!editBuyerName.trim()) { toast.error("Podaj nazwę nabywcy."); return; }
+    const gross = parseFloat(editAmountGross.replace(",", "."));
+    if (isNaN(gross) || gross < 0) { toast.error("Podaj poprawną kwotę brutto."); return; }
+    const vatRate = parseFloat(editVatRate.replace(",", "."));
+    if (isNaN(vatRate) || vatRate < 0 || vatRate > 100) { toast.error("Podaj poprawną stawkę VAT."); return; }
+    setEditInvoiceSaving(true);
+    try {
+      const res = await updateConsolidatedInvoice({
+        id: editInvoiceId,
+        number: editNumber.trim(),
+        issuedAt: editIssuedAt ? new Date(editIssuedAt) : undefined,
+        periodFrom: editPeriodFrom ? new Date(editPeriodFrom) : undefined,
+        periodTo: editPeriodTo ? new Date(editPeriodTo) : undefined,
+        dueDate: editDueDate ? new Date(editDueDate) : undefined,
+        buyerNip: nipValidation.normalized,
+        buyerName: editBuyerName.trim(),
+        buyerAddress: editBuyerAddress.trim() || null,
+        buyerPostalCode: editBuyerPostalCode.trim() || null,
+        buyerCity: editBuyerCity.trim() || null,
+        amountGross: gross,
+        vatRate,
+        notes: editNotes.trim() || null,
+      });
+      if (res.success && selectedCompany) {
+        toast.success("Zapisano dane faktury");
+        const invoicesRes = await getCompanyConsolidatedInvoices(selectedCompany.id);
+        if (invoicesRes.success) setConsolidatedInvoices(invoicesRes.data);
+        setEditInvoiceId(null);
+        setEditInvoiceDetail(null);
+      } else {
+        toast.error(res.error ?? "Błąd zapisu");
+      }
+    } finally {
+      setEditInvoiceSaving(false);
+    }
   };
 
   const handleDeleteConsolidatedInvoice = async (invoiceId: string) => {
@@ -1723,6 +1838,9 @@ function CompaniesSection() {
                                 <td className="px-3 py-2">
                                   <div className="flex flex-wrap gap-1 justify-end">
                                   <Button size="sm" variant="ghost" onClick={() => handleOpenInvoiceDetails(inv.id)}>Szczegóły</Button>
+                                  {inv.status === "ISSUED" && (
+                                    <Button size="sm" variant="ghost" onClick={() => handleOpenEditInvoice(inv.id)}>Edytuj</Button>
+                                  )}
                                   {inv.status !== "CANCELLED" && (
                                     <Button size="sm" variant="ghost" onClick={() => window.open(`/api/finance/consolidated-invoice/${inv.id}/pdf`, "_blank")}>Pobierz PDF</Button>
                                   )}
@@ -1745,6 +1863,107 @@ function CompaniesSection() {
                       </table>
                     </div>
                   )}
+
+                  {/* Sheet edycji faktury zbiorczej */}
+                  <Sheet open={!!editInvoiceId} onOpenChange={(o) => !o && (setEditInvoiceId(null), setEditInvoiceDetail(null))}>
+                    <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+                      <SheetHeader>
+                        <SheetTitle>Faktura {editInvoiceDetail?.number ?? ""}</SheetTitle>
+                      </SheetHeader>
+                      {editInvoiceLoading ? (
+                        <p className="text-sm text-muted-foreground mt-4">Ładowanie…</p>
+                      ) : editInvoiceDetail && editInvoiceDetail.status === "ISSUED" ? (
+                        <div className="mt-4 space-y-4">
+                          <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+                            <h4 className="text-sm font-medium">Edycja faktury zbiorczej</h4>
+                            <div className="grid gap-3 text-sm">
+                              <div>
+                                <Label className="text-xs">Numer faktury</Label>
+                                <Input className="h-8 mt-1" value={editNumber} onChange={(e) => setEditNumber(e.target.value)} placeholder="FVZ/001/03/K" />
+                              </div>
+                              <div>
+                                <Label className="text-xs">Data wystawienia</Label>
+                                <Input type="date" className="h-8 mt-1" value={editIssuedAt} onChange={(e) => setEditIssuedAt(e.target.value)} />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <Label className="text-xs">Okres od</Label>
+                                  <Input type="date" className="h-8 mt-1" value={editPeriodFrom} onChange={(e) => setEditPeriodFrom(e.target.value)} />
+                                </div>
+                                <div>
+                                  <Label className="text-xs">Okres do</Label>
+                                  <Input type="date" className="h-8 mt-1" value={editPeriodTo} onChange={(e) => setEditPeriodTo(e.target.value)} />
+                                </div>
+                              </div>
+                              <div>
+                                <Label className="text-xs">Termin płatności</Label>
+                                <Input type="date" className="h-8 mt-1" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} />
+                              </div>
+                              <div>
+                                <Label className="text-xs">Nabywca – NIP</Label>
+                                <div className="flex gap-2 mt-1">
+                                  <Input className="h-8 flex-1" value={editBuyerNip} onChange={(e) => setEditBuyerNip(e.target.value)} placeholder="1234567890" />
+                                  <Button type="button" variant="outline" size="sm" className="h-8 shrink-0" onClick={handleFetchEditByNip} disabled={editNipLoading}>
+                                    {editNipLoading ? "…" : "Pobierz dane"}
+                                  </Button>
+                                </div>
+                              </div>
+                              <div>
+                                <Label className="text-xs">Nazwa nabywcy</Label>
+                                <Input className="h-8 mt-1" value={editBuyerName} onChange={(e) => setEditBuyerName(e.target.value)} placeholder="Nazwa firmy" />
+                              </div>
+                              <div>
+                                <Label className="text-xs">Adres</Label>
+                                <Input className="h-8 mt-1" value={editBuyerAddress} onChange={(e) => setEditBuyerAddress(e.target.value)} placeholder="ul. Przykładowa 1" />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <Label className="text-xs">Kod pocztowy</Label>
+                                  <Input className="h-8 mt-1" value={editBuyerPostalCode} onChange={(e) => setEditBuyerPostalCode(e.target.value)} placeholder="00-000" />
+                                </div>
+                                <div>
+                                  <Label className="text-xs">Miasto</Label>
+                                  <Input className="h-8 mt-1" value={editBuyerCity} onChange={(e) => setEditBuyerCity(e.target.value)} placeholder="Warszawa" />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <Label className="text-xs">Kwota brutto (PLN)</Label>
+                                  <Input type="number" min={0} step={0.01} className="h-8 mt-1" value={editAmountGross} onChange={(e) => setEditAmountGross(e.target.value)} placeholder="0.00" />
+                                </div>
+                                <div>
+                                  <Label className="text-xs">Stawka VAT (%)</Label>
+                                  <Select value={editVatRate} onValueChange={setEditVatRate}>
+                                    <SelectTrigger className="h-8 mt-1"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="0">0%</SelectItem>
+                                      <SelectItem value="5">5%</SelectItem>
+                                      <SelectItem value="8">8%</SelectItem>
+                                      <SelectItem value="23">23%</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                              <div>
+                                <Label className="text-xs">Uwagi na fakturze</Label>
+                                <Textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="Wpisz uwagi..." rows={2} className="text-sm mt-1" />
+                              </div>
+                            </div>
+                            <div className="flex gap-2 flex-wrap">
+                              <Button type="button" size="sm" disabled={editInvoiceSaving} onClick={handleSaveEditInvoice}>
+                                {editInvoiceSaving ? "Zapisywanie…" : "Zapisz dane faktury"}
+                              </Button>
+                              <Button type="button" variant="outline" size="sm" onClick={() => { setEditInvoiceId(null); setEditInvoiceDetail(null); }}>
+                                Anuluj
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : editInvoiceDetail ? (
+                        <p className="text-sm text-muted-foreground mt-4">Edycja możliwa tylko dla faktury ze statusem Wystawiona. Ta faktura ma status: {editInvoiceDetail.status}.</p>
+                      ) : null}
+                    </SheetContent>
+                  </Sheet>
 
                   {/* Modal szczegółów faktury zbiorczej */}
                   <Dialog open={!!selectedInvoiceDetails} onOpenChange={(o) => !o && setSelectedInvoiceDetails(null)}>

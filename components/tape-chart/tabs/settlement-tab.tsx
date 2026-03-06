@@ -495,6 +495,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   }, [form.room, rooms]);
 
   // Aktualizuj rateCodePrice przy zmianie liczby osób – gdy wybrany kod ma wzór (basePrice + pricePerPerson × pax)
+  // NIE dodawaj form.rateCodePrice do deps – powodowało to nadpisywanie przy każdej literze i brak możliwości skasowania
   useEffect(() => {
     if (!form.rateCodeId) return;
     const c = rateCodes.find((r) => r.id === form.rateCodeId);
@@ -502,11 +503,8 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
     const pax = Math.max(1, (parseInt(form.adults || "1", 10) || 1) + (parseInt(form.children || "0", 10) || 0));
     const computed = computeRateCodePricePerNight(c, pax);
     if (computed == null) return;
-    const current = form.rateCodePrice.trim() ? parseFloat(form.rateCodePrice) : null;
-    if (current == null || Math.abs(current - computed) >= 0.01) {
-      onFormChange({ rateCodePrice: String(computed) });
-    }
-  }, [form.rateCodeId, form.adults, form.children, form.rateCodePrice, rateCodes, onFormChange]);
+    onFormChange({ rateCodePrice: String(computed) });
+  }, [form.rateCodeId, form.adults, form.children, rateCodes, onFormChange]);
 
   // Load edit-mode data
   useEffect(() => {
