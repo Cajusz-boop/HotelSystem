@@ -875,7 +875,7 @@ function CompaniesSection() {
       if (invoicesRes.success) setConsolidatedInvoices(invoicesRes.data);
       setSelectedInvoiceDetails(null);
       setDeleteInvoiceConfirmId(null);
-    } else setError(res.error ?? "Błąd usuwania faktury");
+    } else if (!res.success) setError(res.error ?? "Błąd usuwania faktury");
   };
 
   const handleCancelInvoice = async (invoiceId: string) => {
