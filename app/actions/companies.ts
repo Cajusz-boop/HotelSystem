@@ -9,6 +9,22 @@ export type ActionResult<T = void> =
   | { success: true; data: T }
   | { success: false; error: string };
 
+/** Typy transakcji traktowane jako płatności (nie wchodzą do sumy obciążeń). */
+const PAYMENT_TRANSACTION_TYPES = ["PAYMENT", "DEPOSIT", "REFUND", "VOID"] as const;
+
+/**
+ * Suma obciążeń rezerwacji z transakcji (wszystkie typy oprócz płatności).
+ * W bazie używane są m.in. ROOM, RESTAURANT, GASTRONOMY, LOCAL_TAX, MINIBAR, OTHER itd.
+ */
+function sumChargeAmountFromTransactions(
+  transactions: Array<{ amount: unknown; type: string }> | undefined
+): number {
+  if (!transactions?.length) return 0;
+  return transactions
+    .filter((t) => !PAYMENT_TRANSACTION_TYPES.includes(t.type as (typeof PAYMENT_TRANSACTION_TYPES)[number]))
+    .reduce((s, t) => s + (t.amount != null ? Number(t.amount) : 0), 0);
+}
+
 // ===== TYPY =====
 
 export interface CompanyForList {
@@ -404,10 +420,7 @@ export async function getCompanyById(
       updatedAt: company.updatedAt,
       reservationCount: company._count.reservations,
       reservations: company.reservations.map((r) => {
-        const totalAmount =
-          r.transactions
-            ?.filter((t) => t.type === "CHARGE" || t.type === "CHARGE_ADJUSTMENT")
-            .reduce((s, t) => s + (t.amount?.toNumber?.() ?? Number(t.amount) ?? 0), 0) ?? 0;
+        const totalAmount = sumChargeAmountFromTransactions(r.transactions);
         return {
           id: r.id,
           confirmationNumber: r.confirmationNumber,
@@ -1114,11 +1127,7 @@ export async function getCompanyBalance(
     const recentReservations: CompanyBalance["recentReservations"] = [];
 
     for (const res of company.reservations) {
-      // Reservation nie ma totalAmount – suma obciążeń z transakcji (CHARGE) lub 0
-      const resAmount =
-        res.transactions
-          ?.filter((t) => t.type === "CHARGE" || t.type === "CHARGE_ADJUSTMENT")
-          .reduce((s, t) => s + (t.amount?.toNumber() ?? 0), 0) ?? 0;
+      const resAmount = sumChargeAmountFromTransactions(res.transactions);
 
       // Oblicz sumę płatności dla tej rezerwacji
       const paidForRes = res.transactions
@@ -1361,10 +1370,7 @@ export async function getReservationsForConsolidatedInvoice(
       const checkIn = new Date(r.checkIn);
       const checkOut = new Date(r.checkOut);
       const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
-      const totalAmount =
-        r.transactions
-          ?.filter((t) => t.type === "CHARGE" || t.type === "CHARGE_ADJUSTMENT")
-          .reduce((s, t) => s + (t.amount?.toNumber?.() ?? Number(t.amount) ?? 0), 0) ?? 0;
+      const totalAmount = sumChargeAmountFromTransactions(r.transactions);
 
       return {
         id: r.id,
@@ -1473,10 +1479,7 @@ export async function createConsolidatedInvoice(data: {
       const nights = Math.ceil(
         (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)
       );
-      const amountGross =
-        r.transactions
-          ?.filter((t) => t.type === "CHARGE" || t.type === "CHARGE_ADJUSTMENT")
-          .reduce((s, t) => s + (t.amount?.toNumber?.() ?? Number(t.amount) ?? 0), 0) ?? 0;
+      const amountGross = sumChargeAmountFromTransactions(r.transactions);
       const amountNet = amountGross / (1 + vatRate / 100);
       const amountVat = amountGross - amountNet;
 

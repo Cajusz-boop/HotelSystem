@@ -716,13 +716,6 @@ export async function createReservation(
     }
     const checkInDate = new Date(data.checkIn + "T12:00:00Z");
     const checkOutDate = new Date(data.checkOut + "T12:00:00Z");
-    const cutoff = getClosedCutoffDate();
-    if (checkInDate < cutoff) {
-      return {
-        success: false,
-        error: "Nie można tworzyć rezerwacji z datą przyjazdu w przeszłości (przed audytem). Wybierz datę od dziś.",
-      };
-    }
     const overlapping = await prisma.reservation.findMany({
       where: {
         roomId: room.id,

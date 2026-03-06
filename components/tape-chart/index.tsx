@@ -693,15 +693,19 @@ export function TapeChart({
     return () => observer.disconnect();
   }, [extendDateRange]);
 
-  /** Doładowanie rezerwacji przy zmianie zakresu dat (minimapa, strzałki, zmiana widoku). */
+  /** Doładowanie rezerwacji przy zmianie zakresu dat (minimapa, strzałki, zmiana widoku). Ładujemy 7 dni wstecz, żeby po cofnięciu widoku dane były od razu. */
   const loadingRangeRef = useRef(false);
+  const PRELOAD_DAYS_BACK = 7;
   useEffect(() => {
     const firstDate = dates[0];
     const lastDate = dates[dates.length - 1];
     if (!firstDate || !lastDate) return;
     if (loadingRangeRef.current) return;
     loadingRangeRef.current = true;
-    getTapeChartData({ dateFrom: firstDate, dateTo: lastDate })
+    const fromDate = new Date(firstDate + "T12:00:00");
+    const extendedStart = addDays(fromDate, -PRELOAD_DAYS_BACK);
+    const extendedFromStr = `${extendedStart.getFullYear()}-${String(extendedStart.getMonth() + 1).padStart(2, "0")}-${String(extendedStart.getDate()).padStart(2, "0")}`;
+    getTapeChartData({ dateFrom: extendedFromStr, dateTo: lastDate })
       .then((res) => {
         setReservations((prevRes) => {
           const byId = new Map(prevRes.map((r) => [r.id, r]));
