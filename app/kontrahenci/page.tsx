@@ -912,7 +912,7 @@ function CompaniesSection() {
       setEditNotes(d.notes ?? "");
     } else {
       setEditInvoiceId(null);
-      setError(res.error ?? "Błąd pobierania faktury");
+      setError(!res.success ? (res.error ?? "Błąd pobierania faktury") : "Błąd pobierania faktury");
     }
   };
 
@@ -974,7 +974,7 @@ function CompaniesSection() {
         setEditInvoiceId(null);
         setEditInvoiceDetail(null);
       } else {
-        toast.error(res.error ?? "Błąd zapisu");
+        toast.error(!res.success ? (res.error ?? "Błąd zapisu") : "Błąd zapisu");
       }
     } finally {
       setEditInvoiceSaving(false);
