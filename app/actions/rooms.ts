@@ -85,8 +85,9 @@ export async function getEffectivePriceForRoomOnDate(
   if (ratePlan?.price != null) return Number(ratePlan.price);
   if (room.price != null) return Number(room.price);
   if (roomType?.basePrice != null) return Number(roomType.basePrice);
-  if (roomType?.rateCode) {
-    const rc = roomType.rateCode as { price?: unknown; basePrice?: unknown; pricePerPerson?: unknown };
+  const rtWithCode = roomType as typeof roomType & { rateCode?: { price: unknown; basePrice: unknown; pricePerPerson: unknown } | null };
+  if (rtWithCode?.rateCode) {
+    const rc = rtWithCode.rateCode;
     const price = computeRateCodePricePerNight(
       {
         price: rc.price != null ? Number(rc.price) : null,
