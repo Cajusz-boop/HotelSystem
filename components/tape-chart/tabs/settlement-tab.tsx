@@ -1102,7 +1102,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
               </tr>
               <tr>
                 <td className="py-1 pr-2">
-                  {billingMode === "person" ? <Input type="number" min={0} step={0.01} className="h-6 w-16 text-xs tabular-nums" value={form.rateCodePrice} onChange={(e) => onFormChange({ rateCodePrice: e.target.value })} placeholder="0" /> : (billingMode === "plan" ? <span className="text-muted-foreground">z cennika</span> : <Input ref={priceInputRef} type="number" min={0} step={0.01} className="h-6 w-16 text-xs tabular-nums" value={form.rateCodePrice} onChange={(e) => onFormChange({ rateCodePrice: e.target.value })} placeholder={priceFromRate != null ? String(priceFromRate) : "—"} />)}
+                  {billingMode === "person" ? <Input type="number" min={0} step={0.01} className="h-6 w-16 text-xs tabular-nums" value={form.rateCodePrice} onChange={(e) => onFormChange({ rateCodePrice: e.target.value })} placeholder="0" /> : (billingMode === "plan" ? <span className="text-muted-foreground">z cennika</span> : <Input ref={priceInputRef} type="number" min={0} step={0.01} className="h-6 w-16 text-xs tabular-nums" value={form.rateCodePrice} onChange={(e) => onFormChange({ rateCodePrice: e.target.value })} placeholder="—" />)}
                 </td>
                 <td className="py-1 pr-2">
                   {billingMode === "person" ? <Input type="number" min={0} step={0.01} className="h-6 w-16 text-xs tabular-nums" value={form.pricePerChild} onChange={(e) => onFormChange({ pricePerChild: e.target.value })} placeholder="0" /> : <span className="text-muted-foreground">—</span>}
@@ -2062,7 +2062,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
               className="h-6 w-20 text-right text-xs tabular-nums"
               value={form.rateCodePrice}
               onChange={(e) => onFormChange({ rateCodePrice: e.target.value })}
-              placeholder={priceFromRate != null ? String(priceFromRate) : "—"}
+              placeholder="—"
             />
           </div>
           {(pricePerNight != null && pricePerNight > 0) || roomChargesFromTx > 0 ? (

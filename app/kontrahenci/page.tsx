@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Users, Building2 } from "lucide-react";
 import {
   getFilteredGuests,
@@ -35,14 +37,19 @@ import {
   getReservationsForConsolidatedInvoice,
   createConsolidatedInvoice,
   getCompanyConsolidatedInvoices,
+  getConsolidatedInvoiceById,
   updateConsolidatedInvoiceStatus,
+  updateConsolidatedInvoiceNotes,
   type CompanyForList,
   type CompanyDetails,
   type CorporateContractForList,
   type CompanyBalance,
   type AccountManager,
   type ConsolidatedInvoiceForList,
+  type ConsolidatedInvoiceDetails,
 } from "@/app/actions/companies";
+import { printFiscalReceiptForConsolidatedInvoice } from "@/app/actions/finance";
+import { ConsolidatedInvoiceDocumentDialog } from "@/components/consolidated-invoice-document-dialog";
 
 type MainTab = "goscie" | "firmy";
 
@@ -663,6 +670,10 @@ function CompaniesSection() {
   const [invoiceCreating, setInvoiceCreating] = useState(false);
   const [consolidatedInvoices, setConsolidatedInvoices] = useState<ConsolidatedInvoiceForList[]>([]);
   const [consolidatedInvoicesLoading, setConsolidatedInvoicesLoading] = useState(false);
+  const [selectedInvoiceDetails, setSelectedInvoiceDetails] = useState<ConsolidatedInvoiceDetails | null>(null);
+  const [invoiceDetailsLoading, setInvoiceDetailsLoading] = useState(false);
+  const [docDialogInvoice, setDocDialogInvoice] = useState<ConsolidatedInvoiceForList | null>(null);
+  const [cancelInvoiceConfirm, setCancelInvoiceConfirm] = useState<string | null>(null);
 
   // === STATYSTYKI ===
   const [stats, setStats] = useState<{
@@ -804,6 +815,9 @@ function CompaniesSection() {
       setShowInvoiceForm(false);
       setSelectedForInvoice(new Set());
       setInvoiceReservations([]);
+      setSelectedInvoiceDetails(null);
+      setDocDialogInvoice(null);
+      setCancelInvoiceConfirm(null);
     } else {
       setError(res.error);
       setTab("lista");
@@ -836,8 +850,50 @@ function CompaniesSection() {
     if (res.success && selectedCompany) {
       const invoicesRes = await getCompanyConsolidatedInvoices(selectedCompany.id);
       if (invoicesRes.success) setConsolidatedInvoices(invoicesRes.data);
+      setSelectedInvoiceDetails(null);
     }
   };
+
+  const handleOpenInvoiceDetails = async (invoiceId: string) => {
+    setInvoiceDetailsLoading(true);
+    const res = await getConsolidatedInvoiceById(invoiceId);
+    setInvoiceDetailsLoading(false);
+    if (res.success) setSelectedInvoiceDetails(res.data);
+    else setError(res.error ?? "Błąd pobierania faktury");
+  };
+
+  const handleCancelInvoice = async (invoiceId: string) => {
+    const res = await updateConsolidatedInvoiceStatus(invoiceId, "CANCELLED");
+    if (res.success && selectedCompany) {
+      const invoicesRes = await getCompanyConsolidatedInvoices(selectedCompany.id);
+      if (invoicesRes.success) setConsolidatedInvoices(invoicesRes.data);
+      setSelectedInvoiceDetails(null);
+      setCancelInvoiceConfirm(null);
+    } else setError(res.error ?? "Błąd anulowania");
+  };
+
+  const handleDocVatPdf = async (amountOverride: number | null, notes: string) => {
+    if (!docDialogInvoice) return;
+    if (notes.trim()) await updateConsolidatedInvoiceNotes(docDialogInvoice.id, notes.trim());
+    const amount = amountOverride ?? docDialogInvoice.amountGross;
+    window.open(`/api/finance/consolidated-invoice/${docDialogInvoice.id}/pdf`, "_blank", "noopener,noreferrer");
+  };
+
+  const handleDocPosnetReceipt = async (amount: number, _notes: string) => {
+    if (!docDialogInvoice) return;
+    const res = await printFiscalReceiptForConsolidatedInvoice(docDialogInvoice.id, amount);
+    if (!res.success) setError(res.error ?? "Błąd druku paragonu");
+  };
+
+  const handleDocBoth = async (amountInvoice: number, amountReceipt: number, notes: string) => {
+    if (!docDialogInvoice) return;
+    if (notes.trim()) await updateConsolidatedInvoiceNotes(docDialogInvoice.id, notes.trim());
+    window.open(`/api/finance/consolidated-invoice/${docDialogInvoice.id}/pdf`, "_blank", "noopener,noreferrer");
+    const res = await printFiscalReceiptForConsolidatedInvoice(docDialogInvoice.id, amountReceipt);
+    if (!res.success) setError(res.error ?? "Błąd druku paragonu");
+  };
+
+  const handleDocNone = () => setDocDialogInvoice(null);
 
   const handleSaveEdit = async () => {
     if (!selectedCompany) return;
@@ -1643,10 +1699,22 @@ function CompaniesSection() {
                                 <td className="px-3 py-2 text-right font-medium">{inv.amountGross.toFixed(2)} zł</td>
                                 <td className="px-3 py-2 text-center text-xs">{new Date(inv.dueDate).toLocaleDateString("pl-PL")}</td>
                                 <td className="px-3 py-2 text-center">
-                                  {inv.status === "PAID" ? <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded">Opłacona</span> : isOverdue ? <span className="px-2 py-0.5 bg-red-100 text-red-800 text-xs rounded">Przeterminowana</span> : <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-xs rounded">Wystawiona</span>}
+                                  {inv.status === "PAID" ? <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs rounded">Opłacona</span> : inv.status === "CANCELLED" ? <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">Anulowana</span> : isOverdue ? <span className="px-2 py-0.5 bg-red-100 text-red-800 text-xs rounded">Przeterminowana</span> : <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-xs rounded">Wystawiona</span>}
                                 </td>
-                                <td className="px-3 py-2 text-right">
-                                  {inv.status !== "PAID" && <Button size="sm" variant="outline" onClick={() => handleMarkInvoicePaid(inv.id)}>Oznacz jako opłaconą</Button>}
+                                <td className="px-3 py-2">
+                                  <div className="flex flex-wrap gap-1 justify-end">
+                                  <Button size="sm" variant="ghost" onClick={() => handleOpenInvoiceDetails(inv.id)}>Szczegóły</Button>
+                                  {inv.status !== "CANCELLED" && (
+                                    <Button size="sm" variant="ghost" onClick={() => window.open(`/api/finance/consolidated-invoice/${inv.id}/pdf`, "_blank")}>Pobierz PDF</Button>
+                                  )}
+                                  {inv.status !== "PAID" && inv.status !== "CANCELLED" && (
+                                    <>
+                                      <Button size="sm" variant="outline" onClick={() => setDocDialogInvoice(inv)}>Wystaw dokument</Button>
+                                      <Button size="sm" variant="outline" onClick={() => handleMarkInvoicePaid(inv.id)}>Oznacz jako opłaconą</Button>
+                                      <Button size="sm" variant="outline" onClick={() => setCancelInvoiceConfirm(inv.id)}>Anuluj</Button>
+                                    </>
+                                  )}
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -1654,6 +1722,72 @@ function CompaniesSection() {
                         </tbody>
                       </table>
                     </div>
+                  )}
+
+                  {/* Modal szczegółów faktury zbiorczej */}
+                  <Dialog open={!!selectedInvoiceDetails} onOpenChange={(o) => !o && setSelectedInvoiceDetails(null)}>
+                    <DialogContent className="sm:max-w-lg">
+                      <DialogHeader>
+                        <DialogTitle>Szczegóły faktury zbiorczej</DialogTitle>
+                      </DialogHeader>
+                      {invoiceDetailsLoading ? (
+                        <p className="text-sm text-muted-foreground">Ładowanie…</p>
+                      ) : selectedInvoiceDetails ? (
+                        <div className="space-y-4 text-sm">
+                          <div className="flex justify-between"><span className="text-muted-foreground">Nr faktury:</span><span className="font-mono">{selectedInvoiceDetails.number}</span></div>
+                          <div className="flex justify-between"><span className="text-muted-foreground">Okres:</span><span>{new Date(selectedInvoiceDetails.periodFrom).toLocaleDateString("pl-PL")} – {new Date(selectedInvoiceDetails.periodTo).toLocaleDateString("pl-PL")}</span></div>
+                          <div className="flex justify-between"><span className="text-muted-foreground">Kwota brutto:</span><span className="font-medium">{selectedInvoiceDetails.amountGross.toFixed(2)} zł</span></div>
+                          {selectedInvoiceDetails.notes && <div><span className="text-muted-foreground">Uwagi:</span><p className="mt-1">{selectedInvoiceDetails.notes}</p></div>}
+                          <div>
+                            <p className="font-medium mb-2">Pozycje:</p>
+                            <div className="border rounded overflow-hidden">
+                              <table className="w-full text-xs">
+                                <thead className="bg-muted"><tr><th className="px-2 py-1 text-left">Nr</th><th className="px-2 py-1 text-left">Gość</th><th className="px-2 py-1 text-left">Pokój</th><th className="px-2 py-1 text-left">Daty</th><th className="px-2 py-1 text-right">Kwota</th></tr></thead>
+                                <tbody className="divide-y">
+                                  {selectedInvoiceDetails.items.map((item, i) => (
+                                    <tr key={item.id}>
+                                      <td className="px-2 py-1">{i + 1}</td>
+                                      <td className="px-2 py-1">{item.guestName}</td>
+                                      <td className="px-2 py-1">{item.roomNumber}</td>
+                                      <td className="px-2 py-1">{new Date(item.checkIn).toLocaleDateString("pl-PL")} – {new Date(item.checkOut).toLocaleDateString("pl-PL")}</td>
+                                      <td className="px-2 py-1 text-right">{item.amountGross.toFixed(2)} zł</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                    </DialogContent>
+                  </Dialog>
+
+                  {/* Potwierdzenie anulowania faktury */}
+                  <AlertDialog open={!!cancelInvoiceConfirm} onOpenChange={(o) => !o && setCancelInvoiceConfirm(null)}>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Anulować fakturę zbiorczą?</AlertDialogTitle>
+                        <AlertDialogDescription>Ta operacja jest nieodwracalna. Faktura zostanie oznaczona jako anulowana.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Nie</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => cancelInvoiceConfirm && handleCancelInvoice(cancelInvoiceConfirm)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Tak, anuluj</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+
+                  {/* Dialog Wystawić dokument? */}
+                  {docDialogInvoice && (
+                    <ConsolidatedInvoiceDocumentDialog
+                      open={!!docDialogInvoice}
+                      onOpenChange={(o) => !o && setDocDialogInvoice(null)}
+                      amountGross={docDialogInvoice.amountGross}
+                      invoiceNumber={docDialogInvoice.number}
+                      onVatPdf={handleDocVatPdf}
+                      onPosnetReceipt={handleDocPosnetReceipt}
+                      onBoth={handleDocBoth}
+                      onNone={handleDocNone}
+                    />
                   )}
                 </div>
               )}

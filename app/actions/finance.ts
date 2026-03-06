@@ -4106,7 +4106,9 @@ export async function printFiscalReceiptForReservation(
     let items: Array<{ name: string; quantity: number; unitPrice: number; vatRate: number }>;
     if (amountOverride != null && Number.isFinite(amountOverride) && amountOverride > 0) {
       totalAmount = Math.round(amountOverride * 100) / 100;
-      items = [{ name: "Usługa hotelowa", quantity: 1, unitPrice: totalAmount, vatRate: 8 }];
+      // Używamy "Nocleg" zamiast "Usługa hotelowa" – POSNET błąd 2106 (towar zablokowany)
+      // pojawia się przy powtarzanej nazwie "Usługa hotelowa" w pamięci kasownika
+      items = [{ name: "Nocleg", quantity: 1, unitPrice: totalAmount, vatRate: 8 }];
     } else {
       const typeToName: Record<string, string> = {
       ROOM: "Nocleg",
@@ -4163,6 +4165,51 @@ export async function printFiscalReceiptForReservation(
       success: false,
       error: e instanceof Error ? e.message : "Błąd druku paragonu",
     };
+  }
+}
+
+/** Druk paragonu fiskalnego dla faktury zbiorczej (jedna pozycja). */
+export async function printFiscalReceiptForConsolidatedInvoice(
+  invoiceId: string,
+  amount: number,
+  paymentType: string = "CASH"
+): Promise<ActionResult<{ receiptNumber?: string }>> {
+  try {
+    const inv = await prisma.consolidatedInvoice.findUnique({
+      where: { id: invoiceId },
+      include: { items: { take: 1 } },
+    });
+    if (!inv) return { success: false, error: "Faktura zbiorcza nie istnieje" };
+    const gross = Math.round(amount * 100) / 100;
+    if (gross <= 0) return { success: false, error: "Kwota musi być większa od zera" };
+    const firstResId = inv.items[0]?.reservationId ?? "CONSOLIDATED";
+    const templateResult = await getFiscalReceiptTemplate();
+    const headerLines: string[] = [];
+    const footerLines: string[] = [];
+    if (templateResult.success && templateResult.data) {
+      const t = templateResult.data;
+      if (t.headerLine1) headerLines.push(t.headerLine1);
+      if (t.headerLine2) headerLines.push(t.headerLine2);
+      if (t.headerLine3) headerLines.push(t.headerLine3);
+      if (t.footerLine1) footerLines.push(t.footerLine1);
+      if (t.footerLine2) footerLines.push(t.footerLine2);
+      if (t.footerLine3) footerLines.push(t.footerLine3);
+    }
+    const receiptRequest = {
+      transactionId: `CONSOLIDATED-${invoiceId}-${Date.now()}`,
+      reservationId: firstResId,
+      items: [{ name: `Faktura zbiorcza ${inv.number}`, quantity: 1, unitPrice: gross }],
+      totalAmount: gross,
+      paymentType,
+      description: `Faktura zbiorcza ${inv.number}`,
+      headerLines: headerLines.length > 0 ? headerLines : undefined,
+      footerLines: footerLines.length > 0 ? footerLines : undefined,
+    };
+    const result = await printFiscalReceipt(receiptRequest);
+    if (!result.success) return { success: false, error: result.error ?? "Błąd druku paragonu" };
+    return { success: true, data: { receiptNumber: result.receiptNumber } };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd druku paragonu" };
   }
 }
 

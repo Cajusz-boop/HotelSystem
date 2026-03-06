@@ -1650,6 +1650,27 @@ export async function getConsolidatedInvoiceById(
 }
 
 /**
+ * Aktualizuje uwagi na fakturze zbiorczej.
+ */
+export async function updateConsolidatedInvoiceNotes(
+  invoiceId: string,
+  notes: string | null
+): Promise<ActionResult<void>> {
+  try {
+    await prisma.consolidatedInvoice.update({
+      where: { id: invoiceId },
+      data: { notes: notes?.trim() || null },
+    });
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd aktualizacji uwag",
+    };
+  }
+}
+
+/**
  * Zmienia status faktury zbiorczej (np. oznacza jako opłaconą).
  */
 export async function updateConsolidatedInvoiceStatus(

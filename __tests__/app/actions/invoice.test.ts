@@ -1106,7 +1106,7 @@ describe("Paragon fiskalny – printFiscalReceiptForReservation", () => {
         totalAmount: 100,
         items: [
           expect.objectContaining({
-            name: "Usługa hotelowa",
+            name: "Nocleg",
             quantity: 1,
             unitPrice: 100,
             vatRate: 8,
@@ -1129,7 +1129,7 @@ describe("Paragon fiskalny – printFiscalReceiptForReservation", () => {
         totalAmount: 100,
         items: [
           expect.objectContaining({
-            name: "Usługa hotelowa",
+            name: "Nocleg",
             quantity: 1,
             unitPrice: 100,
             vatRate: 8,

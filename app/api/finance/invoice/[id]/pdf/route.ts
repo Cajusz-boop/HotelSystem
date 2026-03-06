@@ -107,7 +107,18 @@ async function generateInvoiceHtml(id: string): Promise<string> {
 
   // Pobierz transakcje płatności (do ustalenia metody płatności jeśli nie zapisana w fakturze)
   let detectedPaymentMethod: string | null = null;
-  if (!invoice.paymentMethod && invoice.reservationId) {
+  // Priorytet 1: rozbicie płatności zapisane w fakturze (np. z edycji w DocumentsTab)
+  const paymentBreakdown = invoice.paymentBreakdown as Array<{ type: string; amount: number }> | null;
+  if (paymentBreakdown && Array.isArray(paymentBreakdown) && paymentBreakdown.length > 0) {
+    const withAmount = paymentBreakdown.filter((p) => p.amount > 0);
+    if (withAmount.length === 1) {
+      detectedPaymentMethod = withAmount[0].type.toUpperCase();
+    } else if (withAmount.length > 1) {
+      detectedPaymentMethod = "SPLIT"; // Płatność mieszana
+    }
+  }
+  // Priorytet 2: invoice.paymentMethod (ustawione przy tworzeniu faktury)
+  if (!detectedPaymentMethod && !invoice.paymentMethod && invoice.reservationId) {
     const paymentTransactions = await prisma.transaction.findMany({
       where: {
         reservationId: invoice.reservationId,
@@ -157,7 +168,8 @@ async function generateInvoiceHtml(id: string): Promise<string> {
     SPLIT: "Płatność mieszana",
     OTHER: "Inna",
   };
-  const rawPaymentMethod = invoice.paymentMethod || detectedPaymentMethod || template.defaultPaymentMethod || "TRANSFER";
+  // Rozbicie płatności ma najwyższy priorytet (edycja w oknie faktury)
+  const rawPaymentMethod = detectedPaymentMethod || invoice.paymentMethod || template.defaultPaymentMethod || "TRANSFER";
   const paymentMethod = paymentMethodNames[rawPaymentMethod.toUpperCase()] || rawPaymentMethod;
   const paymentDays = invoice.paymentDays ?? template.defaultPaymentDays ?? 14;
   let dueDateStr = "";
