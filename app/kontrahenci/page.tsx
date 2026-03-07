@@ -688,6 +688,7 @@ function CompaniesSection() {
   const [editNipLoading, setEditNipLoading] = useState(false);
   const [editNumber, setEditNumber] = useState("");
   const [editIssuedAt, setEditIssuedAt] = useState("");
+  const [editDeliveryDate, setEditDeliveryDate] = useState("");
   const [editPeriodFrom, setEditPeriodFrom] = useState("");
   const [editPeriodTo, setEditPeriodTo] = useState("");
   const [editDueDate, setEditDueDate] = useState("");
@@ -905,6 +906,8 @@ function CompaniesSection() {
       setEditInvoiceDetail(d);
       setEditNumber(d.number);
       setEditIssuedAt(d.issuedAt ? new Date(d.issuedAt).toISOString().slice(0, 10) : "");
+      const delivery = d.deliveryDate ? new Date(d.deliveryDate).toISOString().slice(0, 10) : (d.issuedAt ? new Date(d.issuedAt).toISOString().slice(0, 10) : "");
+      setEditDeliveryDate(delivery);
       setEditPeriodFrom(d.periodFrom ? new Date(d.periodFrom).toISOString().slice(0, 10) : "");
       setEditPeriodTo(d.periodTo ? new Date(d.periodTo).toISOString().slice(0, 10) : "");
       setEditDueDate(d.dueDate ? new Date(d.dueDate).toISOString().slice(0, 10) : "");
@@ -976,6 +979,7 @@ function CompaniesSection() {
         id: editInvoiceId,
         number: editNumber.trim(),
         issuedAt: editIssuedAt ? new Date(editIssuedAt) : undefined,
+        deliveryDate: editDeliveryDate ? new Date(editDeliveryDate) : undefined,
         periodFrom: editPeriodFrom ? new Date(editPeriodFrom) : undefined,
         periodTo: editPeriodTo ? new Date(editPeriodTo) : undefined,
         dueDate: editDueDate ? new Date(editDueDate) : undefined,
@@ -1068,7 +1072,8 @@ function CompaniesSection() {
     if (!docDialogInvoice) return;
     const gross = docDialogInvoice.amountGross;
     await updateConsolidatedInvoice({ id: docDialogInvoice.id, paymentBreakdown: [{ type: paymentType, amount: gross }], notes: notes.trim() || undefined });
-    window.open(`/api/finance/consolidated-invoice/${docDialogInvoice.id}/pdf`, "_blank", "noopener,noreferrer");
+    const pdfUrl = amountInvoice > 0 ? `/api/finance/consolidated-invoice/${docDialogInvoice.id}/pdf?amountOverride=${encodeURIComponent(amountInvoice.toFixed(2))}` : `/api/finance/consolidated-invoice/${docDialogInvoice.id}/pdf`;
+    window.open(pdfUrl, "_blank", "noopener,noreferrer");
     const res = await printFiscalReceiptForConsolidatedInvoice(docDialogInvoice.id, amountReceipt, paymentType);
     if (!res.success) setError(res.error ?? "Błąd druku paragonu");
   };
@@ -1888,7 +1893,7 @@ function CompaniesSection() {
                                     <Button size="sm" variant="ghost" onClick={() => handleOpenEditInvoice(inv.id)}>Edytuj</Button>
                                   )}
                                   {inv.status !== "CANCELLED" && (
-                                    <Button size="sm" variant="ghost" onClick={() => window.open(`/api/finance/consolidated-invoice/${inv.id}/pdf`, "_blank")}>Pobierz PDF</Button>
+                                    <Button size="sm" variant="ghost" onClick={() => window.open(`/finance/invoice/${inv.id}`, "_blank")}>Pobierz PDF</Button>
                                   )}
                                   {inv.status !== "CANCELLED" && (
                                     <Button size="sm" variant="outline" onClick={() => setDocDialogInvoice(inv)}>Wystaw dokument</Button>
@@ -1930,6 +1935,10 @@ function CompaniesSection() {
                               <div>
                                 <Label className="text-xs">Data wystawienia</Label>
                                 <Input type="date" className="h-8 mt-1" value={editIssuedAt} onChange={(e) => setEditIssuedAt(e.target.value)} />
+                              </div>
+                              <div>
+                                <Label className="text-xs">Data dostawy/wykonania usługi</Label>
+                                <Input type="date" className="h-8 mt-1" value={editDeliveryDate} onChange={(e) => setEditDeliveryDate(e.target.value)} />
                               </div>
                               <div className="grid grid-cols-2 gap-2">
                                 <div>

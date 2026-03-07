@@ -89,25 +89,29 @@ if('serviceWorker' in navigator){
           }}
         />
         <Providers>
-          <ConnectionMonitor />
-          <a href="#main-content" className="skip-link">
+          <div className="no-print print-preview-hide">
+            <ConnectionMonitor />
+          </div>
+          <a href="#main-content" className="skip-link print-preview-hide">
             Przejdź do treści
           </a>
-          <div className="no-print">
+          <div className="no-print print-preview-hide">
             <AppSidebar session={session} permissions={permissions} />
           </div>
           <main
             id="main-content"
             role="main"
-            className="flex flex-col min-h-screen max-h-screen bg-background pt-11 md:pt-0 md:pl-12 pms-main-content overflow-hidden"
+            className="flex flex-col min-h-screen max-h-screen bg-background pt-11 md:pt-0 md:pl-12 pms-main-content overflow-hidden print-preview-main"
             style={{ position: "relative", zIndex: 20, pointerEvents: "auto" }}
           >
-            <StatusBar session={session} />
+            <div className="no-print print-preview-hide">
+              <StatusBar session={session} />
+            </div>
             <div className="flex flex-col flex-1 min-h-0 overflow-auto">
               <MainClickGuard>{children}</MainClickGuard>
             </div>
           </main>
-          <div className="no-print">
+          <div className="no-print print-preview-hide">
             <CommandPalette />
             <KeyboardShortcutsHelp />
             <OnboardingGuide />

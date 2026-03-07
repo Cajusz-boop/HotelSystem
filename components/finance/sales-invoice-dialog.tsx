@@ -219,7 +219,7 @@ export function SalesInvoiceDialog({
         onOpenChange(false);
         onSuccess?.();
         if (typeof window !== "undefined") {
-          window.open(`/api/finance/invoice/${result.data.id}/pdf`, "_blank");
+          window.open(`/finance/invoice/${result.data.id}`, "_blank");
         }
       } else {
         toast.error(result.success === false ? result.error : "Błąd wystawiania faktury");

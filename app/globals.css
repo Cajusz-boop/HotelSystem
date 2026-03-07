@@ -111,6 +111,18 @@
   }
 }
 
+/* Gdy ?print= w URL (ekran i druk) – ukryj cały layout aplikacji */
+body.print-preview-mode .print-preview-hide {
+  display: none !important;
+}
+body.print-preview-mode main.print-preview-main {
+  padding: 0 !important;
+  padding-left: 0 !important;
+  padding-top: 0 !important;
+  max-height: none !important;
+  min-height: auto !important;
+}
+
 @media print {
   .no-print {
     display: none !important;

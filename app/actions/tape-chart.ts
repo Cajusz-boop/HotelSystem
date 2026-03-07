@@ -29,6 +29,9 @@ export interface TapeChartReservation {
   groupName?: string;
   parkingSpotId?: string;
   parkingSpotNumber?: string;
+  companyId?: string | null;
+  companyName?: string | null;
+  hasConsolidatedInvoice?: boolean;
 }
 
 export interface TapeChartRoom {
@@ -129,6 +132,9 @@ function mapReservationToTapeChart(r: {
   rateCodePrice?: unknown; // Decimal | null – nadpisanie ceny za dobę (ręczna cena)
   group?: { id: string; name: string | null } | null;
   parkingBookings?: Array<{ parkingSpotId: string; parkingSpot: { number: string } }>;
+  companyId?: string | null;
+  company?: { id: string; name: string } | null;
+  invoiceReservations?: Array<{ id: string }>;
 }) {
   const firstParking = r.parkingBookings?.[0];
   return {
@@ -170,6 +176,9 @@ function mapReservationToTapeChart(r: {
     groupName: r.group?.name ?? undefined,
     parkingSpotId: firstParking?.parkingSpotId ?? undefined,
     parkingSpotNumber: firstParking?.parkingSpot?.number ?? undefined,
+    companyId: r.companyId ?? undefined,
+    companyName: r.company?.name ?? undefined,
+    hasConsolidatedInvoice: (r.invoiceReservations?.length ?? 0) > 0,
   };
 }
 
@@ -260,6 +269,8 @@ async function fetchTapeChartDataUncached(
           rateCode: { select: { id: true, code: true, name: true, price: true, basePrice: true, pricePerPerson: true } },
           group: { select: { id: true, name: true } },
           parkingBookings: { take: 1, include: { parkingSpot: { select: { number: true } } } },
+          company: { select: { id: true, name: true } },
+          invoiceReservations: { take: 1, select: { id: true } },
         },
         orderBy: { checkIn: "asc" },
       }),
@@ -301,6 +312,8 @@ async function fetchTapeChartDataUncached(
             room: { select: { number: true } },
             group: { select: { id: true, name: true } },
             parkingBookings: { take: 1, include: { parkingSpot: { select: { number: true } } } },
+            company: { select: { id: true, name: true } },
+            invoiceReservations: { take: 1, select: { id: true } },
           },
           orderBy: { checkIn: "asc" },
         }),

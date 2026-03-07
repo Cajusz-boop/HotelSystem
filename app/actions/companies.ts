@@ -1261,6 +1261,7 @@ export interface ConsolidatedInvoiceForList {
 
 export interface ConsolidatedInvoiceDetails extends ConsolidatedInvoiceForList {
   companyId: string;
+  deliveryDate: Date | null;
   amountNet: number;
   amountVat: number;
   vatRate: number;
@@ -1343,8 +1344,8 @@ export async function getReservationsForConsolidatedInvoice(
       orderBy: { checkIn: "asc" },
     });
 
-    // Sprawdź, które rezerwacje są już na fakturze zbiorczej
-    const existingItems = await prisma.consolidatedInvoiceItem.findMany({
+    // Sprawdź, które rezerwacje są już na fakturze zbiorczej (InvoiceReservation)
+    const existingItems = await prisma.invoiceReservation.findMany({
       where: {
         reservationId: { in: reservations.map((r) => r.id) },
       },
@@ -1386,13 +1387,76 @@ export async function getReservationsForConsolidatedInvoice(
  * @returns numer faktury zbiorczej lub rzuca błąd przy niepowodzeniu
  */
 async function generateConsolidatedInvoiceNumber(): Promise<string> {
-  const result = await generateNextDocumentNumber("CONSOLIDATED_INVOICE");
+  const result = await generateNextDocumentNumber("INVOICE");
   if (!result.success) throw new Error(result.error);
   return result.data;
 }
 
 /**
+ * Tworzy fakturę zbiorczą z wybranych rezerwacji (np. z grafiku).
+ * Wszystkie przekazane rezerwacje trafiają na fakturę.
+ * companyId = dane nabywcy (firma z primaryReservation), nie filtr.
+ */
+export async function createConsolidatedInvoiceFromReservationIds(data: {
+  reservationIds: string[];
+  companyId: string;
+  vatRate?: number;
+  paymentTermDays?: number;
+  notes?: string | null;
+}): Promise<
+  ActionResult<{
+    invoiceId: string;
+    invoiceNumber: string;
+    skippedReservationIds: string[];
+  }>
+> {
+  const { reservationIds, companyId, vatRate = 8, paymentTermDays, notes } = data;
+  if (reservationIds.length === 0) {
+    return { success: false, error: "Wybierz co najmniej jedną rezerwację" };
+  }
+
+  const result = await createConsolidatedInvoice({
+    companyId,
+    reservationIds,
+    vatRate,
+    paymentTermDays,
+    notes,
+  });
+
+  if (!result.success) return result;
+
+  return {
+    success: true,
+    data: {
+      invoiceId: result.data!.invoiceId,
+      invoiceNumber: result.data!.invoiceNumber,
+      skippedReservationIds: [],
+    },
+  };
+}
+
+/**
+ * Wystawia fakturę zbiorczą VAT z dialogu „Wystawić dokument?”.
+ * Zwraca invoiceId do otwarcia PDF.
+ */
+export async function createConsolidatedVatInvoice(data: {
+  reservationIds: string[];
+  companyId: string;
+  notes?: string | null;
+  amountGrossOverride?: number;
+}): Promise<ActionResult<{ invoiceId: string }>> {
+  const result = await createConsolidatedInvoiceFromReservationIds({
+    reservationIds: data.reservationIds,
+    companyId: data.companyId,
+    notes: data.notes ?? undefined,
+  });
+  if (!result.success) return result;
+  return { success: true, data: { invoiceId: result.data!.invoiceId } };
+}
+
+/**
  * Tworzy fakturę zbiorczą dla wybranych rezerwacji firmy.
+ * Wymaga, by wszystkie rezerwacje należały do tej samej firmy.
  */
 export async function createConsolidatedInvoice(data: {
   companyId: string;
@@ -1417,12 +1481,9 @@ export async function createConsolidatedInvoice(data: {
       return { success: false, error: "Firma nie istnieje" };
     }
 
-    // Pobierz rezerwacje
+    // Pobierz rezerwacje (wszystkie przekazane – companyId to dane nabywcy, nie filtr)
     const reservations = await prisma.reservation.findMany({
-      where: {
-        id: { in: reservationIds },
-        companyId, // upewnij się, że należą do tej firmy
-      },
+      where: { id: { in: reservationIds } },
       include: {
         guest: { select: { name: true } },
         room: { select: { number: true } },
@@ -1435,12 +1496,12 @@ export async function createConsolidatedInvoice(data: {
     if (reservations.length !== reservationIds.length) {
       return {
         success: false,
-        error: "Niektóre rezerwacje nie istnieją lub nie należą do tej firmy",
+        error: "Niektóre rezerwacje nie istnieją",
       };
     }
 
-    // Sprawdź, czy nie są już na fakturze zbiorczej
-    const existingItems = await prisma.consolidatedInvoiceItem.findMany({
+    // Sprawdź, czy nie są już na fakturze zbiorczej (InvoiceReservation)
+    const existingItems = await prisma.invoiceReservation.findMany({
       where: { reservationId: { in: reservationIds } },
       select: { reservationId: true },
     });
@@ -1496,28 +1557,56 @@ export async function createConsolidatedInvoice(data: {
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + termDays);
 
-    // Utwórz fakturę w transakcji
+    // Utwórz fakturę (Invoice) w transakcji – wspólny model z fakturą zwykłą
     const invoice = await prisma.$transaction(async (tx) => {
-      const inv = await tx.consolidatedInvoice.create({
+      const inv = await tx.invoice.create({
         data: {
-          number: invoiceNumber,
+          sourceType: "CONSOLIDATED",
           companyId,
+          number: invoiceNumber,
           amountNet: totalNet,
           amountVat: totalVat,
           amountGross: totalGross,
           vatRate,
           buyerNip: company.nip,
           buyerName: company.name,
-          buyerAddress: company.address,
-          buyerPostalCode: company.postalCode,
-          buyerCity: company.city,
+          buyerAddress: company.address ?? null,
+          buyerPostalCode: company.postalCode ?? null,
+          buyerCity: company.city ?? null,
           periodFrom,
           periodTo,
-          dueDate,
-          paymentTermDays: termDays,
+          deliveryDate: new Date(),
+          paymentDueDate: dueDate,
+          paymentDays: termDays,
+          paymentBreakdown: null,
           notes: notes ?? null,
-          items: {
-            create: items,
+          consolidatedStatus: "ISSUED",
+          lineItems: {
+            create: {
+              description: "Usługa hotelowa",
+              quantity: 1,
+              unit: "szt.",
+              unitPrice: totalNet,
+              vatRate,
+              amountNet: totalNet,
+              amountVat: totalVat,
+              amountGross: totalGross,
+              sortOrder: 0,
+            },
+          },
+          invoiceReservations: {
+            create: items.map((it) => ({
+              reservationId: it.reservationId,
+              guestName: it.guestName,
+              roomNumber: it.roomNumber,
+              checkIn: it.checkIn,
+              checkOut: it.checkOut,
+              nights: it.nights,
+              amountNet: it.amountNet,
+              amountVat: it.amountVat,
+              amountGross: it.amountGross,
+              description: it.description,
+            })),
           },
         },
       });
@@ -1543,11 +1632,11 @@ export async function getCompanyConsolidatedInvoices(
   companyId: string
 ): Promise<ActionResult<ConsolidatedInvoiceForList[]>> {
   try {
-    const invoices = await prisma.consolidatedInvoice.findMany({
-      where: { companyId },
+    const invoices = await prisma.invoice.findMany({
+      where: { companyId, sourceType: "CONSOLIDATED" },
       include: {
         company: { select: { name: true, nip: true } },
-        _count: { select: { items: true } },
+        _count: { select: { invoiceReservations: true } },
       },
       orderBy: { issuedAt: "desc" },
     });
@@ -1557,14 +1646,14 @@ export async function getCompanyConsolidatedInvoices(
       data: invoices.map((inv) => ({
         id: inv.id,
         number: inv.number,
-        companyName: inv.company.name,
-        companyNip: inv.company.nip,
-        periodFrom: inv.periodFrom,
-        periodTo: inv.periodTo,
+        companyName: inv.company!.name,
+        companyNip: inv.company!.nip,
+        periodFrom: inv.periodFrom!,
+        periodTo: inv.periodTo!,
         amountGross: inv.amountGross.toNumber(),
-        itemsCount: inv._count.items,
-        status: inv.status,
-        dueDate: inv.dueDate,
+        itemsCount: inv._count.invoiceReservations,
+        status: inv.consolidatedStatus ?? "ISSUED",
+        dueDate: inv.paymentDueDate ?? inv.issuedAt,
         issuedAt: inv.issuedAt,
       })),
     };
@@ -1583,17 +1672,15 @@ export async function getConsolidatedInvoiceById(
   invoiceId: string
 ): Promise<ActionResult<ConsolidatedInvoiceDetails>> {
   try {
-    const invoice = await prisma.consolidatedInvoice.findUnique({
-      where: { id: invoiceId },
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId, sourceType: "CONSOLIDATED" },
       include: {
         company: { select: { name: true, nip: true } },
-        items: {
-          orderBy: { checkIn: "asc" },
-        },
+        invoiceReservations: { orderBy: { checkIn: "asc" } },
       },
     });
 
-    if (!invoice) {
+    if (!invoice || !invoice.company) {
       return { success: false, error: "Faktura nie istnieje" };
     }
 
@@ -1602,11 +1689,11 @@ export async function getConsolidatedInvoiceById(
       data: {
         id: invoice.id,
         number: invoice.number,
-        companyId: invoice.companyId,
+        companyId: invoice.companyId!,
         companyName: invoice.company.name,
         companyNip: invoice.company.nip,
-        periodFrom: invoice.periodFrom,
-        periodTo: invoice.periodTo,
+        periodFrom: invoice.periodFrom!,
+        periodTo: invoice.periodTo!,
         amountNet: invoice.amountNet.toNumber(),
         amountVat: invoice.amountVat.toNumber(),
         amountGross: invoice.amountGross.toNumber(),
@@ -1616,16 +1703,17 @@ export async function getConsolidatedInvoiceById(
         buyerAddress: invoice.buyerAddress,
         buyerPostalCode: invoice.buyerPostalCode,
         buyerCity: invoice.buyerCity,
-        paymentTermDays: invoice.paymentTermDays,
-        dueDate: invoice.dueDate,
-        status: invoice.status,
+        paymentTermDays: invoice.paymentDays ?? 14,
+        dueDate: invoice.paymentDueDate ?? invoice.issuedAt,
+        status: invoice.consolidatedStatus ?? "ISSUED",
         paidAt: invoice.paidAt,
         notes: invoice.notes,
         paymentBreakdown: (invoice.paymentBreakdown as Array<{ type: string; amount: number }>) ?? null,
         issuedAt: invoice.issuedAt,
+        deliveryDate: invoice.deliveryDate,
         createdAt: invoice.createdAt,
-        itemsCount: invoice.items.length,
-        items: invoice.items.map((item) => ({
+        itemsCount: invoice.invoiceReservations.length,
+        items: invoice.invoiceReservations.map((item) => ({
           id: item.id,
           reservationId: item.reservationId,
           guestName: item.guestName,
@@ -1655,6 +1743,7 @@ export async function updateConsolidatedInvoice(data: {
   id: string;
   number?: string;
   issuedAt?: Date;
+  deliveryDate?: Date | null;
   periodFrom?: Date;
   periodTo?: Date;
   dueDate?: Date;
@@ -1669,21 +1758,22 @@ export async function updateConsolidatedInvoice(data: {
   paymentBreakdown?: Array<{ type: string; amount: number }> | null;
 }): Promise<ActionResult<void>> {
   try {
-    const inv = await prisma.consolidatedInvoice.findUnique({
-      where: { id: data.id },
-      select: { id: true, status: true },
+    const inv = await prisma.invoice.findUnique({
+      where: { id: data.id, sourceType: "CONSOLIDATED" },
+      select: { id: true, consolidatedStatus: true },
     });
     if (!inv) return { success: false, error: "Faktura nie istnieje" };
-    if (inv.status !== "ISSUED") {
+    if (inv.consolidatedStatus !== "ISSUED") {
       return { success: false, error: "Edycja możliwa tylko dla faktury ze statusem Wystawiona." };
     }
 
     const updateData: Record<string, unknown> = {};
     if (data.number !== undefined) updateData.number = data.number.trim();
     if (data.issuedAt !== undefined) updateData.issuedAt = data.issuedAt;
+    if (data.deliveryDate !== undefined) updateData.deliveryDate = data.deliveryDate;
     if (data.periodFrom !== undefined) updateData.periodFrom = data.periodFrom;
     if (data.periodTo !== undefined) updateData.periodTo = data.periodTo;
-    if (data.dueDate !== undefined) updateData.dueDate = data.dueDate;
+    if (data.dueDate !== undefined) updateData.paymentDueDate = data.dueDate;
     if (data.buyerNip !== undefined) updateData.buyerNip = data.buyerNip.trim();
     if (data.buyerName !== undefined) updateData.buyerName = data.buyerName.trim();
     if (data.buyerAddress !== undefined) updateData.buyerAddress = data.buyerAddress?.trim() || null;
@@ -1699,7 +1789,7 @@ export async function updateConsolidatedInvoice(data: {
       const vat = Math.round((gross - net) * 100) / 100;
       Object.assign(updateData, { amountGross: gross, amountNet: net, amountVat: vat, vatRate });
     } else if (data.amountGross !== undefined) {
-      const inv2 = await prisma.consolidatedInvoice.findUnique({
+      const inv2 = await prisma.invoice.findUnique({
         where: { id: data.id },
         select: { vatRate: true },
       });
@@ -1711,7 +1801,7 @@ export async function updateConsolidatedInvoice(data: {
         Object.assign(updateData, { amountGross: gross, amountNet: net, amountVat: vat });
       }
     } else if (data.vatRate !== undefined) {
-      const inv2 = await prisma.consolidatedInvoice.findUnique({
+      const inv2 = await prisma.invoice.findUnique({
         where: { id: data.id },
         select: { amountGross: true },
       });
@@ -1726,7 +1816,21 @@ export async function updateConsolidatedInvoice(data: {
 
     if (Object.keys(updateData).length === 0) return { success: true, data: undefined };
 
-    await prisma.consolidatedInvoice.update({
+    // Aktualizuj też lineItems gdy zmienia się kwota (faktura zbiorcza ma jedną linię)
+    if (updateData.amountGross !== undefined && updateData.amountNet !== undefined) {
+      await prisma.invoiceLineItem.updateMany({
+        where: { invoiceId: data.id },
+        data: {
+          amountNet: updateData.amountNet as number,
+          amountVat: (updateData.amountVat as number) ?? 0,
+          amountGross: updateData.amountGross as number,
+          unitPrice: updateData.amountNet as number,
+          ...(updateData.vatRate !== undefined && { vatRate: updateData.vatRate as number }),
+        },
+      });
+    }
+
+    await prisma.invoice.update({
       where: { id: data.id },
       data: updateData as object,
     });
@@ -1747,7 +1851,7 @@ export async function updateConsolidatedInvoiceNotes(
   notes: string | null
 ): Promise<ActionResult<void>> {
   try {
-    await prisma.consolidatedInvoice.update({
+    await prisma.invoice.update({
       where: { id: invoiceId },
       data: { notes: notes?.trim() || null },
     });
@@ -1766,16 +1870,20 @@ export async function updateConsolidatedInvoiceNotes(
  */
 export async function deleteConsolidatedInvoice(invoiceId: string): Promise<ActionResult<void>> {
   try {
-    const invoice = await prisma.consolidatedInvoice.findUnique({
-      where: { id: invoiceId },
-      select: { id: true },
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId, sourceType: "CONSOLIDATED" },
+      select: { id: true, ksefStatus: true },
     });
 
     if (!invoice) {
       return { success: false, error: "Faktura nie istnieje" };
     }
 
-    await prisma.consolidatedInvoice.delete({
+    if (invoice.ksefStatus && invoice.ksefStatus !== "DRAFT") {
+      return { success: false, error: "Faktury wysłanej do KSeF nie można usunąć." };
+    }
+
+    await prisma.invoice.delete({
       where: { id: invoiceId },
     });
 
@@ -1796,18 +1904,18 @@ export async function updateConsolidatedInvoiceStatus(
   status: "ISSUED" | "PAID" | "OVERDUE" | "CANCELLED"
 ): Promise<ActionResult<void>> {
   try {
-    const invoice = await prisma.consolidatedInvoice.findUnique({
-      where: { id: invoiceId },
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId, sourceType: "CONSOLIDATED" },
     });
 
     if (!invoice) {
       return { success: false, error: "Faktura nie istnieje" };
     }
 
-    await prisma.consolidatedInvoice.update({
+    await prisma.invoice.update({
       where: { id: invoiceId },
       data: {
-        status,
+        consolidatedStatus: status,
         paidAt: status === "PAID" ? new Date() : null,
       },
     });

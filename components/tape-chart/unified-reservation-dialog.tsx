@@ -15,8 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createReservation, updateReservation, updateReservationStatus, getCheckoutBalanceWarning, findGuestsForCheckIn, getReservationCompany, getReservationEditData, deleteReservation, type GuestCheckInSuggestion } from "@/app/actions/reservations";
-import { postRoomChargeOnCheckout, createVatInvoice, createProforma, printFiscalReceiptForReservation, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates, overrideRoomPrice } from "@/app/actions/finance";
-import { lookupCompanyByNip } from "@/app/actions/companies";
+import { postRoomChargeOnCheckout, createVatInvoice, createProforma, printFiscalReceiptForReservation, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates, overrideRoomPrice, getConsolidatedFolioSummary } from "@/app/actions/finance";
+import { lookupCompanyByNip, createConsolidatedVatInvoice } from "@/app/actions/companies";
 import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { getEffectivePriceForRoomOnDate, getRatePlanInfoForRoomDate } from "@/app/actions/rooms";
 import { getRateCodes, type RateCodeForUi } from "@/app/actions/rate-codes";
@@ -48,6 +48,41 @@ import { WlasneTab } from "./tabs/wlasne-tab";
 
 export type UnifiedReservationTab = "rozliczenie" | "dokumenty" | "posilki" | "parking" | "pozostale" | "wlasne" | "uslugi" | "grafik-sprzatan" | "meldunek";
 
+function ConsolidatedSettlementContent({ reservationIds }: { reservationIds: string[] }) {
+  const [data, setData] = useState<{ reservationSummaries: Array<{ room?: string; balance: number }>; totalAmount: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!reservationIds.length) { setData(null); setLoading(false); return; }
+    setLoading(true);
+    getConsolidatedFolioSummary(reservationIds).then((r) => {
+      if (r.success && r.data) setData(r.data);
+      else setData(null);
+      setLoading(false);
+    });
+  }, [reservationIds.join(",")]);
+  if (loading) return <p className="text-sm text-muted-foreground">Ładowanie…</p>;
+  if (!data) return <p className="text-sm text-muted-foreground">Brak danych.</p>;
+  return (
+    <div className="space-y-4">
+      <div className="rounded border bg-muted/20 p-3 text-xs">
+        <h3 className="font-semibold text-muted-foreground border-b pb-1 mb-2">Podsumowanie (faktura zbiorcza)</h3>
+        <ul className="space-y-1">
+          {data.reservationSummaries.map((rs) => (
+            <li key={rs.reservationId} className="flex justify-between">
+              <span>Pokój {rs.room ?? "—"}</span>
+              <span className="tabular-nums">{rs.balance.toFixed(2)} PLN</span>
+            </li>
+          ))}
+        </ul>
+        <div className="flex justify-between font-bold border-t pt-2 mt-2">
+          <span>Razem</span>
+          <span className="tabular-nums">{data.totalAmount.toFixed(2)} PLN</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export interface CreateReservationContext {
   roomNumber: string;
   checkIn: string;
@@ -73,6 +108,9 @@ interface UnifiedReservationDialogProps {
   onDeleted?: (reservationId: string) => void;
   effectivePricePerNight?: number;
   initialTab?: UnifiedReservationTab;
+  /** Tryb faktury zbiorczej: lista ID rezerwacji + primary (dane firmy, gościa) */
+  consolidatedReservationIds?: string[];
+  primaryReservation?: Reservation | null;
 }
 
 function addDays(dateStr: string, days: number): string {
@@ -158,8 +196,11 @@ export function UnifiedReservationDialog({
   onDeleted,
   effectivePricePerNight: effectivePriceProp,
   initialTab,
+  consolidatedReservationIds,
+  primaryReservation,
 }: UnifiedReservationDialogProps) {
   const isEdit = mode === "edit";
+  const isConsolidated = !!(consolidatedReservationIds?.length && primaryReservation);
   const [form, setForm] = useState<SettlementTabFormState>(INITIAL_FORM);
   const [activeTab, setActiveTab] = useState<UnifiedReservationTab>("rozliczenie");
   const settlementTabRef = useRef<SettlementTabRef>(null);
@@ -176,6 +217,7 @@ export function UnifiedReservationDialog({
   const [deleteReason, setDeleteReason] = useState("");
   const [docChoiceOpen, setDocChoiceOpen] = useState(false);
   const [docChoiceResId, setDocChoiceResId] = useState<string | null>(null);
+  const [docChoiceResIds, setDocChoiceResIds] = useState<string[]>([]);
   const [_docChoiceGuestName, setDocChoiceGuestName] = useState("");
   const [docIssuing, setDocIssuing] = useState(false);
   const [invoiceNotes, setInvoiceNotes] = useState("");
@@ -586,7 +628,7 @@ export function UnifiedReservationDialog({
             createProforma(createdRes.id, proformaAmount > 0 ? proformaAmount : undefined).then((proRes) => {
               if (proRes.success && proRes.data) {
                 toast.success(`Proforma ${proRes.data.number} – ${proRes.data.amount.toFixed(2)} PLN`);
-                window.open(`/api/finance/proforma/${proRes.data.id}/pdf`, "_blank");
+                window.open(`/finance/proforma/${proRes.data.id}`, "_blank");
               } else {
                 toast.error(proRes.success === false ? proRes.error : "Błąd wystawiania proformy");
               }
@@ -685,7 +727,34 @@ export function UnifiedReservationDialog({
   const CHARGE_TYPES = ["ROOM", "LOCAL_TAX", "MINIBAR", "GASTRONOMY", "SPA", "PARKING", "RENTAL", "PHONE", "LAUNDRY", "TRANSPORT", "ATTRACTION", "OTHER"];
   // Fetch charge total when doc choice dialog opens
   useEffect(() => {
-    if (!docChoiceOpen || !docChoiceResId) {
+    if (!docChoiceOpen) {
+      setDocRoomTotal(null);
+      setDocTotalAmount(null);
+      setDocAmountOverride("");
+      setDocAmountInvoice("");
+      setDocAmountReceipt("");
+      return;
+    }
+    if (docChoiceResIds.length > 0) {
+      getConsolidatedFolioSummary(docChoiceResIds).then((r) => {
+        if (r.success && r.data) {
+          const total = r.data.totalAmount;
+          const roomTotal = r.data.reservationSummaries.reduce((s, rs) => s + rs.balance, 0);
+          setDocRoomTotal(roomTotal);
+          setDocTotalAmount(Math.round(total * 100) / 100);
+          setDocAmountOverride("");
+          setDocAmountInvoice(total > 0 ? total.toFixed(2) : "");
+          setDocAmountReceipt("");
+        } else {
+          setDocRoomTotal(null);
+          setDocTotalAmount(null);
+          setDocAmountInvoice("");
+          setDocAmountReceipt("");
+        }
+      });
+      return;
+    }
+    if (!docChoiceResId) {
       setDocRoomTotal(null);
       setDocTotalAmount(null);
       setDocAmountOverride("");
@@ -713,11 +782,13 @@ export function UnifiedReservationDialog({
         setDocAmountReceipt("");
       }
     });
-  }, [docChoiceOpen, docChoiceResId]);
+  }, [docChoiceOpen, docChoiceResId, docChoiceResIds]);
 
   const handleDocChoice = useCallback(async (choice: "vat" | "posnet" | "both" | "none") => {
-    if (choice === "none" || !docChoiceResId) {
+    const isConsolidatedChoice = docChoiceResIds.length > 0;
+    if (choice === "none" || (!docChoiceResId && !isConsolidatedChoice)) {
       setDocChoiceOpen(false);
+      setDocChoiceResIds([]);
       setInvoiceNotes("");
       setDocAmountOverride("");
       setDocAmountInvoice("");
@@ -746,7 +817,7 @@ export function UnifiedReservationDialog({
           return;
         }
       } else {
-        if (overrideVal != null && Number.isFinite(overrideVal) && overrideVal > 0) {
+        if (!isConsolidatedChoice && overrideVal != null && Number.isFinite(overrideVal) && overrideVal > 0 && docChoiceResId) {
           const or = await overrideRoomPrice(docChoiceResId, overrideVal);
           if (!or.success) {
             toast.error(or.error ?? "Błąd nadpisania ceny");
@@ -757,25 +828,46 @@ export function UnifiedReservationDialog({
         }
       }
       if (choice === "vat" || (choice === "both" && amtInv > 0)) {
-        const result = await createVatInvoice(docChoiceResId, undefined, {
-          notes: invoiceNotes.trim() || undefined,
-          amountGrossOverride: amtInv > 0 ? amtInv : undefined,
-        });
-        if (result.success && result.data) {
-          toast.success(`Faktura VAT ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);
-          const printWindow = window.open(`/api/finance/invoice/${result.data.id}/pdf`, "_blank");
-          if (printWindow) {
-            printWindow.addEventListener("load", () => {
-              setTimeout(() => printWindow.print(), 500);
-            });
+        if (isConsolidatedChoice && primaryReservation?.companyId) {
+          const result = await createConsolidatedVatInvoice({
+            reservationIds: docChoiceResIds,
+            companyId: primaryReservation.companyId,
+            notes: invoiceNotes.trim() || undefined,
+          });
+          if (result.success && result.data) {
+            toast.success("Faktura zbiorcza VAT wystawiona");
+            const printWindow = window.open(`/finance/invoice/${result.data.invoiceId}`, "_blank");
+            if (printWindow) {
+              printWindow.addEventListener("load", () => {
+                setTimeout(() => printWindow.print(), 500);
+              });
+            }
+          } else {
+            toast.error("error" in result ? result.error : "Błąd wystawiania faktury zbiorczej");
+            setDocIssuing(false);
+            return;
           }
-        } else {
-          toast.error("error" in result ? result.error : "Błąd wystawiania faktury");
-          setDocIssuing(false);
-          return;
+        } else if (docChoiceResId) {
+          const result = await createVatInvoice(docChoiceResId, undefined, {
+            notes: invoiceNotes.trim() || undefined,
+            amountGrossOverride: amtInv > 0 ? amtInv : undefined,
+          });
+          if (result.success && result.data) {
+            toast.success(`Faktura VAT ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);
+            const printWindow = window.open(`/finance/invoice/${result.data.id}`, "_blank");
+            if (printWindow) {
+              printWindow.addEventListener("load", () => {
+                setTimeout(() => printWindow.print(), 500);
+              });
+            }
+          } else {
+            toast.error("error" in result ? result.error : "Błąd wystawiania faktury");
+            setDocIssuing(false);
+            return;
+          }
         }
       }
-      if (choice === "posnet" || (choice === "both" && amtRec > 0)) {
+      if ((choice === "posnet" || (choice === "both" && amtRec > 0)) && docChoiceResId) {
         const result = await printFiscalReceiptForReservation(docChoiceResId, "CASH", amtRec > 0 ? amtRec : undefined);
         if (result.success) {
           window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
@@ -797,6 +889,7 @@ export function UnifiedReservationDialog({
     } finally {
       setDocIssuing(false);
       setDocChoiceOpen(false);
+      setDocChoiceResIds([]);
       setInvoiceNotes("");
       setDocAmountOverride("");
       setDocAmountInvoice("");
@@ -805,7 +898,7 @@ export function UnifiedReservationDialog({
       setDocTotalAmount(null);
       onOpenChange(false);
     }
-  }, [docChoiceResId, docAmountOverride, docAmountInvoice, docAmountReceipt, docTotalAmount, invoiceNotes, onOpenChange]);
+  }, [docChoiceResId, docChoiceResIds, primaryReservation, docAmountOverride, docAmountInvoice, docAmountReceipt, docTotalAmount, invoiceNotes, onOpenChange]);
 
   const handleIssueDoc = useCallback(async (choice: "vat" | "posnet" | "proforma" | "potwierdzenie") => {
     if (choice === "potwierdzenie") {
@@ -821,7 +914,7 @@ export function UnifiedReservationDialog({
           const result = await createProforma(reservation.id);
           if (result.success && result.data) {
             toast.success(`Proforma ${result.data.number} – ${result.data.amount.toFixed(2)} PLN`);
-            window.open(`/api/finance/proforma/${result.data.id}/pdf`, "_blank");
+            window.open(`/finance/proforma/${result.data.id}`, "_blank");
           } else {
             toast.error(result.success === false ? result.error : "Błąd wystawiania proformy");
           }
@@ -834,22 +927,35 @@ export function UnifiedReservationDialog({
       }
       return;
     }
+    if (isConsolidated && consolidatedReservationIds?.length && primaryReservation) {
+      if (choice === "vat" || choice === "posnet") {
+        setDocChoiceResId(null);
+        setDocChoiceResIds([...consolidatedReservationIds]);
+        setDocChoiceGuestName(primaryReservation.guestName);
+        setIssueDocMenuOpen(false);
+        setDocChoiceOpen(true);
+      }
+      return;
+    }
     if (!reservation?.id) return;
     if (choice === "vat" || choice === "posnet") {
       setDocChoiceResId(reservation.id);
+      setDocChoiceResIds([]);
       setDocChoiceGuestName(reservation.guestName);
       setIssueDocMenuOpen(false);
       setDocChoiceOpen(true);
       return;
     }
-  }, [reservation?.id, reservation?.guestName, isEdit, handleSubmit]);
+  }, [reservation?.id, reservation?.guestName, isEdit, handleSubmit, isConsolidated, consolidatedReservationIds, primaryReservation]);
 
   if (isEdit && !reservation) return null;
   if (!isEdit && !createContext) return null;
 
-  const title = isEdit
-    ? `Edycja rezerwacji${reservation!.confirmationNumber ? ` nr ${reservation!.confirmationNumber}` : ""} · ${reservation!.guestName} · Pokój ${reservation!.room}`
-    : "Nowa rezerwacja";
+  const title = isConsolidated && primaryReservation
+    ? `Faktura zbiorcza · ${primaryReservation.guestName} · ${consolidatedReservationIds?.length ?? 0} rezerwacji`
+    : isEdit && reservation
+      ? `Edycja rezerwacji${reservation.confirmationNumber ? ` nr ${reservation.confirmationNumber}` : ""} · ${reservation.guestName} · Pokój ${reservation.room}`
+      : "Nowa rezerwacja";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -904,7 +1010,7 @@ export function UnifiedReservationDialog({
           {/* LEWA KOLUMNA (40%) - Formularz */}
           <div className="w-[40%] min-w-0 overflow-y-auto bg-muted/30 border-r flex-shrink-0">
             <form id="reservation-form" onSubmit={handleSubmit} className="p-4 space-y-6">
-              <fieldset disabled={isEdit && isInClosedPeriod && !canEditClosedPeriod} className="space-y-6">
+              <fieldset disabled={(isEdit && isInClosedPeriod && !canEditClosedPeriod) || isConsolidated} className="space-y-6">
               <SettlementTab
                 ref={settlementTabRef}
                 mode={mode}
@@ -938,7 +1044,7 @@ export function UnifiedReservationDialog({
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as UnifiedReservationTab)} className="flex-1 flex flex-col min-h-0">
               <TabsList className="flex w-full overflow-x-auto flex-nowrap shrink-0 rounded-none border-b px-4 gap-0 h-auto min-h-9 mb-2 [&>button]:shrink-0">
                 <TabsTrigger value="rozliczenie" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">Rozlicz.</TabsTrigger>
-                <TabsTrigger value="dokumenty" disabled={!isEdit} className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">Dok.</TabsTrigger>
+                <TabsTrigger value="dokumenty" disabled={!isEdit && !isConsolidated} className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">Dok.</TabsTrigger>
                 <TabsTrigger value="posilki" disabled={!isEdit} className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">Posiłki</TabsTrigger>
                 <TabsTrigger value="parking" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">Parking</TabsTrigger>
                 <TabsTrigger value="pozostale" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">Inne</TabsTrigger>
@@ -949,6 +1055,9 @@ export function UnifiedReservationDialog({
               </TabsList>
 
               <TabsContent value="rozliczenie" className="flex-1 min-h-0 overflow-y-auto mt-0 p-4">
+                {isConsolidated && consolidatedReservationIds?.length ? (
+                  <ConsolidatedSettlementContent reservationIds={consolidatedReservationIds} />
+                ) : (
                 <SettlementTab
                   mode={mode}
                   form={form}
@@ -972,10 +1081,15 @@ export function UnifiedReservationDialog({
                   onNipLookup={handleNipLookup}
                   layout="rozliczenie"
                 />
+                )}
               </TabsContent>
 
               <TabsContent value="dokumenty" className="flex-1 min-h-0 overflow-y-auto mt-0 p-4">
-                {isEdit && reservation && <DocumentsTab reservationId={reservation.id} />}
+                {isConsolidated && consolidatedReservationIds?.length ? (
+                  <DocumentsTab reservationIds={consolidatedReservationIds} isConsolidated />
+                ) : isEdit && reservation ? (
+                  <DocumentsTab reservationId={reservation.id} />
+                ) : null}
               </TabsContent>
 
               <TabsContent value="posilki" className="flex-1 min-h-0 overflow-y-auto mt-0 p-4">
@@ -1045,17 +1159,17 @@ export function UnifiedReservationDialog({
         {/* FOOTER - sticky przyciski (KWHotel: Towary, Wystaw dokument, Ceny/dni, Płatności, Historia, Zapisz) */}
         <footer className="shrink-0 border-t border-gray-200 bg-gray-50 px-6 py-3 flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2 flex-wrap">
-            {isEdit && reservation && (
+            {isEdit && reservation && !isConsolidated && (
               <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => settlementTabRef.current?.openAddCharge?.()}>
                 Towary
               </Button>
             )}
-            {(isEdit && reservation) || !isEdit ? (
+            {((isEdit && reservation) || isConsolidated || !isEdit) ? (
               <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => setIssueDocMenuOpen(true)}>
                 Wystaw dokument <ChevronDown className="ml-0.5 h-3 w-3 inline" />
               </Button>
             ) : null}
-            {isEdit && reservation && (
+            {isEdit && reservation && !isConsolidated && (
               <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => {
                 setDayRatesDialogOpen(true);
                 if (reservation?.id && form.checkIn && form.checkOut) {
@@ -1067,7 +1181,7 @@ export function UnifiedReservationDialog({
                 Ceny / dni
               </Button>
             )}
-            {isEdit && reservation && (
+            {isEdit && reservation && !isConsolidated && (
               <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => {
                 setPaymentsDialogOpen(true);
                 if (reservation?.id) {
@@ -1080,7 +1194,7 @@ export function UnifiedReservationDialog({
                 Płatności
               </Button>
             )}
-            {isEdit && reservation && (
+            {isEdit && reservation && !isConsolidated && (
               <Button
                 type="button"
                 variant="destructive"
@@ -1094,14 +1208,17 @@ export function UnifiedReservationDialog({
             )}
           </div>
           <div className="flex items-center gap-2">
-            {isEdit && reservation && reservation.status !== "CANCELLED" && reservation.status !== "CHECKED_OUT" && (
+            {isEdit && reservation && !isConsolidated && reservation.status !== "CANCELLED" && reservation.status !== "CHECKED_OUT" && (
               <Button type="button" variant="outline" size="sm" className="h-8 text-xs bg-orange-600 hover:bg-orange-700 text-white border-orange-600" disabled={checkoutLoading} onClick={handleFullCheckout}>
                 {checkoutLoading ? "Rozliczanie…" : "Rozlicz i wymelduj"}
               </Button>
             )}
+            {!isConsolidated && (
             <Button type="button" variant="outline" size="sm" className="h-8 text-xs bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200" disabled={saving || (isEdit && isInClosedPeriod && !canEditClosedPeriod)} onClick={() => { saveAndPrintRef.current = true; handleSubmit(); }} title="Ctrl+Shift+Enter">
               {saving && saveAndPrintRef.current ? "Zapisywanie…" : "Zapisz i drukuj"}
             </Button>
+            )}
+            {!isConsolidated && (
             <Button
               ref={saveBtnRef}
               type="submit"
@@ -1114,6 +1231,7 @@ export function UnifiedReservationDialog({
             >
               {saving && !saveAndPrintRef.current ? "Zapisywanie…" : "💾 Zapisz"}
             </Button>
+            )}
             <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => onOpenChange(false)}>
               Anuluj
             </Button>

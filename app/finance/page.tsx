@@ -44,6 +44,7 @@ import { getCennikConfig } from "@/app/actions/cennik-config";
 import { toast } from "sonner";
 import { Moon, Banknote, Shield, FileText, Receipt, ExternalLink, Check, X, Trash2, FileWarning, Ban, Percent, Clock, FileBarChart, FilePlus } from "lucide-react";
 import { SalesInvoiceDialog } from "@/components/finance/sales-invoice-dialog";
+import { InvoiceEditSheet } from "@/components/finance/invoice-edit-sheet";
 import { getFiscalConfigAction } from "@/app/actions/finance";
 import type { FiscalConfig } from "@/lib/fiscal/types";
 
@@ -149,6 +150,7 @@ export default function FinancePage() {
   const [ksefCheckStatusId, setKsefCheckStatusId] = useState<string | null>(null);
   const [ksefErrorDialog, setKsefErrorDialog] = useState<{ documentNumber: string; message: string } | null>(null);
   const [salesInvoiceOpen, setSalesInvoiceOpen] = useState(false);
+  const [editInvoiceId, setEditInvoiceId] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -1184,7 +1186,20 @@ export default function FinancePage() {
                               )}
                             </td>
                             <td className="p-2">{r.date}</td>
-                            <td className="p-2">{r.documentNumber}</td>
+                            <td className="p-2">
+                              {r.invoiceId ? (
+                                <a
+                                  href={`/finance/invoice/${r.invoiceId}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline underline-offset-2"
+                                >
+                                  {r.documentNumber}
+                                </a>
+                              ) : (
+                                r.documentNumber
+                              )}
+                            </td>
                             <td className="p-2">{r.contractorNip}</td>
                             <td className="p-2">{r.contractorName}</td>
                             <td className="p-2">
@@ -1321,6 +1336,17 @@ export default function FinancePage() {
                                   }}
                                 >
                                   {deleteInvoiceId === r.invoiceId ? "…" : "Usuń"}
+                                </Button>
+                              )}
+                              {r.invoiceId && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="ml-1 h-7 text-xs"
+                                  onClick={() => setEditInvoiceId(r.invoiceId!)}
+                                >
+                                  Edytuj
                                 </Button>
                               )}
                             </td>
@@ -1937,6 +1963,22 @@ export default function FinancePage() {
           </p>
         </DialogContent>
       </Dialog>
+
+      <InvoiceEditSheet
+        invoiceId={editInvoiceId}
+        open={!!editInvoiceId}
+        onOpenChange={(open) => {
+          if (!open) setEditInvoiceId(null);
+        }}
+        onSaved={async () => {
+          setEditInvoiceId(null);
+          const [salesRes] = await Promise.all([
+            getVatSalesRegister(vatRegisterFrom, vatRegisterTo),
+            getVatPurchasesRegister(vatRegisterFrom, vatRegisterTo),
+          ]);
+          if (salesRes.success && salesRes.data) setVatSalesData(salesRes.data);
+        }}
+      />
     </div>
   );
 }

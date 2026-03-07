@@ -60,8 +60,6 @@ vi.mock("@/lib/db", () => {
       create: vi.fn(),
     },
     receipt: { create: vi.fn() },
-    consolidatedInvoice: { create: vi.fn() },
-    consolidatedInvoiceItem: { createMany: vi.fn() },
     company: {
       findUnique: vi.fn(),
       findMany: vi.fn(),

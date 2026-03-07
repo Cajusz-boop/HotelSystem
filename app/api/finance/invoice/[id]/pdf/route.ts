@@ -18,19 +18,24 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
 /**
  * GET /api/finance/invoice/[id]/pdf
  * Zwraca fakturę VAT w HTML (do druku / Zapisz jako PDF).
+ * Opcjonalny ?amountOverride=123.45 – nadpisuje kwotę brutto (np. dla faktury zbiorczej przy częściowej zapłacie).
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   if (!id?.trim()) {
     return new NextResponse("Brak ID faktury", { status: 400 });
   }
+  const url = new URL(request.url);
+  const amountOverrideParam = url.searchParams.get("amountOverride");
+  const amountOverride = amountOverrideParam ? parseFloat(amountOverrideParam) : null;
+  const variant = url.searchParams.get("variant"); // "original" = tylko oryginał (dla email), "copy" = tylko kopia, brak = oryginał + kopia
 
   try {
     const html = await withTimeout(
-      generateInvoiceHtml(id.trim()),
+      generateInvoiceHtml(id.trim(), amountOverride, variant),
       PDF_GENERATION_TIMEOUT_MS,
       "Timeout generowania PDF faktury (zbyt duża ilość danych). Spróbuj ponownie lub skróć zakres."
     );
@@ -54,7 +59,11 @@ export async function GET(
   }
 }
 
-async function generateInvoiceHtml(id: string): Promise<string> {
+async function generateInvoiceHtml(
+  id: string,
+  amountOverride: number | null,
+  variant: string | null
+): Promise<string> {
   const invoice = await prisma.invoice.findUnique({
     where: { id },
     include: { lineItems: { orderBy: { sortOrder: "asc" } } },
@@ -306,6 +315,31 @@ async function generateInvoiceHtml(id: string): Promise<string> {
     });
   }
 
+  // amountOverride – dla faktury zbiorczej przy częściowej zapłacie (dialog „Wystaw dokument")
+  let finalNet = net;
+  let finalVat = vat;
+  let finalGross = gross;
+  const isConsolidated = invoice.sourceType === "CONSOLIDATED";
+  const useOverride = isConsolidated && amountOverride != null && Number.isFinite(amountOverride) && amountOverride > 0;
+  if (useOverride) {
+    finalGross = Math.round(amountOverride * 100) / 100;
+    finalNet = Math.round((finalGross / (1 + vatRate / 100)) * 100) / 100;
+    finalVat = Math.round((finalGross - finalNet) * 100) / 100;
+    lineItems.length = 0;
+    lineItems.push({
+      name: "Usługa hotelowa",
+      pkwiu: "55.10.10.0",
+      unit: defaultUnit,
+      quantity: 1,
+      unitPrice: finalNet,
+      discount: 0,
+      netAmount: finalNet,
+      vatRate: vatRate,
+      vatAmount: finalVat,
+      grossAmount: finalGross,
+    });
+  }
+
   // Dane sprzedawcy
   const sellerName = template.sellerName || HOTEL_NAME;
   const sellerLines: string[] = [
@@ -409,7 +443,7 @@ async function generateInvoiceHtml(id: string): Promise<string> {
   });
 
   // Podsumowanie VAT
-  const vatSummary = [{ rate: vatRate, net: net, vat: vat, gross: gross }];
+  const vatSummary = [{ rate: vatRate, net: finalNet, vat: finalVat, gross: finalGross }];
 
   const headerHtml = template.headerText
     ? `<div class="header-text">${escapeHtml(template.headerText).replace(/\n/g, "<br>")}</div>`
@@ -433,7 +467,20 @@ async function generateInvoiceHtml(id: string): Promise<string> {
     : "";
 
   const isProforma = invoice.number.toUpperCase().startsWith("PRO");
-  const docLabel = isProforma ? "Proforma" : "Faktura VAT";
+  const docLabel = isProforma ? "Proforma" : isConsolidated ? "Faktura" : "Faktura VAT";
+
+  const datesTopHtml = isConsolidated
+    ? ""
+    : `${placeOfIssue ? `<p class="mb-0"><strong>Miejsce wystawienia:</strong> ${escapeHtml(placeOfIssue)}</p>` : ""}
+      <p class="mb-0"><strong>Data dostawy/wykonania usługi:</strong> ${escapeHtml(deliveryDate)}</p>
+      <p class="mb-0"><strong>Data wystawienia:</strong> ${escapeHtml(issueDate)}</p>`;
+  const datesBelowH1 = isConsolidated
+    ? `<div style="margin-bottom: 1rem; font-size: 0.85rem;">
+        ${placeOfIssue ? `<p class="mb-0"><strong>Miejsce wystawienia:</strong> ${escapeHtml(placeOfIssue)}</p>` : ""}
+        <p class="mb-0"><strong>Data dostawy/wykonania usługi:</strong> ${escapeHtml(deliveryDate)}</p>
+        <p class="mb-0"><strong>Data wystawienia:</strong> ${escapeHtml(issueDate)}</p>
+      </div>`
+    : "";
 
   const html = `<!DOCTYPE html>
 <html lang="pl">
@@ -556,15 +603,11 @@ async function generateInvoiceHtml(id: string): Promise<string> {
       ${sellerHtml}
       ${bankLine ? `<p class="mb-0" style="margin-top: 0.25rem;">${escapeHtml(bankLine).replace(/\n/g, "<br>")}</p>` : ""}
     </div>
-    <div class="dates-top">
-      ${placeOfIssue ? `<p class="mb-0"><strong>Miejsce wystawienia:</strong> ${escapeHtml(placeOfIssue)}</p>` : ""}
-      <p class="mb-0"><strong>Data dostawy/wykonania usługi:</strong> ${escapeHtml(deliveryDate)}</p>
-      <p class="mb-0"><strong>Data wystawienia:</strong> ${escapeHtml(issueDate)}</p>
-    </div>
+    <div class="dates-top">${datesTopHtml}</div>
   </div>
 
   <h1>${docLabel} ${escapeHtml(invoice.number)} oryginał</h1>
-
+  ${datesBelowH1}
   ${headerHtml}
 
   <div class="parties">
@@ -623,9 +666,9 @@ async function generateInvoiceHtml(id: string): Promise<string> {
       </tr>`).join("")}
       <tr style="font-weight: 600;">
         <td>Suma:</td>
-        <td class="text-right">${net.toFixed(2)}</td>
-        <td class="text-right">${vat.toFixed(2)}</td>
-        <td class="text-right">${gross.toFixed(2)}</td>
+        <td class="text-right">${finalNet.toFixed(2)}</td>
+        <td class="text-right">${finalVat.toFixed(2)}</td>
+        <td class="text-right">${finalGross.toFixed(2)}</td>
       </tr>
     </tbody>
   </table>
@@ -640,7 +683,7 @@ async function generateInvoiceHtml(id: string): Promise<string> {
   </div>
 
   <div class="amount-words">
-    <strong>Słownie zł:</strong> ${amountToWords(gross)}
+    <strong>Słownie zł:</strong> ${amountToWords(finalGross)}
   </div>
 
   ${notesHtml}
@@ -672,10 +715,16 @@ async function generateInvoiceHtml(id: string): Promise<string> {
   </p>
 </body>
 </html>`;
-  // Druga strona: kopia (oryginał dla gościa, kopia dla recepcji)
+  // Warianty: original = tylko oryginał (email), copy = tylko kopia (druk po wysłaniu), brak = oryginał + kopia (druk)
+  if (variant === "original") return html;
   const noPrintIdx = html.indexOf('  <p class="mt-2 no-print"');
   const bodyContent = html.substring(html.indexOf('  <div class="header-row">'), noPrintIdx);
   const kopiaContent = bodyContent.replace('oryginał</h1>', 'kopia</h1>');
+  if (variant === "copy") {
+    const beforeBody = html.substring(0, html.indexOf('  <div class="header-row">'));
+    const afterBody = html.substring(noPrintIdx);
+    return beforeBody + kopiaContent + "\n  " + afterBody;
+  }
   const htmlWithCopy = html.substring(0, noPrintIdx) + '\n  <div class="invoice-page-copy">\n' + kopiaContent + '  </div>\n  ' + html.substring(noPrintIdx);
   return htmlWithCopy;
 }

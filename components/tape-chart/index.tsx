@@ -50,6 +50,8 @@ import {
   Plus,
   RefreshCw,
   StickyNote,
+  FileText,
+  Receipt,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -59,6 +61,7 @@ import { RoomStatusIcon } from "./room-status-icon";
 import { getDateRange } from "@/lib/tape-chart-data";
 import { useTapeChartStore } from "@/lib/store/tape-chart-store";
 import { moveReservation, updateReservationStatus } from "@/app/actions/reservations";
+import { createConsolidatedInvoiceFromReservationIds } from "@/app/actions/companies";
 import { getEffectivePricesBatch, updateRoomStatus } from "@/app/actions/rooms";
 import { getTapeChartData } from "@/app/actions/tape-chart";
 import { useRoomsSync, broadcastRoomStatusChange } from "@/hooks/useRoomsSync";
@@ -83,12 +86,24 @@ const FloorPlanDialog = dynamic(() => import("./floor-plan-dialog").then((m) => 
 const DailyMovementsDialog = dynamic(() => import("./daily-movements-dialog").then((m) => m.DailyMovementsDialog), { ssr: false });
 const QuickStatsDialog = dynamic(() => import("./quick-stats-dialog").then((m) => m.QuickStatsDialog), { ssr: false });
 const RoomSearchDialog = dynamic(() => import("./room-search-dialog").then((m) => m.RoomSearchDialog), { ssr: false });
+const SalesInvoiceDialog = dynamic(() => import("@/components/finance/sales-invoice-dialog").then((m) => m.SalesInvoiceDialog), { ssr: false });
+const VatRegisterSheet = dynamic(() => import("@/components/finance/vat-register-sheet").then((m) => m.VatRegisterSheet), { ssr: false });
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -184,7 +199,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
     <div
       data-testid={`room-row-${room.number}`}
       className={cn(
-        "sticky left-0 z-[60] flex items-center gap-1 border-b border-r border-[hsl(var(--kw-grid-border))] px-1.5 py-0.5 bg-card transition-colors duration-150",
+        "sticky left-0 z-[60] flex items-center gap-1 border-b border-r border-blue-500 px-1.5 py-0.5 bg-card transition-colors duration-150",
         "group-hover:bg-blue-100 dark:group-hover:bg-blue-900/50",
         isDirty && "bg-amber-50/80 dark:bg-amber-950/30",
         !previewMode && (onRoomLabelClick || onRoomBlock) && "cursor-pointer hover:bg-muted/50"
@@ -303,7 +318,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
               minHeight: rowHeightPx,
             }}
             className={cn(
-              "cursor-grab active:cursor-grabbing border-b border-[hsl(var(--kw-grid-border))] select-none",
+              "cursor-grab active:cursor-grabbing border-b border-r border-b-blue-500 border-r-white select-none",
               isToday && "kw-cell-today",
               !isToday && saturday && "kw-cell-saturday",
               !isToday && sunday && "kw-cell-sunday",
@@ -419,6 +434,7 @@ function addDays(d: Date, days: number): Date {
 }
 
 const RESERVATION_STATUS_LABELS: Record<Reservation["status"], string> = {
+  PENDING: "Oczekuje",
   CONFIRMED: "Potwierdzona",
   CHECKED_IN: "Zameldowany",
   CHECKED_OUT: "Wymeldowany",
@@ -427,6 +443,7 @@ const RESERVATION_STATUS_LABELS: Record<Reservation["status"], string> = {
 };
 
 const RESERVATION_STATUS_DESCRIPTIONS: Record<Reservation["status"], string> = {
+  PENDING: "Zapytanie rezerwacyjne, oczekuje na potwierdzenie. Pokój nie jest jeszcze potwierdzony.",
   CONFIRMED: "Rezerwacja potwierdzona, oczekuje na przyjazd gościa. Pokój jest zarezerwowany na wskazany termin.",
   CHECKED_IN: "Gość zameldowany i przebywa w hotelu. Pokój jest zajęty.",
   CHECKED_OUT: "Gość wymeldowany i opuścił hotel. Rezerwacja zakończona.",
@@ -552,6 +569,8 @@ export function TapeChart({
   const [splitDialogReservation, setSplitDialogReservation] = useState<Reservation | null>(null);
   const [statusColorsDialogOpen, setStatusColorsDialogOpen] = useState(false);
   const [legendDialogOpen, setLegendDialogOpen] = useState(false);
+  const [salesInvoiceOpen, setSalesInvoiceOpen] = useState(false);
+  const [vatRegisterOpen, setVatRegisterOpen] = useState(false);
   const router = useRouter();
   const [propertyId, setPropertyId] = useState<string | null>(initialPropertyId ?? null);
   const [statusBg, setStatusBg] = useState<Record<string, string> | null>(
@@ -959,6 +978,7 @@ export function TapeChart({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const gridWrapperRef = useRef<HTMLDivElement>(null);
   const wasPanningRef = useRef(false);
+  const contextMenuClosedAtRef = useRef<number>(0);
   const didScrollToTodayRef = useRef(false);
   const userRequestedGoToTodayRef = useRef(false);
 
@@ -1192,6 +1212,11 @@ export function TapeChart({
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
   const [focusedCell, setFocusedCell] = useState<{ roomIdx: number; dateIdx: number } | null>(null);
   const [selectedReservationIds, setSelectedReservationIds] = useState<Set<string>>(new Set());
+  const [consolidatedInvoicePending, setConsolidatedInvoicePending] = useState<{
+    rightClickedReservation: Reservation;
+    idsToInclude: string[];
+  } | null>(null);
+  const [consolidatedInvoiceSubmitting, setConsolidatedInvoiceSubmitting] = useState(false);
   const [newReservationContext, setNewReservationContext] = useState<CreateReservationContext | null>(null);
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [effectivePricesMap, setEffectivePricesMap] = useState<Record<string, number>>({});
@@ -1219,6 +1244,11 @@ export function TapeChart({
   const roomRowIndex = useMemo(() => {
     const map = new Map<string, number>();
     displayRooms.forEach((r, i) => map.set(r.number, i + 1));
+    // AUDIT TEST 3 – usuń po weryfikacji
+    if (typeof window !== "undefined" && window.location.search.includes("audit=1")) {
+      console.log("TapeChart roomRowIndex:", Object.fromEntries(map));
+      console.log("TapeChart displayRooms:", displayRooms.map((r) => r.number));
+    }
     return map;
   }, [displayRooms]);
 
@@ -1287,17 +1317,34 @@ export function TapeChart({
           : (isClampedEnd ? (numDays + 0.5) / numColumns : numDays / numColumns);
 
         const gridColumnEnd = Math.min(endIdx + 3, dates.length + 2);
-        return {
+        const gridColumnStart = startIdx + 2;
+        const placement = {
           reservation: res,
           gridRow: row + headerRowCount,
-          gridColumnStart: startIdx + 2,
+          gridColumnStart,
           gridColumnEnd,
           barLeftPercent,
           barWidthPercent,
         };
+        // AUDIT TEST 2+3 – usuń po weryfikacji
+        if (typeof window !== "undefined" && window.location.search.includes("audit=1")) {
+          console.log(
+            `Placement: ${res.id} room=${res.room} checkIn=${res.checkIn} checkOut=${res.checkOut} gridCol=${gridColumnStart}-${gridColumnEnd} gridRow=${placement.gridRow}`
+          );
+        }
+        return placement;
       })
       .filter((p): p is NonNullable<typeof p> => p != null);
   }, [filteredReservations, roomRowIndex, dateIndex, dates, headerRowCount, visibleRoomNumbers, toDateKey]);
+
+  // AUDIT TEST 1 – usuń po weryfikacji
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.search.includes("audit=1")) {
+      console.log("TapeChart reservations count:", reservations.length);
+      console.log("TapeChart filteredReservations count:", filteredReservations.length);
+      console.log("TapeChart reservationPlacements count:", reservationPlacements.length);
+    }
+  }, [reservations.length, filteredReservations.length, reservationPlacements.length]);
 
   /** Zbiór komórek faktycznie pokrytych paskiem – zgodnie z logiką placementu (bar spans checkIn..checkOut inclusive) */
   const occupiedCellsSet = useMemo(() => {
@@ -1679,6 +1726,92 @@ export function TapeChart({
     });
     setCreateSheetOpen(true);
   }, [displayRooms, allRooms, viewStartDateStr]);
+
+  const primaryReservationForInvoice = useMemo(() => {
+    const ids = Array.from(selectedReservationIds);
+    // Preferuj rezerwację z firmą i BEZ faktury zbiorczej
+    const preferred = reservations.find(
+      (r) => ids.includes(r.id) && r.companyId && !r.hasConsolidatedInvoice
+    );
+    if (preferred) return preferred;
+    // Fallback: rezerwacja z firmą (nawet jeśli już zafakturowana) — żeby menu nie było disabled
+    // Handler i tak pokaże odpowiedni toast
+    return reservations.find((r) => ids.includes(r.id) && r.companyId) ?? null;
+  }, [selectedReservationIds, reservations]);
+
+  const handleCreateConsolidatedInvoiceRequest = useCallback(
+    (primaryReservation: Reservation) => {
+      if (!primaryReservation.companyId) {
+        toast.error(
+          "Żadna zaznaczona rezerwacja nie jest powiązana z firmą. Przypisz firmę do co najmniej jednej rezerwacji."
+        );
+        return;
+      }
+
+      const ids = Array.from(selectedReservationIds);
+
+      const idsToInclude = ids.filter(
+        (id) => !reservations.find((r) => r.id === id)?.hasConsolidatedInvoice
+      );
+
+      if (idsToInclude.length === 0) {
+        toast.error("Wszystkie zaznaczone rezerwacje są już na fakturze zbiorczej");
+        setSelectedReservationIds(new Set());
+        return;
+      }
+
+      const alreadyInvoiced = ids.length - idsToInclude.length;
+      if (alreadyInvoiced > 0) {
+        toast.info(
+          `Pominięto ${alreadyInvoiced} rezerwacji już zafakturowanych. Do faktury trafi ${idsToInclude.length}.`
+        );
+      }
+
+      setConsolidatedInvoicePending({
+        rightClickedReservation: primaryReservation,
+        idsToInclude,
+      });
+    },
+    [selectedReservationIds, reservations]
+  );
+
+  const handleCreateConsolidatedInvoiceConfirm = useCallback(
+    async (companyId: string, reservationIdsToUse?: string[]) => {
+      const ids =
+        reservationIdsToUse ??
+        Array.from(selectedReservationIds).filter(
+          (id) => !reservations.find((r) => r.id === id)?.hasConsolidatedInvoice
+        );
+      setConsolidatedInvoiceSubmitting(true);
+      setConsolidatedInvoicePending(null);
+      try {
+        const result = await createConsolidatedInvoiceFromReservationIds({
+          reservationIds: ids,
+          companyId,
+        });
+        if (result.success && result.data) {
+          setSelectedReservationIds(new Set());
+          const msg = `Faktura zbiorcza ${result.data.invoiceNumber} wystawiona`;
+          toast.success(msg, {
+            action: {
+              label: "Pobierz PDF",
+              onClick: () =>
+                window.open(
+                  `/finance/invoice/${result.data!.invoiceId}`,
+                  "_blank",
+                  "noopener,noreferrer"
+                ),
+            },
+          });
+        } else {
+          toast.error(result.error ?? "Błąd tworzenia faktury zbiorczej");
+        }
+      } finally {
+        setConsolidatedInvoiceSubmitting(false);
+      }
+    },
+    [selectedReservationIds]
+  );
 
   const addDaysToStr = useCallback((dateStr: string, days: number): string => {
     const d = new Date(dateStr + "T12:00:00Z");
@@ -2120,21 +2253,6 @@ export function TapeChart({
           </div>
 
           <div className="flex items-center gap-2">
-            {selectedReservationIds.size > 0 && (
-              <div className="flex items-center gap-1.5 rounded-md border border-amber-500 bg-amber-500/10 px-2.5 py-1">
-                <span className="text-xs font-medium text-amber-700">
-                  Zaznaczono: {selectedReservationIds.size}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 px-1.5 text-[10px]"
-                  onClick={() => setSelectedReservationIds(new Set())}
-                >
-                  Wyczyść
-                </Button>
-              </div>
-            )}
             {selectedCells.size > 0 && (() => {
               const uniqueRooms = new Set([...selectedCells].map((k) => k.split("|")[0]));
               return (
@@ -2270,6 +2388,14 @@ export function TapeChart({
                   </div>
                   <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { handleOpenExportDialog(); setMoreMenuOpen(false); }}>
                     <Printer className="h-4 w-4 text-muted-foreground" /> Eksport PDF
+                  </button>
+                  <div className="mx-2 my-1 h-px bg-border" />
+                  <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Finanse</div>
+                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { setSalesInvoiceOpen(true); setMoreMenuOpen(false); }}>
+                    <FileText className="h-4 w-4 text-muted-foreground" /> Faktura na produkty
+                  </button>
+                  <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50" onClick={() => { setVatRegisterOpen(true); setMoreMenuOpen(false); }}>
+                    <Receipt className="h-4 w-4 text-muted-foreground" /> Rejestry VAT
                   </button>
                   <div className="mx-2 my-1 h-px bg-border" />
                   <div className="flex items-center justify-between px-3 py-2">
@@ -2500,7 +2626,7 @@ export function TapeChart({
                 className="sticky top-0 z-[61] flex h-6 border-b bg-muted/50"
                 style={{ minWidth: totalGridWidthPx }}
               >
-                <div className="flex-shrink-0 text-xs text-muted-foreground px-2 flex items-center border-r border-[hsl(var(--kw-grid-border))]" style={{ width: ROOM_LABEL_WIDTH_PX }}>
+                <div className="flex-shrink-0 text-xs text-muted-foreground px-2 flex items-center border-r border-blue-500" style={{ width: ROOM_LABEL_WIDTH_PX }}>
                   Wydarzenia
                 </div>
                 <div className="flex-1 relative min-w-0">
@@ -2532,7 +2658,7 @@ export function TapeChart({
             )}
             {/* Sticky header: corner + date columns */}
             <div
-              className="kw-date-header-row sticky z-[60] grid w-full min-w-max border-b-2 border-[hsl(var(--kw-grid-border))]"
+              className="kw-date-header-row sticky z-[60] grid w-full min-w-max border-b-2 border-b-blue-500"
               style={{
                 top: initialEvents?.length ? EVENTS_ROW_PX : 0,
                 gridTemplateColumns: gridColumns,
@@ -2542,7 +2668,7 @@ export function TapeChart({
                 background: "hsl(var(--kw-date-header-bg))",
               }}
             >
-              <div className="flex items-center px-3 py-2.5 text-sm font-bold border-r border-[hsl(var(--kw-grid-border))]">
+              <div className="flex items-center px-3 py-2.5 text-sm font-bold border-r border-blue-500">
                 Pokój
               </div>
               {dates.map((dateStr) => {
@@ -2556,7 +2682,7 @@ export function TapeChart({
                     key={dateStr}
                     data-date-header
                     className={cn(
-                      "flex items-center justify-center border-[hsl(var(--kw-grid-border))] px-2 py-2.5 text-center text-[13px] cursor-grab active:cursor-grabbing",
+                      "flex items-center justify-center border-r border-white px-2 py-2.5 text-center text-[13px] cursor-grab active:cursor-grabbing",
                       isToday ? "kw-header-today" : saturday ? "kw-header-saturday" : sunday ? "kw-header-sunday" : headerWeekdayClass ?? "kw-header-default"
                     )}
                     style={{ minWidth: effectiveColumnWidthPx }}
@@ -2656,7 +2782,7 @@ export function TapeChart({
               {dates.map((_, i) => (
                 <div
                   key={i}
-                  className="absolute top-0 bottom-0 w-px bg-[#d5d5d5] dark:bg-[#4a4a4a]"
+                  className="absolute top-0 bottom-0 w-px bg-blue-500"
                   style={{
                     left: ROOM_LABEL_WIDTH_PX + (i + 0.5) * effectiveColumnWidthPx,
                     height: "100%",
@@ -2755,6 +2881,7 @@ export function TapeChart({
                       onClick={(e) => {
                         e.stopPropagation();
                         if (wasPanningRef.current) return;
+                        if (Date.now() - contextMenuClosedAtRef.current < 200) return;
                         if (previewMode) return;
                         if (activeDragReservation?.id !== reservation.id) {
                           if (e.detail === 2) {
@@ -2777,11 +2904,13 @@ export function TapeChart({
                                 return next;
                               });
                             } else {
-                              setSelectedReservationIds(new Set());
                               setSelectedReservation(reservation);
                               setEditInitialTab(undefined);
                               setSheetOpen(true);
                               setHighlightedReservationId(null);
+                              if (!selectedReservationIds.has(reservation.id)) {
+                                setSelectedReservationIds(new Set());
+                              }
                             }
                           }
                         }
@@ -2842,6 +2971,11 @@ export function TapeChart({
                           toast.error(result.error ?? "Błąd przedłużania pobytu");
                         }
                       }}
+                      selectedReservationIds={selectedReservationIds}
+                      primaryReservationForInvoice={primaryReservationForInvoice}
+                      onClearSelection={() => setSelectedReservationIds(new Set())}
+                      onCreateConsolidatedInvoice={handleCreateConsolidatedInvoiceRequest}
+                      onContextMenuClose={() => { contextMenuClosedAtRef.current = Date.now(); }}
                     />
                     </div>
                   </div>
@@ -3131,6 +3265,15 @@ export function TapeChart({
           );
         }}
       />
+      <SalesInvoiceDialog
+        open={salesInvoiceOpen}
+        onOpenChange={setSalesInvoiceOpen}
+        onSuccess={() => router.refresh()}
+      />
+      <VatRegisterSheet
+        open={vatRegisterOpen}
+        onOpenChange={setVatRegisterOpen}
+      />
       <UnifiedReservationDialog
         mode="edit"
         reservation={selectedReservation}
@@ -3178,6 +3321,23 @@ export function TapeChart({
           setCreateSheetOpen(true);
         }}
         onShowOnChart={(roomNumber) => setShowOnlyRoomNumber(roomNumber)}
+      />
+      <UnifiedReservationDialog
+        mode="edit"
+        reservation={consolidatedInvoicePending?.rightClickedReservation ?? null}
+        open={!!consolidatedInvoicePending}
+        onOpenChange={(open) => {
+          if (!open) {
+            if (consolidatedInvoicePending && selectedReservationIds.size >= 2) {
+              toast.info("Zaznaczenie zachowane. Prawy przycisk na zaznaczonym pasku → Faktura zbiorcza.");
+            }
+            setConsolidatedInvoicePending(null);
+          }
+        }}
+        rooms={allRooms}
+        consolidatedReservationIds={consolidatedInvoicePending?.idsToInclude}
+        primaryReservation={consolidatedInvoicePending?.rightClickedReservation ?? null}
+        onSaved={() => {}}
       />
       <UnifiedReservationDialog
         mode="create"

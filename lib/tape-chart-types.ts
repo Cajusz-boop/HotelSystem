@@ -2,7 +2,7 @@
 export type RoomStatus = "CLEAN" | "DIRTY" | "OOO" | "INSPECTION" | "INSPECTED" | "CHECKOUT_PENDING" | "MAINTENANCE";
 
 /** Status rezerwacji – określa kolor paska na grafiku */
-export type ReservationStatus = "CONFIRMED" | "CHECKED_IN" | "CHECKED_OUT" | "CANCELLED" | "NO_SHOW";
+export type ReservationStatus = "PENDING" | "CONFIRMED" | "CHECKED_IN" | "CHECKED_OUT" | "CANCELLED" | "NO_SHOW";
 
 export interface Room {
   id?: string;
@@ -49,6 +49,11 @@ export interface Reservation {
   bedsBooked?: number; // rezerwacja zasobowa: ile łóżek (gdy room.beds > 1)
   vip?: boolean; // gość VIP
   paymentStatus?: "UNPAID" | "PARTIAL" | "PAID"; // status płatności
+  /** ID firmy – do faktury zbiorczej z grafiku */
+  companyId?: string | null;
+  companyName?: string | null;
+  /** Czy rezerwacja jest już na fakturze zbiorczej */
+  hasConsolidatedInvoice?: boolean;
 }
 
 export interface ReservationGroupSummary {
@@ -67,6 +72,7 @@ export interface RoomBlock {
 
 /** Ramka pasków rezerwacji – zawsze czarna, cienka (kolor wypełnienia z RESERVATION_STATUS_BG / ustawień) */
 export const RESERVATION_STATUS_COLORS: Record<ReservationStatus, string> = {
+  PENDING: "border border-black",
   CONFIRMED: "border border-black",
   CHECKED_IN: "border border-black",
   CHECKED_OUT: "border border-black",
@@ -76,6 +82,7 @@ export const RESERVATION_STATUS_COLORS: Record<ReservationStatus, string> = {
 
 /** Tła – kolory unikalne, Potwierdzona zielona */
 export const RESERVATION_STATUS_BG: Record<ReservationStatus, string> = {
+  PENDING: "rgb(161 161 170)",   // szary/cynk – oczekuje na potwierdzenie
   CONFIRMED: "rgb(34 197 94)",   // zielony
   CHECKED_IN: "rgb(59 130 246)", // niebieski
   CHECKED_OUT: "rgb(100 116 139)", // szary

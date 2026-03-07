@@ -230,6 +230,7 @@ export function ReservationBar({
   }
   if (reservation.notes) tooltipLines.push(`Uwagi: ${reservation.notes}`);
   if (advanceOverdue) tooltipLines.push("⚠️ Zaliczka po terminie");
+  if (reservation.hasConsolidatedInvoice) tooltipLines.push("📄 Na fakturze zbiorczej");
   const tooltipText = tooltipLines.join("\n");
 
   const canDrag = reservation.status === "CONFIRMED" || reservation.status === "CHECKED_IN";

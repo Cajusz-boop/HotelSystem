@@ -438,7 +438,7 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
 
     const seqStart = config.sequenceStart ?? 1;
 
-    /** Wypełnianie luk (INVOICE): zwraca najmniejszy wolny numer. */
+    /** Wypełnianie luk (INVOICE): zwraca najmniejszy wolny numer. Invoice obejmuje też faktury zbiorcze (sourceType=CONSOLIDATED). */
     const findSmallestFreeSequenceInvoice = async (
       tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
     ): Promise<number> => {
@@ -452,19 +452,8 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
       return n;
     };
 
-    /** Wypełnianie luk (CONSOLIDATED_INVOICE): zwraca najmniejszy wolny numer (numer będzie dostępny po usunięciu). */
-    const findSmallestFreeSequenceConsolidatedInvoice = async (
-      tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
-    ): Promise<number> => {
-      const where = searchContains
-        ? { number: { contains: searchContains } }
-        : { number: { startsWith: searchPrefix } };
-      const invoices = await tx.consolidatedInvoice.findMany({ where, select: { number: true } });
-      const used = new Set(invoices.map((i) => parseSeqFromNumber(i.number)).filter((n) => n > 0));
-      let n = seqStart;
-      while (used.has(n)) n++;
-      return n;
-    };
+    // CONSOLIDATED_INVOICE używa INVOICE (wspólna numeracja)
+    const findSmallestFreeSeqConsolidated = findSmallestFreeSequenceInvoice;
 
     // Atomowa operacja na liczniku
     const counter = await prisma.$transaction(async (tx) => {
@@ -487,7 +476,7 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
         if (documentType === "INVOICE") {
           existingMax = await findSmallestFreeSequenceInvoice(tx) - 1;
         } else if (documentType === "CONSOLIDATED_INVOICE") {
-          existingMax = await findSmallestFreeSequenceConsolidatedInvoice(tx) - 1;
+          existingMax = await findSmallestFreeSeqConsolidated(tx) - 1;
         } else if (documentType === "CORRECTION") existingMax = await runQuery((o) => tx.invoiceCorrection.findMany(o));
         else if (documentType === "RECEIPT") existingMax = await runQuery((o) => tx.receipt.findMany(o));
         else if (documentType === "ACCOUNTING_NOTE") existingMax = await runQuery((o) => tx.accountingNote.findMany(o));
@@ -519,7 +508,7 @@ export async function generateNextDocumentNumber(documentType: DocumentType): Pr
           where: { id: counter.id },
           data: { lastSequence: counter.lastSequence },
         });
-        nextSeq = await findSmallestFreeSequenceConsolidatedInvoice(tx);
+        nextSeq = await findSmallestFreeSeqConsolidated(tx);
         await tx.documentNumberCounter.update({
           where: { id: counter.id },
           data: { lastSequence: Math.max(counter.lastSequence, nextSeq) },
@@ -4198,14 +4187,14 @@ export async function printFiscalReceiptForConsolidatedInvoice(
   paymentType: string = "CASH"
 ): Promise<ActionResult<{ receiptNumber?: string }>> {
   try {
-    const inv = await prisma.consolidatedInvoice.findUnique({
-      where: { id: invoiceId },
-      include: { items: { take: 1 } },
+    const inv = await prisma.invoice.findUnique({
+      where: { id: invoiceId, sourceType: "CONSOLIDATED" },
+      include: { invoiceReservations: { take: 1 } },
     });
     if (!inv) return { success: false, error: "Faktura zbiorcza nie istnieje" };
     const gross = Math.round(amount * 100) / 100;
     if (gross <= 0) return { success: false, error: "Kwota musi być większa od zera" };
-    const firstResId = inv.items[0]?.reservationId ?? "CONSOLIDATED";
+    const firstResId = inv.invoiceReservations[0]?.reservationId ?? "CONSOLIDATED";
     const templateResult = await getFiscalReceiptTemplate();
     const headerLines: string[] = [];
     const footerLines: string[] = [];
@@ -4221,10 +4210,10 @@ export async function printFiscalReceiptForConsolidatedInvoice(
     const receiptRequest = {
       transactionId: `CONSOLIDATED-${invoiceId}-${Date.now()}`,
       reservationId: firstResId,
-      items: [{ name: `Faktura zbiorcza ${inv.number}`, quantity: 1, unitPrice: gross }],
+      items: [{ name: `Faktura ${inv.number}`, quantity: 1, unitPrice: gross }],
       totalAmount: gross,
       paymentType,
-      description: `Faktura zbiorcza ${inv.number}`,
+      description: `Faktura ${inv.number}`,
       headerLines: headerLines.length > 0 ? headerLines : undefined,
       footerLines: footerLines.length > 0 ? footerLines : undefined,
     };
@@ -4363,6 +4352,301 @@ export async function createProforma(
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd wystawiania proformy",
+    };
+  }
+}
+
+export type ProformaOverrides = {
+  buyerName?: string;
+  buyerNip?: string;
+  buyerAddress?: string;
+  buyerPostalCode?: string;
+  buyerCity?: string;
+  placeOfIssue?: string;
+  deliveryDate?: string;
+  paymentMethod?: string;
+  paymentDays?: number;
+  notes?: string;
+  footerText?: string;
+  thanksText?: string;
+  sellerOverride?: SellerOverride;
+  lineItems?: Array<{ name: string; quantity: number; unit: string; unitPrice: number; vatRate: number; netAmount: number; vatAmount: number; grossAmount: number }>;
+};
+
+/** Dane proformy do podglądu (layout jak faktura). */
+export type ProformaPreviewData = {
+  proforma: { id: string; number: string; amount: number; issuedAt: Date };
+  lineItems: InvoicePreviewLineItem[];
+  vatRate: number;
+  finalNet: number;
+  finalVat: number;
+  finalGross: number;
+  buyerName: string;
+  buyerAddress: string | null;
+  buyerPostalCode: string;
+  buyerCity: string;
+  buyerPostalCity: string;
+  buyerNip: string;
+  issueDate: string;
+  deliveryDate: string;
+  placeOfIssue: string;
+  paymentMethod: string;
+  paymentDays: number;
+  dueDateStr: string;
+  notes: string | null;
+  footerText: string | null;
+  thanksText: string | null;
+  sellerName: string;
+  sellerAddress: string | null;
+  sellerPostalCity: string;
+  sellerNip: string | null;
+  sellerPhone: string | null;
+  sellerEmail: string | null;
+  bankLine: string;
+  showPkwiu: boolean;
+  showUnit: boolean;
+  /** Email gościa/firmy z rezerwacji (do domyślnego adresu przy wysyłce na email) */
+  guestEmail?: string | null;
+};
+
+export async function getProformaPreviewData(id: string): Promise<ActionResult<ProformaPreviewData>> {
+  try {
+    const proforma = await prisma.proforma.findUnique({
+      where: { id },
+      include: {
+        reservation: {
+          include: {
+            company: true,
+            guest: { select: { name: true, email: true } },
+          },
+        },
+      },
+    });
+    if (!proforma) return { success: false, error: "Proforma nie istnieje" };
+
+    let template = await prisma.invoiceTemplate.findUnique({
+      where: { templateType: "DEFAULT" },
+    });
+    if (!template) {
+      template = await prisma.invoiceTemplate.create({
+        data: {
+          templateType: "DEFAULT",
+          sellerName: HOTEL_NAME_FINANCE,
+          footerText: "Dziękujemy za skorzystanie z naszych usług.",
+          thanksText: "Zapraszamy ponownie!",
+        },
+      });
+    }
+
+    const gross = Number(proforma.amount);
+    const vatRate = 8;
+    const net = Math.round((gross / (1 + vatRate / 100)) * 100) / 100;
+    const vat = Math.round((gross - net) * 100) / 100;
+
+    const issueDate = new Date(proforma.issuedAt).toLocaleDateString("pl-PL", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+
+    const reservation = proforma.reservation;
+    const deliveryDate = reservation?.checkOut
+      ? new Date(reservation.checkOut).toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" })
+      : issueDate;
+
+    const company = reservation?.company;
+    const buyerName = company?.name ?? reservation?.guest?.name ?? "—";
+    const buyerNip = company?.nip?.trim() ?? "";
+    const buyerAddress = company?.address ?? null;
+    const buyerPostalCode = company?.postalCode ?? null;
+    const buyerCity = company?.city ?? null;
+    const buyerPostalCity = [buyerPostalCode, buyerCity].filter(Boolean).join(" ") || "";
+
+    const defaultUnit = template.defaultUnit || "szt.";
+
+    const rawPaymentMethod = template.defaultPaymentMethod || "TRANSFER";
+    const paymentMethod = PAYMENT_METHOD_NAMES[rawPaymentMethod.toUpperCase()] || rawPaymentMethod;
+    const paymentDays = template.defaultPaymentDays ?? 14;
+    const dueDate = new Date(proforma.issuedAt);
+    dueDate.setDate(dueDate.getDate() + paymentDays);
+    const dueDateStr = dueDate.toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+    let placeOfIssueVal = template.placeOfIssue || template.sellerCity || "";
+
+    const ov = proforma.overrides as ProformaOverrides | null | undefined;
+    const buyerNameVal = ov?.buyerName ?? buyerName;
+    const buyerNipVal = ov?.buyerNip ?? buyerNip;
+    const buyerAddressVal = ov?.buyerAddress ?? buyerAddress;
+    const buyerPostalCodeVal = ov?.buyerPostalCode ?? buyerPostalCode;
+    const buyerCityVal = ov?.buyerCity ?? buyerCity;
+    const buyerPostalCityVal = [buyerPostalCodeVal ?? "", buyerCityVal ?? ""].filter(Boolean).join(" ") || buyerPostalCity;
+
+    if (ov?.placeOfIssue != null) placeOfIssueVal = ov.placeOfIssue;
+    let deliveryDateVal = deliveryDate;
+    if (ov?.deliveryDate != null) {
+      const dStr = String(ov.deliveryDate);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dStr)) {
+        const [y, m, d] = dStr.split("-");
+        deliveryDateVal = `${d}.${m}.${y}`;
+      } else {
+        deliveryDateVal = dStr;
+      }
+    }
+    let paymentMethodVal = paymentMethod;
+    if (ov?.paymentMethod != null) paymentMethodVal = PAYMENT_METHOD_NAMES[ov.paymentMethod.toUpperCase()] ?? ov.paymentMethod;
+    let paymentDaysVal = paymentDays;
+    if (ov?.paymentDays != null) paymentDaysVal = ov.paymentDays;
+
+    let lineItemsResult: InvoicePreviewLineItem[];
+    let finalNetVal = net;
+    let finalVatVal = vat;
+    let finalGrossVal = gross;
+
+    if (ov?.lineItems && Array.isArray(ov.lineItems) && ov.lineItems.length > 0) {
+      lineItemsResult = ov.lineItems.map((li) => ({
+        name: li.name,
+        pkwiu: "55.10.10.0",
+        unit: li.unit || defaultUnit,
+        quantity: li.quantity,
+        unitPrice: li.unitPrice,
+        discount: 0,
+        netAmount: li.netAmount,
+        vatRate: li.vatRate,
+        vatAmount: li.vatAmount,
+        grossAmount: li.grossAmount,
+      }));
+      finalNetVal = lineItemsResult.reduce((s, i) => s + i.netAmount, 0);
+      finalVatVal = lineItemsResult.reduce((s, i) => s + i.vatAmount, 0);
+      finalGrossVal = lineItemsResult.reduce((s, i) => s + i.grossAmount, 0);
+    } else {
+      lineItemsResult = [{
+        name: "Usługa hotelowa",
+        pkwiu: "55.10.10.0",
+        unit: defaultUnit,
+        quantity: 1,
+        unitPrice: net,
+        discount: 0,
+        netAmount: net,
+        vatRate,
+        vatAmount: vat,
+        grossAmount: gross,
+      }];
+    }
+
+    let dueDateStrVal = dueDateStr;
+    if (ov?.paymentDays != null || ov?.paymentMethod != null) {
+      const d = new Date(proforma.issuedAt);
+      d.setDate(d.getDate() + paymentDaysVal);
+      dueDateStrVal = d.toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
+    }
+
+    const sellerOverride = ov?.sellerOverride;
+    let sellerNameVal = template.sellerName || HOTEL_NAME_FINANCE;
+    let sellerAddressVal: string | null = template.sellerAddress;
+    let sellerPostalCityVal = [template.sellerPostalCode, template.sellerCity].filter(Boolean).join(" ") || "";
+    let sellerNipVal: string | null = template.sellerNip;
+    let sellerPhoneVal: string | null = template.sellerPhone;
+    let sellerEmailVal: string | null = template.sellerEmail;
+    let bankLineVal = "";
+    if (template.sellerBankName) bankLineVal += template.sellerBankName;
+    if (template.sellerBankAccount) bankLineVal += (bankLineVal ? "\n" : "") + template.sellerBankAccount;
+    if (sellerOverride) {
+      if (sellerOverride.sellerName != null) sellerNameVal = sellerOverride.sellerName;
+      if (sellerOverride.sellerAddress != null) sellerAddressVal = sellerOverride.sellerAddress;
+      if (sellerOverride.sellerPostalCity != null) sellerPostalCityVal = sellerOverride.sellerPostalCity;
+      if (sellerOverride.sellerNip != null) sellerNipVal = sellerOverride.sellerNip;
+      if (sellerOverride.sellerPhone != null) sellerPhoneVal = sellerOverride.sellerPhone;
+      if (sellerOverride.sellerEmail != null) sellerEmailVal = sellerOverride.sellerEmail;
+      if (sellerOverride.sellerBankName != null || sellerOverride.sellerBankAccount != null) {
+        bankLineVal = [sellerOverride.sellerBankName, sellerOverride.sellerBankAccount].filter(Boolean).join("\n") || "";
+      }
+    }
+
+    const notesVal = ov?.notes ?? null;
+    const footerTextVal = ov?.footerText ?? template.footerText;
+    const thanksTextVal = ov?.thanksText ?? template.thanksText;
+
+    return {
+      success: true,
+      data: {
+        proforma: {
+          id: proforma.id,
+          number: proforma.number,
+          amount: finalGrossVal,
+          issuedAt: proforma.issuedAt,
+        },
+        lineItems: lineItemsResult,
+        vatRate,
+        finalNet: finalNetVal,
+        finalVat: finalVatVal,
+        finalGross: finalGrossVal,
+        buyerName: buyerNameVal,
+        buyerAddress: buyerAddressVal,
+        buyerPostalCode: buyerPostalCodeVal ?? "",
+        buyerCity: buyerCityVal ?? "",
+        buyerPostalCity: buyerPostalCityVal,
+        buyerNip: buyerNipVal,
+        issueDate,
+        deliveryDate: deliveryDateVal,
+        placeOfIssue: placeOfIssueVal,
+        paymentMethod: paymentMethodVal,
+        paymentDays: paymentDaysVal,
+        dueDateStr: dueDateStrVal,
+        notes: notesVal,
+        footerText: footerTextVal,
+        thanksText: thanksTextVal,
+        sellerName: sellerNameVal,
+        sellerAddress: sellerAddressVal,
+        sellerPostalCity: sellerPostalCityVal,
+        sellerNip: sellerNipVal,
+        sellerPhone: sellerPhoneVal,
+        sellerEmail: sellerEmailVal,
+        bankLine: bankLineVal,
+        showPkwiu: template.showPkwiu ?? false,
+        showUnit: template.showUnit ?? true,
+        guestEmail:
+          reservation?.guest?.email?.trim() ||
+          company?.billingEmail?.trim() ||
+          company?.contactEmail?.trim() ||
+          undefined,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd pobierania danych proformy",
+    };
+  }
+}
+
+/** Aktualizuje proformę (kwota, data wystawienia, overrides). */
+export async function updateProforma(
+  id: string,
+  data: {
+    amount?: number;
+    issuedAt?: Date;
+    overrides?: ProformaOverrides | null;
+  }
+): Promise<ActionResult<{ id: string; number: string }>> {
+  try {
+    const updatePayload: Record<string, unknown> = {};
+    if (data.amount != null && data.amount > 0) updatePayload.amount = data.amount;
+    if (data.issuedAt != null) updatePayload.issuedAt = data.issuedAt;
+    if (data.overrides !== undefined) updatePayload.overrides = data.overrides === null ? Prisma.JsonNull : (data.overrides as Prisma.InputJsonValue);
+    if (Object.keys(updatePayload).length === 0) {
+      const p = await prisma.proforma.findUnique({ where: { id }, select: { id: true, number: true } });
+      return p ? { success: true, data: { id: p.id, number: p.number } } : { success: false, error: "Proforma nie istnieje" };
+    }
+    const updated = await prisma.proforma.update({
+      where: { id },
+      data: updatePayload,
+    });
+    revalidatePath("/finance");
+    return { success: true, data: { id: updated.id, number: updated.number } };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd aktualizacji proformy",
     };
   }
 }
@@ -5221,6 +5505,91 @@ export async function getInvoicesForReservation(
   }
 }
 
+/** Lista faktur dla wielu rezerwacji (tryb zbiorczy) – z kolumną pokój. */
+export async function getInvoicesForReservations(
+  reservationIds: string[]
+): Promise<
+  ActionResult<
+    Array<{
+      id: string;
+      number: string;
+      amountGross: number;
+      issuedAt: string;
+      invoiceType: string;
+      advanceInvoiceId: string | null;
+      room: string;
+    }>
+  >
+> {
+  if (!reservationIds?.length) return { success: true, data: [] };
+  try {
+    const resIds = [...new Set(reservationIds)];
+    const [singleInvoices, consolidatedInvoices] = await Promise.all([
+      prisma.invoice.findMany({
+        where: { reservationId: { in: resIds } },
+        orderBy: { issuedAt: "desc" },
+        include: { reservation: { select: { room: true } } },
+      }),
+      prisma.invoice.findMany({
+        where: {
+          invoiceReservations: { some: { reservationId: { in: resIds } } },
+        },
+        orderBy: { issuedAt: "desc" },
+        include: {
+          invoiceReservations: {
+            where: { reservationId: { in: resIds } },
+            select: { roomNumber: true },
+          },
+        },
+      }),
+    ]);
+    const seen = new Set<string>();
+    const result: Array<{
+      id: string;
+      number: string;
+      amountGross: number;
+      issuedAt: string;
+      invoiceType: string;
+      advanceInvoiceId: string | null;
+      room: string;
+    }> = [];
+    for (const i of singleInvoices) {
+      if (seen.has(i.id)) continue;
+      seen.add(i.id);
+      result.push({
+        id: i.id,
+        number: i.number,
+        amountGross: Number(i.amountGross),
+        issuedAt: i.issuedAt.toISOString(),
+        invoiceType: i.invoiceType ?? "NORMAL",
+        advanceInvoiceId: i.advanceInvoiceId,
+        room: i.reservation?.room ?? "—",
+      });
+    }
+    for (const i of consolidatedInvoices) {
+      if (seen.has(i.id)) continue;
+      seen.add(i.id);
+      const rooms = i.invoiceReservations.map((ir) => ir.roomNumber).join(", ");
+      result.push({
+        id: i.id,
+        number: i.number,
+        amountGross: Number(i.amountGross),
+        issuedAt: i.issuedAt.toISOString(),
+        invoiceType: i.invoiceType ?? "NORMAL",
+        advanceInvoiceId: i.advanceInvoiceId,
+        room: rooms || "—",
+      });
+    }
+    result.sort((a, b) => new Date(b.issuedAt).getTime() - new Date(a.issuedAt).getTime());
+    return { success: true, data: result };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd odczytu faktur",
+    };
+  }
+}
+
 /** Wystawia korektę faktury (numeracja KOR/YYYY/SEQ). */
 export async function createInvoiceCorrection(
   invoiceId: string,
@@ -5318,8 +5687,35 @@ export async function ensureInvoiceEditable(
   return { success: true, data: undefined };
 }
 
+export type UpdateInvoiceLineItem = {
+  description: string;
+  quantity: number;
+  unit?: string;
+  unitPrice: number;
+  vatRate: number;
+  amountNet: number;
+  amountVat: number;
+  amountGross: number;
+};
+
+export type SellerOverride = {
+  sellerName?: string;
+  sellerAddress?: string;
+  sellerPostalCity?: string;
+  sellerNip?: string;
+  sellerPhone?: string;
+  sellerEmail?: string;
+  sellerBankName?: string;
+  sellerBankAccount?: string;
+};
+
+export type DocumentOverrides = {
+  footerText?: string;
+  thanksText?: string;
+};
+
 /**
- * Aktualizacja danych faktury (numer, nabywca, kwoty). Dozwolona tylko gdy ksefStatus jest null lub DRAFT.
+ * Aktualizacja danych faktury (numer, nabywca, kwoty, pozycje). Dozwolona tylko gdy ksefStatus jest null lub DRAFT.
  */
 export async function updateInvoice(
   invoiceId: string,
@@ -5344,6 +5740,18 @@ export async function updateInvoice(
     customFieldValues?: Record<string, string> | null;
     /** Uwagi widoczne na fakturze */
     notes?: string | null;
+    /** Miejsce wystawienia */
+    placeOfIssue?: string | null;
+    /** Forma płatności: CASH, TRANSFER, CARD, ... */
+    paymentMethod?: string | null;
+    /** Ilość dni na płatność */
+    paymentDays?: number | null;
+    /** Nadpisanie danych sprzedawcy na tej fakturze */
+    sellerOverride?: SellerOverride | null;
+    /** Nadpisanie stopki: footerText, thanksText */
+    documentOverrides?: DocumentOverrides | null;
+    /** Pozycje faktury – przy zapisie zastępuje istniejące */
+    lineItems?: UpdateInvoiceLineItem[];
   }
 ): Promise<ActionResult<{ id: string; number: string }>> {
   const editable = await ensureInvoiceEditable(invoiceId);
@@ -5366,21 +5774,498 @@ export async function updateInvoice(
     if (data.paymentBreakdown !== undefined) updatePayload.paymentBreakdown = data.paymentBreakdown === null ? Prisma.JsonNull : (data.paymentBreakdown as Prisma.InputJsonValue);
     if (data.customFieldValues !== undefined) updatePayload.customFieldValues = data.customFieldValues === null ? Prisma.JsonNull : (data.customFieldValues as Prisma.InputJsonValue);
     if (data.notes !== undefined) updatePayload.notes = data.notes;
-    if (Object.keys(updatePayload).length === 0) {
+    if (data.placeOfIssue !== undefined) updatePayload.placeOfIssue = data.placeOfIssue;
+    if (data.paymentMethod !== undefined) updatePayload.paymentMethod = data.paymentMethod;
+    if (data.paymentDays !== undefined) updatePayload.paymentDays = data.paymentDays;
+    if (data.sellerOverride !== undefined) updatePayload.sellerOverride = data.sellerOverride === null ? Prisma.JsonNull : (data.sellerOverride as Prisma.InputJsonValue);
+    if (data.documentOverrides !== undefined) updatePayload.documentOverrides = data.documentOverrides === null ? Prisma.JsonNull : (data.documentOverrides as Prisma.InputJsonValue);
+
+    const hasLineItems = data.lineItems && data.lineItems.length > 0;
+    if (Object.keys(updatePayload).length === 0 && !hasLineItems) {
       const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: { id: true, number: true } });
       return inv ? { success: true, data: { id: inv.id, number: inv.number } } : { success: false, error: "Faktura nie istnieje" };
     }
-    const updated = await prisma.invoice.update({
-      where: { id: invoiceId },
-      data: updatePayload,
+
+    await prisma.$transaction(async (tx) => {
+      if (data.lineItems && data.lineItems.length > 0) {
+        const totalNet = data.lineItems.reduce((s, i) => s + Number(i.amountNet), 0);
+        const totalVat = data.lineItems.reduce((s, i) => s + Number(i.amountVat), 0);
+        const totalGross = data.lineItems.reduce((s, i) => s + Number(i.amountGross), 0);
+        updatePayload.amountNet = Math.round(totalNet * 100) / 100;
+        updatePayload.amountVat = Math.round(totalVat * 100) / 100;
+        updatePayload.amountGross = Math.round(totalGross * 100) / 100;
+        await tx.invoiceLineItem.deleteMany({ where: { invoiceId } });
+        for (let i = 0; i < data.lineItems!.length; i++) {
+          const li = data.lineItems![i];
+          await tx.invoiceLineItem.create({
+            data: {
+              invoiceId,
+              description: li.description.trim(),
+              quantity: Number(li.quantity),
+              unit: li.unit ?? "szt.",
+              unitPrice: Number(li.unitPrice),
+              vatRate: Number(li.vatRate),
+              amountNet: Number(li.amountNet),
+              amountVat: Number(li.amountVat),
+              amountGross: Number(li.amountGross),
+              sortOrder: i,
+            },
+          });
+        }
+      }
+      if (Object.keys(updatePayload).length > 0) {
+        await tx.invoice.update({
+          where: { id: invoiceId },
+          data: updatePayload,
+        });
+      }
     });
+
+    const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: { id: true, number: true } });
     revalidatePath("/finance");
     revalidatePath("/reports");
-    return { success: true, data: { id: updated.id, number: updated.number } };
+    return inv ? { success: true, data: { id: inv.id, number: inv.number } } : { success: false, error: "Faktura nie istnieje" };
   } catch (e) {
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd aktualizacji faktury",
+    };
+  }
+}
+
+const HOTEL_NAME_FINANCE = process.env.HOTEL_NAME ?? "Hotel";
+
+const PAYMENT_METHOD_NAMES: Record<string, string> = {
+  CASH: "Gotówka",
+  TRANSFER: "Przelew",
+  CARD: "Karta płatnicza",
+  BLIK: "BLIK",
+  VOUCHER: "Voucher",
+  PREPAID: "Przedpłata",
+  SPLIT: "Płatność mieszana",
+  OTHER: "Inna",
+};
+
+const GASTRONOMY_TYPES = ["GASTRONOMY", "RESTAURANT", "POSTING"] as const;
+const TYPE_LABELS_BASE: Record<string, string> = {
+  ROOM: "Nocleg",
+  LOCAL_TAX: "Opłata miejscowa",
+  MINIBAR: "Minibar",
+  GASTRONOMY: "Gastronomia",
+  RESTAURANT: "Restauracja",
+  POSTING: "Restauracja",
+  SPA: "SPA / Wellness",
+  PARKING: "Parking",
+  LAUNDRY: "Pralnia",
+  PHONE: "Telefon",
+  TRANSPORT: "Transfer",
+  ATTRACTION: "Atrakcje",
+  RENTAL: "Wypożyczalnia",
+  OTHER: "Usługa dodatkowa",
+};
+
+export type InvoicePreviewLineItem = {
+  name: string;
+  pkwiu: string;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  discount: number;
+  netAmount: number;
+  vatRate: number;
+  vatAmount: number;
+  grossAmount: number;
+};
+
+export type InvoicePreviewData = {
+  invoice: { id: string; number: string; amountNet: number; amountVat: number; amountGross: number; vatRate: number; buyerName: string; buyerAddress: string | null; buyerPostalCode: string | null; buyerCity: string | null; buyerNip: string; receiverName: string | null; receiverAddress: string | null; receiverPostalCode: string | null; receiverCity: string | null; issuedAt: Date; deliveryDate: Date | null; placeOfIssue: string | null; paymentMethod: string | null; paymentDays: number | null; paymentDueDate: Date | null; notes: string | null; sourceType: string | null };
+  template: { placeOfIssue: string | null; defaultPaymentMethod: string | null; defaultPaymentDays: number | null; defaultUnit: string | null; roomProductName: string | null };
+  lineItems: InvoicePreviewLineItem[];
+  vatRate: number;
+  finalNet: number;
+  finalVat: number;
+  finalGross: number;
+  buyerName: string;
+  buyerAddress: string | null;
+  buyerPostalCity: string;
+  buyerNip: string;
+  issueDate: string;
+  deliveryDate: string;
+  placeOfIssue: string;
+  paymentMethod: string;
+  rawPaymentMethod: string;
+  paymentDays: number;
+  dueDateStr: string;
+  notes: string | null;
+  isProforma: boolean;
+  isConsolidated: boolean;
+  docLabel: string;
+  showPkwiu: boolean;
+  showUnit: boolean;
+  showDiscount: boolean;
+  receiverName: string | null;
+  receiverAddress: string | null;
+  receiverPostalCity: string | null;
+  amountOverride: number | null;
+  /** Dane sprzedawcy (do wyświetlenia w podglądzie = PDF) */
+  sellerName: string;
+  sellerAddress: string | null;
+  sellerPostalCity: string;
+  sellerNip: string | null;
+  sellerPhone: string | null;
+  sellerEmail: string | null;
+  bankLine: string;
+  footerText: string | null;
+  thanksText: string | null;
+  headerText: string | null;
+  logoBase64: string | null;
+  logoUrl: string | null;
+  logoWidth: number;
+  logoPosition: string;
+  /** Email gościa z rezerwacji (do domyślnego adresu przy wysyłce na email) */
+  guestEmail?: string | null;
+};
+
+/**
+ * Pobiera dane faktury do podglądu (reuse logiki z PDF route).
+ */
+export async function getInvoicePreviewData(
+  id: string,
+  amountOverrideParam: number | null = null
+): Promise<ActionResult<InvoicePreviewData>> {
+  try {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id },
+      include: { lineItems: { orderBy: { sortOrder: "asc" } } },
+    });
+    if (!invoice) return { success: false, error: "Faktura nie istnieje" };
+
+    let template = await prisma.invoiceTemplate.findUnique({
+      where: { templateType: "DEFAULT" },
+    });
+    if (!template) {
+      template = await prisma.invoiceTemplate.create({
+        data: {
+          templateType: "DEFAULT",
+          sellerName: HOTEL_NAME_FINANCE,
+          footerText: "Dziękujemy za skorzystanie z naszych usług.",
+          thanksText: "Zapraszamy ponownie!",
+        },
+      });
+    }
+
+    let transactions = invoice.reservationId
+      ? await prisma.transaction.findMany({
+          where: {
+            reservationId: invoice.reservationId,
+            status: "ACTIVE",
+            type: { notIn: ["PAYMENT", "DEPOSIT", "VOID", "REFUND", "DISCOUNT"] },
+            amount: { gt: 0 },
+          },
+          orderBy: { createdAt: "asc" },
+        })
+      : [];
+    const invoiceScope = invoice.invoiceScope ?? (invoice.reservationId
+      ? (await prisma.reservation.findUnique({
+          where: { id: invoice.reservationId },
+          select: { invoiceScope: true },
+        }))?.invoiceScope ?? "ALL"
+      : "ALL");
+    if (invoiceScope === "HOTEL_ONLY") {
+      transactions = transactions.filter((t) => !GASTRONOMY_TYPES.includes(t.type as (typeof GASTRONOMY_TYPES)[number]));
+    } else if (invoiceScope === "GASTRONOMY_ONLY") {
+      transactions = transactions.filter((t) => GASTRONOMY_TYPES.includes(t.type as (typeof GASTRONOMY_TYPES)[number]));
+    }
+
+    let detectedPaymentMethod: string | null = null;
+    const paymentBreakdown = invoice.paymentBreakdown as Array<{ type: string; amount: number }> | null;
+    if (paymentBreakdown && Array.isArray(paymentBreakdown) && paymentBreakdown.length > 0) {
+      const withAmount = paymentBreakdown.filter((p) => p.amount > 0);
+      if (withAmount.length === 1) detectedPaymentMethod = withAmount[0].type.toUpperCase();
+      else if (withAmount.length > 1) detectedPaymentMethod = "SPLIT";
+    }
+    if (!detectedPaymentMethod && !invoice.paymentMethod && invoice.reservationId) {
+      const paymentTransactions = await prisma.transaction.findMany({
+        where: { reservationId: invoice.reservationId, type: "PAYMENT", status: "ACTIVE" },
+        select: { paymentMethod: true, amount: true },
+      });
+      if (paymentTransactions.length > 0) {
+        const methodCounts = new Map<string, number>();
+        for (const pt of paymentTransactions) {
+          if (pt.paymentMethod) {
+            const m = pt.paymentMethod.toUpperCase();
+            methodCounts.set(m, (methodCounts.get(m) || 0) + Number(pt.amount));
+          }
+        }
+        if (methodCounts.size > 0) {
+          detectedPaymentMethod = [...methodCounts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+        }
+      }
+    }
+
+    const issueDate = new Date(invoice.issuedAt).toLocaleDateString("pl-PL", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    const deliveryDate = invoice.deliveryDate
+      ? new Date(invoice.deliveryDate).toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" })
+      : issueDate;
+
+    const net = Number(invoice.amountNet);
+    const vat = Number(invoice.amountVat);
+    const gross = Number(invoice.amountGross);
+    const vatRate = Number(invoice.vatRate);
+    const roomLabel = (template.roomProductName?.trim() || "Nocleg") as string;
+    const defaultUnit = template.defaultUnit || "szt.";
+    const TYPE_LABELS = { ...TYPE_LABELS_BASE, ROOM: roomLabel };
+
+    const lineItems: InvoicePreviewLineItem[] = [];
+
+    if (invoice.lineItems && invoice.lineItems.length > 0) {
+      for (const li of invoice.lineItems) {
+        lineItems.push({
+          name: li.description,
+          pkwiu: "55.10.10.0",
+          unit: li.unit || "szt.",
+          quantity: Number(li.quantity),
+          unitPrice: Number(li.unitPrice),
+          discount: 0,
+          netAmount: Number(li.amountNet),
+          vatRate: Number(li.vatRate),
+          vatAmount: Number(li.amountVat),
+          grossAmount: Number(li.amountGross),
+        });
+      }
+    }
+
+    const reservation = invoice.reservationId
+      ? await prisma.reservation.findUnique({
+          where: { id: invoice.reservationId },
+          select: {
+            invoiceSingleLine: true,
+            guest: { select: { email: true } },
+            company: { select: { billingEmail: true, contactEmail: true } },
+          },
+        })
+      : null;
+    const useSingleLine = reservation?.invoiceSingleLine ?? true;
+
+    if (lineItems.length === 0 && useSingleLine) {
+      lineItems.push({
+        name: "Usługa hotelowa",
+        pkwiu: "55.10.10.0",
+        unit: defaultUnit,
+        quantity: 1,
+        unitPrice: net,
+        discount: 0,
+        netAmount: net,
+        vatRate: vatRate,
+        vatAmount: vat,
+        grossAmount: gross,
+      });
+    } else if (transactions.length > 0) {
+      const grouped = new Map<string, { name: string; total: number }>();
+      for (const tx of transactions) {
+        const txType = tx.type;
+        const isRestaurant = txType === "GASTRONOMY" || txType === "RESTAURANT" || txType === "POSTING";
+        const label = isRestaurant && tx.description
+          ? tx.description.split(" | ")[0] || TYPE_LABELS[txType] || txType
+          : TYPE_LABELS[txType] || txType;
+        const key = isRestaurant ? `restaurant-${tx.id}` : txType;
+        const existing = grouped.get(key);
+        if (existing) existing.total += Number(tx.amount);
+        else grouped.set(key, { name: label, total: Number(tx.amount) });
+      }
+      for (const [, { name, total }] of grouped) {
+        const lineGross = Math.round(total * 100) / 100;
+        const lineNet = Math.round((lineGross / (1 + vatRate / 100)) * 100) / 100;
+        const lineVat = Math.round((lineGross - lineNet) * 100) / 100;
+        lineItems.push({
+          name,
+          pkwiu: "55.10.10.0",
+          unit: defaultUnit,
+          quantity: 1,
+          unitPrice: lineNet,
+          discount: 0,
+          netAmount: lineNet,
+          vatRate: vatRate,
+          vatAmount: lineVat,
+          grossAmount: lineGross,
+        });
+      }
+    }
+
+    if (lineItems.length === 0) {
+      lineItems.push({
+        name: "Usługa hotelowa",
+        pkwiu: "55.10.10.0",
+        unit: defaultUnit,
+        quantity: 1,
+        unitPrice: net,
+        discount: 0,
+        netAmount: net,
+        vatRate: vatRate,
+        vatAmount: vat,
+        grossAmount: gross,
+      });
+    }
+
+    let finalNet = net;
+    let finalVat = vat;
+    let finalGross = gross;
+    const isConsolidated = invoice.sourceType === "CONSOLIDATED";
+    const useOverride = isConsolidated && amountOverrideParam != null && Number.isFinite(amountOverrideParam) && amountOverrideParam > 0;
+    if (useOverride) {
+      finalGross = Math.round(amountOverrideParam * 100) / 100;
+      finalNet = Math.round((finalGross / (1 + vatRate / 100)) * 100) / 100;
+      finalVat = Math.round((finalGross - finalNet) * 100) / 100;
+      lineItems.length = 0;
+      lineItems.push({
+        name: "Usługa hotelowa",
+        pkwiu: "55.10.10.0",
+        unit: defaultUnit,
+        quantity: 1,
+        unitPrice: finalNet,
+        discount: 0,
+        netAmount: finalNet,
+        vatRate: vatRate,
+        vatAmount: finalVat,
+        grossAmount: finalGross,
+      });
+    }
+
+    const rawPaymentMethod = detectedPaymentMethod || invoice.paymentMethod || template.defaultPaymentMethod || "TRANSFER";
+    const paymentMethod = PAYMENT_METHOD_NAMES[rawPaymentMethod.toUpperCase()] || rawPaymentMethod;
+    const paymentDays = invoice.paymentDays ?? template.defaultPaymentDays ?? 14;
+    let dueDateStr = "";
+    if (invoice.paymentDueDate) {
+      dueDateStr = new Date(invoice.paymentDueDate).toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
+    } else {
+      const dueDate = new Date(invoice.issuedAt);
+      dueDate.setDate(dueDate.getDate() + paymentDays);
+      dueDateStr = dueDate.toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
+    }
+
+    const placeOfIssue = invoice.placeOfIssue || template.placeOfIssue || template.sellerCity || "";
+    const showPkwiu = template.showPkwiu ?? false;
+    const showUnit = template.showUnit ?? true;
+    const showDiscount = template.showDiscount ?? false;
+    const isProforma = invoice.number.toUpperCase().startsWith("PRO");
+    const docLabel = isProforma ? "Proforma" : isConsolidated ? "Faktura" : "Faktura VAT";
+    const sellerOverride = invoice.sellerOverride as SellerOverride | null | undefined;
+    let sellerName = template.sellerName || HOTEL_NAME_FINANCE;
+    let sellerAddress: string | null = template.sellerAddress;
+    let sellerPostalCity = [template.sellerPostalCode, template.sellerCity].filter(Boolean).join(" ") || "";
+    let sellerNip: string | null = template.sellerNip;
+    let sellerPhone: string | null = template.sellerPhone;
+    let sellerEmail: string | null = template.sellerEmail;
+    let bankLine = "";
+    if (template.sellerBankName) bankLine += template.sellerBankName;
+    if (template.sellerBankAccount) bankLine += (bankLine ? "\n" : "") + template.sellerBankAccount;
+    if (sellerOverride) {
+      if (sellerOverride.sellerName != null) sellerName = sellerOverride.sellerName;
+      if (sellerOverride.sellerAddress != null) sellerAddress = sellerOverride.sellerAddress;
+      if (sellerOverride.sellerPostalCity != null) sellerPostalCity = sellerOverride.sellerPostalCity;
+      if (sellerOverride.sellerNip != null) sellerNip = sellerOverride.sellerNip;
+      if (sellerOverride.sellerPhone != null) sellerPhone = sellerOverride.sellerPhone;
+      if (sellerOverride.sellerEmail != null) sellerEmail = sellerOverride.sellerEmail;
+      if (sellerOverride.sellerBankName != null || sellerOverride.sellerBankAccount != null) {
+        bankLine = [sellerOverride.sellerBankName, sellerOverride.sellerBankAccount].filter(Boolean).join("\n") || "";
+      }
+    }
+    const buyerPostalCity = [invoice.buyerPostalCode, invoice.buyerCity].filter(Boolean).join(" ") || "";
+    const receiverPostalCity = invoice.receiverName && (invoice.receiverPostalCode || invoice.receiverCity)
+      ? [invoice.receiverPostalCode, invoice.receiverCity].filter(Boolean).join(" ")
+      : null;
+
+    return {
+      success: true,
+      data: {
+        invoice: {
+          id: invoice.id,
+          number: invoice.number,
+          amountNet: net,
+          amountVat: vat,
+          amountGross: gross,
+          vatRate,
+          buyerName: invoice.buyerName,
+          buyerAddress: invoice.buyerAddress,
+          buyerPostalCode: invoice.buyerPostalCode,
+          buyerCity: invoice.buyerCity,
+          buyerNip: invoice.buyerNip,
+          receiverName: invoice.receiverName,
+          receiverAddress: invoice.receiverAddress,
+          receiverPostalCode: invoice.receiverPostalCode,
+          receiverCity: invoice.receiverCity,
+          issuedAt: invoice.issuedAt,
+          deliveryDate: invoice.deliveryDate,
+          placeOfIssue: invoice.placeOfIssue,
+          paymentMethod: invoice.paymentMethod,
+          paymentDays: invoice.paymentDays,
+          paymentDueDate: invoice.paymentDueDate,
+          notes: invoice.notes,
+          sourceType: invoice.sourceType,
+        },
+        template: {
+          placeOfIssue: template.placeOfIssue,
+          defaultPaymentMethod: template.defaultPaymentMethod,
+          defaultPaymentDays: template.defaultPaymentDays,
+          defaultUnit: template.defaultUnit,
+          roomProductName: template.roomProductName,
+        },
+        lineItems,
+        vatRate,
+        finalNet,
+        finalVat,
+        finalGross,
+        buyerName: invoice.buyerName,
+        buyerAddress: invoice.buyerAddress,
+        buyerPostalCity,
+        buyerNip: invoice.buyerNip,
+        issueDate,
+        deliveryDate,
+        placeOfIssue,
+        paymentMethod,
+        rawPaymentMethod,
+        paymentDays,
+        dueDateStr,
+        notes: invoice.notes,
+        isProforma,
+        isConsolidated,
+        docLabel,
+        showPkwiu,
+        showUnit,
+        showDiscount,
+        receiverName: invoice.receiverName,
+        receiverAddress: invoice.receiverAddress,
+        receiverPostalCity,
+        amountOverride: amountOverrideParam,
+        sellerName,
+        sellerAddress,
+        sellerPostalCity,
+        sellerNip,
+        sellerPhone,
+        sellerEmail,
+        bankLine,
+        footerText: (invoice.documentOverrides as DocumentOverrides | null)?.footerText ?? template.footerText,
+        thanksText: (invoice.documentOverrides as DocumentOverrides | null)?.thanksText ?? template.thanksText,
+        headerText: template.headerText,
+        logoBase64: template.logoBase64,
+        logoUrl: template.logoUrl,
+        logoWidth: template.logoWidth,
+        logoPosition: template.logoPosition,
+        guestEmail:
+          reservation?.guest?.email?.trim() ||
+          reservation?.company?.billingEmail?.trim() ||
+          reservation?.company?.contactEmail?.trim() ||
+          null,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd pobierania danych faktury",
     };
   }
 }
@@ -7654,7 +8539,7 @@ export async function getUnsettledCardTransactions(
         reservation: {
           select: {
             id: true,
-            guest: { select: { name: true } },
+            guest: { select: { name: true, email: true } },
           },
         },
       },
@@ -12069,6 +12954,73 @@ export async function getFolioSummary(
 }
 
 /**
+ * Pobiera zagregowane podsumowanie folio dla wielu rezerwacji (faktura zbiorcza).
+ */
+export async function getConsolidatedFolioSummary(reservationIds: string[]): Promise<
+  ActionResult<{
+    reservationSummaries: Array<{
+      reservationId: string;
+      totalCharges: number;
+      totalDiscounts: number;
+      totalPayments: number;
+      balance: number;
+      room?: string;
+    }>;
+    totalAmount: number;
+  }>
+> {
+  if (!reservationIds?.length) {
+    return { success: false, error: "Brak rezerwacji" };
+  }
+  try {
+    const [summaries, reservations] = await Promise.all([
+      Promise.all(reservationIds.map((id) => getFolioSummary(id))),
+      prisma.reservation.findMany({
+        where: { id: { in: reservationIds } },
+        select: { id: true, room: { select: { number: true } } },
+      }),
+    ]);
+    const roomByResId = new Map(reservations.map((r) => [r.id, r.room?.number]));
+    const reservationSummaries: Array<{
+      reservationId: string;
+      totalCharges: number;
+      totalDiscounts: number;
+      totalPayments: number;
+      balance: number;
+      room?: string;
+    }> = [];
+    let totalAmount = 0;
+    for (let i = 0; i < summaries.length; i++) {
+      const s = summaries[i];
+      if (s.success && s.data) {
+        const bal = s.data.balance ?? (s.data.totalCharges - s.data.totalDiscounts - s.data.totalPayments);
+        reservationSummaries.push({
+          reservationId: reservationIds[i],
+          totalCharges: s.data.totalCharges,
+          totalDiscounts: s.data.totalDiscounts,
+          totalPayments: s.data.totalPayments,
+          balance: bal,
+          room: roomByResId.get(reservationIds[i]),
+        });
+        totalAmount += bal;
+      }
+    }
+    return {
+      success: true,
+      data: {
+        reservationSummaries,
+        totalAmount: Math.round(totalAmount * 100) / 100,
+      },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd pobierania podsumowania",
+    };
+  }
+}
+
+/**
  * Pobiera szczegółowe pozycje folio
  */
 export async function getFolioItems(
@@ -13105,6 +14057,14 @@ export async function setFolioAssignment(params: {
         guest: { select: { id: true, name: true } },
       },
     });
+
+    // Główne folio (1): zsynchronizuj Reservation.companyId – potrzebne do faktury zbiorczej i grafiku
+    if (folioNumber === 1) {
+      await prisma.reservation.update({
+        where: { id: reservationId },
+        data: { companyId: billTo === "COMPANY" && companyId ? companyId : null },
+      });
+    }
 
     await createAuditLog({
       actionType: "UPDATE",

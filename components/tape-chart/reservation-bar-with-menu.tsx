@@ -69,6 +69,16 @@ interface ReservationBarWithMenuProps {
   barHeightPx?: number;
   /** Tylko w widoku Dzień – maksimum informacji na pasku */
   showFullInfo?: boolean;
+  /** Zaznaczone paski (Ctrl+klik) – do menu Faktura zbiorcza */
+  selectedReservationIds?: Set<string>;
+  /** Pierwsza zaznaczona rezerwacja z firmą – używana do faktury zbiorczej (działa przy prawym kliku na dowolny zaznaczony pasek) */
+  primaryReservationForInvoice?: Reservation | null;
+  /** Wyczyść zaznaczenie (gdy prawy klik na zaznaczony pasek) */
+  onClearSelection?: () => void;
+  /** Wystaw fakturę zbiorczą (przekazywana rezerwacja z firmą – primaryReservationForInvoice) */
+  onCreateConsolidatedInvoice?: (primaryReservation: Reservation) => void;
+  /** Wywoływane gdy menu kontekstowe się zamknie – pozwala tłumić fałszywe kliki edycji */
+  onContextMenuClose?: () => void;
 }
 
 export function ReservationBarWithMenu({
@@ -96,6 +106,11 @@ export function ReservationBarWithMenu({
   barWidthPx,
   barHeightPx,
   showFullInfo,
+  selectedReservationIds,
+  primaryReservationForInvoice,
+  onClearSelection,
+  onCreateConsolidatedInvoice,
+  onContextMenuClose,
 }: ReservationBarWithMenuProps) {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartPos = useRef<{ x: number; y: number } | null>(null);
@@ -324,7 +339,7 @@ export function ReservationBarWithMenu({
     if (result.success && result.data) {
       toast.success(`Proforma ${result.data.number} – ${result.data.amount.toFixed(2)} PLN`);
       if (typeof window !== "undefined") {
-        window.open(`/api/finance/proforma/${result.data.id}/pdf`, "_blank", "noopener,noreferrer");
+        window.open(`/finance/proforma/${result.data.id}`, "_blank", "noopener,noreferrer");
       }
     } else {
       toast.error("error" in result ? result.error : "Błąd");
@@ -345,7 +360,7 @@ export function ReservationBarWithMenu({
     if (result.success && result.data) {
       toast.success(`Faktura VAT ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);
       if (typeof window !== "undefined") {
-        window.open(`/api/finance/invoice/${result.data.id}/pdf`, "_blank", "noopener,noreferrer");
+        window.open(`/finance/invoice/${result.data.id}`, "_blank", "noopener,noreferrer");
       }
     } else {
       toast.error("error" in result ? result.error : "Błąd");
@@ -450,7 +465,7 @@ export function ReservationBarWithMenu({
   );
 
   return (
-    <ContextMenu>
+    <ContextMenu onOpenChange={(open) => { if (!open) onContextMenuClose?.(); }}>
       <ContextMenuTrigger asChild>
         <div
           className="relative h-full w-full"
@@ -510,6 +525,39 @@ export function ReservationBarWithMenu({
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-56">
+        {/* === ZAZNACZONE PASKI (Faktura zbiorcza) === */}
+        {selectedReservationIds && selectedReservationIds.size >= 1 && selectedReservationIds.has(reservation.id) && (
+          <>
+            <div
+              className="px-2 py-1.5 text-xs text-muted-foreground font-medium"
+              title="Ctrl+klik = zaznacz, Ctrl+klik na zaznaczonym = odznacz. Prawy przycisk = menu."
+            >
+              Zaznaczono: {selectedReservationIds.size}
+            </div>
+            <ContextMenuItem
+              onSelect={() =>
+                selectedReservationIds.size >= 2 &&
+                primaryReservationForInvoice &&
+                onCreateConsolidatedInvoice?.(primaryReservationForInvoice)
+              }
+              disabled={selectedReservationIds.size < 2 || !primaryReservationForInvoice}
+              title={
+                selectedReservationIds.size < 2
+                  ? "Zaznacz co najmniej 2 rezerwacje (Ctrl+klik)"
+                  : !primaryReservationForInvoice
+                    ? "Przynajmniej jedna zaznaczona rezerwacja musi być powiązana z firmą"
+                    : undefined
+              }
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Faktura zbiorcza{selectedReservationIds.size < 2 ? " (min. 2)" : ""}
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => onClearSelection?.()}>
+              Wyczyść zaznaczenie
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
         {/* === REZERWACJA === */}
         <ContextMenuItem onSelect={() => onEdit(reservation)}>
           Edytuj rezerwację

@@ -541,7 +541,7 @@ model Company {
 
   reservations Reservation[]
   corporateContracts CorporateContract[]
-  consolidatedInvoices ConsolidatedInvoice[]
+  invoices      Invoice[]  // faktury zbiorcze (companyId)
   accountingNotes AccountingNote[]
   reservationFolios ReservationFolio[]
 }
@@ -789,6 +789,7 @@ model Reservation {
   phoneCallLogs     PhoneCallLog[]
   unassignedGastronomyCharges UnassignedGastronomyCharge[] @relation("UnassignedCharges")
   cashDocuments    CashDocument[]
+  invoiceReservations InvoiceReservation[]
 
   @@index([checkIn, checkOut])
   @@index([roomId])
@@ -1094,6 +1095,8 @@ model Proforma {
   amount         Decimal  @db.Decimal(12, 2)
   issuedAt       DateTime @default(now())
   createdAt      DateTime @default(now())
+  /** Nadpisania pól edytowalnych: buyer*, placeOfIssue, deliveryDate, payment*, notes, footerText, thanksText, sellerOverride, lineItems */
+  overrides      Json?
 
   @@unique([number])
   @@index([reservationId])
@@ -1101,9 +1104,11 @@ model Proforma {
 
 model Invoice {
   id             String   @id @default(cuid())
-  reservationId  String?  // opcjonalne: null dla faktur na produkty (stypy, vouchery, usługi)
+  reservationId  String?  // opcjonalne: null dla faktur na produkty (stypy, vouchery) i zbiorczych
   reservation    Reservation? @relation(fields: [reservationId], references: [id], onDelete: Cascade)
-  sourceType     String   @default("RESERVATION")  // RESERVATION, EVENT, VOUCHER, MANUAL
+  companyId      String?  // dla faktury zbiorczej – wiele rezerwacji jednej firmy
+  company        Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  sourceType     String   @default("RESERVATION")  // RESERVATION, EVENT, VOUCHER, MANUAL, CONSOLIDATED
   sourceId       String?  // ID EventOrder, GiftVoucher itp. (gdy sourceType != RESERVATION)
   invoiceType    String?  @default("NORMAL")  // NORMAL, ADVANCE, FINAL
   advanceInvoiceId String?  // gdy invoiceType = FINAL: ID faktury zaliczkowej rozliczanej
@@ -1149,16 +1154,55 @@ model Invoice {
   paymentBreakdown Json?    // rozbicie płatności: [{ type: "CASH", amount: 100 }, { type: "CARD", amount: 50 }]
   customFieldValues Json?   // własne pola faktury (np. zamówienie, projekt)
   notes         String?  @db.Text  // uwagi widoczne na fakturze
+  /** Nadpisanie danych sprzedawcy na tej fakturze (sellerName, sellerAddress, ...) */
+  sellerOverride Json?
+  /** Nadpisanie stopki: footerText, thanksText */
+  documentOverrides Json?
   /** Zakres użyty przy tworzeniu: ALL, HOTEL_ONLY, GASTRONOMY_ONLY (dla faktur z rezerwacji) */
   invoiceScope  String?  // ALL | HOTEL_ONLY | GASTRONOMY_ONLY
 
+  /** Dla faktury zbiorczej: ISSUED, PAID, CANCELLED. Null dla zwykłej faktury. */
+  consolidatedStatus String?
+  paidAt         DateTime?
+
+  /** Okres rozliczeniowy – tylko dla faktury zbiorczej */
+  periodFrom     DateTime? @db.Date
+  periodTo       DateTime? @db.Date
+
   corrections   InvoiceCorrection[]
   cashDocuments CashDocument[]
-  lineItems     InvoiceLineItem[]  // pozycje dla faktur bez rezerwacji (MANUAL, EVENT, VOUCHER)
+  lineItems     InvoiceLineItem[]
+  invoiceReservations InvoiceReservation[]
 
   @@unique([number])
   @@index([reservationId])
+  @@index([companyId])
   @@index([sourceType, sourceId])
+}
+
+// Powiązanie faktury zbiorczej z rezerwacjami (snapshot danych)
+model InvoiceReservation {
+  id            String   @id @default(cuid())
+  invoiceId     String
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  reservationId String
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  guestName     String
+  roomNumber    String
+  checkIn       DateTime @db.Date
+  checkOut      DateTime @db.Date
+  nights        Int
+  amountNet     Decimal  @db.Decimal(12, 2)
+  amountVat     Decimal  @db.Decimal(12, 2)
+  amountGross   Decimal  @db.Decimal(12, 2)
+  description   String?  @db.Text
+
+  createdAt     DateTime @default(now())
+
+  @@unique([invoiceId, reservationId])
+  @@index([invoiceId])
+  @@index([reservationId])
 }
 
 // Pozycje faktury (dla faktur na produkty: stypy, vouchery, usługi – bez rezerwacji)
@@ -1177,80 +1221,6 @@ model InvoiceLineItem {
   sortOrder   Int      @default(0)
 
   @@index([invoiceId])
-}
-
-// Faktura zbiorcza - dla wielu rezerwacji jednej firmy
-model ConsolidatedInvoice {
-  id             String   @id @default(cuid())
-  number         String   @unique  // FVZ/YYYY/SEQ – numer faktury zbiorczej
-  companyId      String
-  company        Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  
-  // Kwoty
-  amountNet      Decimal  @db.Decimal(12, 2)
-  amountVat      Decimal  @db.Decimal(12, 2)
-  amountGross    Decimal  @db.Decimal(12, 2)
-  vatRate        Decimal  @db.Decimal(5, 2) @default(8)
-  
-  // Dane nabywcy (skopiowane z firmy w momencie wystawiania)
-  buyerNip       String
-  buyerName      String
-  buyerAddress   String?
-  buyerPostalCode String?
-  buyerCity      String?
-  
-  // Okres rozliczeniowy
-  periodFrom     DateTime @db.Date
-  periodTo       DateTime @db.Date
-  
-  // Termin płatności
-  dueDate        DateTime @db.Date
-  paymentTermDays Int     @default(14)
-  paymentBreakdown Json?  // rozbicie płatności: [{ type: "CASH", amount: 100 }, { type: "CARD", amount: 50 }]
-  
-  // Status
-  status         String   @default("ISSUED")  // ISSUED, PAID, OVERDUE, CANCELLED
-  paidAt         DateTime?
-  
-  // Notatki
-  notes          String?  @db.Text
-  
-  issuedAt       DateTime @default(now())
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  items          ConsolidatedInvoiceItem[]
-
-  @@index([companyId])
-  @@index([periodFrom, periodTo])
-  @@index([status])
-}
-
-// Pozycje faktury zbiorczej (pojedyncze rezerwacje)
-model ConsolidatedInvoiceItem {
-  id                    String   @id @default(cuid())
-  consolidatedInvoiceId String
-  consolidatedInvoice   ConsolidatedInvoice @relation(fields: [consolidatedInvoiceId], references: [id], onDelete: Cascade)
-  reservationId         String
-  
-  // Dane rezerwacji (skopiowane w momencie fakturowania)
-  guestName             String
-  roomNumber            String
-  checkIn               DateTime @db.Date
-  checkOut              DateTime @db.Date
-  nights                Int
-  
-  // Kwoty
-  amountNet             Decimal  @db.Decimal(12, 2)
-  amountVat             Decimal  @db.Decimal(12, 2)
-  amountGross           Decimal  @db.Decimal(12, 2)
-  
-  description           String?  // opis pozycji (np. "Nocleg 5 dób")
-  
-  createdAt             DateTime @default(now())
-
-  @@index([consolidatedInvoiceId])
-  @@index([reservationId])
 }
 
 model InvoiceCorrection {
