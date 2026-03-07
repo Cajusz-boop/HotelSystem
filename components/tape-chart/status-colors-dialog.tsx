@@ -22,6 +22,7 @@ import { RESERVATION_STATUS_BG } from "@/lib/tape-chart-types";
 import type { ReservationStatus } from "@/lib/tape-chart-types";
 
 const STATUS_KEYS: ReservationStatus[] = [
+  "PENDING",
   "CONFIRMED",
   "CHECKED_IN",
   "CHECKED_OUT",
@@ -30,6 +31,7 @@ const STATUS_KEYS: ReservationStatus[] = [
 ];
 
 const STATUS_LABELS: Record<ReservationStatus, string> = {
+  PENDING: "Oczekująca",
   CONFIRMED: "Potwierdzona",
   CHECKED_IN: "Zameldowany",
   CHECKED_OUT: "Wymeldowany",

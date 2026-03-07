@@ -49,7 +49,7 @@ import { WlasneTab } from "./tabs/wlasne-tab";
 export type UnifiedReservationTab = "rozliczenie" | "dokumenty" | "posilki" | "parking" | "pozostale" | "wlasne" | "uslugi" | "grafik-sprzatan" | "meldunek";
 
 function ConsolidatedSettlementContent({ reservationIds }: { reservationIds: string[] }) {
-  const [data, setData] = useState<{ reservationSummaries: Array<{ room?: string; balance: number }>; totalAmount: number } | null>(null);
+  const [data, setData] = useState<{ reservationSummaries: Array<{ reservationId: string; room?: string; balance: number }>; totalAmount: number } | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     if (!reservationIds.length) { setData(null); setLoading(false); return; }

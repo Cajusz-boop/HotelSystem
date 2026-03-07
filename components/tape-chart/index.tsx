@@ -287,8 +287,8 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
       {dates.map((dateStr, colIdx) => {
         const saturday = isSaturdayDate(dateStr);
         const sunday = isSundayDate(dateStr);
-        const isToday = dateStr === todayStr;
-        const isPast = dateStr < todayStr;
+        const isToday = todayStr ? dateStr === todayStr : false;
+        const isPast = todayStr ? dateStr < todayStr : false;
         const wd = getWeekdayIndex(dateStr);
         const isWeekdayA = wd >= 0 && wd <= 4 && wd % 2 === 0; // Pon=0, Śr=2, Pt=4
         const isBlocked = blockedRanges?.some(
@@ -1820,7 +1820,7 @@ export function TapeChart({
                 ),
             },
           });
-        } else {
+        } else if (!result.success) {
           toast.error(result.error ?? "Błąd tworzenia faktury zbiorczej");
         }
       } finally {

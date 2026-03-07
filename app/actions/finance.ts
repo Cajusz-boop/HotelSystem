@@ -5563,7 +5563,7 @@ export async function getInvoicesForReservations(
         issuedAt: i.issuedAt.toISOString(),
         invoiceType: i.invoiceType ?? "NORMAL",
         advanceInvoiceId: i.advanceInvoiceId,
-        room: i.reservation?.room ?? "—",
+        room: (i.reservation?.room as { number: string } | null)?.number ?? "—",
       });
     }
     for (const i of consolidatedInvoices) {
@@ -6018,7 +6018,7 @@ export async function getInvoicePreviewData(
     const vatRate = Number(invoice.vatRate);
     const roomLabel = (template.roomProductName?.trim() || "Nocleg") as string;
     const defaultUnit = template.defaultUnit || "szt.";
-    const TYPE_LABELS = { ...TYPE_LABELS_BASE, ROOM: roomLabel };
+    const TYPE_LABELS: Record<string, string> = { ...TYPE_LABELS_BASE, ROOM: roomLabel };
 
     const lineItems: InvoicePreviewLineItem[] = [];
 

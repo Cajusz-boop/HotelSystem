@@ -167,7 +167,7 @@ export function InvoicePreviewPage({ id }: InvoicePreviewPageProps) {
             grossAmount: item.grossAmount,
           }))
         );
-      } else {
+      } else if (!r.success) {
         setError(r.error ?? "Błąd ładowania danych");
       }
       setLoading(false);

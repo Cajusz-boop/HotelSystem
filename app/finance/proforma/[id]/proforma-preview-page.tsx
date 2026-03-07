@@ -168,7 +168,7 @@ export function ProformaPreviewPage({ id }: ProformaPreviewPageProps) {
             grossAmount: item.grossAmount,
           }))
         );
-      } else {
+      } else if (!r.success) {
         setError(r.error ?? "Błąd ładowania danych");
       }
       setLoading(false);
@@ -420,7 +420,61 @@ export function ProformaPreviewPage({ id }: ProformaPreviewPageProps) {
     </div>
   );
 
-  const commonProps = {
+  const commonProps: {
+    placeOfIssue: string;
+    setPlaceOfIssue: (v: string) => void;
+    issueDate: string;
+    setIssueDate: (v: string) => void;
+    deliveryDate: string;
+    setDeliveryDate: (v: string) => void;
+    buyerName: string;
+    setBuyerName: (v: string) => void;
+    buyerNip: string;
+    setBuyerNip: (v: string) => void;
+    buyerAddress: string;
+    setBuyerAddress: (v: string) => void;
+    buyerPostalCode: string;
+    setBuyerPostalCode: (v: string) => void;
+    buyerCity: string;
+    setBuyerCity: (v: string) => void;
+    paymentMethod: string;
+    setPaymentMethod: (v: string) => void;
+    paymentDays: string;
+    setPaymentDays: (v: string) => void;
+    notes: string;
+    setNotes: (v: string) => void;
+    footerText: string;
+    setFooterText: (v: string) => void;
+    thanksText: string;
+    setThanksText: (v: string) => void;
+    sellerName: string;
+    setSellerName: (v: string) => void;
+    sellerAddress: string;
+    setSellerAddress: (v: string) => void;
+    sellerPostalCity: string;
+    setSellerPostalCity: (v: string) => void;
+    sellerNip: string;
+    setSellerNip: (v: string) => void;
+    sellerPhone: string;
+    setSellerPhone: (v: string) => void;
+    sellerEmail: string;
+    setSellerEmail: (v: string) => void;
+    sellerBank: string;
+    setSellerBank: (v: string) => void;
+    sellerAccount: string;
+    setSellerAccount: (v: string) => void;
+    lineItems: EditableLineItem[];
+    updateLineItem: (idx: number, patch: Partial<EditableLineItem>) => void;
+    addLineItem: () => void;
+    removeLineItem: (idx: number) => void;
+    totalNet: number;
+    totalVat: number;
+    totalGross: number;
+    vatSummary: Record<string, { net: number; vat: number; gross: number }>;
+    dueDateStr: string;
+    nipLookupLoading?: boolean;
+    onNipLookup?: () => void;
+  } = {
     placeOfIssue,
     setPlaceOfIssue,
     issueDate,
@@ -575,7 +629,60 @@ function ProformaContent({
   editable: boolean;
   variantLabel?: string;
   setDocumentVariant?: (v: string) => void;
-} & Record<string, unknown>) {
+  placeOfIssue: string;
+  setPlaceOfIssue: (v: string) => void;
+  issueDate: string;
+  setIssueDate: (v: string) => void;
+  deliveryDate: string;
+  setDeliveryDate: (v: string) => void;
+  buyerName: string;
+  setBuyerName: (v: string) => void;
+  buyerNip: string;
+  setBuyerNip: (v: string) => void;
+  buyerAddress: string;
+  setBuyerAddress: (v: string) => void;
+  buyerPostalCode: string;
+  setBuyerPostalCode: (v: string) => void;
+  buyerCity: string;
+  setBuyerCity: (v: string) => void;
+  paymentMethod: string;
+  setPaymentMethod: (v: string) => void;
+  paymentDays: string;
+  setPaymentDays: (v: string) => void;
+  notes: string;
+  setNotes: (v: string) => void;
+  footerText: string;
+  setFooterText: (v: string) => void;
+  thanksText: string;
+  setThanksText: (v: string) => void;
+  sellerName: string;
+  setSellerName: (v: string) => void;
+  sellerAddress: string;
+  setSellerAddress: (v: string) => void;
+  sellerPostalCity: string;
+  setSellerPostalCity: (v: string) => void;
+  sellerNip: string;
+  setSellerNip: (v: string) => void;
+  sellerPhone: string;
+  setSellerPhone: (v: string) => void;
+  sellerEmail: string;
+  setSellerEmail: (v: string) => void;
+  sellerBank: string;
+  setSellerBank: (v: string) => void;
+  sellerAccount: string;
+  setSellerAccount: (v: string) => void;
+  lineItems: EditableLineItem[];
+  updateLineItem: (idx: number, patch: Partial<EditableLineItem>) => void;
+  addLineItem: () => void;
+  removeLineItem: (idx: number) => void;
+  totalNet: number;
+  totalVat: number;
+  totalGross: number;
+  vatSummary: Record<string, { net: number; vat: number; gross: number }>;
+  dueDateStr: string;
+  nipLookupLoading?: boolean;
+  onNipLookup?: () => void;
+}) {
   const UNIT_OPTS = UNIT_OPTIONS;
   const VAT_OPTS = VAT_OPTIONS;
   const DOC_VARIANTS = DOCUMENT_VARIANTS;

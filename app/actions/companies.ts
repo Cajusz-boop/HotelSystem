@@ -1,5 +1,6 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { lookupCompanyByNip as lookupFromWL } from "@/lib/nip-lookup";
 import { validateNipOrVat, isEuVat } from "@/lib/nip-vat-validate";
@@ -1578,7 +1579,7 @@ export async function createConsolidatedInvoice(data: {
           deliveryDate: new Date(),
           paymentDueDate: dueDate,
           paymentDays: termDays,
-          paymentBreakdown: null,
+          paymentBreakdown: Prisma.JsonNull,
           notes: notes ?? null,
           consolidatedStatus: "ISSUED",
           lineItems: {
