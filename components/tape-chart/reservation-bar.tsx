@@ -109,6 +109,8 @@ interface ReservationBarProps {
   barHeightPx?: number;
   /** Tylko w widoku Dzień – maksimum informacji na pasku */
   showFullInfo?: boolean;
+  /** Podświetlenie komórki pokoju przy najechaniu (pasek lub tooltip) */
+  onRoomHover?: (room: string | null) => void;
 }
 
 export function ReservationBar({
@@ -127,6 +129,7 @@ export function ReservationBar({
   barWidthPx,
   barHeightPx,
   showFullInfo = false,
+  onRoomHover,
 }: ReservationBarProps) {
   const shortName = shortGuestLabel(reservation.guestName, privacyMode);
   const displayName = showFullInfo && !privacyMode ? reservation.guestName : shortName;
@@ -282,13 +285,15 @@ export function ReservationBar({
     tooltipVisible && tooltipRect && typeof document !== "undefined"
       ? createPortal(
           <div
-            className="fixed z-[200] max-w-[320px] rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left shadow-lg"
+            className="fixed z-[200] max-w-[320px] rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-left shadow-lg pointer-events-auto"
             style={{
               left: Math.min(tooltipRect.left, window.innerWidth - 330),
               top: tooltipAbove ? tooltipRect.top - 8 : tooltipRect.bottom + 8,
               transform: tooltipAbove ? "translateY(-100%)" : "none",
             }}
             role="tooltip"
+            onMouseEnter={() => onRoomHover?.(reservation.room)}
+            onMouseLeave={() => onRoomHover?.(null)}
           >
             <div className="text-xs text-gray-800 space-y-1 font-medium max-w-[320px] break-words">
               {tooltipLines.map((line, i) => (
@@ -309,7 +314,7 @@ export function ReservationBar({
         data-testid="reservation-bar"
         data-reservation-id={reservation.id}
         className={cn(
-          "relative z-10 flex h-full w-full min-h-0 flex-col justify-center gap-0 text-xs leading-snug font-semibold text-white overflow-hidden antialiased transition-[filter] duration-150 hover:brightness-105",
+          "relative z-10 flex h-full w-full min-h-0 flex-col justify-center gap-0 text-xs leading-snug font-bold text-black overflow-hidden antialiased transition-[filter] duration-150 hover:brightness-105",
           RESERVATION_STATUS_COLORS[reservation.status],
           isPlaceholder && "border-2 border-dashed opacity-80",
           isDragging && "z-50 cursor-grabbing opacity-30",
@@ -329,8 +334,14 @@ export function ReservationBar({
           touchAction: "none",
         }}
         title={tooltipText}
-        onMouseEnter={showTooltip}
-        onMouseLeave={hideTooltip}
+        onMouseEnter={(e) => {
+          showTooltip();
+          onRoomHover?.(reservation.room);
+        }}
+        onMouseLeave={(e) => {
+          hideTooltip();
+          onRoomHover?.(null);
+        }}
         {...listeners}
         {...attributes}
       >
@@ -348,17 +359,17 @@ export function ReservationBar({
               !barHeightPx && "text-xs"
             )}
             style={{
-              textShadow: "0 1px 3px rgba(0,0,0,0.4)",
+              textShadow: "0 0 1px rgba(255,255,255,0.6)",
               ...(barHeightPx != null && barHeightPx > 0 && {
                 fontSize: `${Math.max(9, Math.min(16, Math.round(barHeightPx * 0.48)))}px`,
               }),
             }}
           >
-            {reservation.vip && <Star className="inline h-2.5 w-2.5 mr-0.5 text-yellow-300 fill-yellow-300 align-middle shrink-0" aria-label="VIP" />}
+            {reservation.vip && <Star className="inline h-2.5 w-2.5 mr-0.5 text-amber-600 fill-amber-600 align-middle shrink-0" aria-label="VIP" />}
             {barLabel}
           </span>
           {firstLineNotes && (
-            <span className="block text-[10px] font-normal opacity-90 truncate px-1" title={reservation.notes ?? ""}>
+            <span className="block text-[10px] font-normal opacity-90 truncate px-1 text-black" title={reservation.notes ?? ""}>
               {firstLineNotes}{firstLineNotes.length >= 60 ? "…" : ""}
             </span>
           )}
@@ -367,7 +378,7 @@ export function ReservationBar({
         {reservation.notes && !reservation.notesVisibleOnChart && (
           <span title={`Uwagi: ${reservation.notes}`}>
             <StickyNote
-              className="absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-white/90 shrink-0"
+              className="absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-black shrink-0"
               aria-label="Ma uwagi"
             />
           </span>

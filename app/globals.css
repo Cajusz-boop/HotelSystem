@@ -198,6 +198,13 @@ body.print-preview-mode main.print-preview-main {
   border-radius: 4px;
 }
 
+/* Paski rezerwacji – wygładzona typografia */
+[data-testid="reservation-bar"] {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
 /* Thin scrollbar for sidebar */
 .scrollbar-thin {
   scrollbar-width: thin;
@@ -233,16 +240,24 @@ body.print-preview-mode main.print-preview-main {
 }
 
 /* ── KWHotel Tape Chart grid cells ────────────────── */
-.kw-cell-weekday-a {
-  background-color: hsl(var(--kw-weekday-a));
-}
+.kw-cell-weekday-a,
 .kw-cell-weekday-b {
-  background-color: hsl(var(--kw-weekday-b));
+  background-color: white;
 }
 .kw-cell-saturday {
   background-color: hsl(var(--kw-saturday));
 }
 .kw-cell-sunday {
+  background-color: hsl(var(--kw-sunday));
+}
+.dark .kw-cell-weekday-a,
+.dark .kw-cell-weekday-b {
+  background-color: hsl(var(--background));
+}
+.dark .kw-cell-saturday {
+  background-color: hsl(var(--kw-saturday));
+}
+.dark .kw-cell-sunday {
   background-color: hsl(var(--kw-sunday));
 }
 .kw-cell-today {
@@ -251,11 +266,14 @@ body.print-preview-mode main.print-preview-main {
 .kw-cell-past {
   background-color: hsl(var(--kw-past));
 }
-/* Pasek z dniami i datami – ciemniejsze tło, spójne z resztą */
+/* Pasek z dniami i datami – jasne niebieskie tło nagłówka */
 .kw-date-header-row {
-  background: hsl(var(--kw-date-header-bg)) !important;
+  background: hsl(213 60% 92%) !important;
   box-shadow: 0 2px 6px hsl(var(--kw-grid-border) / 0.4);
   border-bottom: 2px solid hsl(var(--kw-grid-border)) !important;
+}
+.dark .kw-date-header-row {
+  background: hsl(213 40% 22%) !important;
 }
 .kw-header-today {
   background: linear-gradient(to bottom, hsl(48 95% 85%), hsl(var(--kw-today-bg)));
@@ -263,41 +281,32 @@ body.print-preview-mode main.print-preview-main {
   font-weight: 800;
   color: hsl(215 30% 12%);
 }
-.kw-header-saturday {
-  background-color: hsl(213 50% 82%);
-  color: hsl(213 75% 28%);
-  font-weight: 600;
-}
+.kw-header-saturday,
 .kw-header-sunday {
-  background-color: hsl(0 50% 88%);
-  color: hsl(0 75% 35%);
+  background-color: hsl(213 60% 92%);
+  color: hsl(var(--foreground) / 0.92);
   font-weight: 600;
 }
-.kw-header-weekday-a {
-  background-color: hsl(var(--kw-weekday-a));
-  color: hsl(var(--foreground) / 0.92);
-  font-weight: 500;
-}
-.kw-header-weekday-b {
-  background-color: hsl(var(--kw-weekday-b));
-  color: hsl(var(--foreground) / 0.92);
-  font-weight: 500;
-}
+.kw-header-weekday-a,
+.kw-header-weekday-b,
 .kw-header-default {
-  background-color: hsl(var(--kw-date-header-bg));
+  background-color: hsl(213 60% 92%);
   color: hsl(var(--foreground) / 0.92);
   font-weight: 500;
+}
+.dark .kw-header-weekday-a,
+.dark .kw-header-weekday-b,
+.dark .kw-header-default {
+  background-color: hsl(213 40% 22%);
+  color: hsl(var(--foreground) / 0.92);
 }
 .dark .kw-header-today {
   background: hsl(var(--kw-today-bg));
 }
-.dark .kw-header-saturday {
-  background-color: hsl(var(--kw-saturday));
-  color: hsl(213 70% 55%);
-}
+.dark .kw-header-saturday,
 .dark .kw-header-sunday {
-  background-color: hsl(var(--kw-sunday));
-  color: hsl(0 70% 55%);
+  background-color: hsl(213 40% 22%);
+  color: hsl(var(--foreground) / 0.92);
 }
 .kw-today-column {
   background-color: hsl(var(--kw-today-bg) / 0.4);

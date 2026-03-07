@@ -76,6 +76,14 @@ import { TapeChartOverviewBar } from "./tape-chart-overview-bar";
 import type { UnifiedReservationTab, CreateReservationContext } from "./unified-reservation-dialog";
 import type { QuickStatsTab } from "./quick-stats-dialog";
 
+/** Porównanie numerów pokoi – "5" i "005" traktowane jako ten sam pokój */
+function roomNumbersMatch(a: string | null, b: string): boolean {
+  if (!a) return false;
+  const na = a.replace(/^0+/, "") || "0";
+  const nb = b.replace(/^0+/, "") || "0";
+  return na === nb;
+}
+
 const UnifiedReservationDialog = dynamic(() => import("./unified-reservation-dialog").then((m) => m.UnifiedReservationDialog), { ssr: false });
 const GroupReservationSheet = dynamic(() => import("./group-reservation-sheet").then((m) => m.GroupReservationSheet), { ssr: false });
 const RoomBlockSheet = dynamic(() => import("./room-block-sheet").then((m) => m.RoomBlockSheet), { ssr: false });
@@ -162,6 +170,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   todayStr,
   dragOverTarget,
   dragNights,
+  labelHighlighted,
 }: {
   room: Room;
   rowIdx: number;
@@ -190,6 +199,8 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   todayStr?: string;
   dragOverTarget?: { roomNumber: string; dateStr: string } | null;
   dragNights?: number;
+  /** Podświetlenie komórki pokoju przy najechaniu na rezerwację (poza group) */
+  labelHighlighted?: boolean;
 }) {
   const isDirty = room.status === "DIRTY";
   const isFilteredToThis = showOnlyRoomNumber === room.number;
@@ -199,9 +210,10 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
     <div
       data-testid={`room-row-${room.number}`}
       className={cn(
-        "sticky left-0 z-[60] flex items-center gap-1 border-b border-r border-blue-500 px-1.5 py-0.5 bg-card transition-colors duration-150",
-        "group-hover:bg-blue-100 dark:group-hover:bg-blue-900/50",
+        "sticky left-0 z-[60] flex items-center gap-1 border-b border-r border-blue-500 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/40 transition-colors duration-150",
+        "group-hover:bg-blue-400 dark:group-hover:bg-blue-600",
         isDirty && "bg-amber-50/80 dark:bg-amber-950/30",
+        labelHighlighted && "!bg-blue-400 dark:!bg-blue-600",
         !previewMode && (onRoomLabelClick || onRoomBlock) && "cursor-pointer hover:bg-muted/50"
       )}
       style={{
@@ -276,6 +288,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
         const saturday = isSaturdayDate(dateStr);
         const sunday = isSundayDate(dateStr);
         const isToday = dateStr === todayStr;
+        const isPast = dateStr < todayStr;
         const wd = getWeekdayIndex(dateStr);
         const isWeekdayA = wd >= 0 && wd <= 4 && wd % 2 === 0; // Pon=0, Śr=2, Pt=4
         const isBlocked = blockedRanges?.some(
@@ -319,10 +332,11 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
             }}
             className={cn(
               "cursor-grab active:cursor-grabbing border-b border-r border-b-blue-500 border-r-white select-none",
-              isToday && "kw-cell-today",
-              !isToday && saturday && "kw-cell-saturday",
-              !isToday && sunday && "kw-cell-sunday",
-              !isToday && !saturday && !sunday && (isWeekdayA ? "kw-cell-weekday-a" : "kw-cell-weekday-b"),
+              isPast && "kw-cell-past",
+              !isPast && isToday && "kw-cell-today",
+              !isPast && !isToday && saturday && "kw-cell-saturday",
+              !isPast && !isToday && sunday && "kw-cell-sunday",
+              !isPast && !isToday && !saturday && !sunday && (isWeekdayA ? "kw-cell-weekday-a" : "kw-cell-weekday-b"),
               isBlocked && "bg-destructive/20 cursor-not-allowed opacity-70",
               isFocused && "ring-2 ring-inset ring-primary bg-primary/10",
               isDirty && "bg-amber-50/80 dark:bg-amber-950/30"
@@ -358,6 +372,7 @@ const RoomRowDroppable = memo(function RoomRowDroppable({
   if (prevProps.dragOverTarget?.roomNumber !== nextProps.dragOverTarget?.roomNumber) return false;
   if (prevProps.dragOverTarget?.dateStr !== nextProps.dragOverTarget?.dateStr) return false;
   if (prevProps.selectionKey !== nextProps.selectionKey) return false;
+  if (prevProps.labelHighlighted !== nextProps.labelHighlighted) return false;
   return true;
 });
 
@@ -637,6 +652,8 @@ export function TapeChart({
   const [highlightedReservationId, setHighlightedReservationId] = useState<string | null>(
     () => initialHighlightReservationId ?? null
   );
+  /** Numer pokoju przy najechaniu na rezerwację – podświetla komórkę pokoju */
+  const [hoveredRoomForLabel, setHoveredRoomForLabel] = useState<string | null>(null);
   /** Lazy loading: doładowane dni w prawo (scroll). Reset przy zmianie widoku/daty. */
   const [extraDaysLoaded, setExtraDaysLoaded] = useState(0);
   /** Po mount – unika błędu hydratacji (virtualizer zwraca inny wynik na serwerze vs klient). */
@@ -2665,10 +2682,9 @@ export function TapeChart({
                 gridTemplateRows: `${HEADER_ROW_PX}px`,
                 minHeight: HEADER_ROW_PX,
                 maxHeight: HEADER_ROW_PX,
-                background: "hsl(var(--kw-date-header-bg))",
               }}
             >
-              <div className="flex items-center px-3 py-2.5 text-sm font-bold border-r border-blue-500">
+              <div className="flex items-center px-3 py-2.5 text-sm font-bold border-r border-blue-500 bg-blue-100 dark:bg-blue-900/40">
                 Pokój
               </div>
               {dates.map((dateStr) => {
@@ -2750,6 +2766,7 @@ export function TapeChart({
                       onShowAllRooms={showOnlyRoomNumber ? () => setShowOnlyRoomNumber(null) : undefined}
                       showOnlyRoomNumber={showOnlyRoomNumber}
                       todayStr={todayStr}
+                      labelHighlighted={roomNumbersMatch(hoveredRoomForLabel, room.number)}
                     >
                       <div
                         className="flex items-center gap-1.5 min-w-0 flex-1"
@@ -2922,6 +2939,7 @@ export function TapeChart({
                       gridColumnStart={0}
                       gridColumnEnd={0}
                       privacyMode={privacyMode}
+                      onRoomHover={(room) => setHoveredRoomForLabel(room)}
                       isDragging={activeDragReservation?.id === reservation.id}
                       pricePerNight={pricePerNight}
                       totalAmount={totalAmount}

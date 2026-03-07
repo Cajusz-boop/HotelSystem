@@ -79,6 +79,8 @@ interface ReservationBarWithMenuProps {
   onCreateConsolidatedInvoice?: (primaryReservation: Reservation) => void;
   /** Wywoływane gdy menu kontekstowe się zamknie – pozwala tłumić fałszywe kliki edycji */
   onContextMenuClose?: () => void;
+  /** Podświetlenie komórki pokoju przy najechaniu na pasek/tooltip */
+  onRoomHover?: (room: string | null) => void;
 }
 
 export function ReservationBarWithMenu({
@@ -111,6 +113,7 @@ export function ReservationBarWithMenu({
   onClearSelection,
   onCreateConsolidatedInvoice,
   onContextMenuClose,
+  onRoomHover,
 }: ReservationBarWithMenuProps) {
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartPos = useRef<{ x: number; y: number } | null>(null);
@@ -491,6 +494,7 @@ export function ReservationBarWithMenu({
             barWidthPx={barWidthPx}
             barHeightPx={barHeightPx}
             showFullInfo={showFullInfo}
+            onRoomHover={onRoomHover}
           />
           {canResize && (
             <>

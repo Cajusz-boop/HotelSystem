@@ -511,7 +511,7 @@ async function generateProformaHtml(id: string, variant: string | null): Promise
   const bodyContent = html.substring(html.indexOf('  <div class="header-row">'), noPrintIdx);
   const kopiaContent = bodyContent.replace("oryginał</h1>", "kopia</h1>");
   if (variant === "copy") {
-    const beforeBody = html.substring(0, html.indexOf("  <div class="header-row">"));
+    const beforeBody = html.substring(0, html.indexOf('  <div class="header-row">'));
     const afterBody = html.substring(noPrintIdx);
     return beforeBody + kopiaContent + "\n  " + afterBody;
   }
