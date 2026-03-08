@@ -160,6 +160,9 @@ export async function POST(request: NextRequest) {
     });
 
     res.cookies.set(COOKIE_NAME, session.value, session.options);
+    if (process.env.NODE_ENV === "production") {
+      console.log("[pin-login] OK", { userId: user.id, secure: session.options.secure });
+    }
 
     return res;
   } catch (e) {

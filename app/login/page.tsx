@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,8 +18,6 @@ type UserItem = {
 };
 
 export default function LoginPage() {
-  const router = useRouter();
-
   const [users, setUsers] = useState<UserItem[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [usersError, setUsersError] = useState<string | null>(null);
@@ -43,7 +40,7 @@ export default function LoginPage() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    fetch("/api/auth/users", { signal: controller.signal, cache: "no-store" })
+    fetch("/api/auth/users", { signal: controller.signal, cache: "no-store", credentials: "include" })
       .then((r) => {
         if (!r.ok) throw new Error(r.status === 500 ? "Błąd serwera" : `Błąd ${r.status}`);
         return r.json();
@@ -116,12 +113,20 @@ export default function LoginPage() {
     setPinError("");
 
     try {
+      if (typeof window !== "undefined") {
+        console.log("[Login] 1. Before auth call", { userId: selectedUser.id });
+      }
       const res = await fetch("/api/auth/pin-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: selectedUser.id, pin }),
+        credentials: "include",
       });
       const data = await res.json();
+
+      if (typeof window !== "undefined") {
+        console.log("[Login] 2. Auth response", { ok: res.ok, status: res.status, hasSetCookie: !!res.headers.get("set-cookie") });
+      }
 
       if (!res.ok) {
         setPinError(data.error ?? "Błąd logowania");
@@ -129,19 +134,23 @@ export default function LoginPage() {
         return;
       }
 
-      // BUG 1: Redirect BEFORE closePinDialog to avoid re-render interrupting navigation
+      if (typeof window !== "undefined") {
+        console.log("[Login] 3. Success, redirecting to /front-office");
+      }
       toast.success(`Zalogowano jako ${selectedUser.name}`);
-      router.push("/front-office");
-      router.refresh();
-      // Don't call closePinDialog() - page will change anyway
-    } catch {
+      setPinDialogOpen(false);
+      window.location.assign("/front-office");
+    } catch (e) {
+      if (typeof window !== "undefined") {
+        console.error("[Login] Error:", e);
+      }
       setPinError("Błąd połączenia");
       setPin("");
     } finally {
       setPinLoading(false);
       isSubmittingRef.current = false;
     }
-  }, [selectedUser, pin, router]);
+  }, [selectedUser, pin]);
 
   // BUG 7: Auto-submit with guard check
   useEffect(() => {

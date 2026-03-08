@@ -314,7 +314,7 @@ export function ReservationBar({
         data-testid="reservation-bar"
         data-reservation-id={reservation.id}
         className={cn(
-          "relative z-10 flex h-full w-full min-h-0 flex-col justify-center gap-0 text-xs leading-snug font-bold text-black overflow-hidden antialiased transition-[filter] duration-150 hover:brightness-105",
+          "relative z-10 flex h-full w-full min-h-0 flex-col justify-center gap-0 text-xs leading-snug text-black overflow-hidden antialiased transition-[filter] duration-150 hover:brightness-105",
           RESERVATION_STATUS_COLORS[reservation.status],
           isPlaceholder && "border-2 border-dashed opacity-80",
           isDragging && "z-50 cursor-grabbing opacity-30",

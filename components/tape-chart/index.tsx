@@ -1,7 +1,6 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import {
@@ -657,8 +656,6 @@ export function TapeChart({
   /** Lazy loading: doładowane dni w prawo (scroll). Reset przy zmianie widoku/daty. */
   const [extraDaysLoaded, setExtraDaysLoaded] = useState(0);
   /** Po mount – unika błędu hydratacji (virtualizer zwraca inny wynik na serwerze vs klient). */
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
 
   const currentViewConfig = VIEW_SCALE_CONFIG[viewScale];
   const zoomMultiplier = ZOOM_LEVELS[zoomIndex];
@@ -2103,22 +2100,15 @@ export function TapeChart({
     ? `${EVENTS_ROW_PX}px ${HEADER_ROW_PX}px repeat(${displayRooms.length}, ${effectiveRowHeightPx}px)`
     : `${HEADER_ROW_PX}px repeat(${displayRooms.length}, ${effectiveRowHeightPx}px)`;
 
-  const rowVirtualizer = useVirtualizer({
-    count: displayRooms.length,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => effectiveRowHeightPx,
-    overscan: 12,
-    paddingStart: totalHeaderPx,
-  });
-
-  const virtualRows = rowVirtualizer.getVirtualItems();
-  const visibleRowSet = useMemo(() => {
-    return new Set(virtualRows.map((v) => v.index + 1 + headerRowCount));
-  }, [virtualRows, headerRowCount]);
-  const visiblePlacements = useMemo(
-    () => reservationPlacements.filter((p) => visibleRowSet.has(p.gridRow)),
-    [reservationPlacements, visibleRowSet]
-  );
+  const placementsByRoom = useMemo(() => {
+    const map = new Map<string, typeof reservationPlacements>();
+    reservationPlacements.forEach((p) => {
+      const list = map.get(p.reservation.room) ?? [];
+      list.push(p);
+      map.set(p.reservation.room, list);
+    });
+    return map;
+  }, [reservationPlacements]);
 
   const totalGridWidthPx = ROOM_LABEL_WIDTH_PX + dates.length * effectiveColumnWidthPx;
   const totalRowHeightPx = displayRooms.length * effectiveRowHeightPx;
@@ -2634,14 +2624,21 @@ export function TapeChart({
             ref={gridWrapperRef}
             data-grid-draggable
             className="relative w-full min-w-max cursor-grab active:cursor-grabbing"
-            style={{ height: rowVirtualizer.getTotalSize(), minWidth: totalGridWidthPx }}
+            style={{
+              display: "grid",
+              gridTemplateColumns: gridColumns,
+              gridTemplateRows: hasEvents
+                ? `${EVENTS_ROW_PX}px ${HEADER_ROW_PX}px repeat(${displayRooms.length}, minmax(${effectiveRowHeightPx}px, auto))`
+                : `${HEADER_ROW_PX}px repeat(${displayRooms.length}, minmax(${effectiveRowHeightPx}px, auto))`,
+              minWidth: totalGridWidthPx,
+            }}
             onMouseDown={handleGridMouseDownMerged}
           >
             {/* Wiersz wydarzeń – nad nagłówkiem dat */}
             {initialEvents && initialEvents.length > 0 && (
               <div
-                className="sticky top-0 z-[61] flex h-6 border-b bg-muted/50"
-                style={{ minWidth: totalGridWidthPx }}
+                className="sticky top-0 z-[61] flex h-6 border-b bg-muted/50 col-span-full"
+                style={{ minWidth: totalGridWidthPx, gridRow: 1 }}
               >
                 <div className="flex-shrink-0 text-xs text-muted-foreground px-2 flex items-center border-r border-blue-500" style={{ width: ROOM_LABEL_WIDTH_PX }}>
                   Wydarzenia
@@ -2675,9 +2672,10 @@ export function TapeChart({
             )}
             {/* Sticky header: corner + date columns */}
             <div
-              className="kw-date-header-row sticky z-[60] grid w-full min-w-max border-b-2 border-b-blue-500"
+              className="kw-date-header-row sticky z-[60] grid w-full min-w-max border-b-2 border-b-blue-500 col-span-full"
               style={{
                 top: initialEvents?.length ? EVENTS_ROW_PX : 0,
+                gridRow: hasEvents ? 2 : 1,
                 gridTemplateColumns: gridColumns,
                 gridTemplateRows: `${HEADER_ROW_PX}px`,
                 minHeight: HEADER_ROW_PX,
@@ -2709,31 +2707,24 @@ export function TapeChart({
               })}
             </div>
 
-            {/* Virtualized room rows – render dopiero po mount (unika hydratacji: virtualizer inny na SSR) */}
-            <div
-              className="relative w-full"
-              style={{ height: totalRowHeightPx }}
-            >
-              {mounted && virtualRows.map((virtualRow) => {
-                const room = displayRooms[virtualRow.index];
-                if (!room) return null;
-                return (
-                  <div
-                    key={`${room.number}-${room.status}-${virtualRow.key}`}
-                    data-index={virtualRow.index}
-                    data-room-row
-                    ref={rowVirtualizer.measureElement}
-                    className="group absolute left-0 grid w-full min-w-max"
-                    style={{
-                      top: virtualRow.start - totalHeaderPx,
-                      height: virtualRow.size,
-                      gridTemplateColumns: gridColumns,
-                      gridTemplateRows: "1fr",
-                    }}
-                  >
+            {/* Room rows – CSS Grid, bez virtualizacji (zoom-safe) */}
+            {displayRooms.map((room, index) => (
+              <div
+                key={`${room.number}-${room.status}-${index}`}
+                data-index={index}
+                data-room-row
+                className="group grid w-full min-w-max col-span-full"
+                style={{
+                  gridRow: index + (hasEvents ? 2 : 1) + 1,
+                  display: "grid",
+                  gridTemplateColumns: gridColumns,
+                  gridTemplateRows: "1fr",
+                  minHeight: effectiveRowHeightPx,
+                }}
+              >
                     <RoomRowDroppable
                       room={room}
-                      rowIdx={virtualRow.index}
+                      rowIdx={index}
                       dates={dates}
                       columnWidthPx={effectiveColumnWidthPx}
                       rowHeightPx={effectiveRowHeightPx}
@@ -2743,7 +2734,7 @@ export function TapeChart({
                         endDate: block.endDate,
                         reason: block.reason,
                       }))}
-                      focusedDateIdx={focusedCell?.roomIdx === virtualRow.index ? focusedCell.dateIdx : undefined}
+                      focusedDateIdx={focusedCell?.roomIdx === index ? focusedCell.dateIdx : undefined}
                       previewMode={previewMode}
                       dragOverTarget={dragOverTarget}
                       dragNights={dragNights}
@@ -2786,10 +2777,150 @@ export function TapeChart({
                       </div>
                       <RoomStatusIcon status={room.status} showLabel={false} compact />
                     </RoomRowDroppable>
+                    {(placementsByRoom.get(room.number) ?? []).map(({ reservation, gridColumnStart, gridColumnEnd, barLeftPercent, barWidthPercent }) => {
+                      const priceKey = `${reservation.room}-${reservation.checkIn}`;
+                      const pricePerNight =
+                        reservation.rateCodePrice ??
+                        effectivePricesMap[priceKey] ??
+                        room?.price;
+                      const nights = Math.round(
+                        (new Date(reservation.checkOut).getTime() - new Date(reservation.checkIn).getTime()) /
+                          (24 * 60 * 60 * 1000)
+                      );
+                      const totalAmount =
+                        pricePerNight != null && pricePerNight > 0 ? nights * pricePerNight : undefined;
+                      const barHeightPx = effectiveRowHeightPx;
+                      const barWidthPx = Math.round(barWidthPercent * (gridColumnEnd - gridColumnStart) * effectiveColumnWidthPx);
+                      const reservationSource = reservation.rateCodeName ?? reservation.rateCode ?? "Recepcja";
+                      const sourceColor = sourceColors.get(reservationSource);
+                      const effectiveStatusBg = colorMode === "source" && sourceColor
+                        ? { [reservation.status]: sourceColor }
+                        : statusBg ?? undefined;
+                      return (
+                        <div
+                          key={reservation.id}
+                          className={cn(
+                            "overflow-hidden flex items-center relative pointer-events-none",
+                            previewMode ? "cursor-default" : "cursor-grab active:cursor-grabbing",
+                            highlightedReservationId === reservation.id && "ring-2 ring-primary rounded-md z-10",
+                            selectedReservationIds.has(reservation.id) && "ring-2 ring-amber-500 rounded-md"
+                          )}
+                          data-highlighted-reservation={highlightedReservationId === reservation.id ? "true" : undefined}
+                          data-selected={selectedReservationIds.has(reservation.id) ? "true" : undefined}
+                          data-reservation-id={reservation.id}
+                          style={{
+                            gridColumn: `${gridColumnStart} / ${gridColumnEnd}`,
+                            gridRow: 1,
+                            alignSelf: "stretch",
+                            minHeight: barHeightPx,
+                            marginBottom: -1,
+                            zIndex: 10,
+                          }}
+                        >
+                          <div
+                            className={cn(
+                              "absolute inset-y-0 flex items-stretch",
+                              isSelecting ? "pointer-events-none" : "pointer-events-auto"
+                            )}
+                            style={{ left: `${(barLeftPercent ?? 0) * 100}%`, width: `${barWidthPercent * 100}%`, minWidth: 0 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (wasPanningRef.current) return;
+                              if (Date.now() - contextMenuClosedAtRef.current < 200) return;
+                              if (previewMode) return;
+                              if (activeDragReservation?.id !== reservation.id) {
+                                if (e.detail === 2) {
+                                  setSelectedReservationIds(new Set());
+                                  setSelectedReservation(reservation);
+                                  setEditInitialTab("rozliczenie");
+                                  setSheetOpen(true);
+                                  setHighlightedReservationId(null);
+                                  return;
+                                }
+                                if (e.detail === 1) {
+                                  if (e.ctrlKey || e.metaKey) {
+                                    setSelectedReservationIds((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(reservation.id)) next.delete(reservation.id);
+                                      else next.add(reservation.id);
+                                      return next;
+                                    });
+                                  } else {
+                                    setSelectedReservation(reservation);
+                                    setEditInitialTab(undefined);
+                                    setSheetOpen(true);
+                                    setHighlightedReservationId(null);
+                                    if (!selectedReservationIds.has(reservation.id)) setSelectedReservationIds(new Set());
+                                  }
+                                }
+                              }
+                            }}
+                          >
+                            <ReservationBarWithMenu
+                              reservation={reservation}
+                              gridRow={0}
+                              gridColumnStart={0}
+                              gridColumnEnd={0}
+                              privacyMode={privacyMode}
+                              onRoomHover={(r) => setHoveredRoomForLabel(r)}
+                              isDragging={activeDragReservation?.id === reservation.id}
+                              pricePerNight={pricePerNight}
+                              totalAmount={totalAmount}
+                              dates={dates}
+                              getDateFromClientX={getDateFromClientX}
+                              onResize={handleResize}
+                              onSplitClick={(r) => setSplitDialogReservation(r)}
+                              statusBg={effectiveStatusBg}
+                              hasConflict={conflictingReservationIds.has(reservation.id)}
+                              isCheckInToday={reservation.checkIn === todayStr && reservation.status === "CONFIRMED"}
+                              barWidthPx={barWidthPx}
+                              barHeightPx={barHeightPx}
+                              showFullInfo={viewScale === "day"}
+                              onEdit={(r, initialTab) => {
+                                setSelectedReservation(r);
+                                setEditInitialTab(initialTab ?? "rozliczenie");
+                                setSheetOpen(true);
+                              }}
+                              onStatusChange={(updated) =>
+                                setReservations((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+                              }
+                              onDuplicate={(r) => {
+                                setNewReservationContext({
+                                  roomNumber: r.room,
+                                  checkIn: r.checkIn,
+                                  checkOut: r.checkOut,
+                                  guestName: r.guestName,
+                                  pax: r.pax,
+                                  notes: r.notes ? `(Kopia) ${r.notes}` : "(Kopia)",
+                                  rateCodeId: r.rateCodeId,
+                                });
+                                setCreateSheetOpen(true);
+                              }}
+                              onEditGroup={handleEditGroup}
+                              onExtendStay={async (r, newCheckOut) => {
+                                const { updateReservation } = await import("@/app/actions/reservations");
+                                const result = await updateReservation(r.id, { checkOut: newCheckOut });
+                                if (result?.success && result?.data) {
+                                  setReservations((prev) =>
+                                    prev.map((res) => (res.id === r.id ? { ...res, checkOut: newCheckOut } : res))
+                                  );
+                                  toast.success(`Pobyt przedłużony do ${newCheckOut}`);
+                                } else if ("error" in result) {
+                                  toast.error(result.error ?? "Błąd przedłużania pobytu");
+                                }
+                              }}
+                              selectedReservationIds={selectedReservationIds}
+                              primaryReservationForInvoice={primaryReservationForInvoice}
+                              onClearSelection={() => setSelectedReservationIds(new Set())}
+                              onCreateConsolidatedInvoice={handleCreateConsolidatedInvoiceRequest}
+                              onContextMenuClose={() => { contextMenuClosedAtRef.current = Date.now(); }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
+            ))}
 
             {/* KWHotel: pionowe linie siatki na ŚRODKU każdej kolumny dnia (południe = granica doby). Linia widoczna w przerwach między kafelkami, zasłaniana przez kafelki (z-index niższy). */}
             <div
@@ -2834,173 +2965,7 @@ export function TapeChart({
               </>
             )}
 
-            {/* Reservation bars – overlay, tylko widoczne wiersze (po mount, unika hydratacji).
-                Kontener ma pointer-events-none, paski pointer-events-auto. Podczas prostokątnego zaznaczania
-                (isSelecting) paski dostają pointer-events-none, żeby elementsFromPoint trafił w CellDroppable. */}
-            <div
-              className="absolute inset-0 pointer-events-none overflow-visible"
-              style={{ zIndex: 50, gridTemplateColumns: gridColumns, gridTemplateRows: gridRows, display: "grid" }}
-            >
-              {mounted && visiblePlacements.map(({ reservation, gridRow, gridColumnStart, gridColumnEnd, barLeftPercent, barWidthPercent }) => {
-                  const room = roomByNumber.get(reservation.room);
-                  const priceKey = `${reservation.room}-${reservation.checkIn}`;
-                  const pricePerNight =
-                    reservation.rateCodePrice ??
-                    effectivePricesMap[priceKey] ??
-                    room?.price;
-                  const nights = Math.round(
-                    (new Date(reservation.checkOut).getTime() -
-                      new Date(reservation.checkIn).getTime()) /
-                      (24 * 60 * 60 * 1000)
-                  );
-                  const totalAmount =
-                    pricePerNight != null && pricePerNight > 0
-                      ? nights * pricePerNight
-                      : undefined;
-                  const barHeightPx = effectiveRowHeightPx;
-                  const barWidthPx = Math.round(barWidthPercent * (gridColumnEnd - gridColumnStart) * effectiveColumnWidthPx);
-                  // Source-based coloring
-                  const reservationSource = reservation.rateCodeName ?? reservation.rateCode ?? "Recepcja";
-                  const sourceColor = sourceColors.get(reservationSource);
-                  const effectiveStatusBg = colorMode === "source" && sourceColor
-                    ? { [reservation.status]: sourceColor }
-                    : statusBg ?? undefined;
-                  return (
-                  <div
-                    key={reservation.id}
-                    className={cn(
-                      "overflow-hidden flex items-center relative pointer-events-none",
-                      previewMode ? "cursor-default" : "cursor-grab active:cursor-grabbing",
-                      highlightedReservationId === reservation.id &&
-                        "ring-2 ring-primary rounded-md z-10",
-                      selectedReservationIds.has(reservation.id) &&
-                        "ring-2 ring-amber-500 rounded-md"
-                    )}
-                    data-highlighted-reservation={
-                      highlightedReservationId === reservation.id ? "true" : undefined
-                    }
-                    data-selected={selectedReservationIds.has(reservation.id) ? "true" : undefined}
-                    data-reservation-id={reservation.id}
-                    style={{
-                      gridColumn: `${gridColumnStart} / ${gridColumnEnd}`,
-                      gridRow,
-                      alignSelf: "stretch",
-                      minHeight: barHeightPx,
-                      marginBottom: -1,
-                    }}
-                  >
-                    <div
-                      className={cn(
-                        "absolute inset-y-0 flex items-stretch",
-                        isSelecting ? "pointer-events-none" : "pointer-events-auto"
-                      )}
-                      style={{ left: `${(barLeftPercent ?? 0) * 100}%`, width: `${barWidthPercent * 100}%`, minWidth: 0 }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (wasPanningRef.current) return;
-                        if (Date.now() - contextMenuClosedAtRef.current < 200) return;
-                        if (previewMode) return;
-                        if (activeDragReservation?.id !== reservation.id) {
-                          if (e.detail === 2) {
-                            setSelectedReservationIds(new Set());
-                            setSelectedReservation(reservation);
-                            setEditInitialTab("rozliczenie");
-                            setSheetOpen(true);
-                            setHighlightedReservationId(null);
-                            return;
-                          }
-                          if (e.detail === 1) {
-                            if (e.ctrlKey || e.metaKey) {
-                              setSelectedReservationIds((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(reservation.id)) {
-                                  next.delete(reservation.id);
-                                } else {
-                                  next.add(reservation.id);
-                                }
-                                return next;
-                              });
-                            } else {
-                              setSelectedReservation(reservation);
-                              setEditInitialTab(undefined);
-                              setSheetOpen(true);
-                              setHighlightedReservationId(null);
-                              if (!selectedReservationIds.has(reservation.id)) {
-                                setSelectedReservationIds(new Set());
-                              }
-                            }
-                          }
-                        }
-                      }}
-                    >
-                    <ReservationBarWithMenu
-                      reservation={reservation}
-                      gridRow={0}
-                      gridColumnStart={0}
-                      gridColumnEnd={0}
-                      privacyMode={privacyMode}
-                      onRoomHover={(room) => setHoveredRoomForLabel(room)}
-                      isDragging={activeDragReservation?.id === reservation.id}
-                      pricePerNight={pricePerNight}
-                      totalAmount={totalAmount}
-                      dates={dates}
-                      getDateFromClientX={getDateFromClientX}
-                      onResize={handleResize}
-                      onSplitClick={(r) => setSplitDialogReservation(r)}
-                      statusBg={effectiveStatusBg}
-                      hasConflict={conflictingReservationIds.has(reservation.id)}
-                      isCheckInToday={reservation.checkIn === todayStr && reservation.status === "CONFIRMED"}
-                      barWidthPx={barWidthPx}
-                      barHeightPx={barHeightPx}
-                      showFullInfo={viewScale === "day"}
-                      onEdit={(r, initialTab) => {
-                        setSelectedReservation(r);
-                        setEditInitialTab(initialTab ?? "rozliczenie");
-                        setSheetOpen(true);
-                      }}
-                      onStatusChange={(updated) => {
-                        setReservations((prev) =>
-                          prev.map((r) => (r.id === updated.id ? updated : r))
-                        );
-                      }}
-                      onDuplicate={(r) => {
-                        // Pre-fill create form with duplicated data
-                        setNewReservationContext({
-                          roomNumber: r.room,
-                          checkIn: r.checkIn,
-                          checkOut: r.checkOut,
-                          guestName: r.guestName,
-                          pax: r.pax,
-                          notes: r.notes ? `(Kopia) ${r.notes}` : "(Kopia)",
-                          rateCodeId: r.rateCodeId,
-                        });
-                        setCreateSheetOpen(true);
-                      }}
-                      onEditGroup={handleEditGroup}
-                      onExtendStay={async (r, newCheckOut) => {
-                        const { updateReservation } = await import("@/app/actions/reservations");
-                        const result = await updateReservation(r.id, { checkOut: newCheckOut });
-                        if (result?.success && result?.data) {
-                          setReservations((prev) =>
-                            prev.map((res) => (res.id === r.id ? { ...res, checkOut: newCheckOut } : res))
-                          );
-                          toast.success(`Pobyt przedłużony do ${newCheckOut}`);
-                        } else if ("error" in result) {
-                          toast.error(result.error ?? "Błąd przedłużania pobytu");
-                        }
-                      }}
-                      selectedReservationIds={selectedReservationIds}
-                      primaryReservationForInvoice={primaryReservationForInvoice}
-                      onClearSelection={() => setSelectedReservationIds(new Set())}
-                      onCreateConsolidatedInvoice={handleCreateConsolidatedInvoiceRequest}
-                      onContextMenuClose={() => { contextMenuClosedAtRef.current = Date.now(); }}
-                    />
-                    </div>
-                  </div>
-                );
-                })}
-              </div>
-            </div>
+            {/* Paski rezerwacji są wewnątrz virtualizowanych wierszy (placementsByRoom) – jeden system pozycjonowania */}
             {/* Sentinel dla lazy loading: przy scrollu w prawo doładowujemy kolejne dni */}
             <div
               ref={sentinelRef}
@@ -3011,6 +2976,7 @@ export function TapeChart({
                 pointerEvents: "none",
               }}
             />
+          </div>
             <DragOverlay dropAnimation={null}>
               {activeDragReservation ? (() => {
                 const res = activeDragReservation;
