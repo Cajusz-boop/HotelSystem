@@ -128,11 +128,13 @@ export async function createChecklistDoc(
   });
   const docId = createRes.data.documentId!;
 
-  if (process.env.GOOGLE_DOCS_FOLDER_ID) {
+  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID ?? process.env.GOOGLE_DOCS_FOLDER_ID;
+  if (folderId) {
     try {
       await drive.files.update({
         fileId: docId,
-        addParents: process.env.GOOGLE_DOCS_FOLDER_ID,
+        addParents: folderId,
+        removeParents: "root",
         fields: "id, parents",
       });
     } catch (err) {
@@ -165,15 +167,17 @@ export async function createMenuDoc(
   const createRes = await docs.documents.create({ requestBody: { title } });
   const docId = createRes.data.documentId!;
 
-  if (process.env.GOOGLE_DOCS_FOLDER_ID) {
+  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID ?? process.env.GOOGLE_DOCS_FOLDER_ID;
+  if (folderId) {
     try {
       await drive.files.update({
         fileId: docId,
-        addParents: process.env.GOOGLE_DOCS_FOLDER_ID,
+        addParents: folderId,
+        removeParents: "root",
         fields: "id, parents",
       });
-    } catch {
-      // ignoruj
+    } catch (err) {
+      console.warn("Nie udało się przenieść dokumentu do folderu:", err);
     }
   }
 

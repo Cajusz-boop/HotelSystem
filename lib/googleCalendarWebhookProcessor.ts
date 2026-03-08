@@ -1,5 +1,5 @@
 /**
- * Przetwarzanie zdarzeń z webhooka Google Calendar → aktualizacja rezerwacji w bazie.
+ * Przetwarzanie zdarzeń z webhooka Google Calendar → aktualizacja EventOrder w bazie.
  */
 import { prisma } from "@/lib/db";
 
@@ -24,9 +24,9 @@ function parseDate(v: string | null | undefined): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function extractLabedzId(description: string | null | undefined): string | null {
+function extractLabedzEventId(description: string | null | undefined): string | null {
   if (!description) return null;
-  const m = description.match(/\[LABEDZ_ID:([a-z0-9_-]+)\]/i);
+  const m = description.match(/\[LABEDZ_EVENT_ID:([a-z0-9_-]+)\]/i);
   return m ? m[1] : null;
 }
 
@@ -34,8 +34,8 @@ export async function processCalendarEvent(
   event: GCalEvent,
   calendarId: string
 ): Promise<void> {
-  const labedzId = extractLabedzId(event.description);
-  const guestName = (event.summary || "Gość z GCal").split("—")[0].trim() || "Gość z GCal";
+  const labedzEventId = extractLabedzEventId(event.description);
+  const clientName = (event.summary || "Impreza z GCal").split("—")[0].trim() || "Impreza z GCal";
 
   const startDate = event.start?.date || event.start?.dateTime;
   const endDate = event.end?.date || event.end?.dateTime;
@@ -49,25 +49,25 @@ export async function processCalendarEvent(
     mimeType: a.mimeType ?? undefined,
   }));
 
-  if (labedzId) {
-    const res = await prisma.reservation.findUnique({
-      where: { id: labedzId },
+  if (labedzEventId) {
+    const existing = await prisma.eventOrder.findUnique({
+      where: { id: labedzEventId },
       select: { id: true, googleCalendarUpdatedAt: true },
     });
 
-    if (!res) return;
+    if (!existing) return;
 
     const gcalUpdated = eventUpdated ? eventUpdated.getTime() : 0;
-    const dbUpdated = res.googleCalendarUpdatedAt
-      ? res.googleCalendarUpdatedAt.getTime()
+    const dbUpdated = existing.googleCalendarUpdatedAt
+      ? existing.googleCalendarUpdatedAt.getTime()
       : 0;
 
     if (event.status === "cancelled") {
-      await prisma.reservation.update({
-        where: { id: labedzId },
+      await prisma.eventOrder.update({
+        where: { id: labedzEventId },
         data: {
           status: "CANCELLED",
-          googleAttachments: attachments as object,
+          googleAttachments: attachments.length > 0 ? (attachments as object) : undefined,
           googleCalendarUpdatedAt: eventUpdated ?? new Date(),
         },
       });
@@ -77,51 +77,35 @@ export async function processCalendarEvent(
     if (gcalUpdated <= dbUpdated) return;
 
     const updateData: {
-      checkIn?: Date;
-      checkOut?: Date;
+      dateFrom?: Date;
+      dateTo?: Date;
       notes?: string | null;
-      status?: "PENDING" | "CONFIRMED" | "CANCELLED" | "CHECKED_IN" | "CHECKED_OUT" | "NO_SHOW" | "GUARANTEED" | "WAITLIST";
+      status?: string;
       googleAttachments?: object;
       googleCalendarUpdatedAt?: Date;
     } = {};
 
-    if (dateFrom) updateData.checkIn = dateFrom;
-    if (dateTo) updateData.checkOut = dateTo;
+    if (dateFrom) updateData.dateFrom = dateFrom;
+    if (dateTo) updateData.dateTo = dateTo;
     if (event.description) updateData.notes = event.description;
-    updateData.googleAttachments = attachments as object;
+    updateData.googleAttachments = attachments.length > 0 ? (attachments as object) : undefined;
     updateData.googleCalendarUpdatedAt = eventUpdated ?? new Date();
 
-    await prisma.reservation.update({
-      where: { id: labedzId },
+    await prisma.eventOrder.update({
+      where: { id: labedzEventId },
       data: updateData,
     });
   } else {
     if (!dateFrom || !dateTo) return;
 
-    const defaultRoom = await prisma.room.findFirst({
-      where: { activeForSale: true, isDeleted: false },
-      select: { id: true },
-    });
-    if (!defaultRoom) return;
-
-    const guest = await prisma.guest.create({
+    await prisma.eventOrder.create({
       data: {
-        name: guestName,
-        guestType: "INDIVIDUAL",
-      },
-    });
-
-    const confirmationNumber = `GC${Date.now().toString(36).toUpperCase().slice(-6)}`;
-    await prisma.reservation.create({
-      data: {
-        guestId: guest.id,
-        roomId: defaultRoom.id,
-        checkIn: dateFrom,
-        checkOut: dateTo,
-        status: "PENDING",
-        source: "WEBSITE",
-        channel: "DIRECT",
-        confirmationNumber,
+        name: `${clientName} – ${dateFrom.toLocaleDateString("pl-PL")}`,
+        eventType: "INNE",
+        clientName,
+        dateFrom,
+        dateTo,
+        status: "DRAFT",
         notes: event.description ?? null,
         googleCalendarEventId: event.id ?? null,
         googleCalendarCalId: calendarId,

@@ -10,6 +10,7 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   URODZINY: "Urodziny",
   STYPA: "Stypa",
   FIRMOWA: "Firmowa",
+  SYLWESTER: "Sylwester",
   INNE: "Inne",
 };
 
@@ -22,6 +23,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default async function EventsPage() {
   const events = await prisma.eventOrder.findMany({
+    where: { status: { not: "CANCELLED" } },
     orderBy: { dateFrom: "desc" },
     take: 200,
   });

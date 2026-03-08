@@ -12,6 +12,7 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   URODZINY: "Urodziny",
   STYPA: "Stypa",
   FIRMOWA: "Firmowa",
+  SYLWESTER: "Sylwester",
   INNE: "Inne",
 };
 
@@ -59,7 +60,7 @@ export default async function EventDetailPage({
               rel="noopener noreferrer"
               className="rounded-md border px-4 py-2 h-12 text-base hover:bg-muted"
             >
-              Otwórz checklist
+              Checklist operacyjny
             </a>
           )}
           {event.menuDocUrl && (
@@ -69,7 +70,7 @@ export default async function EventDetailPage({
               rel="noopener noreferrer"
               className="rounded-md border px-4 py-2 h-12 text-base hover:bg-muted"
             >
-              Otwórz ofertę menu
+              Oferta menu
             </a>
           )}
           {event.googleCalendarEventId && process.env.GOOGLE_CALENDAR_ID && (
@@ -107,6 +108,30 @@ export default async function EventDetailPage({
       </h1>
 
       <div className="space-y-4 rounded-lg border p-6 text-base">
+        {(event.checklistDocUrl || event.menuDocUrl) && (
+          <div className="flex flex-wrap gap-2 pb-2 border-b">
+            {event.checklistDocUrl && (
+              <a
+                href={event.checklistDocUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline font-medium"
+              >
+                📋 Checklist operacyjny
+              </a>
+            )}
+            {event.menuDocUrl && (
+              <a
+                href={event.menuDocUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline font-medium"
+              >
+                📄 Oferta menu
+              </a>
+            )}
+          </div>
+        )}
         <p>
           <strong>Typ:</strong> {EVENT_TYPE_LABELS[event.eventType ?? ""] ?? event.eventType}
         </p>

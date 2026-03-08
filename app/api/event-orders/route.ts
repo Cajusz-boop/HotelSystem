@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { createChecklistDoc, createMenuDoc } from "@/lib/googleDocs";
-import { createEventWithDocs } from "@/lib/googleCalendar";
+import { createCalendarEvent } from "@/lib/googleCalendarEvents";
+import { getCalendarIdForEventOrder } from "@/lib/calendarMapping";
 
-const EVENT_TYPES = ["WESELE", "KOMUNIA", "CHRZCINY", "URODZINY", "STYPA", "FIRMOWA", "INNE"];
+const EVENT_TYPES = ["WESELE", "KOMUNIA", "CHRZCINY", "URODZINY", "STYPA", "FIRMOWA", "SYLWESTER", "INNE"];
 
 function sanitizeEventData(body: Record<string, unknown>) {
   const b = body as Record<string, unknown>;
@@ -130,16 +131,36 @@ export async function POST(req: Request) {
         }),
       ]);
 
-      const calendarEventId = await createEventWithDocs(
-        event,
+      const calendarEventId = await createCalendarEvent(
+        {
+          id: event.id,
+          clientName: event.clientName,
+          clientPhone: event.clientPhone,
+          eventType: event.eventType,
+          roomName: event.roomName,
+          timeStart: event.timeStart,
+          timeEnd: event.timeEnd,
+          guestCount: event.guestCount,
+          packageId: event.packageId,
+          status: event.status,
+          notes: event.notes,
+          dateFrom: event.dateFrom,
+          dateTo: event.dateTo,
+        },
+        packageName,
         checklist.docId,
         menu.docId
       );
+      const calId = getCalendarIdForEventOrder(event.eventType, event.roomName);
 
       const updated = await prisma.eventOrder.update({
         where: { id: event.id },
         data: {
           googleCalendarEventId: calendarEventId,
+          googleCalendarCalId: calId,
+          googleCalendarSynced: true,
+          googleCalendarSyncedAt: new Date(),
+          googleCalendarError: null,
           checklistDocId: checklist.docId,
           checklistDocUrl: checklist.docUrl,
           menuDocId: menu.docId,
@@ -150,6 +171,17 @@ export async function POST(req: Request) {
       return NextResponse.json(updated, { status: 201 });
     } catch (err) {
       console.error("Google API error:", err);
+      try {
+        await prisma.eventOrder.update({
+          where: { id: event.id },
+          data: {
+            googleCalendarSynced: false,
+            googleCalendarError: err instanceof Error ? err.message : String(err),
+          },
+        });
+      } catch (updateErr) {
+        console.error("Nie udało się zapisać błędu Google do bazy:", updateErr);
+      }
       return NextResponse.json(
         { ...event, googlePending: true },
         { status: 201 }
@@ -172,7 +204,7 @@ export async function GET(req: Request) {
 
     const events = await prisma.eventOrder.findMany({
       where: {
-        ...(status ? { status } : {}),
+        ...(status ? { status } : { status: { not: "CANCELLED" } }),
         ...(upcoming === "1" ? { dateFrom: { gte: new Date() } } : {}),
       },
       select: {

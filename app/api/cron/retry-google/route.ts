@@ -7,7 +7,8 @@ function subDays(d: Date, n: number): Date {
   return out;
 }
 import { createChecklistDoc, createMenuDoc } from "@/lib/googleDocs";
-import { createEventWithDocs } from "@/lib/googleCalendar";
+import { createCalendarEvent } from "@/lib/googleCalendarEvents";
+import { getCalendarIdForEventOrder } from "@/lib/calendarMapping";
 
 /**
  * Cron: ponowienie tworzenia dokumentów Google dla imprez z googlePending.
@@ -44,15 +45,35 @@ export async function GET() {
             cakesAndDesserts: event.cakesAndDesserts,
           }),
         ]);
-        const calendarId = await createEventWithDocs(
-          event,
+        const calendarEventId = await createCalendarEvent(
+          {
+            id: event.id,
+            clientName: event.clientName,
+            clientPhone: event.clientPhone,
+            eventType: event.eventType,
+            roomName: event.roomName,
+            timeStart: event.timeStart,
+            timeEnd: event.timeEnd,
+            guestCount: event.guestCount,
+            packageId: event.packageId,
+            status: event.status,
+            notes: event.notes,
+            dateFrom: event.dateFrom,
+            dateTo: event.dateTo,
+          },
+          packageName,
           checklist.docId,
           menu.docId
         );
+        const calId = getCalendarIdForEventOrder(event.eventType, event.roomName);
         await prisma.eventOrder.update({
           where: { id: event.id },
           data: {
-            googleCalendarEventId: calendarId,
+            googleCalendarEventId: calendarEventId,
+            googleCalendarCalId: calId,
+            googleCalendarSynced: true,
+            googleCalendarSyncedAt: new Date(),
+            googleCalendarError: null,
             checklistDocId: checklist.docId,
             checklistDocUrl: checklist.docUrl,
             menuDocId: menu.docId,

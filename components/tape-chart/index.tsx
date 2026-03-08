@@ -993,6 +993,8 @@ export function TapeChart({
   const gridWrapperRef = useRef<HTMLDivElement>(null);
   const wasPanningRef = useRef(false);
   const contextMenuClosedAtRef = useRef<number>(0);
+  /** Czy Ctrl+klik był obsłużony w onPointerDown (unikamy podwójnego toggle i otwarcia edycji) */
+  const ctrlToggleHandledRef = useRef(false);
   const didScrollToTodayRef = useRef(false);
   const userRequestedGoToTodayRef = useRef(false);
 
@@ -2823,8 +2825,29 @@ export function TapeChart({
                               isSelecting ? "pointer-events-none" : "pointer-events-auto"
                             )}
                             style={{ left: `${(barLeftPercent ?? 0) * 100}%`, width: `${barWidthPercent * 100}%`, minWidth: 0 }}
+                            onPointerDown={(e) => {
+                              ctrlToggleHandledRef.current = false;
+                              if (e.button !== 0) return;
+                              if (wasPanningRef.current) return;
+                              if (Date.now() - contextMenuClosedAtRef.current < 200) return;
+                              if (previewMode) return;
+                              if (activeDragReservation?.id === reservation.id) return;
+                              if (e.ctrlKey || e.metaKey) {
+                                ctrlToggleHandledRef.current = true;
+                                setSelectedReservationIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(reservation.id)) next.delete(reservation.id);
+                                  else next.add(reservation.id);
+                                  return next;
+                                });
+                              }
+                            }}
                             onClick={(e) => {
                               e.stopPropagation();
+                              if (ctrlToggleHandledRef.current) {
+                                ctrlToggleHandledRef.current = false;
+                                return;
+                              }
                               if (wasPanningRef.current) return;
                               if (Date.now() - contextMenuClosedAtRef.current < 200) return;
                               if (previewMode) return;

@@ -16,13 +16,17 @@ const EVENT_TYPES = [
   { value: "URODZINY", label: "Urodziny" },
   { value: "STYPA", label: "Stypa" },
   { value: "FIRMOWA", label: "Firmowa" },
+  { value: "SYLWESTER", label: "Sylwester" },
   { value: "INNE", label: "Inne" },
 ] as const;
 
 const ROOMS = [
-  { value: "Sala Duża", label: "Sala Duża" },
-  { value: "Sala Mała", label: "Sala Mała" },
-  { value: "Ogród", label: "Ogród" },
+  { value: "Sala Złota", label: "Sala Złota" },
+  { value: "Sala Diamentowa", label: "Sala Diamentowa" },
+  { value: "Restauracja", label: "Restauracja" },
+  { value: "Pokój 10", label: "Pokój 10" },
+  { value: "Pokój 30", label: "Pokój 30" },
+  { value: "Wiata", label: "Wiata" },
 ] as const;
 
 export type EventFormData = {
@@ -126,6 +130,65 @@ const EMPTY_FORM: EventFormData = {
   afterpartyMusic: "",
 };
 
+const HOURS = Array.from({ length: 19 }, (_, i) => i + 6); // 6–24
+const MINUTES = [0, 15, 30, 45];
+
+function TimeSelect({
+  value,
+  onChange,
+  id,
+  className,
+  error,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  id: string;
+  className?: string;
+  error?: boolean;
+}) {
+  const [h, m] = value
+    ? value.split(":").map((x) => parseInt(x, 10) || 0)
+    : [14, 0];
+  const hour = HOURS.includes(h) ? h : 14;
+  const minute = MINUTES.includes(m) ? m : 0;
+
+  const handleChange = (newH: number, newM: number) => {
+    onChange(`${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`);
+  };
+
+  return (
+    <div className={cn("flex gap-1", className)}>
+      <select
+        id={id}
+        value={hour}
+        onChange={(e) => handleChange(parseInt(e.target.value, 10), minute)}
+        className={cn(
+          "h-12 rounded-md border border-input bg-background px-3 py-2 text-base",
+          error && "border-destructive"
+        )}
+      >
+        {HOURS.map((h) => (
+          <option key={h} value={h}>{String(h).padStart(2, "0")}</option>
+        ))}
+      </select>
+      <span className="flex items-center text-muted-foreground">:</span>
+      <select
+        aria-label="Minuty"
+        value={minute}
+        onChange={(e) => handleChange(hour, parseInt(e.target.value, 10))}
+        className={cn(
+          "h-12 rounded-md border border-input bg-background px-3 py-2 text-base",
+          error && "border-destructive"
+        )}
+      >
+        {MINUTES.map((m) => (
+          <option key={m} value={m}>{String(m).padStart(2, "0")}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function YesNoButton({
   value,
   onChange,
@@ -190,7 +253,16 @@ export function EventForm({
   }));
 
   const update = useCallback(<K extends keyof EventFormData>(key: K, value: EventFormData[K]) => {
-    setData((prev) => ({ ...prev, [key]: value }));
+    setData((prev) => {
+      const next = { ...prev, [key]: value };
+      if (key === "adultsCount" || key === "children03" || key === "children47") {
+        const a = next.adultsCount === "" ? 0 : Number(next.adultsCount) || 0;
+        const c03 = next.children03 === "" ? 0 : Number(next.children03) || 0;
+        const c47 = next.children47 === "" ? 0 : Number(next.children47) || 0;
+        next.guestCount = a + c03 + c47 || "";
+      }
+      return next;
+    });
   }, []);
 
   const totalSections = 8;
@@ -202,12 +274,13 @@ export function EventForm({
   if (!data.timeStart?.trim()) errors.timeStart = "Wymagane";
   if (!data.roomName?.trim()) errors.roomName = "Wymagane";
   const gc = data.guestCount;
+  const totalGuests = (data.adultsCount === "" ? 0 : Number(data.adultsCount) || 0) +
+    (data.children03 === "" ? 0 : Number(data.children03) || 0) +
+    (data.children47 === "" ? 0 : Number(data.children47) || 0);
   if (gc !== "" && (typeof gc !== "number" || gc <= 0 || gc > 1500)) {
     errors.guestCount = "Liczba 1–1500";
   }
-  if (data.adultsCount !== "" && typeof data.adultsCount === "number" && gc !== "" && typeof gc === "number" && data.adultsCount > gc) {
-    errors.adultsCount = "≤ liczba gości";
-  }
+  if (totalGuests > 0 && totalGuests > 1500) errors.guestCount = "Liczba 1–1500";
   const hasErrors = Object.keys(errors).length > 0;
 
   const toPayload = () => {
@@ -215,6 +288,10 @@ export function EventForm({
     const eventDate = d.eventDate || d.dateFrom;
     const dateFrom = eventDate ? new Date(eventDate + "T12:00:00") : new Date();
     const dateTo = dateFrom;
+    const sumGuests = (d.adultsCount === "" ? 0 : Number(d.adultsCount) || 0) +
+      (d.children03 === "" ? 0 : Number(d.children03) || 0) +
+      (d.children47 === "" ? 0 : Number(d.children47) || 0);
+    const guestCountValue = sumGuests > 0 ? sumGuests : (d.guestCount === "" ? null : Number(d.guestCount));
     return {
       name: `${d.clientName} – ${eventDate ?? "?"}`,
       eventType: d.eventType,
@@ -224,7 +301,7 @@ export function EventForm({
       timeStart: d.timeStart || null,
       timeEnd: d.timeEnd || null,
       roomName: d.roomName || null,
-      guestCount: d.guestCount === "" ? null : Number(d.guestCount),
+      guestCount: guestCountValue,
       adultsCount: d.adultsCount === "" ? null : Number(d.adultsCount),
       children03: d.children03 === "" ? null : Number(d.children03),
       children47: d.children47 === "" ? null : Number(d.children47),
@@ -387,52 +464,47 @@ export function EventForm({
         <div className="space-y-4">
           <h2 className="text-xl font-semibold">Goście i czas</h2>
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="timeStart" className="text-base">Godzina rozpoczęcia</Label>
-              <Input
-                id="timeStart"
-                type="time"
-                value={data.timeStart}
-                onChange={(e) => update("timeStart", e.target.value)}
-                className={cn("mt-1 h-12 text-base", errors.timeStart && "border-destructive")}
-              />
-              {errors.timeStart && <p className="text-sm text-destructive">{errors.timeStart}</p>}
-            </div>
-            <div>
-              <Label htmlFor="timeEnd" className="text-base">Godzina zakończenia</Label>
-              <Input
-                id="timeEnd"
-                type="time"
-                value={data.timeEnd}
-                onChange={(e) => update("timeEnd", e.target.value)}
-                className="mt-1 h-12 text-base"
-              />
-            </div>
+          <div>
+            <Label htmlFor="timeStart" className="text-base">Godzina rozpoczęcia</Label>
+            <TimeSelect
+              id="timeStart"
+              value={data.timeStart}
+              onChange={(v) => update("timeStart", v)}
+              className="mt-1"
+              error={!!errors.timeStart}
+            />
+            {errors.timeStart && <p className="text-sm text-destructive mt-1">{errors.timeStart}</p>}
+          </div>
+          <div>
+            <Label htmlFor="timeEnd" className="text-base">Godzina zakończenia</Label>
+            <TimeSelect
+              id="timeEnd"
+              value={data.timeEnd}
+              onChange={(v) => update("timeEnd", v)}
+              className="mt-1"
+            />
+          </div>
           </div>
           {showChurch && (
             <div>
               <Label htmlFor="churchTime" className="text-base">Godzina kościoła</Label>
-              <Input
+              <TimeSelect
                 id="churchTime"
-                type="time"
                 value={data.churchTime}
-                onChange={(e) => update("churchTime", e.target.value)}
-                className="mt-1 h-12 text-base"
+                onChange={(v) => update("churchTime", v)}
+                className="mt-1"
               />
             </div>
           )}
           <div>
-            <Label htmlFor="guestCount" className="text-base">Liczba gości (łącznie)</Label>
-            <Input
-              id="guestCount"
-              type="number"
-              min={1}
-              max={1500}
-              value={data.guestCount}
-              onChange={(e) => update("guestCount", e.target.value === "" ? "" : parseInt(e.target.value, 10))}
-              className={cn("mt-1 h-16 text-2xl max-w-[200px]", errors.guestCount && "border-destructive")}
-              placeholder="np. 80"
-            />
+            <Label className="text-base">Goście</Label>
+            <p className="text-2xl font-semibold mt-1">
+              Łącznie: {typeof data.guestCount === "number" && data.guestCount > 0
+                ? data.guestCount
+                : (data.adultsCount === "" && data.children03 === "" && data.children47 === ""
+                  ? "—"
+                  : totalGuests)}
+            </p>
             {errors.guestCount && <p className="text-sm text-destructive">{errors.guestCount}</p>}
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -553,22 +625,20 @@ export function EventForm({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="cakeArrivalTime" className="text-base">Tort – godzina przyjazdu</Label>
-              <Input
+              <TimeSelect
                 id="cakeArrivalTime"
-                type="time"
                 value={data.cakeArrivalTime}
-                onChange={(e) => update("cakeArrivalTime", e.target.value)}
-                className="mt-1 h-12 text-base"
+                onChange={(v) => update("cakeArrivalTime", v)}
+                className="mt-1"
               />
             </div>
             <div>
               <Label htmlFor="cakeServedAt" className="text-base">Tort – godzina podania</Label>
-              <Input
+              <TimeSelect
                 id="cakeServedAt"
-                type="time"
                 value={data.cakeServedAt}
-                onChange={(e) => update("cakeServedAt", e.target.value)}
-                className="mt-1 h-12 text-base"
+                onChange={(v) => update("cakeServedAt", v)}
+                className="mt-1"
               />
             </div>
           </div>
@@ -744,22 +814,20 @@ export function EventForm({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="afterpartyTimeFrom" className="text-base">Godzina od</Label>
-                  <Input
+                  <TimeSelect
                     id="afterpartyTimeFrom"
-                    type="time"
                     value={data.afterpartyTimeFrom}
-                    onChange={(e) => update("afterpartyTimeFrom", e.target.value)}
-                    className="mt-1 h-12 text-base"
+                    onChange={(v) => update("afterpartyTimeFrom", v)}
+                    className="mt-1"
                   />
                 </div>
                 <div>
                   <Label htmlFor="afterpartyTimeTo" className="text-base">Godzina do</Label>
-                  <Input
+                  <TimeSelect
                     id="afterpartyTimeTo"
-                    type="time"
                     value={data.afterpartyTimeTo}
-                    onChange={(e) => update("afterpartyTimeTo", e.target.value)}
-                    className="mt-1 h-12 text-base"
+                    onChange={(v) => update("afterpartyTimeTo", v)}
+                    className="mt-1"
                   />
                 </div>
               </div>

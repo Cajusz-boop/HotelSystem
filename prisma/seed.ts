@@ -294,6 +294,21 @@ async function main() {
   }
   }
 
+  // Pakiety menu dla imprez (jeśli nie istnieją)
+  const eventPackages = [
+    { code: "EVENT_STANDARD", name: "Pakiet Standard" },
+    { code: "EVENT_PREMIUM", name: "Pakiet Premium" },
+    { code: "EVENT_DELUXE", name: "Pakiet Deluxe" },
+  ];
+  for (const p of eventPackages) {
+    await prisma.package.upsert({
+      where: { code: p.code },
+      update: { name: p.name, isActive: true },
+      create: { code: p.code, name: p.name },
+    });
+  }
+  console.log("Pakiety menu imprez: sprawdzono/utworzono");
+
   await importConfigSnapshot();
 
   // Nadaj roli RECEPTION dostęp do modułów (w tym Finanse) — config-snapshot ma tylko MANAGER

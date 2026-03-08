@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { updateChecklistDoc } from "@/lib/googleDocs";
-import { updateCalendarEvent } from "@/lib/googleCalendar";
+import {
+  updateCalendarEvent,
+  cancelCalendarEvent,
+  deleteCalendarEvent,
+} from "@/lib/googleCalendarEvents";
 
-const EVENT_TYPES = ["WESELE", "KOMUNIA", "CHRZCINY", "URODZINY", "STYPA", "FIRMOWA", "INNE"];
+const EVENT_TYPES = ["WESELE", "KOMUNIA", "CHRZCINY", "URODZINY", "STYPA", "FIRMOWA", "SYLWESTER", "INNE"];
 
 function sanitizeEventData(body: Record<string, unknown>) {
   const b = body as Record<string, unknown>;
@@ -83,6 +87,51 @@ function sanitizeEventData(body: Record<string, unknown>) {
   return base;
 }
 
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const data = await req.json();
+    const status = data?.status;
+    if (status === "CANCELLED") {
+      const event = await prisma.eventOrder.findUnique({
+        where: { id },
+        select: { googleCalendarEventId: true, googleCalendarCalId: true },
+      });
+      if (event?.googleCalendarEventId && event?.googleCalendarCalId) {
+        try {
+          await cancelCalendarEvent(event.googleCalendarEventId, event.googleCalendarCalId);
+          await prisma.eventOrder.update({
+            where: { id },
+            data: { status: "CANCELLED", googleCalendarSynced: true, googleCalendarSyncedAt: new Date(), googleCalendarError: null },
+          });
+        } catch (err) {
+          console.error("Google cancel error:", err);
+          await prisma.eventOrder.update({
+            where: { id },
+            data: { status: "CANCELLED", googleCalendarSynced: false, googleCalendarError: err instanceof Error ? err.message : String(err) },
+          });
+        }
+      } else {
+        await prisma.eventOrder.update({ where: { id }, data: { status: "CANCELLED" } });
+      }
+      return NextResponse.json({ ok: true });
+    }
+    return NextResponse.json({ error: "PATCH obsługuje tylko status=CANCELLED" }, { status: 400 });
+  } catch (e) {
+    if (e && typeof e === "object" && "code" in e && e.code === "P2025") {
+      return NextResponse.json({ error: "Impreza nie istnieje" }, { status: 404 });
+    }
+    console.error("PATCH /api/event-orders/[id]:", e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Błąd" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -104,14 +153,67 @@ export async function PUT(
       },
     });
 
+    let packageName: string | null = null;
+    if (event.packageId) {
+      const pkg = await prisma.package.findUnique({
+        where: { id: event.packageId },
+        select: { name: true },
+      });
+      packageName = pkg?.name ?? null;
+    }
+
     await Promise.all([
       event.checklistDocId
         ? updateChecklistDoc(event.checklistDocId, event)
         : Promise.resolve(),
-      event.googleCalendarEventId
-        ? updateCalendarEvent(event.googleCalendarEventId, event)
+      event.googleCalendarEventId && event.googleCalendarCalId
+        ? (() => {
+            if (event.status === "CANCELLED") {
+              return cancelCalendarEvent(event.googleCalendarEventId!, event.googleCalendarCalId!);
+            }
+            return updateCalendarEvent(
+              {
+                id: event.id,
+                clientName: event.clientName,
+                clientPhone: event.clientPhone,
+                eventType: event.eventType,
+                roomName: event.roomName,
+                timeStart: event.timeStart,
+                timeEnd: event.timeEnd,
+                guestCount: event.guestCount,
+                packageId: event.packageId,
+                status: event.status,
+                notes: event.notes,
+                dateFrom: event.dateFrom,
+                dateTo: event.dateTo,
+              },
+              event.googleCalendarEventId,
+              event.googleCalendarCalId,
+              packageName
+            );
+          })()
         : Promise.resolve(),
-    ]).catch((err) => console.error("Google update error:", err));
+    ]).catch(async (err) => {
+      console.error("Google update error:", err);
+      await prisma.eventOrder
+        .update({
+          where: { id },
+          data: {
+            googleCalendarSynced: false,
+            googleCalendarError: err instanceof Error ? err.message : String(err),
+          },
+        })
+        .catch(() => {});
+    });
+
+    if (event.googleCalendarEventId && event.googleCalendarCalId && event.status !== "CANCELLED") {
+      await prisma.eventOrder
+        .update({
+          where: { id },
+          data: { googleCalendarSynced: true, googleCalendarSyncedAt: new Date(), googleCalendarError: null },
+        })
+        .catch(() => {});
+    }
 
     return NextResponse.json(event);
   } catch (e) {
@@ -132,9 +234,19 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    await prisma.eventOrder.update({
+    const event = await prisma.eventOrder.findUnique({
       where: { id },
-      data: { status: "CANCELLED" },
+      select: { googleCalendarEventId: true, googleCalendarCalId: true },
+    });
+    if (event?.googleCalendarEventId && event?.googleCalendarCalId) {
+      try {
+        await deleteCalendarEvent(event.googleCalendarEventId, event.googleCalendarCalId);
+      } catch (err) {
+        console.error("Google delete error:", err);
+      }
+    }
+    await prisma.eventOrder.delete({
+      where: { id },
     });
     return NextResponse.json({ ok: true });
   } catch (e) {
