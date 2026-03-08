@@ -2823,21 +2823,6 @@ export function TapeChart({
                               isSelecting ? "pointer-events-none" : "pointer-events-auto"
                             )}
                             style={{ left: `${(barLeftPercent ?? 0) * 100}%`, width: `${barWidthPercent * 100}%`, minWidth: 0 }}
-                            onPointerDownCapture={(e) => {
-                              if (e.button !== 0) return;
-                              if (!(e.ctrlKey || e.metaKey)) return;
-                              e.stopPropagation();
-                              e.preventDefault();
-                              if (wasPanningRef.current) return;
-                              if (Date.now() - contextMenuClosedAtRef.current < 200) return;
-                              if (previewMode) return;
-                              setSelectedReservationIds((prev) => {
-                                const next = new Set(prev);
-                                if (next.has(reservation.id)) next.delete(reservation.id);
-                                else next.add(reservation.id);
-                                return next;
-                              });
-                            }}
                             onClick={(e) => {
                               e.stopPropagation();
                               if (wasPanningRef.current) return;
