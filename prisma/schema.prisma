@@ -756,6 +756,16 @@ model Reservation {
   invoiceScope     String    @default("ALL")
   /** Nadpisana kwota wpłat (widoczna na fakturze) – gdy null, używana suma z transakcji */
   paidAmountOverride Decimal? @db.Decimal(12, 2)
+
+  // Google Calendar sync (dwustronna synchronizacja)
+  googleCalendarEventId   String?   @db.VarChar(255)
+  googleCalendarCalId     String?   @db.VarChar(255)
+  googleCalendarSynced    Boolean   @default(false)
+  googleCalendarSyncedAt  DateTime?
+  googleCalendarError     String?   @db.Text
+  googleCalendarUpdatedAt DateTime?
+  googleAttachments       Json?
+
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
@@ -1760,6 +1770,18 @@ model EventOrder {
   @@index([dateFrom])
   @@index([status])
   @@index([eventType])
+}
+
+// Kanały watch Google Calendar (webhooks)
+model GoogleCalendarWatchChannel {
+  id         String   @id @default(cuid())
+  channelId  String   @unique
+  resourceId String
+  calendarId String
+  expiration DateTime
+  syncToken  String?  @db.Text
+  createdAt  DateTime @default(now())
+  isActive   Boolean  @default(true)
 }
 
 // Camping – miejsca (działki, przyczepy)

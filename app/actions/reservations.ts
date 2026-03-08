@@ -30,6 +30,13 @@ import { generateRoomAccessCode } from "@/app/actions/digital-keys";
 import { sendWelcomeToTv } from "@/lib/hotel-tv";
 import { activateRoomPower, deactivateRoomPower } from "@/lib/energy-system";
 import { sendReservationCreatedWebhook } from "@/lib/webhooks";
+import {
+  createCalendarEvent,
+  updateCalendarEvent,
+  cancelCalendarEvent,
+  deleteCalendarEvent,
+} from "@/lib/googleCalendarReservations";
+import { getCalendarIdForEvent } from "@/lib/calendarMapping";
 import { encrypt, decrypt } from "@/lib/encryption";
 import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -883,6 +890,35 @@ export async function createReservation(
       pax: reservation.pax,
       createdAt: reservation.createdAt.toISOString(),
     });
+
+    try {
+      const eventType = (reservation.tripPurpose ?? "CATERING") as string;
+      const eventId = await createCalendarEvent(
+        { ...reservation, status: reservation.status },
+        eventType
+      );
+      const calId = getCalendarIdForEvent(eventType);
+      await prisma.reservation.update({
+        where: { id: reservation.id },
+        data: {
+          googleCalendarEventId: eventId,
+          googleCalendarCalId: calId,
+          googleCalendarSynced: true,
+          googleCalendarSyncedAt: new Date(),
+          googleCalendarError: null,
+        },
+      });
+    } catch (gErr) {
+      await prisma.reservation
+        .update({
+          where: { id: reservation.id },
+          data: {
+            googleCalendarSynced: false,
+            googleCalendarError: gErr instanceof Error ? gErr.message : String(gErr),
+          },
+        })
+        .catch(() => {});
+    }
 
     revalidatePath("/front-office");
     return {
@@ -2711,6 +2747,43 @@ export async function moveReservation(
       ipAddress: ip,
     });
 
+    if (updated.googleCalendarEventId && updated.googleCalendarCalId) {
+      try {
+        await updateCalendarEvent(
+          {
+            id: updated.id,
+            guest: updated.guest,
+            room: updated.room,
+            checkIn: updated.checkIn,
+            checkOut: updated.checkOut,
+            pax: updated.pax,
+            adults: updated.adults,
+            children: updated.children,
+            notes: updated.notes,
+            internalNotes: updated.internalNotes,
+            status: updated.status,
+            tripPurpose: updated.tripPurpose,
+          },
+          updated.googleCalendarEventId,
+          updated.googleCalendarCalId
+        );
+        await prisma.reservation.update({
+          where: { id: reservationId },
+          data: { googleCalendarSynced: true, googleCalendarSyncedAt: new Date(), googleCalendarError: null },
+        });
+      } catch (gErr) {
+        await prisma.reservation
+          .update({
+            where: { id: reservationId },
+            data: {
+              googleCalendarSynced: false,
+              googleCalendarError: gErr instanceof Error ? gErr.message : String(gErr),
+            },
+          })
+          .catch(() => {});
+      }
+    }
+
     if (!skipRevalidate) revalidatePath("/front-office");
     return { success: true, data: newUi };
   } catch (e) {
@@ -3191,6 +3264,74 @@ export async function updateReservation(
       ipAddress: ip,
     });
 
+    try {
+      const r = finalUpdated;
+      const eventType = (r.tripPurpose ?? "CATERING") as string;
+      if (r.googleCalendarEventId && r.googleCalendarCalId) {
+        await updateCalendarEvent(
+          {
+            id: r.id,
+            guest: r.guest,
+            room: r.room,
+            checkIn: r.checkIn,
+            checkOut: r.checkOut,
+            pax: r.pax,
+            adults: r.adults,
+            children: r.children,
+            notes: r.notes,
+            internalNotes: r.internalNotes,
+            status: r.status,
+            tripPurpose: r.tripPurpose,
+          },
+          r.googleCalendarEventId,
+          r.googleCalendarCalId
+        );
+        await prisma.reservation.update({
+          where: { id: reservationId },
+          data: { googleCalendarSynced: true, googleCalendarSyncedAt: new Date(), googleCalendarError: null },
+        });
+      } else {
+        const eventId = await createCalendarEvent(
+          {
+            id: r.id,
+            guest: r.guest,
+            room: r.room,
+            checkIn: r.checkIn,
+            checkOut: r.checkOut,
+            pax: r.pax,
+            adults: r.adults,
+            children: r.children,
+            notes: r.notes,
+            internalNotes: r.internalNotes,
+            status: r.status,
+            tripPurpose: r.tripPurpose,
+          },
+          eventType
+        );
+        const calId = getCalendarIdForEvent(eventType);
+        await prisma.reservation.update({
+          where: { id: reservationId },
+          data: {
+            googleCalendarEventId: eventId,
+            googleCalendarCalId: calId,
+            googleCalendarSynced: true,
+            googleCalendarSyncedAt: new Date(),
+            googleCalendarError: null,
+          },
+        });
+      }
+    } catch (gErr) {
+      await prisma.reservation
+        .update({
+          where: { id: reservationId },
+          data: {
+            googleCalendarSynced: false,
+            googleCalendarError: gErr instanceof Error ? gErr.message : String(gErr),
+          },
+        })
+        .catch(() => {});
+    }
+
     revalidatePath("/front-office");
     return { success: true, data: toUiReservation(finalUpdated) };
   } catch (e) {
@@ -3324,6 +3465,68 @@ export async function splitReservation(
       }),
     ]);
 
+    const eventType = (prev.tripPurpose ?? "CATERING") as string;
+    if (updatedFirst.googleCalendarEventId && updatedFirst.googleCalendarCalId) {
+      try {
+        await updateCalendarEvent(
+          {
+            id: updatedFirst.id,
+            guest: updatedFirst.guest,
+            room: updatedFirst.room,
+            checkIn: updatedFirst.checkIn,
+            checkOut: updatedFirst.checkOut,
+            pax: updatedFirst.pax,
+            adults: updatedFirst.adults,
+            children: updatedFirst.children,
+            notes: updatedFirst.notes,
+            internalNotes: updatedFirst.internalNotes,
+            status: updatedFirst.status,
+            tripPurpose: updatedFirst.tripPurpose,
+          },
+          updatedFirst.googleCalendarEventId,
+          updatedFirst.googleCalendarCalId
+        );
+        await prisma.reservation.update({
+          where: { id: reservationId },
+          data: { googleCalendarSynced: true, googleCalendarSyncedAt: new Date(), googleCalendarError: null },
+        });
+      } catch {
+        /* nie blokuj */
+      }
+    }
+    try {
+      const eventId = await createCalendarEvent(
+        {
+          id: newSecond.id,
+          guest: newSecond.guest,
+          room: newSecond.room,
+          checkIn: newSecond.checkIn,
+          checkOut: newSecond.checkOut,
+          pax: newSecond.pax,
+          adults: newSecond.adults,
+          children: newSecond.children,
+          notes: newSecond.notes,
+          internalNotes: newSecond.internalNotes,
+          status: newSecond.status,
+          tripPurpose: newSecond.tripPurpose,
+        },
+        eventType
+      );
+      const calId = getCalendarIdForEvent(eventType);
+      await prisma.reservation.update({
+        where: { id: newSecond.id },
+        data: {
+          googleCalendarEventId: eventId,
+          googleCalendarCalId: calId,
+          googleCalendarSynced: true,
+          googleCalendarSyncedAt: new Date(),
+          googleCalendarError: null,
+        },
+      });
+    } catch {
+      /* nie blokuj */
+    }
+
     revalidatePath("/front-office");
     return {
       success: true,
@@ -3423,6 +3626,26 @@ export async function updateReservationStatus(
       data: { status },
       include: { guest: true, room: true, rateCode: true },
     });
+
+    if (status === "CANCELLED" && prev.googleCalendarEventId && prev.googleCalendarCalId) {
+      try {
+        await cancelCalendarEvent(prev.googleCalendarEventId, prev.googleCalendarCalId);
+        await prisma.reservation.update({
+          where: { id: reservationId },
+          data: { googleCalendarSynced: true, googleCalendarSyncedAt: new Date(), googleCalendarError: null },
+        });
+      } catch (gErr) {
+        await prisma.reservation
+          .update({
+            where: { id: reservationId },
+            data: {
+              googleCalendarSynced: false,
+              googleCalendarError: gErr instanceof Error ? gErr.message : String(gErr),
+            },
+          })
+          .catch(() => {});
+      }
+    }
 
     if (status === "CHECKED_IN" && prev.status !== "CHECKED_IN") {
       await generateRoomAccessCode(reservationId).catch((err) =>
@@ -3568,6 +3791,14 @@ export async function deleteReservation(reservationId: string, cancellationReaso
       ...(cancellationReason != null && cancellationReason.trim() !== "" ? { cancellationReason: cancellationReason.trim(), deletionReason: cancellationReason.trim() } : {}),
     };
     const groupIdToCheck = prev.groupId;
+
+    if (prev.googleCalendarEventId && prev.googleCalendarCalId) {
+      try {
+        await deleteCalendarEvent(prev.googleCalendarEventId, prev.googleCalendarCalId);
+      } catch {
+        // Nie blokuj usunięcia rezerwacji przy błędzie Google
+      }
+    }
 
     await prisma.reservation.delete({ where: { id } });
 
