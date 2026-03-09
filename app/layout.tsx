@@ -34,6 +34,7 @@ export default async function RootLayout({
   return (
     <html lang="pl" suppressHydrationWarning>
       <head>
+        <meta charSet="utf-8" />
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#8B6914" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

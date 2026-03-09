@@ -90,6 +90,7 @@ function sanitizeEventData(body: Record<string, unknown>) {
   if (b.depositPaid !== undefined) base.depositPaid = Boolean(b.depositPaid);
   if (b.isPoprawiny !== undefined) base.isPoprawiny = Boolean(b.isPoprawiny);
   if (b.parentEventId !== undefined) base.parentEventId = b.parentEventId != null ? String(b.parentEventId) : null;
+  if (b.menu !== undefined) base.menu = b.menu != null && typeof b.menu === "object" && !Array.isArray(b.menu) ? (b.menu as object) : undefined;
 
   return base;
 }

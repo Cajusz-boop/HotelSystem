@@ -4,7 +4,14 @@ import { EventForm } from "@/components/events/event-form";
 
 export const metadata = { title: "Nowa impreza", description: "Dodaj imprezę" };
 
-export default async function NewEventPage() {
+export default async function NewEventPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }> | { date?: string };
+}) {
+  const params = await Promise.resolve(searchParams);
+  const prefilledDate = typeof params?.date === "string" ? params.date.trim() : undefined;
+
   const [packages, staff] = await Promise.all([
     prisma.package.findMany({
       where: { isActive: true },
@@ -35,6 +42,7 @@ export default async function NewEventPage() {
       <EventForm
         packages={packages}
         staff={staff}
+        initialData={prefilledDate ? { eventDate: prefilledDate } : undefined}
       />
     </div>
   );

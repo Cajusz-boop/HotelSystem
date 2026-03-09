@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { MenuTab } from "@/components/events/menu-modul";
+import { EventFormTabs, EMPTY_EVENT_FORM, type EventFormTabState } from "@/components/events/event-form-tabs";
 
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
@@ -31,6 +32,45 @@ type EventRecord = {
   googleCalendarSynced: boolean;
   googleCalendarSyncedAt: Date | string | null;
   googleCalendarError: string | null;
+  adultsCount?: number | null;
+  children03?: number | null;
+  children47?: number | null;
+  orchestraCount?: number | null;
+  cameramanCount?: number | null;
+  photographerCount?: number | null;
+  churchTime?: string | null;
+  brideGroomTable?: string | null;
+  orchestraTable?: string | null;
+  packageId?: string | null;
+  cakesAndDesserts?: string | null;
+  cakeOrderedAt?: string | null;
+  cakeArrivalTime?: string | null;
+  cakeServedAt?: string | null;
+  drinksArrival?: string | null;
+  drinksStorage?: string | null;
+  champagneStorage?: string | null;
+  firstBottlesBy?: string | null;
+  alcoholAtTeamTable?: boolean | null;
+  cakesSwedishTable?: boolean | null;
+  fruitsSwedishTable?: boolean | null;
+  ownFlowers?: boolean | null;
+  ownVases?: boolean | null;
+  decorationColor?: string | null;
+  placeCards?: boolean | null;
+  placeCardsLayout?: string | null;
+  tableLayout?: string | null;
+  breadWelcomeBy?: string | null;
+  extraAttractions?: string | null;
+  specialRequests?: string | null;
+  facebookConsent?: boolean | null;
+  ownNapkins?: boolean | null;
+  dutyPerson?: string | null;
+  afterpartyEnabled?: boolean | null;
+  afterpartyTimeFrom?: string | null;
+  afterpartyTimeTo?: string | null;
+  afterpartyGuests?: number | null;
+  afterpartyMenu?: string | null;
+  afterpartyMusic?: string | null;
 };
 
 function mapApiToEvent(record: Record<string, unknown>): EventRecord {
@@ -65,6 +105,45 @@ function mapApiToEvent(record: Record<string, unknown>): EventRecord {
     googleCalendarSynced: Boolean(record.googleCalendarSynced),
     googleCalendarSyncedAt: (record.googleCalendarSyncedAt as Date | string | null) ?? null,
     googleCalendarError: (record.googleCalendarError as string) ?? null,
+    adultsCount: record.adultsCount != null ? Number(record.adultsCount) : null,
+    children03: record.children03 != null ? Number(record.children03) : null,
+    children47: record.children47 != null ? Number(record.children47) : null,
+    orchestraCount: record.orchestraCount != null ? Number(record.orchestraCount) : null,
+    cameramanCount: record.cameramanCount != null ? Number(record.cameramanCount) : null,
+    photographerCount: record.photographerCount != null ? Number(record.photographerCount) : null,
+    churchTime: (record.churchTime as string) ?? null,
+    brideGroomTable: (record.brideGroomTable as string) ?? null,
+    orchestraTable: (record.orchestraTable as string) ?? null,
+    packageId: (record.packageId as string) ?? null,
+    cakesAndDesserts: (record.cakesAndDesserts as string) ?? null,
+    cakeOrderedAt: (record.cakeOrderedAt as string) ?? null,
+    cakeArrivalTime: (record.cakeArrivalTime as string) ?? null,
+    cakeServedAt: (record.cakeServedAt as string) ?? null,
+    drinksArrival: (record.drinksArrival as string) ?? null,
+    drinksStorage: (record.drinksStorage as string) ?? null,
+    champagneStorage: (record.champagneStorage as string) ?? null,
+    firstBottlesBy: (record.firstBottlesBy as string) ?? null,
+    alcoholAtTeamTable: record.alcoholAtTeamTable != null ? Boolean(record.alcoholAtTeamTable) : null,
+    cakesSwedishTable: record.cakesSwedishTable != null ? Boolean(record.cakesSwedishTable) : null,
+    fruitsSwedishTable: record.fruitsSwedishTable != null ? Boolean(record.fruitsSwedishTable) : null,
+    ownFlowers: record.ownFlowers != null ? Boolean(record.ownFlowers) : null,
+    ownVases: record.ownVases != null ? Boolean(record.ownVases) : null,
+    decorationColor: (record.decorationColor as string) ?? null,
+    placeCards: record.placeCards != null ? Boolean(record.placeCards) : null,
+    placeCardsLayout: (record.placeCardsLayout as string) ?? null,
+    tableLayout: (record.tableLayout as string) ?? null,
+    breadWelcomeBy: (record.breadWelcomeBy as string) ?? null,
+    extraAttractions: (record.extraAttractions as string) ?? null,
+    specialRequests: (record.specialRequests as string) ?? null,
+    facebookConsent: record.facebookConsent != null ? Boolean(record.facebookConsent) : null,
+    ownNapkins: record.ownNapkins != null ? Boolean(record.ownNapkins) : null,
+    dutyPerson: (record.dutyPerson as string) ?? null,
+    afterpartyEnabled: record.afterpartyEnabled != null ? Boolean(record.afterpartyEnabled) : null,
+    afterpartyTimeFrom: (record.afterpartyTimeFrom as string) ?? null,
+    afterpartyTimeTo: (record.afterpartyTimeTo as string) ?? null,
+    afterpartyGuests: record.afterpartyGuests != null ? Number(record.afterpartyGuests) : null,
+    afterpartyMenu: (record.afterpartyMenu as string) ?? null,
+    afterpartyMusic: (record.afterpartyMusic as string) ?? null,
   };
 }
 
@@ -400,6 +479,306 @@ type Handlers = {
   updateMenu: (id: string, menuData: Record<string, unknown>) => Promise<void>;
 };
 
+function CreateEventField({ label, value, onChange, placeholder, type = "text", compact = false }: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  compact?: boolean;
+}) {
+  return (
+    <div style={{ marginBottom: compact ? "0" : "16px" }}>
+      <label style={{ fontSize: "11px", fontWeight: 700, color: "#888", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>{label}</label>
+      <input type={type} value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+        style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "4px", fontSize: "13px", outline: "none", fontFamily: "inherit" }}
+        onFocus={(e) => { e.currentTarget.style.borderColor = "#999"; }}
+        onBlur={(e) => { e.currentTarget.style.borderColor = "#ddd"; }} />
+    </div>
+  );
+}
+
+function evToFullForm(e: EventRecord): EventFormTabState {
+  return {
+    ...EMPTY_EVENT_FORM,
+    eventType: e.type || "WESELE",
+    clientName: e.client ?? "",
+    clientPhone: e.phone ?? "",
+    eventDate: e.date ?? "",
+    roomName: e.room ?? "",
+    addPoprawiny: false,
+    poprawinyDate: "",
+    poprawinyGuestCount: "",
+    depositAmount: e.deposit != null ? String(e.deposit) : "",
+    depositPaid: e.paid ?? false,
+    timeStart: e.tf ?? "",
+    timeEnd: e.tt ?? "",
+    churchTime: e.churchTime ?? "",
+    adultsCount: e.adultsCount ?? "",
+    children03: e.children03 ?? "",
+    children47: e.children47 ?? "",
+    orchestraCount: e.orchestraCount ?? "",
+    cameramanCount: e.cameramanCount ?? "",
+    photographerCount: e.photographerCount ?? "",
+    cakesAndDesserts: e.cakesAndDesserts ?? "",
+    cakeOrderedAt: e.cakeOrderedAt ?? "",
+    cakeArrivalTime: e.cakeArrivalTime ?? "",
+    cakeServedAt: e.cakeServedAt ?? "",
+    drinksArrival: e.drinksArrival ?? "",
+    drinksStorage: e.drinksStorage ?? "",
+    champagneStorage: e.champagneStorage ?? "",
+    firstBottlesBy: e.firstBottlesBy ?? "",
+    alcoholAtTeamTable: e.alcoholAtTeamTable ?? false,
+    cakesSwedishTable: e.cakesSwedishTable ?? false,
+    fruitsSwedishTable: e.fruitsSwedishTable ?? false,
+    ownFlowers: e.ownFlowers ?? false,
+    ownVases: e.ownVases ?? false,
+    placeCards: e.placeCards ?? false,
+    placeCardsLayout: e.placeCardsLayout ?? "",
+    decorationColor: e.decorationColor ?? "",
+    tableLayout: e.tableLayout ?? "",
+    brideGroomTable: e.brideGroomTable ?? "",
+    orchestraTable: e.orchestraTable ?? "",
+    breadWelcomeBy: e.breadWelcomeBy ?? "",
+    extraAttractions: e.extraAttractions ?? "",
+    specialRequests: e.specialRequests ?? "",
+    facebookConsent: e.facebookConsent ?? false,
+    ownNapkins: e.ownNapkins ?? false,
+    dutyPerson: e.dutyPerson ?? "",
+    afterpartyEnabled: e.afterpartyEnabled ?? false,
+    afterpartyTimeFrom: e.afterpartyTimeFrom ?? "",
+    afterpartyTimeTo: e.afterpartyTimeTo ?? "",
+    afterpartyGuests: e.afterpartyGuests ?? "",
+    afterpartyMenu: e.afterpartyMenu ?? "",
+    afterpartyMusic: e.afterpartyMusic ?? "",
+    notes: e.notes ?? "",
+  };
+}
+
+function toCreatePayload(form: EventFormTabState, menuData: Record<string, unknown> | null): Record<string, unknown> {
+  const dateVal = form.eventDate || new Date().toISOString().split("T")[0];
+  const guestCount = (Number(form.adultsCount) || 0) + (Number(form.children03) || 0) + (Number(form.children47) || 0) || null;
+  return {
+    eventType: form.eventType,
+    clientName: form.clientName || "Nowa impreza",
+    clientPhone: form.clientPhone || null,
+    dateFrom: dateVal,
+    eventDate: dateVal,
+    dateTo: dateVal,
+    roomName: form.roomName || "Do ustalenia",
+    guestCount,
+    adultsCount: form.adultsCount === "" ? null : Number(form.adultsCount),
+    children03: form.children03 === "" ? null : Number(form.children03),
+    children47: form.children47 === "" ? null : Number(form.children47),
+    timeStart: form.timeStart || null,
+    timeEnd: form.timeEnd || null,
+    churchTime: form.churchTime || null,
+    orchestraCount: form.orchestraCount === "" ? null : Number(form.orchestraCount),
+    cameramanCount: form.cameramanCount === "" ? null : Number(form.cameramanCount),
+    photographerCount: form.photographerCount === "" ? null : Number(form.photographerCount),
+    packageId: (menuData as { pakietId?: string } | null)?.pakietId ?? null,
+    cakesAndDesserts: form.cakesAndDesserts || null,
+    cakeOrderedAt: form.cakeOrderedAt || null,
+    cakeArrivalTime: form.cakeArrivalTime || null,
+    cakeServedAt: form.cakeServedAt || null,
+    drinksArrival: form.drinksArrival || null,
+    drinksStorage: form.drinksStorage || null,
+    champagneStorage: form.champagneStorage || null,
+    firstBottlesBy: form.firstBottlesBy || null,
+    alcoholAtTeamTable: form.alcoholAtTeamTable,
+    cakesSwedishTable: form.cakesSwedishTable,
+    fruitsSwedishTable: form.fruitsSwedishTable,
+    ownFlowers: form.ownFlowers,
+    ownVases: form.ownVases,
+    placeCards: form.placeCards,
+    placeCardsLayout: form.placeCardsLayout || null,
+    decorationColor: form.decorationColor || null,
+    tableLayout: form.tableLayout || null,
+    brideGroomTable: form.brideGroomTable || null,
+    orchestraTable: form.orchestraTable || null,
+    breadWelcomeBy: form.breadWelcomeBy || null,
+    extraAttractions: form.extraAttractions || null,
+    specialRequests: form.specialRequests || null,
+    facebookConsent: form.facebookConsent,
+    ownNapkins: form.ownNapkins,
+    dutyPerson: form.dutyPerson || null,
+    afterpartyEnabled: form.afterpartyEnabled,
+    afterpartyTimeFrom: form.afterpartyTimeFrom || null,
+    afterpartyTimeTo: form.afterpartyTimeTo || null,
+    afterpartyGuests: form.afterpartyGuests === "" ? null : Number(form.afterpartyGuests),
+    afterpartyMenu: form.afterpartyMenu || null,
+    afterpartyMusic: form.afterpartyMusic || null,
+    notes: form.notes || "",
+    depositAmount: form.depositAmount ? parseFloat(String(form.depositAmount).replace(",", ".")) : null,
+    depositPaid: form.depositPaid,
+    addPoprawiny: form.eventType === "WESELE" && form.addPoprawiny,
+    poprawinyDate: form.addPoprawiny ? form.poprawinyDate : null,
+    poprawinyGuestCount: form.addPoprawiny && form.poprawinyGuestCount !== "" ? Number(form.poprawinyGuestCount) : null,
+    status: "DRAFT",
+    ...(menuData && { menu: menuData }),
+  };
+}
+
+function toEditPayload(form: EventFormTabState, menuData: Record<string, unknown> | null, status: string, depositPaid: boolean): Record<string, unknown> {
+  const dateVal = form.eventDate || new Date().toISOString().split("T")[0];
+  const guestCount = (Number(form.adultsCount) || 0) + (Number(form.children03) || 0) + (Number(form.children47) || 0) || null;
+  return {
+    eventType: form.eventType,
+    clientName: form.clientName || "Nowa impreza",
+    clientPhone: form.clientPhone || null,
+    dateFrom: dateVal,
+    eventDate: dateVal,
+    dateTo: dateVal,
+    roomName: form.roomName || "Do ustalenia",
+    guestCount,
+    adultsCount: form.adultsCount === "" ? null : Number(form.adultsCount),
+    children03: form.children03 === "" ? null : Number(form.children03),
+    children47: form.children47 === "" ? null : Number(form.children47),
+    timeStart: form.timeStart || null,
+    timeEnd: form.timeEnd || null,
+    churchTime: form.churchTime || null,
+    orchestraCount: form.orchestraCount === "" ? null : Number(form.orchestraCount),
+    cameramanCount: form.cameramanCount === "" ? null : Number(form.cameramanCount),
+    photographerCount: form.photographerCount === "" ? null : Number(form.photographerCount),
+    packageId: (menuData as { pakietId?: string } | null)?.pakietId ?? null,
+    cakesAndDesserts: form.cakesAndDesserts || null,
+    cakeOrderedAt: form.cakeOrderedAt || null,
+    cakeArrivalTime: form.cakeArrivalTime || null,
+    cakeServedAt: form.cakeServedAt || null,
+    drinksArrival: form.drinksArrival || null,
+    drinksStorage: form.drinksStorage || null,
+    champagneStorage: form.champagneStorage || null,
+    firstBottlesBy: form.firstBottlesBy || null,
+    alcoholAtTeamTable: form.alcoholAtTeamTable,
+    cakesSwedishTable: form.cakesSwedishTable,
+    fruitsSwedishTable: form.fruitsSwedishTable,
+    ownFlowers: form.ownFlowers,
+    ownVases: form.ownVases,
+    placeCards: form.placeCards,
+    placeCardsLayout: form.placeCardsLayout || null,
+    decorationColor: form.decorationColor || null,
+    tableLayout: form.tableLayout || null,
+    brideGroomTable: form.brideGroomTable || null,
+    orchestraTable: form.orchestraTable || null,
+    breadWelcomeBy: form.breadWelcomeBy || null,
+    extraAttractions: form.extraAttractions || null,
+    specialRequests: form.specialRequests || null,
+    facebookConsent: form.facebookConsent,
+    ownNapkins: form.ownNapkins,
+    dutyPerson: form.dutyPerson || null,
+    afterpartyEnabled: form.afterpartyEnabled,
+    afterpartyTimeFrom: form.afterpartyTimeFrom || null,
+    afterpartyTimeTo: form.afterpartyTimeTo || null,
+    afterpartyGuests: form.afterpartyGuests === "" ? null : Number(form.afterpartyGuests),
+    afterpartyMenu: form.afterpartyMenu || null,
+    afterpartyMusic: form.afterpartyMusic || null,
+    notes: form.notes || "",
+    depositAmount: form.depositAmount ? parseFloat(String(form.depositAmount).replace(",", ".")) : null,
+    depositPaid,
+    status,
+    ...(menuData && { menu: menuData }),
+  };
+}
+
+function CreateEventModal({
+  open,
+  initialDate,
+  onClose,
+  onCreated,
+  showToast,
+}: {
+  open: boolean;
+  initialDate: string;
+  onClose: () => void;
+  onCreated: (created: Record<string, unknown>) => void;
+  showToast: (msg: string) => void;
+}) {
+  const [tab, setTab] = useState<"dane" | "goscie" | "menu" | "szczegoly">("dane");
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<EventFormTabState>(() => ({ ...EMPTY_EVENT_FORM, eventDate: initialDate || "" }));
+  const [menuData, setMenuData] = useState<Record<string, unknown> | null>(null);
+  const updateForm = useCallback(<K extends keyof EventFormTabState>(k: K, v: EventFormTabState[K]) => {
+    setForm((f) => ({ ...f, [k]: v }));
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      setForm({ ...EMPTY_EVENT_FORM, eventDate: initialDate || "" });
+      setMenuData(null);
+      setTab("dane");
+    }
+  }, [open, initialDate]);
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    if (open) document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [open, onClose]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const body = toCreatePayload(form, menuData);
+      const res = await fetch("/api/event-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        onCreated(created);
+        onClose();
+      } else {
+        const err = await res.text();
+        alert("Błąd zapisu: " + err);
+      }
+    } catch (e) {
+      alert("Błąd połączenia: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) return null;
+
+  const tc = TC[form.eventType] || TC.INNE;
+  const typeLabel = TL[form.eventType] || "Inne";
+  const evForMenu = { type: form.eventType, client: form.clientName, date: form.eventDate || new Date().toISOString().split("T")[0], guests: (form.adultsCount === "" ? 0 : Number(form.adultsCount) || 0) + (form.children03 === "" ? 0 : Number(form.children03) || 0) + (form.children47 === "" ? 0 : Number(form.children47) || 0) || null };
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 8000, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "40px" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "white", borderRadius: "8px", width: "660px", maxWidth: "95vw", maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 4px 24px rgba(0,0,0,0.12)" }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid #e5e5e5", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+            <span style={{ background: tc.bg, color: tc.tx, border: `1px solid ${tc.bd}`, borderRadius: "3px", padding: "2px 8px", fontSize: "11px", fontWeight: 700 }}>{typeLabel}</span>
+            <span style={{ fontSize: "10px", color: "#f57c00", fontWeight: 600, border: "1px solid #f57c0033", borderRadius: "3px", padding: "1px 6px" }}>Nowa</span>
+          </div>
+          <div style={{ fontSize: "16px", fontWeight: 700, color: "#1e1e1e" }}>Nowa impreza</div>
+          {form.eventDate && <div style={{ fontSize: "12px", color: "#999", marginTop: "2px" }}>{fmtLong(form.eventDate)}</div>}
+        </div>
+        <div style={{ display: "flex", borderBottom: "1px solid #e5e5e5", padding: "0 20px", flexShrink: 0 }}>
+          {(["dane", "goscie", "menu", "szczegoly"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              style={{ padding: "8px 16px", border: "none", background: "transparent", borderBottom: tab === t ? "2px solid #1e1e1e" : "2px solid transparent", color: tab === t ? "#1e1e1e" : "#bbb", fontSize: "13px", fontWeight: tab === t ? 700 : 500, cursor: "pointer", marginBottom: "-1px" }}
+            >
+              {t === "dane" ? "Dane" : t === "goscie" ? "Goście i czas" : t === "menu" ? "Menu i tort" : "Szczegóły"}
+            </button>
+          ))}
+        </div>
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          <EventFormTabs tab={tab} form={form} update={updateForm} menuData={menuData} onMenuSave={(d) => { setMenuData(d); showToast("Menu zapisane"); }} evForMenu={evForMenu} />
+        </div>
+        <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e5e5", display: "flex", gap: "8px", justifyContent: "flex-end", flexShrink: 0 }}>
+          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "8px 16px", fontSize: "12px", fontWeight: 600, color: "#888", cursor: "pointer" }}>Anuluj</button>
+          <button onClick={handleSave} disabled={saving} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "8px 20px", fontSize: "12px", fontWeight: 600, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>{saving ? "Zapisuję..." : "Zapisz imprezę"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EventDetailModal({
   evId,
   events,
@@ -418,20 +797,34 @@ function EventDetailModal({
   onRefresh?: () => void;
 }) {
   const ev = events.find((e) => e.id === evId);
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState<EventFormTabState>(EMPTY_EVENT_FORM);
+  const [editSaving, setEditSaving] = useState(false);
   const [editNote, setEditNote] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [showDep, setShowDep] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
-  const [zakladka, setZakladka] = useState<"szczegoly" | "menu">("szczegoly");
+  const [zakladka, setZakladka] = useState<"dane" | "goscie" | "menu" | "szczegoly">("dane");
+  const [editMenuData, setEditMenuData] = useState<Record<string, unknown> | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const subOpen = showDep || showCancel;
+  const updateEditForm = useCallback(<K extends keyof EventFormTabState>(k: K, v: EventFormTabState[K]) => {
+    setEditForm((f) => ({ ...f, [k]: v }));
+  }, []);
 
   useEffect(() => {
     setNoteText(ev?.notes ?? "");
   }, [ev?.notes]);
   useEffect(() => {
     setZakladka("szczegoly");
+    setEditMode(false);
+  }, [ev?.id]);
+  useEffect(() => {
+    if (ev) {
+      setEditForm(evToFullForm(ev));
+      setEditMenuData(null);
+    }
   }, [ev?.id]);
   useEffect(() => {
     if (editNote) noteRef.current?.focus();
@@ -452,6 +845,36 @@ function EventDetailModal({
   const doCancel = () => handlers.changeStatus(evId, "CANCELLED").then(() => { setShowCancel(false); showToast("Impreza anulowana", "warn"); onClose(); }).catch(onErr);
   const doRestore = () => handlers.changeStatus(evId, "CONFIRMED").then(() => showToast("Impreza przywrócona ✅")).catch(onErr);
 
+  const handleSaveEdit = async () => {
+    setEditSaving(true);
+    try {
+      const body = toEditPayload(editForm, editMenuData ?? ev.menu ?? null, ev.status, ev.paid);
+      const res = await fetch(`/api/event-orders/${ev.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        onRefresh?.();
+        setEditMode(false);
+        showToast("Zapisano zmiany");
+      } else {
+        const err = await res.text();
+        alert("Błąd zapisu: " + err);
+      }
+    } catch (e) {
+      alert("Błąd połączenia: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditForm(evToFullForm(ev));
+    setEditMode(false);
+    setZakladka("szczegoly");
+  };
+
   return (
     <>
       <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 500, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "60px" }}>
@@ -471,10 +894,10 @@ function EventDetailModal({
             </div>
           </div>
           <div style={{ display: "flex", borderBottom: "1px solid #e5e5e5", marginLeft: "20px", marginRight: "20px", gap: "0" }}>
-            {([
-              ["szczegoly", "Szczegóły"],
-              ["menu", "Menu"],
-            ] as const).map(([t, label]) => (
+            {(editMode
+              ? ([["dane", "Dane"], ["goscie", "Goście i czas"], ["menu", "Menu i tort"], ["szczegoly", "Szczegóły"]] as const)
+              : ([["szczegoly", "Szczegóły"], ["menu", "Menu"]] as const)
+            ).map(([t, label]) => (
               <button
                 key={t}
                 onClick={() => setZakladka(t)}
@@ -494,9 +917,18 @@ function EventDetailModal({
               </button>
             ))}
           </div>
-          <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: "12px" }}>
-            {zakladka === "szczegoly" && (
-            <>
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+            {editMode ? (
+              <EventFormTabs
+                tab={zakladka}
+                form={editForm}
+                update={updateEditForm}
+                menuData={editMenuData ?? ev.menu ?? null}
+                onMenuSave={(d) => { setEditMenuData(d); handlers.updateMenu(evId, d).then(() => { showToast("Menu zapisane"); onRefresh?.(); }); }}
+                evForMenu={{ type: editForm.eventType, client: editForm.clientName, date: editForm.eventDate || ev.date, guests: (editForm.adultsCount === "" ? 0 : Number(editForm.adultsCount) || 0) + (editForm.children03 === "" ? 0 : Number(editForm.children03) || 0) + (editForm.children47 === "" ? 0 : Number(editForm.children47) || 0) || null }}
+              />
+            ) : zakladka === "szczegoly" ? (
+            <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "12px" }}>
             {ev.phone ? (
               <a href={`tel:${ev.phone.replace(/\s/g, "")}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", background: "#f0fdf4", border: "2px solid #22c55e", borderRadius: "12px", padding: "14px", textDecoration: "none", fontSize: "16px", fontWeight: 900, color: "#166534" }}>📞 Zadzwoń: {ev.phone}</a>
             ) : (
@@ -520,6 +952,40 @@ function EventDetailModal({
                 ))}
               </div>
             </div>
+            <>
+            <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "9px" }}>
+                <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px" }}>ZADATEK</div>
+                <button onClick={() => setShowDep(true)} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "7px", padding: "4px 10px", cursor: "pointer", fontSize: "11px", fontWeight: 700, color: "#3b82f6" }}>{ev.deposit != null ? "✏️ Zmień" : "+ Dodaj"}</button>
+              </div>
+              {ev.deposit != null ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                  <div style={{ fontSize: "22px", fontWeight: 900, color: ev.paid ? "#166534" : "#991b1b" }}>{ev.paid ? "✅" : "❌"} {fmtZl(ev.deposit)}</div>
+                  <button onClick={doToggleDep} style={{ background: ev.paid ? "#fef2f2" : "#f0fdf4", border: `1.5px solid ${ev.paid ? "#fca5a5" : "#86efac"}`, borderRadius: "9px", padding: "7px 14px", cursor: "pointer", fontSize: "12px", fontWeight: 800, color: ev.paid ? "#991b1b" : "#166534" }}>{ev.paid ? "↩ Cofnij" : "✅ Oznacz opłacony"}</button>
+                </div>
+              ) : (
+                <div style={{ color: "#94a3b8", fontSize: "13px", fontStyle: "italic" }}>Brak zadatku — kliknij Dodaj</div>
+              )}
+            </div>
+            <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "9px" }}>
+                <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px" }}>NOTATKA</div>
+                {!editNote && <button onClick={() => setEditNote(true)} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "7px", padding: "4px 10px", cursor: "pointer", fontSize: "11px", fontWeight: 700, color: "#64748b" }}>✏️ Edytuj</button>}
+              </div>
+              {editNote ? (
+                <div>
+                  <textarea ref={noteRef} value={noteText} onChange={(e) => setNoteText(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setEditNote(false); } if (e.key === "Enter" && e.ctrlKey) doSaveNote(); }} style={{ width: "100%", minHeight: "80px", padding: "10px", border: "2px solid #3b82f6", borderRadius: "9px", fontSize: "13px", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.6, outline: "none" }} />
+                  <div style={{ display: "flex", gap: "8px", marginTop: "8px", alignItems: "center" }}>
+                    <button onClick={doSaveNote} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "8px", padding: "8px 18px", cursor: "pointer", fontSize: "13px", fontWeight: 800 }}>Zapisz</button>
+                    <button onClick={() => { setEditNote(false); setNoteText(ev.notes ?? ""); }} style={{ background: "white", border: "1.5px solid #e2e8f0", borderRadius: "8px", padding: "8px 14px", cursor: "pointer", fontSize: "13px", color: "#64748b" }}>Anuluj</button>
+                    <span style={{ fontSize: "11px", color: "#94a3b8" }}>Ctrl+Enter</span>
+                  </div>
+                </div>
+              ) : (
+                <div onClick={() => setEditNote(true)} style={{ fontSize: "13px", color: ev.notes ? "#0f172a" : "#94a3b8", lineHeight: 1.6, cursor: "text", whiteSpace: "pre-wrap", minHeight: "32px", padding: "8px", background: "white", border: "1.5px dashed #e2e8f0", borderRadius: "8px" }}>{ev.notes || "Brak notatki — kliknij aby dodać..."}</div>
+              )}
+            </div>
+            </>
             {ev.quoteId && (
               <div style={{ background: "#f5f3ff", border: "1.5px solid #a78bfa", borderRadius: "10px", padding: "10px 14px", display: "flex", alignItems: "center", gap: "10px" }}>
                 <span style={{ fontSize: "18px" }}>💰</span>
@@ -600,46 +1066,12 @@ function EventDetailModal({
                 )}
               </div>
             )}
-            <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "9px" }}>
-                <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px" }}>ZADATEK</div>
-                <button onClick={() => setShowDep(true)} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "7px", padding: "4px 10px", cursor: "pointer", fontSize: "11px", fontWeight: 700, color: "#3b82f6" }}>{ev.deposit != null ? "✏️ Zmień" : "+ Dodaj"}</button>
-              </div>
-              {ev.deposit != null ? (
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ fontSize: "22px", fontWeight: 900, color: ev.paid ? "#166534" : "#991b1b" }}>{ev.paid ? "✅" : "❌"} {fmtZl(ev.deposit)}</div>
-                  <button onClick={doToggleDep} style={{ background: ev.paid ? "#fef2f2" : "#f0fdf4", border: `1.5px solid ${ev.paid ? "#fca5a5" : "#86efac"}`, borderRadius: "9px", padding: "7px 14px", cursor: "pointer", fontSize: "12px", fontWeight: 800, color: ev.paid ? "#991b1b" : "#166534" }}>{ev.paid ? "↩ Cofnij" : "✅ Oznacz opłacony"}</button>
-                </div>
-              ) : (
-                <div style={{ color: "#94a3b8", fontSize: "13px", fontStyle: "italic" }}>Brak zadatku — kliknij Dodaj</div>
-              )}
-            </div>
-            <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "9px" }}>
-                <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px" }}>NOTATKA</div>
-                {!editNote && <button onClick={() => setEditNote(true)} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "7px", padding: "4px 10px", cursor: "pointer", fontSize: "11px", fontWeight: 700, color: "#64748b" }}>✏️ Edytuj</button>}
-              </div>
-              {editNote ? (
-                <div>
-                  <textarea ref={noteRef} value={noteText} onChange={(e) => setNoteText(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setEditNote(false); } if (e.key === "Enter" && e.ctrlKey) doSaveNote(); }} style={{ width: "100%", minHeight: "80px", padding: "10px", border: "2px solid #3b82f6", borderRadius: "9px", fontSize: "13px", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.6, outline: "none" }} />
-                  <div style={{ display: "flex", gap: "8px", marginTop: "8px", alignItems: "center" }}>
-                    <button onClick={doSaveNote} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "8px", padding: "8px 18px", cursor: "pointer", fontSize: "13px", fontWeight: 800 }}>Zapisz</button>
-                    <button onClick={() => { setEditNote(false); setNoteText(ev.notes ?? ""); }} style={{ background: "white", border: "1.5px solid #e2e8f0", borderRadius: "8px", padding: "8px 14px", cursor: "pointer", fontSize: "13px", color: "#64748b" }}>Anuluj</button>
-                    <span style={{ fontSize: "11px", color: "#94a3b8" }}>Ctrl+Enter</span>
-                  </div>
-                </div>
-              ) : (
-                <div onClick={() => setEditNote(true)} style={{ fontSize: "13px", color: ev.notes ? "#0f172a" : "#94a3b8", lineHeight: 1.6, cursor: "text", whiteSpace: "pre-wrap", minHeight: "32px", padding: "8px", background: "white", border: "1.5px dashed #e2e8f0", borderRadius: "8px" }}>{ev.notes || "Brak notatki — kliknij aby dodać..."}</div>
-              )}
-            </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-              <a href={`/events/${ev.id}/edit`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1.5px solid #e2e8f0", borderRadius: "10px", padding: "12px", textDecoration: "none", fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>✏️ Edytuj formularz</a>
+              <button onClick={() => { setEditForm(evToFullForm(ev)); setEditMode(true); setZakladka("dane"); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1.5px solid #e2e8f0", borderRadius: "10px", padding: "12px", fontSize: "13px", fontWeight: 700, color: "#0f172a", cursor: "pointer" }}>✏️ Edytuj</button>
               <button onClick={() => { const docId = ev.menuDocId ?? ev.checklistDocId; if (docId) window.open(`https://docs.google.com/document/d/${docId}/edit`, "_blank"); else showToast("Dokumenty Google Docs — w przygotowaniu", "warn"); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1.5px solid #e2e8f0", borderRadius: "10px", padding: "12px", cursor: "pointer", fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>📄 Dokumenty</button>
             </div>
-            </>
-            )}
-
-            {zakladka === "menu" && (
+            </div>
+            ) : (
               <MenuTab
                 ev={{ type: ev.type, client: ev.client, date: ev.date, guests: ev.guests }}
                 savedMenu={ev.menu ?? null}
@@ -655,12 +1087,21 @@ function EventDetailModal({
             )}
           </div>
           <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e5e5", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-            {ev.status === "CANCELLED" ? (
-              <button onClick={doRestore} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#2e7d32" }}>Przywróć imprezę</button>
+            {editMode ? (
+              <>
+                <button onClick={handleCancelEdit} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#64748b" }}>Anuluj edycję</button>
+                <button onClick={handleSaveEdit} disabled={editSaving} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "6px 20px", cursor: "pointer", fontSize: "11px", fontWeight: 600, opacity: editSaving ? 0.6 : 1 }}>{editSaving ? "Zapisuję..." : "Zapisz"}</button>
+              </>
             ) : (
-              <button onClick={() => setShowCancel(true)} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#c62828" }}>Anuluj imprezę</button>
+              <>
+                {ev.status === "CANCELLED" ? (
+                  <button onClick={doRestore} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#2e7d32" }}>Przywróć imprezę</button>
+                ) : (
+                  <button onClick={() => setShowCancel(true)} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#c62828" }}>Anuluj imprezę</button>
+                )}
+                <button onClick={onClose} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "6px 16px", cursor: "pointer", fontSize: "11px", fontWeight: 600 }}>Zamknij</button>
+              </>
             )}
-            <button onClick={onClose} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "6px 16px", cursor: "pointer", fontSize: "11px", fontWeight: 600 }}>Zamknij</button>
           </div>
         </div>
       </div>
@@ -693,32 +1134,47 @@ function EventCard({
     if (expanded) ref.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [expanded]);
   const leftBorder = cancelled ? "#ddd" : c.bd;
+  const tc = c;
   return (
-    <div ref={ref} id={`ev-${ev.id}`} onClick={onToggle} style={{ borderBottom: "1px solid #f0f0f0", borderLeft: `3px solid ${leftBorder}`, padding: "10px 16px", cursor: "pointer", opacity: cancelled ? 0.45 : 1, background: "white" }} onMouseEnter={(e) => { if (!cancelled) e.currentTarget.style.background = "#fafafa"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "white"; }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <div style={{ width: "88px", flexShrink: 0 }}>
-          <div style={{ fontSize: "13px", fontWeight: 600, color: "#1e1e1e" }}>{fmtDate(ev.date)}</div>
-          <div style={{ fontSize: "10px", fontWeight: 600, color: days === 0 ? "#e53935" : days <= 7 && days > 0 ? "#f57c00" : "#bbb" }}>
-            {days === 0 ? "dziś" : days === 1 ? "jutro" : days > 0 ? `za ${days} d` : `${Math.abs(days)} d temu`}
-          </div>
-          {(ev.tf || ev.tt) && <div style={{ fontSize: "10px", color: "#ccc" }}>{ev.tf ?? "?"}–{ev.tt ?? "?"}</div>}
+    <div ref={ref} id={`ev-${ev.id}`} onClick={onToggle} style={{
+      display: "grid",
+      gridTemplateColumns: "95px minmax(200px,1fr) 150px 70px 90px minmax(100px,1fr) 110px 120px 20px",
+      padding: "10px 16px",
+      borderBottom: "1px solid #f0f0f0",
+      borderLeft: `3px solid ${leftBorder}`,
+      cursor: "pointer",
+      alignItems: "center",
+      gap: "8px",
+      fontSize: "13px",
+      opacity: cancelled ? 0.45 : 1,
+      background: "white",
+    }} onMouseEnter={(e) => { if (!cancelled) e.currentTarget.style.background = "#fafafa"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "white"; }}>
+      <div>
+        <div style={{ fontWeight: 600, color: "#1e1e1e" }}>{fmtDate(ev.date)}</div>
+        <div style={{ fontSize: "10px", fontWeight: 600, color: days === 0 ? "#e53935" : days <= 7 && days > 0 ? "#f57c00" : "#bbb" }}>
+          {days === 0 ? "dziś" : days === 1 ? "jutro" : days > 0 ? `za ${days} d` : `${Math.abs(days)} d temu`}
         </div>
-        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-          <TypeBadge type={ev.type} pop={ev.pop} room={ev.room} />
-          <span style={{ fontWeight: 600, fontSize: "14px", color: "#1e1e1e", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.client ?? "—"}</span>
-          {ev.status === "DRAFT" && <StatusBadge status="DRAFT" />}
-        </div>
-        <div style={{ width: "160px", flexShrink: 0, fontSize: "12px", color: "#777" }}>{ev.room ?? "—"}{ev.guests ? ` · ${ev.guests} os.` : ""}</div>
-        <div style={{ width: "100px", flexShrink: 0, textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
-          <DepositChip ev={ev} onToggle={onDepositToggle} onOpen={onDepositOpen} />
-        </div>
-        <div style={{ width: "100px", flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-          <PhoneBtn phone={ev.phone} />
-        </div>
-        <span style={{ color: "#ccc", fontSize: "14px", transition: "transform 0.15s", transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
       </div>
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+        <span style={{
+          background: tc.bg, color: tc.tx, border: `1px solid ${tc.bd}`,
+          borderRadius: "3px", padding: "2px 8px", fontSize: "11px", fontWeight: 700,
+          whiteSpace: "nowrap", flexShrink: 0,
+        }}>{ev.pop ? "Poprawiny" : TL[ev.type] ?? ev.type}</span>
+        <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.client ?? "—"}</span>
+        {ev.status === "DRAFT" && <span style={{ fontSize: "10px", color: "#f57c00", fontWeight: 600, flexShrink: 0 }}>Szkic</span>}
+      </div>
+      <div style={{ fontSize: "12px", color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ev.room ?? ""}>{ev.room ?? "—"}</div>
+      <div style={{ fontSize: "12px", color: "#666" }}>{ev.guests ? `${ev.guests} os.` : "—"}</div>
+      <div style={{ fontSize: "11px", color: "#999" }}>{ev.tf || ev.tt ? `${ev.tf ?? "?"}–${ev.tt ?? "?"}` : "—"}</div>
+      <div style={{ fontSize: "11px", color: "#bbb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontStyle: ev.notes ? "normal" : "italic" }} title={ev.notes ?? ""}>{ev.notes || "brak notatki"}</div>
+      <div style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
+        <DepositChip ev={ev} onToggle={onDepositToggle} onOpen={onDepositOpen} />
+      </div>
+      <div onClick={(e) => e.stopPropagation()}><PhoneBtn phone={ev.phone} /></div>
+      <span style={{ color: "#ccc", fontSize: "14px", textAlign: "right", transition: "transform 0.15s", transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
       {expanded && (
-        <div style={{ marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #f0f0f0", display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ gridColumn: "1 / -1", marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #f0f0f0", display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 200px", fontSize: "12px", color: ev.notes ? "#555" : "#ccc", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{ev.notes || "Brak notatki."}</div>
           <button onClick={(e) => { e.stopPropagation(); onOpenModal(ev.id); }} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "6px 16px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Szczegóły</button>
         </div>
@@ -926,7 +1382,9 @@ function MonthNav({ month, year, onPrev, onNext, onToday }: { month: number; yea
   );
 }
 
-function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange }: { events: EventRecord[]; month: number; year: number; onOpenModal: (id: string) => void; onMonthChange: (fn: (p: number) => number) => void }) {
+function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange, onCreateWithDate }: { events: EventRecord[]; month: number; year: number; onOpenModal: (id: string) => void; onMonthChange: (fn: (p: number) => number) => void; onCreateWithDate?: (dateStr: string) => void }) {
+  const [popupDay, setPopupDay] = useState<{ day: number; events: EventRecord[]; x: number; y: number } | null>(null);
+
   const dInM = new Date(year, month + 1, 0).getDate();
   const firstDow = new Date(year, month, 1).getDay();
   const startOffset = firstDow === 0 ? 6 : firstDow - 1;
@@ -944,45 +1402,67 @@ function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange }: 
     return d.getFullYear() === year && d.getMonth() === month && e.status !== "CANCELLED";
   });
 
+  const maxVisible = 4;
+
   return (
     <div style={{ padding: "0 20px 48px" }}>
       <MonthNav month={month} year={year} onPrev={() => onMonthChange((p) => p - 1)} onNext={() => onMonthChange((p) => p + 1)} onToday={() => onMonthChange(() => 0)} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "2px", marginBottom: "2px" }}>
         {["Pon", "Wt", "Śr", "Czw", "Pt", "Sob", "Ndz"].map((d) => (
-          <div key={d} style={{ textAlign: "center", fontSize: "11px", fontWeight: 700, color: "#94a3b8", padding: "6px 0" }}>{d}</div>
+          <div key={d} style={{ textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94a3b8", padding: "6px 0" }}>{d}</div>
         ))}
       </div>
 
       {weeks.map((week, wi) => (
         <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "2px", marginBottom: "2px" }}>
           {week.map((day, di) => {
-            if (day === null) return <div key={di} style={{ background: "#f9fafb", minHeight: "100px", borderRadius: "6px" }} />;
+            if (day === null) return <div key={di} style={{ background: "#f9fafb", minHeight: "110px", borderRadius: "6px" }} />;
             const dayEvs = monthEvs.filter((e) => new Date(e.date).getDate() === day);
             const isToday = day === todayD;
             const isWeekend = di >= 5;
             return (
-              <div key={di} style={{ background: isToday ? "#fef2f2" : isWeekend ? "#fafafa" : "white", border: `1px solid ${isToday ? "#fca5a5" : "#f1f5f9"}`, borderRadius: "6px", minHeight: "100px", padding: "4px", display: "flex", flexDirection: "column" }}>
-                <div style={{ fontSize: "12px", fontWeight: isToday ? 900 : 600, color: isToday ? "#ef4444" : "#64748b", marginBottom: "3px", display: "flex", alignItems: "center", gap: "4px" }}>
+              <div
+                key={di}
+                onClick={() => {
+                  const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                  onCreateWithDate ? onCreateWithDate(dateStr) : (window.location.href = `/events/new?date=${dateStr}`);
+                }}
+                style={{ background: isToday ? "#fef2f2" : isWeekend ? "#fafafa" : "white", border: `1px solid ${isToday ? "#fca5a5" : "#f1f5f9"}`, borderRadius: "6px", minHeight: "110px", padding: "4px", display: "flex", flexDirection: "column", cursor: "pointer" }}
+              >
+                <div style={{ fontSize: "14px", fontWeight: 700, color: isToday ? "#ef4444" : "#64748b", marginBottom: "3px", display: "flex", alignItems: "center", gap: "4px" }}>
                   {isToday && <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#ef4444" }} />}
                   {day}
-                  {dayEvs.length > 0 && <span style={{ fontSize: "9px", color: "#94a3b8", fontWeight: 700 }}>({dayEvs.length})</span>}
+                  {dayEvs.length > 0 && <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 700 }}>({dayEvs.length})</span>}
                 </div>
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px", overflow: "hidden" }}>
-                  {dayEvs.slice(0, 4).map((ev) => {
+                  {dayEvs.slice(0, maxVisible).map((ev) => {
                     const tc = getEventColor(ev);
                     const emoji = TYPE_EMOJI[ev.type] ?? "📋";
                     return (
-                      <div key={ev.id} onClick={() => onOpenModal(ev.id)}
-                        style={{ background: tc.bg, borderLeft: `3px solid ${tc.bd}`, borderRadius: "3px", padding: "1px 4px", cursor: "pointer", fontSize: "9px", fontWeight: 700, color: tc.tx, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: "15px" }}
+                      <div
+                        key={ev.id}
+                        onClick={(e) => { e.stopPropagation(); onOpenModal(ev.id); }}
+                        style={{ background: tc.bg, borderLeft: `3px solid ${tc.bd}`, borderRadius: "3px", padding: "2px 6px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: tc.tx, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: "18px" }}
                         onMouseEnter={(e) => { e.currentTarget.style.background = tc.bd + "22"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = tc.bg; }}>
+                        onMouseLeave={(e) => { e.currentTarget.style.background = tc.bg; }}
+                      >
                         {emoji} {(ev.client ?? "").split(/\s+/).slice(0, 2).join(" ")}
                       </div>
                     );
                   })}
-                  {dayEvs.length > 4 && (
-                    <div style={{ fontSize: "9px", color: "#94a3b8", fontWeight: 700, textAlign: "center", cursor: "pointer" }} onClick={() => onOpenModal(dayEvs[0].id)}>+{dayEvs.length - 4} więcej</div>
+                  {dayEvs.length > maxVisible && (
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPopupDay({ day, events: dayEvs, x: e.clientX, y: e.clientY });
+                      }}
+                      style={{ fontSize: "10px", color: "#1976d2", fontWeight: 700, textAlign: "center", cursor: "pointer", padding: "2px", borderRadius: "3px" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "#e3f2fd"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                    >
+                      +{dayEvs.length - maxVisible} więcej
+                    </div>
                   )}
                 </div>
               </div>
@@ -990,6 +1470,69 @@ function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange }: 
           })}
         </div>
       ))}
+
+      {popupDay && (
+        <div onClick={() => setPopupDay(null)} style={{ position: "fixed", inset: 0, zIndex: 7000, background: "rgba(0,0,0,0.15)" }}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "fixed",
+              left: Math.min(popupDay.x, window.innerWidth - 320),
+              top: Math.min(popupDay.y, window.innerHeight - 400),
+              width: "300px",
+              maxHeight: "380px",
+              overflowY: "auto",
+              background: "white",
+              borderRadius: "8px",
+              border: "1px solid #e5e5e5",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
+              padding: "12px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px", paddingBottom: "8px", borderBottom: "1px solid #f0f0f0" }}>
+              <span style={{ fontSize: "14px", fontWeight: 700, color: "#1e1e1e" }}>
+                {popupDay.day} {MPL[month]} — {popupDay.events.length} imprez
+              </span>
+              <button onClick={() => setPopupDay(null)} style={{ background: "none", border: "none", fontSize: "16px", color: "#ccc", cursor: "pointer" }}>×</button>
+            </div>
+            {popupDay.events.map((ev) => {
+              const tc = getEventColor(ev);
+              return (
+                <div
+                  key={ev.id}
+                  onClick={() => { setPopupDay(null); onOpenModal(ev.id); }}
+                  style={{
+                    borderLeft: `3px solid ${tc.bd}`,
+                    background: tc.bg,
+                    borderRadius: "4px",
+                    padding: "6px 10px",
+                    marginBottom: "4px",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+                >
+                  <div style={{ fontWeight: 700, color: tc.tx }}>{ev.client ?? "—"}</div>
+                  <div style={{ fontSize: "10px", color: tc.tx + "88", marginTop: "1px" }}>
+                    {ev.room ?? "—"} {ev.guests ? `· ${ev.guests} os.` : ""}
+                  </div>
+                </div>
+              );
+            })}
+            <button
+              onClick={() => {
+                const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(popupDay.day).padStart(2, "0")}`;
+                setPopupDay(null);
+                onCreateWithDate ? onCreateWithDate(dateStr) : (window.location.href = `/events/new?date=${dateStr}`);
+              }}
+              style={{ width: "100%", marginTop: "6px", padding: "6px", background: "#f5f5f5", border: "1px dashed #ddd", borderRadius: "4px", fontSize: "11px", fontWeight: 600, color: "#888", cursor: "pointer", textAlign: "center" }}
+            >
+              + Nowa impreza na ten dzień
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1589,6 +2132,8 @@ export function CentrumSprzedazy() {
   const [expId, setExpId] = useState<string | null>(null);
   const [modalId, setModalId] = useState<string | null>(null);
   const [depId, setDepId] = useState<string | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [createDate, setCreateDate] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const { toasts, show: showToast } = useToast();
 
@@ -1818,7 +2363,7 @@ export function CentrumSprzedazy() {
             <button key={t} onClick={() => setTab(t as typeof tab)} style={{ padding: "8px 14px", border: "none", background: "transparent", cursor: "pointer", borderBottom: tab === t ? "2px solid #1e1e1e" : "2px solid transparent", color: tab === t ? "#1e1e1e" : "#bbb", fontSize: "12px", fontWeight: tab === t ? 700 : 500, marginBottom: "-1px" }}>{l}</button>
           ))}
         </div>
-        <button onClick={() => (window.location.href = "/events/new")} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "7px 14px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>+ Nowa impreza</button>
+        <button onClick={() => { setCreateDate(""); setCreateModalOpen(true); }} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "7px 14px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>+ Nowa impreza</button>
       </div>
       <div style={{ padding: "8px 24px", borderBottom: "1px solid #f5f5f5", display: "flex", gap: "12px", flexWrap: "wrap" }}>
         {Object.entries(TC).map(([type, tc]) => (
@@ -1885,13 +2430,24 @@ export function CentrumSprzedazy() {
           )}
           <div style={{ padding: "0 24px 48px" }}>
             {filtered.length > 0 && (
-              <div style={{ display: "flex", padding: "8px 16px", borderBottom: "2px solid #e5e5e5", gap: "12px", fontSize: "10px", fontWeight: 700, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                <span style={{ width: "88px" }}>Data</span>
-                <span style={{ flex: 1 }}>Klient</span>
-                <span style={{ width: "160px" }}>Sala</span>
-                <span style={{ width: "100px", textAlign: "right" }}>Zadatek</span>
-                <span style={{ width: "100px" }}>Telefon</span>
-                <span style={{ width: "14px" }} />
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "95px minmax(200px,1fr) 150px 70px 90px minmax(100px,1fr) 110px 120px 20px",
+                padding: "8px 16px",
+                borderBottom: "2px solid #e5e5e5",
+                fontSize: "10px", fontWeight: 700, color: "#aaa",
+                textTransform: "uppercase", letterSpacing: "0.5px",
+                gap: "8px",
+              }}>
+                <span>Data</span>
+                <span>Klient</span>
+                <span>Sala</span>
+                <span>Goście</span>
+                <span>Godziny</span>
+                <span>Notatka</span>
+                <span style={{ textAlign: "right" }}>Zadatek</span>
+                <span>Telefon</span>
+                <span></span>
               </div>
             )}
             {filtered.length === 0 ? (
@@ -1909,13 +2465,27 @@ export function CentrumSprzedazy() {
           </div>
         </>
       )}
-      {tab === "kalendarz" && <CalendarMonthView events={filtered} month={ganttMonth} year={ganttYear} onOpenModal={openModal} onMonthChange={setGanttOffset} />}
+      {tab === "kalendarz" && <CalendarMonthView events={filtered} month={ganttMonth} year={ganttYear} onOpenModal={openModal} onMonthChange={setGanttOffset} onCreateWithDate={(dateStr) => { setCreateDate(dateStr); setCreateModalOpen(true); }} />}
       {tab === "os" && <TimelineView events={filtered} onOpenModal={openModal} />}
       {tab === "sale" && <HeatmapView events={filtered} month={ganttMonth} year={ganttYear} onOpenModal={openModal} onMonthChange={setGanttOffset} />}
       {tab === "tydzien" && <WeekView events={filtered} onOpenModal={openModal} />}
       {tab === "gantt" && <GanttView events={events} onOpenModal={openModal} />}
       {tab === "kosztorysy" && <KosztorysyView />}
       {modalId && <EventDetailModal evId={modalId} events={events} onClose={() => setModalId(null)} handlers={handlers} showToast={showToast} onOpenModal={openModal} onRefresh={fetchEvents} />}
+      {createModalOpen && (
+        <CreateEventModal
+          open={createModalOpen}
+          initialDate={createDate}
+          onClose={() => setCreateModalOpen(false)}
+          onCreated={(created) => {
+            const mapped = mapApiToEvent(created);
+            setEvents((prev) => [...prev, mapped]);
+            showToast(`Impreza "${(created.clientName as string) ?? "Nowa impreza"}" utworzona`);
+            setModalId(String(created.id));
+          }}
+          showToast={showToast}
+        />
+      )}
       {depId && !modalId && <DepositModal existingAmt={events.find((e) => e.id === depId)?.deposit ?? null} onSave={handleDepSaveFromList} onClose={() => setDepId(null)} />}
       <Toasts toasts={toasts} />
     </div>

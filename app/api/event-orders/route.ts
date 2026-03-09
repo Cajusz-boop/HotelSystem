@@ -87,6 +87,7 @@ function sanitizeEventData(body: Record<string, unknown>) {
     addPoprawiny: Boolean(b.addPoprawiny),
     poprawinyDate: b.poprawinyDate ? toDate(b.poprawinyDate) : null,
     poprawinyGuestCount: typeof b.poprawinyGuestCount === "number" ? b.poprawinyGuestCount : (b.poprawinyGuestCount != null ? parseInt(String(b.poprawinyGuestCount), 10) : null),
+    menu: b.menu != null && typeof b.menu === "object" && !Array.isArray(b.menu) ? (b.menu as Prisma.InputJsonValue) : undefined,
   };
 }
 
@@ -137,7 +138,7 @@ async function syncEventToGoogle(
 }
 
 function toCreateData(sanitized: ReturnType<typeof sanitizeEventData>): Prisma.EventOrderCreateInput {
-  const { addPoprawiny, poprawinyDate, poprawinyGuestCount, ...rest } = sanitized;
+  const { addPoprawiny, poprawinyDate, poprawinyGuestCount, menu, ...rest } = sanitized;
   const data: Prisma.EventOrderCreateInput = {
     ...rest,
     eventDate: sanitized.eventDate,
@@ -145,6 +146,7 @@ function toCreateData(sanitized: ReturnType<typeof sanitizeEventData>): Prisma.E
     depositPaid: sanitized.depositPaid,
     isPoprawiny: sanitized.isPoprawiny,
     parentEventId: sanitized.parentEventId,
+    ...(menu != null && { menu: menu as Prisma.InputJsonValue }),
   };
   return data;
 }
@@ -152,19 +154,16 @@ function toCreateData(sanitized: ReturnType<typeof sanitizeEventData>): Prisma.E
 export async function POST(req: Request) {
   try {
     const data = await req.json();
-    if (!data.clientName || !data.roomName) {
-      return NextResponse.json(
-        { error: "Brakuje wymaganych pól: clientName, roomName" },
-        { status: 400 }
-      );
-    }
-    if (!data.dateFrom && !data.eventDate) {
+    const clientName = data.clientName != null && String(data.clientName).trim() ? String(data.clientName).trim() : "Nowa impreza";
+    const roomName = data.roomName != null && String(data.roomName).trim() ? String(data.roomName).trim() : "Do ustalenia";
+    const payload = { ...data, clientName, roomName };
+    if (!payload.dateFrom && !payload.eventDate) {
       return NextResponse.json(
         { error: "Brakuje wymaganego pola: dateFrom lub eventDate" },
         { status: 400 }
       );
     }
-    const sanitized = sanitizeEventData(data);
+    const sanitized = sanitizeEventData(payload);
     if (!sanitized.dateFrom || !sanitized.dateTo) {
       return NextResponse.json({ error: "Nieprawidłowe daty" }, { status: 400 });
     }
@@ -358,6 +357,45 @@ const FULL_SELECT = {
   timeStart: true,
   timeEnd: true,
   guestCount: true,
+  adultsCount: true,
+  children03: true,
+  children47: true,
+  orchestraCount: true,
+  cameramanCount: true,
+  photographerCount: true,
+  churchTime: true,
+  brideGroomTable: true,
+  orchestraTable: true,
+  packageId: true,
+  cakesAndDesserts: true,
+  cakeOrderedAt: true,
+  cakeArrivalTime: true,
+  cakeServedAt: true,
+  drinksArrival: true,
+  drinksStorage: true,
+  champagneStorage: true,
+  firstBottlesBy: true,
+  alcoholAtTeamTable: true,
+  cakesSwedishTable: true,
+  fruitsSwedishTable: true,
+  ownFlowers: true,
+  ownVases: true,
+  decorationColor: true,
+  placeCards: true,
+  placeCardsLayout: true,
+  tableLayout: true,
+  breadWelcomeBy: true,
+  extraAttractions: true,
+  specialRequests: true,
+  facebookConsent: true,
+  ownNapkins: true,
+  dutyPerson: true,
+  afterpartyEnabled: true,
+  afterpartyTimeFrom: true,
+  afterpartyTimeTo: true,
+  afterpartyGuests: true,
+  afterpartyMenu: true,
+  afterpartyMusic: true,
   status: true,
   roomName: true,
   depositAmount: true,
@@ -407,7 +445,9 @@ export async function GET(req: Request) {
       orderBy: { dateFrom: "asc" },
     });
 
-    return NextResponse.json(events);
+    return NextResponse.json(events, {
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+    });
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : "Błąd pobierania imprez";
     const errStack = e instanceof Error ? e.stack : undefined;
