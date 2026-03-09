@@ -26,9 +26,10 @@ function getTransporter() {
 
 function getBaseUrl(): string {
   return (
+    process.env.NEXT_PUBLIC_APP_URL ||
     process.env.NEXT_PUBLIC_BASE_URL ||
     process.env.NEXTAUTH_URL ||
-    "http://localhost:3011"
+    "http://localhost:3000"
   );
 }
 
