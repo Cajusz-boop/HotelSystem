@@ -70,18 +70,18 @@ function buildDescription(e: EventOrderForCalendar, packageName?: string | null)
   return lines.join("\n");
 }
 
-function statusToColor(status: string): string {
+function statusToColor(status: string): string | undefined {
   switch (String(status).toUpperCase()) {
     case "CONFIRMED":
     case "DONE":
-      return "10";
+      return undefined; // nie ustawiaj colorId → kafelek dziedziczy kolor kalendarza
     case "DRAFT":
     case "PENDING":
-      return "5";
+      return "5"; // żółty — wyróżnia szkice
     case "CANCELLED":
-      return "11";
+      return "11"; // czerwony — wyróżnia anulowane
     default:
-      return "5";
+      return undefined;
   }
 }
 
@@ -126,6 +126,8 @@ export async function createCalendarEvent(
     });
   }
 
+  const color = statusToColor(event.status ?? "DRAFT");
+
   const res = await calendar.events.insert({
     calendarId: calId,
     supportsAttachments: true,
@@ -134,7 +136,7 @@ export async function createCalendarEvent(
       description: buildDescription(event, packageName),
       start: { date: dateFromStr, timeZone: TIMEZONE },
       end: { date: dateToStr, timeZone: TIMEZONE },
-      colorId: statusToColor(event.status ?? "DRAFT"),
+      ...(color ? { colorId: color } : {}),
       ...(attachments.length > 0 ? { attachments } : {}),
     },
   });
@@ -164,17 +166,22 @@ export async function updateCalendarEvent(
   const dateFromStr = dateFrom.toISOString().split("T")[0];
   const dateToStr = dateTo.toISOString().split("T")[0];
 
+  const color = statusToColor(event.status ?? "DRAFT");
+  const requestBody: Record<string, unknown> = {
+    summary,
+    description: buildDescription(event, packageName),
+    start: { date: dateFromStr, timeZone: TIMEZONE },
+    end: { date: dateToStr, timeZone: TIMEZONE },
+    // CONFIRMED/DONE: null usuwa nadpisanie → kafelek dziedziczy kolor kalendarza
+    // DRAFT/CANCELLED: ustawiamy colorId, by wyróżnić szkice i anulowane
+    colorId: color ?? null,
+  };
+
   await calendar.events.patch({
     calendarId,
     eventId: googleEventId,
     supportsAttachments: true,
-    requestBody: {
-      summary,
-      description: buildDescription(event, packageName),
-      start: { date: dateFromStr, timeZone: TIMEZONE },
-      end: { date: dateToStr, timeZone: TIMEZONE },
-      colorId: statusToColor(event.status ?? "DRAFT"),
-    },
+    requestBody,
   });
 }
 

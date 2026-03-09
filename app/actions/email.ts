@@ -1,6 +1,7 @@
 "use server";
 
 import nodemailer from "nodemailer";
+import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import puppeteer from "puppeteer";
 import { prisma } from "@/lib/db";
 
@@ -17,14 +18,16 @@ function getTransporter() {
   if (!host) return null;
 
   const isRelay = host.includes("smtp-relay");
-  
-  return nodemailer.createTransport({
+
+  const smtpConfig: SMTPTransport.Options & { family?: number } = {
     host,
     port,
     secure: port === 465,
     family: 6,
     auth: isRelay ? undefined : { user, pass },
-  });
+  };
+
+  return nodemailer.createTransport(smtpConfig);
 }
 
 function getBaseUrl(): string {
