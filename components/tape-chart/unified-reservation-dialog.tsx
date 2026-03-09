@@ -836,12 +836,7 @@ export function UnifiedReservationDialog({
           });
           if (result.success && result.data) {
             toast.success("Faktura zbiorcza VAT wystawiona");
-            const printWindow = window.open(`/finance/invoice/${result.data.invoiceId}`, "_blank");
-            if (printWindow) {
-              printWindow.addEventListener("load", () => {
-                setTimeout(() => printWindow.print(), 500);
-              });
-            }
+            window.open(`/finance/invoice/${result.data.invoiceId}?autoPrint=1`, "_blank");
           } else {
             toast.error("error" in result ? result.error : "Błąd wystawiania faktury zbiorczej");
             setDocIssuing(false);
@@ -854,12 +849,7 @@ export function UnifiedReservationDialog({
           });
           if (result.success && result.data) {
             toast.success(`Faktura VAT ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);
-            const printWindow = window.open(`/finance/invoice/${result.data.id}`, "_blank");
-            if (printWindow) {
-              printWindow.addEventListener("load", () => {
-                setTimeout(() => printWindow.print(), 500);
-              });
-            }
+            window.open(`/finance/invoice/${result.data.id}?autoPrint=1`, "_blank");
           } else {
             toast.error("error" in result ? result.error : "Błąd wystawiania faktury");
             setDocIssuing(false);

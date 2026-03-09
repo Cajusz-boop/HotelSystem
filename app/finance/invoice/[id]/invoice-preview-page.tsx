@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { getInvoicePreviewData, updateInvoice } from "@/app/actions/finance";
 import type { InvoicePreviewData } from "@/app/actions/finance";
@@ -88,9 +88,10 @@ function calcFromGross(gross: number, vatRate: number) {
 
 export interface InvoicePreviewPageProps {
   id: string;
+  autoPrint?: boolean;
 }
 
-export function InvoicePreviewPage({ id }: InvoicePreviewPageProps) {
+export function InvoicePreviewPage({ id, autoPrint }: InvoicePreviewPageProps) {
   const [data, setData] = useState<InvoicePreviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -433,19 +434,32 @@ export function InvoicePreviewPage({ id }: InvoicePreviewPageProps) {
     return () => window.removeEventListener("beforeunload", handler);
   }, [hasUnsavedChanges]);
 
-  const handlePrint = () =>
-    saveAndThen(() => {
-      const iframe = document.createElement("iframe");
-      iframe.style.display = "none";
-      iframe.src = `/api/finance/invoice/${id}/pdf`;
-      document.body.appendChild(iframe);
-      iframe.addEventListener("load", () => {
-        iframe.contentWindow?.print();
-        setTimeout(() => {
-          if (iframe.parentNode) document.body.removeChild(iframe);
-        }, 1000);
-      });
-    });
+  const handlePrint = useCallback(
+    () =>
+      saveAndThen(() => {
+        const iframe = document.createElement("iframe");
+        iframe.style.cssText = "position:absolute;left:-9999px;width:210mm;height:297mm;border:none";
+        iframe.src = `/api/finance/invoice/${id}/pdf`;
+        document.body.appendChild(iframe);
+        iframe.addEventListener("load", () => {
+          setTimeout(() => {
+            iframe.contentWindow?.print();
+            setTimeout(() => {
+              if (iframe.parentNode) document.body.removeChild(iframe);
+            }, 2000);
+          }, 1800);
+        });
+      }),
+    [id, saveAndThen]
+  );
+
+  const autoPrintTriggered = useRef(false);
+  useEffect(() => {
+    if (autoPrint && !loading && data && !autoPrintTriggered.current) {
+      autoPrintTriggered.current = true;
+      handlePrint();
+    }
+  }, [autoPrint, loading, data, handlePrint]);
 
   const handlePdf = () => {
     let url = `/api/finance/invoice/${id}/pdf`;
