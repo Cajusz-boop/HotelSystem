@@ -13,14 +13,14 @@ function getTransporter() {
   const port = Number(process.env.SMTP_PORT) || 587;
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) {
+  if (!host) {
     return null;
   }
   return nodemailer.createTransport({
     host,
     port,
-    secure: false,
-    auth: { user, pass },
+    secure: port === 465,
+    ...(user && pass ? { auth: { user, pass } } : {}),
   });
 }
 
@@ -69,7 +69,7 @@ export async function sendInvoiceByEmail(data: {
     return {
       success: false,
       error:
-        "Konfiguracja SMTP nie jest ustawiona. Dodaj zmienne SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS w pliku .env",
+        "Konfiguracja SMTP nie jest ustawiona. Dodaj zmienną SMTP_HOST w pliku .env (SMTP Relay nie wymaga hasła przy IP na liście)",
     };
   }
 
@@ -128,7 +128,7 @@ export async function sendProformaByEmail(data: {
     return {
       success: false,
       error:
-        "Konfiguracja SMTP nie jest ustawiona. Dodaj zmienne SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS w pliku .env",
+        "Konfiguracja SMTP nie jest ustawiona. Dodaj zmienną SMTP_HOST w pliku .env (SMTP Relay nie wymaga hasła przy IP na liście)",
     };
   }
 

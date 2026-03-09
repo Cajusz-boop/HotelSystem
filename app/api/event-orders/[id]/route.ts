@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { updateChecklistDoc } from "@/lib/googleDocs";
 import {
   updateCalendarEvent,
   cancelCalendarEvent,
-  deleteCalendarEvent,
 } from "@/lib/googleCalendarEvents";
 
 const EVENT_TYPES = ["WESELE", "KOMUNIA", "CHRZCINY", "URODZINY", "STYPA", "FIRMOWA", "SYLWESTER", "INNE"];
@@ -79,10 +79,17 @@ function sanitizeEventData(body: Record<string, unknown>) {
   if (b.afterpartyMusic !== undefined) base.afterpartyMusic = b.afterpartyMusic != null ? String(b.afterpartyMusic) : null;
   if (b.quoteId !== undefined) base.quoteId = b.quoteId != null ? String(b.quoteId) : null;
   if (b.roomIds !== undefined) base.roomIds = Array.isArray(b.roomIds) ? b.roomIds : null;
-  if (dateFrom != null) base.dateFrom = dateFrom;
+  if (dateFrom != null) {
+    base.dateFrom = dateFrom;
+    base.eventDate = dateFrom;
+  }
   if (dateTo != null) base.dateTo = dateTo;
   if (b.status != null && ["DRAFT", "CONFIRMED", "DONE", "CANCELLED"].includes(String(b.status))) base.status = b.status;
   if (b.notes !== undefined) base.notes = b.notes != null ? String(b.notes) : null;
+  if (b.depositAmount !== undefined) base.depositAmount = typeof b.depositAmount === "number" ? b.depositAmount : (b.depositAmount != null ? parseFloat(String(b.depositAmount)) : null);
+  if (b.depositPaid !== undefined) base.depositPaid = Boolean(b.depositPaid);
+  if (b.isPoprawiny !== undefined) base.isPoprawiny = Boolean(b.isPoprawiny);
+  if (b.parentEventId !== undefined) base.parentEventId = b.parentEventId != null ? String(b.parentEventId) : null;
 
   return base;
 }
@@ -93,33 +100,117 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const data = await req.json();
-    const status = data?.status;
+    const data = await req.json() as Record<string, unknown>;
+    const status = data?.status as string | undefined;
+    const depositAmount = data?.depositAmount;
+    const depositPaid = data?.depositPaid;
+    const notes = data?.notes;
+
+    const patchData: Record<string, unknown> = {};
+    if (status !== undefined) {
+      const allowed = ["DRAFT", "CONFIRMED", "DONE", "CANCELLED"];
+      if (!allowed.includes(String(status))) {
+        return NextResponse.json({ error: "Nieprawidłowy status" }, { status: 400 });
+      }
+      patchData.status = status;
+    }
+    if (depositAmount !== undefined) {
+      const val = typeof depositAmount === "number" ? depositAmount : (depositAmount != null ? parseFloat(String(depositAmount)) : null);
+      if (val != null && (isNaN(val) || val < 0 || val > 99999999.99)) {
+        return NextResponse.json({ error: "Nieprawidłowa kwota zadatku" }, { status: 400 });
+      }
+      patchData.depositAmount = val != null ? new Prisma.Decimal(val) : null;
+    }
+    if (depositPaid !== undefined) {
+      patchData.depositPaid = Boolean(depositPaid);
+    }
+    if (notes !== undefined) {
+      patchData.notes = notes != null ? String(notes) : null;
+    }
+    const menu = data?.menu;
+    if (menu !== undefined) {
+      patchData.menu = menu;
+    }
+
+    if (Object.keys(patchData).length === 0) {
+      return NextResponse.json({ error: "Brak danych do aktualizacji" }, { status: 400 });
+    }
+
     if (status === "CANCELLED") {
-      const event = await prisma.eventOrder.findUnique({
+      const ev = await prisma.eventOrder.findUnique({
         where: { id },
         select: { googleCalendarEventId: true, googleCalendarCalId: true },
       });
-      if (event?.googleCalendarEventId && event?.googleCalendarCalId) {
+      if (ev?.googleCalendarEventId && ev?.googleCalendarCalId) {
         try {
-          await cancelCalendarEvent(event.googleCalendarEventId, event.googleCalendarCalId);
-          await prisma.eventOrder.update({
-            where: { id },
-            data: { status: "CANCELLED", googleCalendarSynced: true, googleCalendarSyncedAt: new Date(), googleCalendarError: null },
-          });
+          await cancelCalendarEvent(ev.googleCalendarEventId, ev.googleCalendarCalId);
         } catch (err) {
           console.error("Google cancel error:", err);
-          await prisma.eventOrder.update({
-            where: { id },
-            data: { status: "CANCELLED", googleCalendarSynced: false, googleCalendarError: err instanceof Error ? err.message : String(err) },
-          });
         }
-      } else {
-        await prisma.eventOrder.update({ where: { id }, data: { status: "CANCELLED" } });
       }
-      return NextResponse.json({ ok: true });
     }
-    return NextResponse.json({ error: "PATCH obsługuje tylko status=CANCELLED" }, { status: 400 });
+
+    const updated = await prisma.eventOrder.update({
+      where: { id },
+      data: {
+        ...patchData,
+        ...(status === "CANCELLED" ? { googleCalendarSynced: true, googleCalendarSyncedAt: new Date(), googleCalendarError: null } : {}),
+      },
+    });
+
+    // Google Calendar sync — update description when status/notes/deposit changed (non-CANCELLED)
+    const gcalChanged = status !== undefined || notes !== undefined || depositAmount !== undefined || depositPaid !== undefined;
+    if (updated.status !== "CANCELLED" && gcalChanged && updated.googleCalendarEventId && updated.googleCalendarCalId) {
+      let packageName: string | null = null;
+      if (updated.packageId) {
+        const pkg = await prisma.package.findUnique({ where: { id: updated.packageId }, select: { name: true } });
+        packageName = pkg?.name ?? null;
+      }
+      const depNum = updated.depositAmount != null
+        ? (typeof updated.depositAmount === "object" && "toNumber" in updated.depositAmount
+          ? (updated.depositAmount as { toNumber: () => number }).toNumber()
+          : Number(updated.depositAmount))
+        : null;
+      try {
+        await updateCalendarEvent(
+          {
+            id: updated.id,
+            clientName: updated.clientName,
+            clientPhone: updated.clientPhone,
+            eventType: updated.eventType,
+            roomName: updated.roomName,
+            timeStart: updated.timeStart,
+            timeEnd: updated.timeEnd,
+            guestCount: updated.guestCount,
+            status: updated.status,
+            notes: updated.notes,
+            dateFrom: updated.dateFrom,
+            dateTo: updated.dateTo,
+            depositAmount: depNum,
+            depositPaid: updated.depositPaid,
+            isPoprawiny: updated.isPoprawiny,
+          },
+          updated.googleCalendarEventId,
+          updated.googleCalendarCalId,
+          packageName
+        );
+        await prisma.eventOrder.update({
+          where: { id },
+          data: { googleCalendarSynced: true, googleCalendarSyncedAt: new Date(), googleCalendarError: null },
+        });
+      } catch (err) {
+        console.error("Google Calendar update error:", err);
+        await prisma.eventOrder.update({
+          where: { id },
+          data: {
+            googleCalendarSynced: false,
+            googleCalendarError: err instanceof Error ? err.message : String(err),
+          },
+        }).catch(() => {});
+      }
+    }
+
+    return NextResponse.json(updated);
   } catch (e) {
     if (e && typeof e === "object" && "code" in e && e.code === "P2025") {
       return NextResponse.json({ error: "Impreza nie istnieje" }, { status: 404 });
@@ -171,6 +262,7 @@ export async function PUT(
             if (event.status === "CANCELLED") {
               return cancelCalendarEvent(event.googleCalendarEventId!, event.googleCalendarCalId!);
             }
+            const depAmount = event.depositAmount != null ? (typeof event.depositAmount === "object" && "toNumber" in event.depositAmount ? (event.depositAmount as { toNumber: () => number }).toNumber() : Number(event.depositAmount)) : null;
             return updateCalendarEvent(
               {
                 id: event.id,
@@ -186,6 +278,9 @@ export async function PUT(
                 notes: event.notes,
                 dateFrom: event.dateFrom,
                 dateTo: event.dateTo,
+                depositAmount: depAmount,
+                depositPaid: event.depositPaid,
+                isPoprawiny: event.isPoprawiny,
               },
               event.googleCalendarEventId,
               event.googleCalendarCalId,
@@ -234,21 +329,18 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const event = await prisma.eventOrder.findUnique({
+    const updated = await prisma.eventOrder.update({
       where: { id },
-      select: { googleCalendarEventId: true, googleCalendarCalId: true },
+      data: { status: "CANCELLED" },
     });
-    if (event?.googleCalendarEventId && event?.googleCalendarCalId) {
+    if (updated.googleCalendarEventId && updated.googleCalendarCalId) {
       try {
-        await deleteCalendarEvent(event.googleCalendarEventId, event.googleCalendarCalId);
+        await cancelCalendarEvent(updated.googleCalendarEventId, updated.googleCalendarCalId);
       } catch (err) {
-        console.error("Google delete error:", err);
+        console.log("GCal cancel (event possibly already deleted):", (err as Error).message);
       }
     }
-    await prisma.eventOrder.delete({
-      where: { id },
-    });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ success: true });
   } catch (e) {
     if (e && typeof e === "object" && "code" in e && e.code === "P2025") {
       return NextResponse.json({ error: "Impreza nie istnieje" }, { status: 404 });

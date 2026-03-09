@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
       packageName = pkg?.name ?? null;
     }
 
+    const depAmount = e.depositAmount != null ? (typeof e.depositAmount === "object" && e.depositAmount !== null && "toNumber" in e.depositAmount ? (e.depositAmount as { toNumber: () => number }).toNumber() : Number(e.depositAmount)) : null;
     const payload = {
       id: e.id,
       clientName: e.clientName,
@@ -66,6 +67,9 @@ export async function POST(request: NextRequest) {
       notes: e.notes,
       dateFrom: e.dateFrom,
       dateTo: e.dateTo,
+      depositAmount: depAmount,
+      depositPaid: e.depositPaid,
+      isPoprawiny: e.isPoprawiny,
     };
 
     try {
@@ -87,7 +91,7 @@ export async function POST(request: NextRequest) {
           e.checklistDocId,
           e.menuDocId
         );
-        const calId = getCalendarIdForEventOrder(e.eventType, e.roomName);
+        const calId = getCalendarIdForEventOrder(e.eventType, e.roomName, e.isPoprawiny ?? false);
         await prisma.eventOrder.update({
           where: { id: e.id },
           data: {

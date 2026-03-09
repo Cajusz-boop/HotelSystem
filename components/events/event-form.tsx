@@ -13,7 +13,7 @@ const EVENT_TYPES = [
   { value: "WESELE", label: "Wesele" },
   { value: "KOMUNIA", label: "Komunia" },
   { value: "CHRZCINY", label: "Chrzciny" },
-  { value: "URODZINY", label: "Urodziny" },
+  { value: "URODZINY", label: "Urodziny - Rocznice" },
   { value: "STYPA", label: "Stypa" },
   { value: "FIRMOWA", label: "Firmowa" },
   { value: "SYLWESTER", label: "Sylwester" },
@@ -27,6 +27,7 @@ const ROOMS = [
   { value: "Pokój 10", label: "Pokój 10" },
   { value: "Pokój 30", label: "Pokój 30" },
   { value: "Wiata", label: "Wiata" },
+  { value: "Do ustalenia", label: "Do ustalenia" },
 ] as const;
 
 export type EventFormData = {
@@ -38,6 +39,7 @@ export type EventFormData = {
   timeStart: string;
   timeEnd: string;
   roomName: string;
+  roomNames: string[];
   guestCount: number | "";
   adultsCount: number | "";
   children03: number | "";
@@ -78,6 +80,12 @@ export type EventFormData = {
   afterpartyGuests: number | "";
   afterpartyMenu: string;
   afterpartyMusic: string;
+  depositAmount: number | "";
+  depositPaid: boolean;
+  addPoprawiny: boolean;
+  poprawinyDate: string;
+  poprawinyGuestCount: number | "";
+  isPoprawiny?: boolean;
 };
 
 const EMPTY_FORM: EventFormData = {
@@ -88,6 +96,7 @@ const EMPTY_FORM: EventFormData = {
   timeStart: "",
   timeEnd: "",
   roomName: "",
+  roomNames: [],
   guestCount: "",
   adultsCount: "",
   children03: "",
@@ -128,6 +137,11 @@ const EMPTY_FORM: EventFormData = {
   afterpartyGuests: "",
   afterpartyMenu: "",
   afterpartyMusic: "",
+  depositAmount: "",
+  depositPaid: false,
+  addPoprawiny: false,
+  poprawinyDate: "",
+  poprawinyGuestCount: "",
 };
 
 const HOURS = Array.from({ length: 19 }, (_, i) => i + 6); // 6–24
@@ -261,6 +275,17 @@ export function EventForm({
         const c47 = next.children47 === "" ? 0 : Number(next.children47) || 0;
         next.guestCount = a + c03 + c47 || "";
       }
+      if (key === "eventDate" && next.addPoprawiny && next.eventType === "WESELE") {
+        const d = String(value || "").trim();
+        if (d) {
+          const dObj = new Date(d + "T12:00:00");
+          dObj.setDate(dObj.getDate() + 1);
+          next.poprawinyDate = dObj.toISOString().slice(0, 10);
+        }
+      }
+      if (key === "roomNames") {
+        next.roomName = Array.isArray(value) && value.length ? value.join(", ") : "";
+      }
       return next;
     });
   }, []);
@@ -268,11 +293,15 @@ export function EventForm({
   const totalSections = 8;
 
   // Walidacja
+  const roomNamesVal = data.roomNames?.length ? data.roomNames : (data.roomName ? data.roomName.split(/,\s*/).filter(Boolean) : []);
   const errors: Partial<Record<keyof EventFormData, string>> = {};
   if (!data.clientName?.trim()) errors.clientName = "Wymagane";
   if (!(data.eventDate || data.dateFrom)?.toString().trim()) errors.eventDate = "Wymagane";
   if (!data.timeStart?.trim()) errors.timeStart = "Wymagane";
-  if (!data.roomName?.trim()) errors.roomName = "Wymagane";
+  if (roomNamesVal.length === 0) errors.roomName = "Wybierz co najmniej jedną salę";
+  if (data.eventType === "WESELE" && data.addPoprawiny && !data.poprawinyDate?.trim()) {
+    errors.poprawinyDate = "Data poprawin jest wymagana";
+  }
   const gc = data.guestCount;
   const totalGuests = (data.adultsCount === "" ? 0 : Number(data.adultsCount) || 0) +
     (data.children03 === "" ? 0 : Number(data.children03) || 0) +
@@ -292,7 +321,9 @@ export function EventForm({
       (d.children03 === "" ? 0 : Number(d.children03) || 0) +
       (d.children47 === "" ? 0 : Number(d.children47) || 0);
     const guestCountValue = sumGuests > 0 ? sumGuests : (d.guestCount === "" ? null : Number(d.guestCount));
-    return {
+    const rooms = d.roomNames?.length ? d.roomNames : (d.roomName ? d.roomName.split(/,\s*/).filter(Boolean) : []);
+    const roomNameStr = rooms.length ? rooms.join(", ") : (d.roomName || null);
+    const basePayload: Record<string, unknown> = {
       name: `${d.clientName} – ${eventDate ?? "?"}`,
       eventType: d.eventType,
       clientName: d.clientName,
@@ -300,7 +331,7 @@ export function EventForm({
       eventDate: eventDate || null,
       timeStart: d.timeStart || null,
       timeEnd: d.timeEnd || null,
-      roomName: d.roomName || null,
+      roomName: roomNameStr,
       guestCount: guestCountValue,
       adultsCount: d.adultsCount === "" ? null : Number(d.adultsCount),
       children03: d.children03 === "" ? null : Number(d.children03),
@@ -344,7 +375,13 @@ export function EventForm({
       dateFrom: dateFrom.toISOString().slice(0, 10),
       dateTo: dateTo.toISOString().slice(0, 10),
       status: "DRAFT",
+      depositAmount: d.depositAmount === "" ? null : Number(d.depositAmount),
+      depositPaid: d.depositPaid,
+      addPoprawiny: d.eventType === "WESELE" && d.addPoprawiny,
+      poprawinyDate: d.addPoprawiny ? (d.poprawinyDate || "") : null,
+      poprawinyGuestCount: d.addPoprawiny && d.poprawinyGuestCount !== "" ? Number(d.poprawinyGuestCount) : null,
     };
+    return basePayload;
   };
 
   const handleSubmit = async () => {
@@ -365,7 +402,7 @@ export function EventForm({
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Błąd zapisu");
       toast.success(eventId ? "Impreza zaktualizowana" : "Impreza zapisana");
-      router.push(`/events/${json.id}`);
+      router.push("/centrum-sprzedazy");
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Błąd zapisu");
@@ -441,21 +478,113 @@ export function EventForm({
             {errors.eventDate && <p className="text-sm text-destructive">{errors.eventDate}</p>}
           </div>
           <div>
-            <Label className="text-base">Sala</Label>
+            <Label className="text-base">Sale (można wybrać kilka)</Label>
             <div className="mt-2 flex flex-wrap gap-2">
-              {ROOMS.map(({ value, label }) => (
-                <Button
-                  key={value}
-                  type="button"
-                  variant={data.roomName === value ? "default" : "outline"}
-                  className="h-12 text-base"
-                  onClick={() => update("roomName", value)}
-                >
-                  {label}
-                </Button>
-              ))}
+              {ROOMS.map(({ value, label }) => {
+                const rooms = data.roomNames?.length ? data.roomNames : (data.roomName ? data.roomName.split(/,\s*/).filter(Boolean) : []);
+                const isSelected = rooms.includes(value);
+                return (
+                  <Button
+                    key={value}
+                    type="button"
+                    variant={isSelected ? "default" : "outline"}
+                    className="h-12 text-base"
+                    onClick={() => {
+                      const next = isSelected ? rooms.filter((r) => r !== value) : [...rooms, value];
+                      update("roomNames", next);
+                    }}
+                  >
+                    {label}
+                  </Button>
+                );
+              })}
             </div>
             {errors.roomName && <p className="text-sm text-destructive">{errors.roomName}</p>}
+          </div>
+          {data.eventType === "WESELE" && !(initialData as { isPoprawiny?: boolean })?.isPoprawiny && (
+            <>
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="addPoprawiny"
+                  checked={data.addPoprawiny}
+                  onChange={(e) => {
+                    update("addPoprawiny", e.target.checked);
+                    if (e.target.checked && (data.eventDate || data.dateFrom)) {
+                      const d = data.eventDate || data.dateFrom || "";
+                      if (d) {
+                        const dObj = new Date(d + "T12:00:00");
+                        dObj.setDate(dObj.getDate() + 1);
+                        update("poprawinyDate", dObj.toISOString().slice(0, 10));
+                      }
+                    }
+                  }}
+                  className="h-4 w-4 rounded border-input"
+                />
+                <Label htmlFor="addPoprawiny" className="text-base font-normal cursor-pointer">
+                  Dodaj poprawiny (dzień po weselu)
+                </Label>
+              </div>
+              {data.addPoprawiny && (
+                <div className="grid grid-cols-2 gap-4 pl-6 border-l-2 border-muted">
+                  <div>
+                    <Label htmlFor="poprawinyDate" className="text-base">Data poprawin</Label>
+                    <Input
+                      id="poprawinyDate"
+                      type="date"
+                      value={data.poprawinyDate}
+                      onChange={(e) => update("poprawinyDate", e.target.value)}
+                      className={cn("mt-1 h-12 text-base max-w-xs", errors.poprawinyDate && "border-destructive")}
+                    />
+                    {errors.poprawinyDate && <p className="text-sm text-destructive">{errors.poprawinyDate}</p>}
+                  </div>
+                  <div>
+                    <Label htmlFor="poprawinyGuestCount" className="text-base">Liczba gości na poprawinach</Label>
+                    <Input
+                      id="poprawinyGuestCount"
+                      type="number"
+                      min={0}
+                      value={data.poprawinyGuestCount}
+                      onChange={(e) => update("poprawinyGuestCount", e.target.value === "" ? "" : parseInt(e.target.value, 10))}
+                      className="mt-1 h-12 text-base max-w-[200px]"
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          <div>
+            <Label className="text-base">Zadatek</Label>
+            <div className="mt-2 flex flex-wrap items-center gap-4">
+              <Input
+                type="number"
+                step="0.01"
+                min={0}
+                placeholder="0.00"
+                value={data.depositAmount === "" ? "" : data.depositAmount}
+                onChange={(e) => update("depositAmount", e.target.value === "" ? "" : parseFloat(e.target.value) || 0)}
+                className="h-12 w-32 text-base"
+              />
+              <span className="text-muted-foreground">zł</span>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={data.depositPaid ? "default" : "outline"}
+                  className="h-12 text-base"
+                  onClick={() => update("depositPaid", true)}
+                >
+                  ✅ Zapłacony
+                </Button>
+                <Button
+                  type="button"
+                  variant={!data.depositPaid ? "default" : "outline"}
+                  className="h-12 text-base"
+                  onClick={() => update("depositPaid", false)}
+                >
+                  ❌ Niezapłacony
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -878,8 +1007,12 @@ export function EventForm({
             <p><strong>Telefon:</strong> {data.clientPhone || "—"}</p>
             <p><strong>Data:</strong> {dateFrom || "—"}</p>
             <p><strong>Godziny:</strong> {data.timeStart || "—"} – {data.timeEnd || "—"}</p>
-            <p><strong>Sala:</strong> {data.roomName || "—"}</p>
+            <p><strong>Sale:</strong> {(data.roomNames?.length ? data.roomNames.join(", ") : data.roomName) || "—"}</p>
             <p><strong>Goście:</strong> {data.guestCount !== "" ? data.guestCount : "—"}</p>
+            <p><strong>Zadatek:</strong> {data.depositAmount !== "" ? `${data.depositAmount} zł` : "0"} {data.depositPaid ? "✅ zapłacony" : "❌ niezapłacony"}</p>
+            {data.addPoprawiny && (
+              <p><strong>Poprawiny:</strong> {data.poprawinyDate || "—"}, {data.poprawinyGuestCount !== "" ? data.poprawinyGuestCount : "?"} os.</p>
+            )}
             <p><strong>Pakiet:</strong> {packages.find((p) => p.id === data.packageId)?.name ?? "—"}</p>
             {data.afterpartyEnabled && (
               <p><strong>Afterparty:</strong> {data.afterpartyTimeFrom}–{data.afterpartyTimeTo}, {data.afterpartyGuests} os.</p>

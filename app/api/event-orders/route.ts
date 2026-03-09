@@ -76,12 +76,77 @@ function sanitizeEventData(body: Record<string, unknown>) {
     afterpartyMenu: b.afterpartyMenu != null ? String(b.afterpartyMenu) : null,
     afterpartyMusic: b.afterpartyMusic != null ? String(b.afterpartyMusic) : null,
     quoteId: b.quoteId != null ? String(b.quoteId) : null,
-    roomIds: Array.isArray(b.roomIds) ? b.roomIds : null,
     dateFrom: dateFrom ?? new Date(),
     dateTo: dateTo ?? new Date(),
     status: ["DRAFT", "CONFIRMED", "DONE", "CANCELLED"].includes(String(b.status ?? "")) ? String(b.status) : "DRAFT",
     notes: b.notes != null ? String(b.notes) : null,
+    depositAmount: typeof b.depositAmount === "number" ? b.depositAmount : (b.depositAmount != null ? parseFloat(String(b.depositAmount)) : null),
+    depositPaid: Boolean(b.depositPaid),
+    isPoprawiny: Boolean(b.isPoprawiny),
+    parentEventId: b.parentEventId != null ? String(b.parentEventId) : null,
+    addPoprawiny: Boolean(b.addPoprawiny),
+    poprawinyDate: b.poprawinyDate ? toDate(b.poprawinyDate) : null,
+    poprawinyGuestCount: typeof b.poprawinyGuestCount === "number" ? b.poprawinyGuestCount : (b.poprawinyGuestCount != null ? parseInt(String(b.poprawinyGuestCount), 10) : null),
   };
+}
+
+function parseRooms(roomName: string | null): string[] {
+  if (!roomName?.trim()) return [];
+  return roomName.split(/,\s*/).map((r) => r.trim()).filter(Boolean);
+}
+
+async function syncEventToGoogle(
+  event: { id: string; clientName: string | null; clientPhone: string | null; eventType: string; roomName: string | null; timeStart: string | null; timeEnd: string | null; guestCount: number | null; status: string | null; notes: string | null; dateFrom: Date; dateTo: Date; depositAmount?: unknown; depositPaid?: boolean | null; isPoprawiny?: boolean | null },
+  packageName: string | null,
+  checklist: { docId: string },
+  menu: { docId: string }
+): Promise<{ calendarEventId: string; calId: string }[]> {
+  const rooms = parseRooms(event.roomName);
+  const depAmount = event.depositAmount != null ? (typeof event.depositAmount === "object" && event.depositAmount !== null && "toNumber" in event.depositAmount
+    ? (event.depositAmount as { toNumber: () => number }).toNumber()
+    : Number(event.depositAmount)) : null;
+  const calPayload = {
+    id: event.id,
+    clientName: event.clientName,
+    clientPhone: event.clientPhone,
+    eventType: event.eventType,
+    timeStart: event.timeStart,
+    timeEnd: event.timeEnd,
+    guestCount: event.guestCount,
+    status: event.status,
+    notes: event.notes,
+    dateFrom: event.dateFrom,
+    dateTo: event.dateTo,
+    depositAmount: depAmount,
+    depositPaid: event.depositPaid,
+    isPoprawiny: event.isPoprawiny,
+  };
+  const results: { calendarEventId: string; calId: string }[] = [];
+  const roomList = rooms.length > 0 ? rooms : (event.roomName ? [event.roomName] : []);
+  for (const room of roomList) {
+    const calId = getCalendarIdForEventOrder(event.eventType, room, event.isPoprawiny ?? false);
+    const eventId = await createCalendarEvent(
+      { ...calPayload, roomName: room },
+      packageName,
+      checklist.docId,
+      menu.docId
+    );
+    results.push({ calendarEventId: eventId, calId });
+  }
+  return results;
+}
+
+function toCreateData(sanitized: ReturnType<typeof sanitizeEventData>): Prisma.EventOrderCreateInput {
+  const { addPoprawiny, poprawinyDate, poprawinyGuestCount, ...rest } = sanitized;
+  const data: Prisma.EventOrderCreateInput = {
+    ...rest,
+    eventDate: sanitized.eventDate,
+    depositAmount: sanitized.depositAmount != null ? new Prisma.Decimal(sanitized.depositAmount) : null,
+    depositPaid: sanitized.depositPaid,
+    isPoprawiny: sanitized.isPoprawiny,
+    parentEventId: sanitized.parentEventId,
+  };
+  return data;
 }
 
 export async function POST(req: Request) {
@@ -104,13 +169,106 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Nieprawidłowe daty" }, { status: 400 });
     }
 
-    const event = await prisma.eventOrder.create({
-      data: {
+    const addPoprawiny = Boolean(sanitized.addPoprawiny) && sanitized.eventType === "WESELE";
+    const poprawinyDate = sanitized.poprawinyDate;
+    const poprawinyGuestCount = sanitized.poprawinyGuestCount;
+
+    const createMainEvent = async () => {
+      const mainData = toCreateData({ ...sanitized, isPoprawiny: false, parentEventId: null });
+      return prisma.eventOrder.create({ data: mainData });
+    };
+
+    let event = await createMainEvent();
+
+    if (addPoprawiny && poprawinyDate) {
+      const poprawinyDateFrom = poprawinyDate instanceof Date ? poprawinyDate : new Date(poprawinyDate);
+      const poprawinyData = toCreateData({
         ...sanitized,
-        eventDate: sanitized.eventDate,
-        roomIds: sanitized.roomIds === null ? Prisma.JsonNull : (sanitized.roomIds as Prisma.InputJsonValue),
-      },
-    });
+        name: `Poprawiny ${sanitized.clientName ?? ""} – ${poprawinyDateFrom.toLocaleDateString("pl-PL")}`,
+        eventDate: poprawinyDateFrom,
+        dateFrom: poprawinyDateFrom,
+        dateTo: poprawinyDateFrom,
+        guestCount: poprawinyGuestCount ?? sanitized.guestCount,
+        isPoprawiny: true,
+        parentEventId: event.id,
+      });
+      const poprawinyEvent = await prisma.eventOrder.create({
+        data: poprawinyData,
+      });
+
+      let packageName: string | null = null;
+      if (event.packageId) {
+        const pkg = await prisma.package.findUnique({
+          where: { id: event.packageId },
+          select: { name: true },
+        });
+        packageName = pkg?.name ?? null;
+      }
+
+      try {
+        const [mainChecklist, mainMenu, popChecklist, popMenu] = await Promise.all([
+          createChecklistDoc(event),
+          createMenuDoc({ ...event, packageName, packageId: event.packageId, cakesAndDesserts: event.cakesAndDesserts }),
+          createChecklistDoc(poprawinyEvent),
+          createMenuDoc({ ...poprawinyEvent, packageName: null, packageId: null, cakesAndDesserts: null }),
+        ]);
+
+        const mainResults = await syncEventToGoogle(
+          { ...event, depositAmount: event.depositAmount, depositPaid: event.depositPaid, isPoprawiny: false },
+          packageName,
+          mainChecklist,
+          mainMenu
+        );
+        const popResults = await syncEventToGoogle(
+          { ...poprawinyEvent, depositAmount: null, depositPaid: false, isPoprawiny: true },
+          null,
+          popChecklist,
+          popMenu
+        );
+
+        const mainFirst = mainResults[0];
+        const mainRooms = parseRooms(event.roomName);
+        const mainCalEvents = mainResults.map((r, i) => ({ roomName: mainRooms[i] ?? event.roomName, eventId: r.calendarEventId, calId: r.calId }));
+        await prisma.eventOrder.update({
+          where: { id: event.id },
+          data: {
+            googleCalendarEventId: mainFirst?.calendarEventId,
+            googleCalendarCalId: mainFirst?.calId,
+            googleCalendarEvents: mainCalEvents as unknown as Prisma.InputJsonValue,
+            googleCalendarSynced: true,
+            googleCalendarSyncedAt: new Date(),
+            googleCalendarError: null,
+            checklistDocId: mainChecklist.docId,
+            checklistDocUrl: mainChecklist.docUrl,
+            menuDocId: mainMenu.docId,
+            menuDocUrl: mainMenu.docUrl,
+          },
+        });
+
+        const popFirst = popResults[0];
+        const popCalEvents = popResults.map((r, i) => ({ roomName: parseRooms(poprawinyEvent.roomName)[i] ?? poprawinyEvent.roomName, eventId: r.calendarEventId, calId: r.calId }));
+        await prisma.eventOrder.update({
+          where: { id: poprawinyEvent.id },
+          data: {
+            googleCalendarEventId: popFirst?.calendarEventId,
+            googleCalendarCalId: popFirst?.calId,
+            googleCalendarEvents: popCalEvents as unknown as Prisma.InputJsonValue,
+            googleCalendarSynced: true,
+            googleCalendarSyncedAt: new Date(),
+            googleCalendarError: null,
+            checklistDocId: popChecklist.docId,
+            checklistDocUrl: popChecklist.docUrl,
+            menuDocId: popMenu.docId,
+            menuDocUrl: popMenu.docUrl,
+          },
+        });
+
+        return NextResponse.json(event, { status: 201 });
+      } catch (err) {
+        console.error("Google API error (wesele+poprawiny):", err);
+        return NextResponse.json({ ...event, googlePending: true }, { status: 201 });
+      }
+    }
 
     try {
       let packageName: string | null = null;
@@ -131,33 +289,26 @@ export async function POST(req: Request) {
         }),
       ]);
 
-      const calendarEventId = await createCalendarEvent(
-        {
-          id: event.id,
-          clientName: event.clientName,
-          clientPhone: event.clientPhone,
-          eventType: event.eventType,
-          roomName: event.roomName,
-          timeStart: event.timeStart,
-          timeEnd: event.timeEnd,
-          guestCount: event.guestCount,
-          packageId: event.packageId,
-          status: event.status,
-          notes: event.notes,
-          dateFrom: event.dateFrom,
-          dateTo: event.dateTo,
-        },
+      const results = await syncEventToGoogle(
+        { ...event, depositAmount: event.depositAmount, depositPaid: event.depositPaid, isPoprawiny: event.isPoprawiny },
         packageName,
-        checklist.docId,
-        menu.docId
+        checklist,
+        menu
       );
-      const calId = getCalendarIdForEventOrder(event.eventType, event.roomName);
+
+      const first = results[0];
+      const calEvents = parseRooms(event.roomName).map((room, i) => ({
+        roomName: room,
+        eventId: results[i]?.calendarEventId,
+        calId: results[i]?.calId,
+      }));
 
       const updated = await prisma.eventOrder.update({
         where: { id: event.id },
         data: {
-          googleCalendarEventId: calendarEventId,
-          googleCalendarCalId: calId,
+          googleCalendarEventId: first?.calendarEventId,
+          googleCalendarCalId: first?.calId,
+          googleCalendarEvents: (results.length > 1 ? calEvents : undefined) as unknown as Prisma.InputJsonValue | undefined,
           googleCalendarSynced: true,
           googleCalendarSyncedAt: new Date(),
           googleCalendarError: null,
@@ -196,18 +347,51 @@ export async function POST(req: Request) {
   }
 }
 
+const FULL_SELECT = {
+  id: true,
+  eventType: true,
+  clientName: true,
+  clientPhone: true,
+  eventDate: true,
+  dateFrom: true,
+  dateTo: true,
+  timeStart: true,
+  timeEnd: true,
+  guestCount: true,
+  status: true,
+  roomName: true,
+  depositAmount: true,
+  depositPaid: true,
+  notes: true,
+  isPoprawiny: true,
+  parentEventId: true,
+  menu: true,
+  quoteId: true,
+  roomIds: true,
+  checklistDocId: true,
+  menuDocId: true,
+  googleCalendarEventId: true,
+  googleCalendarCalId: true,
+  googleCalendarSynced: true,
+};
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const upcoming = searchParams.get("upcoming");
     const status = searchParams.get("status");
+    const all = searchParams.get("all") === "1";
+
+    const where = all
+      ? {}
+      : {
+          ...(status ? { status } : { status: { not: "CANCELLED" as const } }),
+          ...(upcoming === "1" ? { dateFrom: { gte: new Date() } } : {}),
+        };
 
     const events = await prisma.eventOrder.findMany({
-      where: {
-        ...(status ? { status } : { status: { not: "CANCELLED" } }),
-        ...(upcoming === "1" ? { dateFrom: { gte: new Date() } } : {}),
-      },
-      select: {
+      where,
+      select: all ? FULL_SELECT : {
         id: true,
         eventType: true,
         clientName: true,
@@ -223,9 +407,11 @@ export async function GET(req: Request) {
 
     return NextResponse.json(events);
   } catch (e) {
+    const errMsg = e instanceof Error ? e.message : "Błąd pobierania imprez";
+    const errStack = e instanceof Error ? e.stack : undefined;
     console.error("GET /api/event-orders:", e);
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Błąd pobierania imprez" },
+      { error: errMsg, ...(process.env.NODE_ENV === "development" && errStack ? { debug: errStack } : {}) },
       { status: 500 }
     );
   }

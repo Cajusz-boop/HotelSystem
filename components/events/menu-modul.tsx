@@ -1,0 +1,376 @@
+"use client";
+
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+
+// ═══════════════════════════════════════════════════════════════
+// BAZA PAKIETÓW MENU — Karczma Łabędź
+// ═══════════════════════════════════════════════════════════════
+
+const PAKIETY = [
+  { id: "stypa_58", typy: ["STYPA"], nazwa: "Stypa podstawowa", cena: 58, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z makaronem"] }, { id: "miesa", label: "Dania główne", typ: "fixed", dania: ["Schabowy", "Ziemniaki", "Surówka z białej kapusty"] }, { id: "desery", label: "Ciasta", typ: "fixed", dania: ["Sernik", "Szarlotka", "Krówka"] }, { id: "napoje", label: "Napoje", typ: "fixed", dania: ["Sok jabłkowy", "Kawa i herbata — szwedzki stół"] }], doplaty: [] as { id: string; label: string; cena: number; wybor?: boolean; limit?: number; opcje?: string[]; opis?: string; stala?: number }[], regulamin: [] as string[] },
+  { id: "stypa_69", typy: ["STYPA"], nazwa: "Stypa rozszerzona", cena: 69, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z makaronem"] }, { id: "miesa", label: "Dania główne", typ: "fixed", dania: ["Schabowy", "De volaille", "Udko z kurczaka", "Ziemniaki", "Surówka z białej kapusty", "Bukiet warzyw gotowanych"] }, { id: "desery", label: "Ciasta", typ: "fixed", dania: ["Sernik", "Szarlotka", "Krówka"] }, { id: "napoje", label: "Napoje", typ: "fixed", dania: ["Sok jabłkowy", "Kawa i herbata — szwedzki stół"] }], doplaty: [], regulamin: [] },
+  { id: "stypa_78", typy: ["STYPA"], nazwa: "Stypa pełna", cena: 78, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z makaronem"] }, { id: "miesa", label: "Dania główne", typ: "fixed", dania: ["Udko z kurczaka", "Karkówka w sosie", "Schabowy", "De volaille", "Ziemniaki", "Surówka z białej kapusty", "Buraczki", "Bukiet warzyw gotowanych"] }, { id: "desery", label: "Ciasta", typ: "fixed", dania: ["Sernik", "Szarlotka", "Krówka"] }, { id: "napoje", label: "Napoje", typ: "fixed", dania: ["Sok jabłkowy", "Kawa i herbata"] }], doplaty: [], regulamin: [] },
+  { id: "obiad_100", typy: ["FIRMOWA", "CHRZCINY", "URODZINY", "INNE"], nazwa: "Obiad", cena: 100, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z makaronem"] }, { id: "surowki", label: "Surówki", typ: "wybor", limit: 2, dania: ["Buraczki", "Surówka z białej kapusty", "Surówka z selera z prażonym słonecznikiem", "Bukiet warzyw gotowanych z masłem i bułką tartą"] }, { id: "glowne", label: "Dania obiadowe", typ: "wybor", limit: 3, dania: ["Kotlet schabowy", "Kieszonka wieprzowa faszerowana pieczarkami", "Pierś otulona boczkiem podana na cukinii z marchewką", "De volaille z serem", "Rumiane udko z kurczaka", "Dorsz w sosie koperkowym"] }, { id: "sosy", label: "Danie w sosie", typ: "wybor", limit: 1, dania: ["Eskalop w sosie porowym", "Zraz w sosie własnym", "Karkówka w sosie podana z kaszą pęczak"] }, { id: "stol", label: "Szwedzki stół (w cenie)", typ: "fixed", dania: ["Kawa i herbata bez ograniczeń", "Pieczywo"] }], doplaty: [{ id: "ciasta", label: "Ciasta", cena: 20, wybor: true, limit: 3, opcje: ["Sernik złota rosa", "3-bit", "Krówka", "Pychotka", "Słonecznikowiec", "Szarlotka"] }, { id: "ciepledop", label: "Dod. danie ciepłe", cena: 20 }, { id: "napoje", label: "Pakiet napojów", cena: 20, opis: "Coca-Cola, Fanta, Sprite, woda, sok jabłkowy, sok pomarańczowy" }], regulamin: [] },
+  { id: "dzienna_190", typy: ["URODZINY", "CHRZCINY", "KOMUNIA", "FIRMOWA", "INNE"], nazwa: "Impreza dzienna", cena: 190, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z makaronem"] }, { id: "surowki", label: "Surówki", typ: "wybor", limit: 2, dania: ["Buraczki", "Surówka z białej kapusty", "Surówka z selera z prażonym słonecznikiem", "Bukiet warzyw gotowanych z masłem i bułką tartą"] }, { id: "glowne", label: "Dania obiadowe", typ: "wybor", limit: 3, dania: ["Kotlet schabowy", "Kieszonka wieprzowa faszerowana pieczarkami", "Pierś otulona boczkiem podana na cukinii z marchewką", "De volaille z serem", "Rumiane udko z kurczaka", "Dorsz w sosie koperkowym"] }, { id: "sosy", label: "Danie w sosie", typ: "wybor", limit: 1, dania: ["Eskalop w sosie porowym", "Zraz w sosie własnym", "Karkówka w sosie podana z kaszą pęczak"] }, { id: "zimne", label: "Zimne przekąski", typ: "wybor", limit: 6, dania: ["Rolada szpinakowa z łososiem", "Mini tortilla warzywna z szynką", "Rolady (dwa rodzaje)", "Schab ze śliwką", "Ryba po japońsku", "Klopsiki w zalewie octowej", "Sałatka grecka", "Sałatka jarzynowa", "Sałatka w koszyczkach", "Śledź z burakiem"] }, { id: "ciepledod", label: "Dania ciepłe", typ: "wybor", limit: 2, dania: ["Polędwiczki wieprzowe w sosie pieprzowym z chrupiącą bagietką", "Udko z serem camembert", "Gołąbki mięsne", "Żeberka na słodko z ziemniakami opiekanymi", "Medaliony drobiowe z frytkami", "Strogonow wieprzowy z plackami ziemniaczanymi", "Barszcz z pierogami"] }, { id: "stol", label: "Szwedzki stół (w cenie)", typ: "fixed", dania: ["Kawa i herbata bez ograniczeń", "Pieczywo"] }], doplaty: [{ id: "ciasta", label: "Ciasta", cena: 20, wybor: true, limit: 3, opcje: ["Sernik złota rosa", "3-bit", "Krówka", "Pychotka", "Słonecznikowiec", "Szarlotka"] }, { id: "ciepledop", label: "Dod. danie ciepłe", cena: 20 }, { id: "napoje", label: "Pakiet napojów", cena: 20, opis: "Coca-Cola, Fanta, Sprite, woda, sok jabłkowy, sok pomarańczowy" }], regulamin: ["Dzieci 0–3 lat — bezpłatnie", "Dzieci 4–7 lat — 50% stawki", "Dzieci powyżej 7 lat — 100%", "Alkohol we własnym zakresie bez opłaty korkowej", "Możliwość wniesienia ciast i tortu z paragonem"] },
+  { id: "nocna_190", typy: ["URODZINY", "CHRZCINY", "INNE"], nazwa: "Impreza nocna", cena: 190, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z makaronem"] }, { id: "surowki", label: "Surówki", typ: "wybor", limit: 2, dania: ["Buraczki", "Surówka z białej kapusty", "Surówka z selera z prażonym słonecznikiem", "Bukiet warzyw gotowanych z masłem i bułką tartą"] }, { id: "glowne", label: "Dania obiadowe", typ: "wybor", limit: 3, dania: ["Kotlet schabowy", "Kieszonka wieprzowa faszerowana pieczarkami", "Pierś otulona boczkiem podana na cukinii z marchewką", "De volaille z serem", "Rumiane udko z kurczaka", "Dorsz w sosie koperkowym"] }, { id: "sosy", label: "Danie w sosie", typ: "wybor", limit: 1, dania: ["Eskalop w sosie porowym", "Zraz w sosie własnym", "Karkówka w sosie podana z kaszą pęczak"] }, { id: "zimne", label: "Zimne przekąski", typ: "wybor", limit: 5, dania: ["Rolada szpinakowa z łososiem", "Mini tortilla warzywna z szynką", "Rolady (dwa rodzaje)", "Schab ze śliwką", "Ryba po japońsku", "Klopsiki w zalewie octowej", "Sałatka grecka", "Sałatka jarzynowa", "Śledź z burakiem"] }, { id: "ciepledod", label: "Dania ciepłe", typ: "wybor", limit: 3, dania: ["Polędwiczki wieprzowe w sosie pieprzowym z chrupiącą bagietką", "Udko z serem camembert", "Gołąbki mięsne", "Żeberka na słodko z ziemniakami opiekanymi", "Medaliony drobiowe z frytkami", "Strogonow wieprzowy z plackami ziemniaczanymi", "Barszcz z pierogami"] }, { id: "stol", label: "Szwedzki stół (w cenie)", typ: "fixed", dania: ["Kawa i herbata bez ograniczeń", "Pieczywo"] }], doplaty: [{ id: "ciasta", label: "Ciasta", cena: 20, wybor: true, limit: 3, opcje: ["Sernik złota rosa", "3-bit", "Krówka", "Pychotka", "Słonecznikowiec", "Szarlotka"] }, { id: "ciepledop", label: "Dod. danie ciepłe", cena: 20 }, { id: "napoje", label: "Pakiet napojów", cena: 20, opis: "Coca-Cola, Fanta, Sprite, woda, sok jabłkowy, sok pomarańczowy" }], regulamin: ["Dzieci 0–3 lat — bezpłatnie", "Dzieci 4–7 lat — 50% stawki", "Dzieci powyżej 7 lat — 100%", "Alkohol we własnym zakresie bez opłaty korkowej", "Możliwość wniesienia ciast i tortu z paragonem"] },
+  { id: "dzienna_200", typy: ["URODZINY", "CHRZCINY", "KOMUNIA", "FIRMOWA", "INNE"], nazwa: "Impreza dzienna Plus", cena: 200, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z makaronem"] }, { id: "surowki", label: "Surówki", typ: "wybor", limit: 2, dania: ["Buraczki", "Surówka z białej kapusty", "Surówka z selera z prażonym słonecznikiem", "Bukiet warzyw gotowanych z masłem i bułką tartą"] }, { id: "glowne", label: "Dania obiadowe", typ: "wybor", limit: 3, dania: ["Kotlet schabowy", "Kieszonka wieprzowa faszerowana pieczarkami", "Pierś otulona boczkiem podana na cukinii z marchewką", "De volaille z serem", "Rumiane udko z kurczaka", "Dorsz w sosie koperkowym"] }, { id: "sosy", label: "Danie w sosie", typ: "wybor", limit: 1, dania: ["Eskalop w sosie porowym", "Zraz w sosie własnym", "Karkówka w sosie podana z kaszą pęczak"] }, { id: "zimne", label: "Zimne przekąski", typ: "wybor", limit: 6, dania: ["Rolada szpinakowa z łososiem", "Mini tortilla warzywna z szynką", "Rolady (dwa rodzaje)", "Schab ze śliwką", "Ryba po japońsku", "Klopsiki w zalewie octowej", "Sałatka grecka", "Sałatka jarzynowa", "Sałatka w koszyczkach", "Śledź z burakiem"] }, { id: "ciepledod", label: "Dania ciepłe", typ: "wybor", limit: 2, dania: ["Polędwiczki wieprzowe w sosie pieprzowym z chrupiącą bagietką", "Udko z serem camembert", "Gołąbki mięsne", "Żeberka na słodko z ziemniakami opiekanymi", "Medaliony drobiowe z frytkami", "Strogonow wieprzowy z plackami ziemniaczanymi", "Barszcz z pierogami"] }, { id: "stol", label: "Szwedzki stół (w cenie)", typ: "fixed", dania: ["Kawa i herbata bez ograniczeń", "Pieczywo"] }], doplaty: [{ id: "ciasta", label: "Ciasta", cena: 20, wybor: true, limit: 3, opcje: ["Sernik złota rosa", "3-bit", "Krówka", "Pychotka", "Słonecznikowiec", "Szarlotka"] }, { id: "ciepledop", label: "Dod. danie ciepłe", cena: 20 }, { id: "napoje", label: "Pakiet napojów", cena: 20, opis: "Coca-Cola, Fanta, Sprite, woda, sok jabłkowy, sok pomarańczowy" }], regulamin: ["Dzieci 0–3 lat — bezpłatnie", "Dzieci 4–7 lat — 50% stawki", "Dzieci powyżej 7 lat — 100%", "Alkohol we własnym zakresie bez opłaty korkowej", "Możliwość wniesienia ciast i tortu z paragonem"] },
+  { id: "impreza_220", typy: ["URODZINY", "CHRZCINY", "KOMUNIA", "FIRMOWA", "INNE"], nazwa: "Impreza rozszerzona", cena: 220, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół drobiowo-wołowy z kluseczkami"] }, { id: "surowki", label: "Surówki", typ: "wybor", limit: 2, dania: ["Buraczki zasmażane na ciepło", "Surówka z białej kapusty", "Surówka z selera z prażonym słonecznikiem", "Bukiet warzyw gotowanych z masłem i bułką tartą", "Surówka Colesław", "Fasolka szparagowa z bułką tartą"] }, { id: "glowne", label: "Dania obiadowe", typ: "wybor", limit: 4, dania: ["Kotlet schabowy", "Rulon drobiowy z porem i serem gorgonzola", "Pierś z ananasem", "Udko z serem camembert", "Dorsz w sosie koperkowym", "Udko kacze", "Eskalop w sosie porowym", "Zraz w sosie własnym", "Karkówka w sosie podana z kaszą pęczak"] }, { id: "zimne", label: "Zimne przekąski", typ: "wybor", limit: 6, dania: ["Mini tortilla warzywna z szynką", "Tatarki wołowe na krążkach party", "Tatar z łososia", "Tymbaliki z pstrąga", "Rolady (dwa rodzaje)", "Schab ze śliwką", "Sałatka Cezar", "Sałatka jarzynowa na babeczkach", "Sałatka z wędzonym kurczakiem", "Sałatka z ryżem i grillowanym kurczakiem", "Śledź z burakiem", "Sałatka w koszyczkach"] }, { id: "ciepledod", label: "Dania ciepłe", typ: "wybor", limit: 3, dania: ["Polędwiczki wieprzowe w sosie pieprzowym z chrupiącą bagietką", "Strogonow wieprzowy z plackami ziemniaczanymi", "Barszcz z pierogami", "Barszcz z krokietem", "Żeberka na słodko z ziemniakami opiekanymi", "Szaszłyki z mięsa mielonego otulone boczkiem z sosem czosnkowym", "Zupa krem z cukinii z grzankami"] }, { id: "stol", label: "Szwedzki stół (w cenie)", typ: "fixed", dania: ["Kawa i herbata bez ograniczeń", "Pieczywo"] }], doplaty: [{ id: "ciasta", label: "Ciasta", cena: 25, wybor: true, limit: 3, opcje: ["Sernik z wiśnią", "Krówka", "Słonecznikowiec", "Szarlotka", "Mini eklery", "Malinowa chmurka", "Deser Oreo", "Deser z karmelem", "Deser leśny mech"] }, { id: "ciepledop", label: "Dod. danie ciepłe", cena: 20 }, { id: "napoje", label: "Pakiet napojów", cena: 20, opis: "Coca-Cola, Fanta, Sprite, woda, sok jabłkowy, sok pomarańczowy" }], regulamin: ["Dzieci 0–3 lat — bezpłatnie", "Dzieci 4–7 lat — 50% stawki", "Dzieci powyżej 7 lat — 100%", "DJ — 100% stawki", "Alkohol we własnym zakresie bez opłaty korkowej", "Możliwość wniesienia ciast i tortu z paragonem"] },
+  { id: "komunia_235", typy: ["KOMUNIA"], nazwa: "Menu komunijne", cena: 235, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z kluskami i lubczykiem"] }, { id: "surowki", label: "Surówki", typ: "fixed", dania: ["Mizeria", "Fasolka z masłem i bułką tartą", "Surówka z białej kapusty", "Buraczki"] }, { id: "glowne", label: "Mięsa i ziemniaki", typ: "fixed", dania: ["Pierś otulona boczkiem podana na cukinii z marchewką", "De volaille z serem", "Ryba w sosie śmietanowym", "Fileciki drobiowe panierowane z frytkami", "Zraz z kaszą pęczak", "Ziemniaki z wody"] }, { id: "desery", label: "Ciasta i desery", typ: "fixed", dania: ["Sernik", "Słonecznikowiec", "Krówka", "Malinowa chmurka", "Eklery", "Tarta lemon curd", "Cake pops"] }, { id: "zimne", label: "Zimne przekąski", typ: "fixed", dania: ["Rolada szpinakowa z łososiem", "Carpaccio z buraka", "Krążki tatara wołowego z cebulą i ogórkiem", "Sałatka Cezar", "Sałatka Gyros", "Deska przysmaków karczmy"] }, { id: "ciepledod", label: "Dania ciepłe", typ: "fixed", dania: ["Gołąbki w sosie pomidorowym", "Cukinia faszerowana mięsem mielonym z sosem czosnkowym", "Krem z cukinii z chipsem z szynki parmeńskiej", "Mix pierogów"] }, { id: "stol", label: "Na stole / Szwedzki stół", typ: "fixed", dania: ["Chleb, owoce", "Kawa i herbata bez ograniczeń", "Coca-Cola, Fanta, Sprite, woda z cytryną, sok jabłkowy, sok pomarańczowy — nielimitowane"] }], doplaty: [], regulamin: ["Dzieci 0–3 lat — bezpłatnie", "Dzieci 4–7 lat — 50% stawki", "Dzieci powyżej 7 lat — 100%", "Alkohol we własnym zakresie bez opłaty korkowej"] },
+  { id: "wesele_290", typy: ["WESELE"], nazwa: "Wesele propozycja 1", cena: 290, sekcje: [{ id: "zupa", label: "Zupa", typ: "wybor", limit: 1, dania: ["Rosół z kury z makaronem", "Krem z białych warzyw z pesto rukolowym"] }, { id: "glowne", label: "Danie serwowane", typ: "wybor", limit: 1, dania: ["Polędwiczki wieprzowe podane na puree chrzanowo-pietruszkowym muśnięte sosem z zielonego pieprzu", "Rulon drobiowy nadziewany szpinakiem serwowany z pieczonym batatem w aromatycznych ziołach"] }, { id: "surowki", label: "Surówki zimne", typ: "wybor", limit: 2, dania: ["Surówka z białej kapusty", "Surówka z kapusty pekińskiej", "Mizeria"] }, { id: "surowkiciep", label: "Surówka na ciepło", typ: "wybor", limit: 1, dania: ["Fasolka z masełkiem", "Groszek z marchewką"] }, { id: "dodatki", label: "Dodatki do dań", typ: "wybor", limit: 3, dania: ["Ziemniaki z koperkiem", "Ziemniaki zapiekane", "Kasza pęczak", "Kulki ziemniaczane"] }, { id: "zimny", label: "Zimny bufet", typ: "wybor", limit: 12, dania: ["Deska naszych przysmaków", "Tatarki (z pstrąga, wołowe, z łososia)", "Mini tortilla z łososiem", "Mini tortilla z szynką", "Śledzik w śmietanie z jabłkiem", "Ryba w sosie pomidorowym", "Klopsiki w zalewie octowej", "Kąski pstrąga w galarecie", "Tymbaliki z łososiem", "Pasztet wiejski z sosem żurawinowo-chrzanowym", "Sałatka w koszyczku", "Sałatki w ambuszkach (3 rodzaje: orzeźwiająca, z kolorowym makaronem, ananasem i ryżem)", "Sałatka Cezar", "Sałatka z grillowanym kurczakiem", "Półmisek frykasów (koreczki, koperty ze szpinakiem i suszonymi pomidorami, vol-au-venty, sałatka jarzynowa w słonej babeczce)"] }, { id: "bufet", label: "Bufet ciepły", typ: "wybor", limit: 6, dania: ["De volaille z serem", "Kieszonka wieprzowa", "Rumiane udko z kurczaka", "Udko z camembert", "Kotlet mielony z farszem pieczarkowym", "Zraz w sosie własnym", "Karkówka w sosie własnym", "Sandacz w sosie koperkowym", "Eskalop", "Żeberka na słodko", "Żeberka w kapuście kiszonej", "Gołąbki mięsne w sosie pomidorowym", "Mix pierogów z okrasą", "Pierogi z kaczką z masełkiem szałwiowym", "Pierś z kurczaka ze szpinakiem", "Gulasz wieprzowy"] }, { id: "stol", label: "W cenie", typ: "fixed", dania: ["Kawa i herbata bez ograniczeń", "Pieczywo"] }], doplaty: [{ id: "napoje", label: "Napoje nielimitowane", cena: 25, opis: "Coca-Cola, Fanta, Sprite, woda z cytryną, sok jabłkowy, sok pomarańczowy" }, { id: "ciasta", label: "Ciasta", cena: 25, wybor: true, limit: 5, opcje: ["Rafaello", "Sernik z wiśnią", "Krówka", "Szarlotka", "Czarny Las", "Słonecznikowiec", "Góra lodowa", "Malinowa chmurka", "Królowa śniegu", "Łabędzi puch"] }], regulamin: ["Dzieci 0–3 lat — bezpłatnie", "Dzieci 4–7 lat — 50%", "Zespół — 100%, kamerzysta/fotograf — 50%", "Alkohol we własnym zakresie bez opłaty korkowej", "Tort — dostarczyć z paragonem z cukierni"] },
+  { id: "wesele_350", typy: ["WESELE"], nazwa: "Wesele propozycja 2", cena: 350, sekcje: [{ id: "zupa", label: "Zupa", typ: "wybor", limit: 1, dania: ["Rosół z kury z makaronem", "Krem z białych warzyw z pesto rukolowym"] }, { id: "glowne", label: "Danie serwowane", typ: "wybor", limit: 1, dania: ["Polędwiczki wieprzowe podane na puree chrzanowo-pietruszkowym muśnięte sosem z zielonego pieprzu", "Rulon drobiowy nadziewany szpinakiem serwowany z pieczonym batatem w aromatycznych ziołach"] }, { id: "surowki", label: "Surówki zimne", typ: "wybor", limit: 2, dania: ["Surówka z białej kapusty", "Surówka z kapusty pekińskiej", "Mizeria"] }, { id: "surowkiciep", label: "Surówka na ciepło", typ: "wybor", limit: 1, dania: ["Fasolka z masełkiem", "Groszek z marchewką"] }, { id: "dodatki", label: "Dodatki do dań", typ: "wybor", limit: 3, dania: ["Ziemniaki z koperkiem", "Ziemniaki zapiekane", "Kasza pęczak", "Kulki ziemniaczane"] }, { id: "zimny", label: "Zimny bufet", typ: "wybor", limit: 12, dania: ["Deska naszych przysmaków", "Tatarki (z pstrąga, wołowe, z łososia)", "Mini tortilla z łososiem", "Mini tortilla z szynką", "Śledzik w śmietanie z jabłkiem", "Ryba w sosie pomidorowym", "Klopsiki w zalewie octowej", "Kąski pstrąga w galarecie", "Tymbaliki z łososiem", "Pasztet wiejski z sosem żurawinowo-chrzanowym", "Sałatka w koszyczku", "Sałatki w ambuszkach (3 rodzaje)", "Sałatka Cezar", "Sałatka z grillowanym kurczakiem", "Półmisek frykasów"] }, { id: "bufet", label: "Bufet ciepły", typ: "wybor", limit: 6, dania: ["De volaille z serem", "Kieszonka wieprzowa", "Rumiane udko z kurczaka", "Udko z camembert", "Kotlet mielony z farszem pieczarkowym", "Zraz w sosie własnym", "Karkówka w sosie własnym", "Sandacz w sosie koperkowym", "Eskalop", "Żeberka na słodko", "Żeberka w kapuście kiszonej", "Gołąbki mięsne w sosie pomidorowym", "Mix pierogów z okrasą", "Pierogi z kaczką z masełkiem szałwiowym", "Pierś z kurczaka ze szpinakiem", "Gulasz wieprzowy"] }, { id: "stol", label: "W cenie", typ: "fixed", dania: ["Kawa i herbata bez ograniczeń", "Pieczywo"] }], doplaty: [{ id: "napoje", label: "Napoje nielimitowane", cena: 25, opis: "Coca-Cola, Fanta, Sprite, woda z cytryną, sok jabłkowy, sok pomarańczowy" }, { id: "ciasta", label: "Ciasta", cena: 25, wybor: true, limit: 5, opcje: ["Rafaello", "Sernik z wiśnią", "Krówka", "Szarlotka", "Czarny Las", "Słonecznikowiec", "Góra lodowa", "Malinowa chmurka", "Królowa śniegu", "Łabędzi puch"] }, { id: "ryby", label: "Stół rybny", cena: 40, opis: "Sielawa, jesiotr, pstrąg, węgorz, 5 rodzajów śledzi, ryba po grecku/japońsku/żydowsku, w galarecie, sałatki rybne" }, { id: "wozek", label: "Wózek z jadłem", cena: 25, opis: "Gulasz z babką ziemniaczaną, bigos z pajdą chleba, pierogi mix" }, { id: "udko", label: "Udko pieczone", cena: 0, stala: 800, opis: "Cena ryczałtowa 800 zł za całość" }, { id: "prosie", label: "Pieczone prosię", cena: 0, stala: 2000, opis: "Cena ryczałtowa 2000 zł za całość" }, { id: "wegorz", label: "Węgorz wędzony", cena: 20 }], regulamin: ["Poza sezonem (1.11–1.04) w soboty — 10 zł/os taniej", "Poniżej 90 osób w soboty — +15 zł/os", "Dzieci 0–3 lat — bezpłatnie", "Dzieci 4–7 lat — 50%", "Zespół — 100%, kamerzysta/fotograf — 50%", "Poprawiny — 6000 zł (6 godzin)", "Alkohol we własnym zakresie bez opłaty korkowej", "Tort — dostarczyć z paragonem z cukierni"] },
+];
+
+const fmtZl = (n: number | null | undefined) => (n != null ? n.toLocaleString("pl-PL") + "\u00a0zł" : "—");
+const fmtDate = (d: string | Date) => new Date(d).toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric" });
+
+type EvType = { type: string; client?: string | null; date: string; guests?: number | null };
+type SavedMenu = { pakietId?: string | null; wybory?: Record<string, string[]>; doplaty?: Record<string, boolean>; dopWybory?: Record<string, string[]>; notatka?: string } | null;
+
+function obliczCene(
+  pakiet: (typeof PAKIETY)[0] | undefined,
+  doplaty: Record<string, boolean>,
+  guestsOverride: number | null,
+  evGuests: number | null | undefined
+) {
+  if (!pakiet) return { base: 0, dop: 0, perOsoba: 0, total: null, staleDop: 0 };
+  const g = guestsOverride ?? evGuests ?? 0;
+  const base = pakiet.cena;
+  let dop = 0, staleDop = 0;
+  (pakiet.doplaty || []).forEach((d: { id: string; stala?: number; cena?: number }) => {
+    if (!doplaty[d.id]) return;
+    if (d.stala) staleDop += d.stala;
+    else dop += d.cena ?? 0;
+  });
+  const perOsoba = base + dop;
+  const total = g > 0 ? perOsoba * g + staleDop : null;
+  return { base, dop, perOsoba, total, staleDop, gosc: g };
+}
+
+type SekcjaWybor = { id: string; label: string; typ: string; limit: number; dania: string[] };
+function statusWyborow(
+  pakiet: (typeof PAKIETY)[0] | undefined,
+  wybory: Record<string, string[]>
+) {
+  if (!pakiet) return { todo: [] as SekcjaWybor[], done: 0, total: 0 };
+  const wyborowe = pakiet.sekcje.filter((s) => s.typ === "wybor" && "limit" in s) as SekcjaWybor[];
+  const done = wyborowe.filter((s) => (wybory[s.id] || []).length === s.limit).length;
+  const todo = wyborowe.filter((s) => (wybory[s.id] || []).length < s.limit);
+  return { todo, done, total: wyborowe.length };
+}
+
+function generatePrintHTML(
+  pakiet: (typeof PAKIETY)[0],
+  wybory: Record<string, string[]>,
+  doplaty: Record<string, boolean>,
+  dopWybory: Record<string, string[]>,
+  notatka: string,
+  ev: EvType,
+  cena: ReturnType<typeof obliczCene>
+) {
+  const sekcjeHTML = pakiet.sekcje.map((s: { typ: string; id: string; label: string; dania: string[] }) => {
+    const lista = s.typ === "fixed" ? s.dania : (wybory[s.id] || []);
+    if (!lista.length) return "";
+    const items = lista.map((d: string) => `<li>${d}</li>`).join("");
+    return `<div class="sekcja"><div class="sekcja-label">${s.label.replace(/ \(.*\)/, "").toUpperCase()}</div><ul>${items}</ul></div>`;
+  }).join("");
+  const wybrDoplaty = (pakiet.doplaty || []).filter((d: { id: string }) => doplaty[d.id]);
+  const doplatyHTML = wybrDoplaty.length
+    ? `<div class="sekcja"><div class="sekcja-label">DOPŁATY</div><ul>${wybrDoplaty.map((d: { label: string; stala?: number; cena?: number; wybor?: boolean; id: string }) => {
+        const wybrane = d.wybor && dopWybory[d.id]?.length ? ` — ${dopWybory[d.id].join(", ")}` : "";
+        const cenaStr = d.stala ? ` (${fmtZl(d.stala)} ryczałt)` : (d.cena ?? 0) > 0 ? ` (+${d.cena} zł/os)` : "";
+        return `<li>${d.label}${cenaStr}${wybrane}</li>`;
+      }).join("")}</ul></div>`
+    : "";
+  const notatkaHTML = notatka ? `<div class="notatka">📝 ${notatka}</div>` : "";
+  const cenaHTML = `<div class="cena-box"><div class="cena-wiersz"><span>Pakiet</span><span>${pakiet.cena} zł/os</span></div>${cena.dop > 0 ? `<div class="cena-wiersz"><span>Dopłaty</span><span>+${cena.dop} zł/os</span></div>` : ""}${cena.dop > 0 ? `<div class="cena-wiersz bold"><span>Łącznie na osobę</span><span>${cena.perOsoba} zł/os</span></div>` : ""}${(cena.gosc ?? 0) > 0 ? `<div class="cena-wiersz"><span>Gości</span><span>${cena.gosc ?? 0}</span></div>` : ""}${cena.staleDop > 0 ? `<div class="cena-wiersz"><span>Dopłaty ryczałtowe</span><span>+${fmtZl(cena.staleDop)}</span></div>` : ""}${cena.total != null ? `<div class="cena-total">RAZEM: ${fmtZl(cena.total)}</div>` : ""}</div>`;
+  const regulaminHTML = pakiet.regulamin?.length ? `<div class="regulamin"><strong>Regulamin:</strong><br/>${pakiet.regulamin.map((r: string) => `• ${r}`).join("<br/>")}</div>` : "";
+  return `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>Menu — ${ev.client}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Georgia,serif;padding:32px;color:#1e293b;max-width:720px;margin:0 auto}h1{font-size:22px;font-weight:bold;margin-bottom:4px}.subtitle{font-size:13px;color:#64748b;margin-bottom:24px}.sekcja{margin-bottom:16px}.sekcja-label{font-size:10px;font-weight:bold;color:#94a3b8;letter-spacing:2px;margin-bottom:5px;border-bottom:1px solid #e2e8f0;padding-bottom:3px}ul{padding-left:18px}li{font-size:13px;line-height:1.9}.notatka{background:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:10px 14px;margin:16px 0;font-size:12px;color:#92400e}.cena-box{background:#f0fdf4;border:2px solid #86efac;border-radius:8px;padding:14px 18px;margin:20px 0}.cena-wiersz{display:flex;justify-content:space-between;font-size:13px;line-height:2}.cena-wiersz.bold{font-weight:bold;border-top:1px dashed #d1fae5;padding-top:4px}.cena-total{font-size:20px;font-weight:bold;color:#166534;border-top:2px solid #86efac;padding-top:10px;margin-top:6px}.regulamin{font-size:11px;color:#64748b;line-height:1.9;border-top:1px solid #e2e8f0;padding-top:14px;margin-top:14px}.footer{font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:10px;margin-top:20px}@media print{body{padding:16px}}</style></head><body><h1>${pakiet.nazwa} — ${pakiet.cena} zł/os</h1><div class="subtitle">${ev.client} · ${fmtDate(ev.date)}${ev.guests ? ` · ${ev.guests} osób` : ""}</div>${sekcjeHTML}${doplatyHTML}${notatkaHTML}${cenaHTML}${regulaminHTML}<div class="footer">Karczma Łabędź · Marta Aker: 721 434 939, 604 070 908</div></body></html>`;
+}
+
+export interface MenuEv {
+  type: string;
+  client?: string | null;
+  date: string;
+  guests?: number | null;
+}
+
+export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: SavedMenu; onSave?: (menuData: Record<string, unknown>) => void }) {
+  const [pakietId, setPakietId] = useState<string | null>(savedMenu?.pakietId ?? null);
+  const [wybory, setWybory] = useState<Record<string, string[]>>(savedMenu?.wybory ?? {});
+  const [doplaty, setDoplaty] = useState<Record<string, boolean>>(savedMenu?.doplaty ?? {});
+  const [dopWybory, setDopWybory] = useState<Record<string, string[]>>(savedMenu?.dopWybory ?? {});
+  const [notatka, setNotatka] = useState(savedMenu?.notatka ?? "");
+  const [guestsOvr, setGuestsOvr] = useState<number | null>(null);
+  const [tryb, setTryb] = useState<"edycja" | "podglad">("edycja");
+  const [zapisano, setZapisano] = useState(false);
+  const [walidError, setWalidError] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    if (!savedMenu) return;
+    setPakietId(savedMenu.pakietId ?? null);
+    setWybory(savedMenu.wybory ?? {});
+    setDoplaty(savedMenu.doplaty ?? {});
+    setDopWybory(savedMenu.dopWybory ?? {});
+    setNotatka(savedMenu.notatka ?? "");
+  }, [savedMenu]);
+
+  const dostepne = useMemo(() => PAKIETY.filter((p) => p.typy.includes(ev.type)), [ev.type]);
+  const pakiet = useMemo(() => PAKIETY.find((p) => p.id === pakietId), [pakietId]);
+  const cena = useMemo(() => obliczCene(pakiet, doplaty, guestsOvr, ev.guests), [pakiet, doplaty, guestsOvr, ev.guests]);
+  const statusWyb = useMemo(() => statusWyborow(pakiet, wybory), [pakiet, wybory]);
+
+  const toggleWybor = useCallback((sekcjaId: string, danie: string, limit: number) => {
+    setWybory((prev) => {
+      const curr = prev[sekcjaId] || [];
+      if (curr.includes(danie)) return { ...prev, [sekcjaId]: curr.filter((d) => d !== danie) };
+      if (curr.length >= limit) return prev;
+      return { ...prev, [sekcjaId]: [...curr, danie] };
+    });
+  }, []);
+
+  const toggleDoplata = useCallback((id: string) => setDoplaty((prev) => ({ ...prev, [id]: !prev[id] })), []);
+  const toggleDopWybor = useCallback((dopId: string, opcja: string, limit: number) => {
+    setDopWybory((prev) => {
+      const curr = prev[dopId] || [];
+      if (curr.includes(opcja)) return { ...prev, [dopId]: curr.filter((o) => o !== opcja) };
+      if (curr.length >= limit) return prev;
+      return { ...prev, [dopId]: [...curr, opcja] };
+    });
+  }, []);
+  const clearSekcja = useCallback((sekcjaId: string) => setWybory((prev) => ({ ...prev, [sekcjaId]: [] })), []);
+
+  const handlePakietClick = (id: string) => {
+    if (id === pakietId) return;
+    const hasWybory = Object.values(wybory).some((v) => v.length > 0);
+    if (hasWybory) { setConfirmReset(id); return; }
+    doChangePakiet(id);
+  };
+
+  const doChangePakiet = (id: string) => {
+    setPakietId(id); setWybory({}); setDoplaty({}); setDopWybory({});
+    setConfirmReset(null); setWalidError(null);
+  };
+
+  const handleSave = () => {
+    if (!pakiet) { setWalidError("Wybierz pakiet menu przed zapisaniem."); return; }
+    const brakujace = statusWyb.todo.map((s) => {
+      const curr = (wybory[s.id] || []).length;
+      return `${s.label.replace(/ \(.*\)/, "")} (${curr}/${s.limit})`;
+    });
+    if (brakujace.length) {
+      setWalidError("Uzupełnij wybory: " + brakujace.join(", "));
+      return;
+    }
+    setWalidError(null);
+    onSave?.({ pakietId, wybory, doplaty, dopWybory, notatka });
+    setZapisano(true);
+    setTimeout(() => setZapisano(false), 2500);
+  };
+
+  const handlePrint = () => {
+    if (!pakiet) return;
+    const html = generatePrintHTML(pakiet, wybory, doplaty, dopWybory, notatka, ev, cena);
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    const doc = iframe.contentDocument || iframe.contentWindow!.document;
+    doc.open(); doc.write(html); doc.close();
+    setTimeout(() => iframe.contentWindow!.print(), 300);
+  };
+
+  const effGuests = guestsOvr ?? ev.guests;
+
+  return (
+    <div style={{ fontFamily: "'DM Sans','Segoe UI',system-ui,sans-serif", fontSize: "13px" }}>
+      <iframe ref={iframeRef} style={{ display: "none" }} title="print" />
+      <div style={{ position: "sticky", top: 0, zIndex: 50, background: "white", borderBottom: "2px solid #e2e8f0", padding: "10px 0 10px", marginBottom: "12px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", border: "2px solid #e2e8f0", borderRadius: "8px", overflow: "hidden", flexShrink: 0 }}>
+          {([["edycja", "✏️ Edycja"], ["podglad", "👁 Podgląd"]] as const).map(([t, l]) => (
+            <button key={t} onClick={() => setTryb(t)} style={{ padding: "6px 14px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: 700, background: tryb === t ? "#1e293b" : "white", color: tryb === t ? "white" : "#64748b" }}>{l}</button>
+          ))}
+        </div>
+        {pakiet && (
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#f0fdf4", border: "2px solid #86efac", borderRadius: "8px", padding: "5px 12px", flexShrink: 0 }}>
+            <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600 }}>{cena.perOsoba} zł/os</span>
+            {cena.total != null && <><span style={{ color: "#86efac" }}>×</span><span style={{ fontSize: "15px", fontWeight: 900, color: "#166534" }}>{fmtZl(cena.total)}</span></>}
+            {cena.total == null && <span style={{ fontSize: "11px", color: "#94a3b8", fontStyle: "italic" }}>(wpisz gości →)</span>}
+          </div>
+        )}
+        <div style={{ display: "flex", alignItems: "center", gap: "5px", flexShrink: 0 }}>
+          <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, whiteSpace: "nowrap" }}>👥 gości:</span>
+          <input type="number" min={1} max={999} value={guestsOvr ?? ev.guests ?? ""} onChange={(e) => { const v = parseInt(e.target.value); setGuestsOvr(isNaN(v) || v <= 0 ? null : v); }} style={{ width: "64px", padding: "5px 8px", border: "2px solid #e2e8f0", borderRadius: "7px", fontSize: "13px", fontWeight: 700, textAlign: "center", outline: "none" }} />
+          {guestsOvr != null && guestsOvr !== ev.guests && <button onClick={() => setGuestsOvr(null)} style={{ background: "#fee2e2", border: "none", borderRadius: "5px", padding: "4px 7px", cursor: "pointer", fontSize: "11px", color: "#991b1b", fontWeight: 700 }}>↩</button>}
+        </div>
+        {pakiet && statusWyb.total > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+            <div style={{ display: "flex", gap: "3px" }}>{Array.from({ length: statusWyb.total }, (_, i) => <div key={i} style={{ width: "10px", height: "10px", borderRadius: "3px", background: i < statusWyb.done ? "#22c55e" : "#e2e8f0" }} />)}</div>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: statusWyb.done === statusWyb.total ? "#166534" : "#92400e" }}>{statusWyb.done}/{statusWyb.total}</span>
+          </div>
+        )}
+        <div style={{ marginLeft: "auto", display: "flex", gap: "6px", flexShrink: 0 }}>
+          {tryb === "podglad" && pakiet && <button onClick={handlePrint} style={{ background: "#475569", color: "white", border: "none", borderRadius: "8px", padding: "7px 14px", cursor: "pointer", fontSize: "12px", fontWeight: 700 }}>🖨️ Drukuj</button>}
+          <button onClick={handleSave} style={{ background: zapisano ? "#22c55e" : "#3b82f6", color: "white", border: "none", borderRadius: "8px", padding: "7px 16px", cursor: "pointer", fontSize: "12px", fontWeight: 800, transition: "background 0.25s", whiteSpace: "nowrap" }}>{zapisano ? "✅ Zapisano!" : "💾 Zapisz"}</button>
+        </div>
+      </div>
+      {walidError && (
+        <div style={{ background: "#fef2f2", border: "2px solid #fca5a5", borderRadius: "9px", padding: "10px 14px", marginBottom: "10px", fontSize: "12px", color: "#991b1b", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px" }}>
+          ⚠️ {walidError}
+          <button onClick={() => setWalidError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#991b1b", fontSize: "15px", fontWeight: 900 }}>×</button>
+        </div>
+      )}
+      {tryb === "podglad" && (
+        <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "20px 22px" }}>
+          {!pakiet ? (
+            <div style={{ textAlign: "center", padding: "48px 20px", color: "#94a3b8" }}><div style={{ fontSize: "40px", marginBottom: "10px" }}>🍽️</div><div style={{ fontSize: "15px", fontWeight: 700 }}>Wybierz pakiet w trybie edycji</div></div>
+          ) : (
+            <>
+              <div style={{ fontSize: "20px", fontWeight: 900, color: "#0f172a", marginBottom: "2px" }}>{pakiet.nazwa} — {pakiet.cena} zł/os</div>
+              <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "20px" }}>{ev.client} · {fmtDate(ev.date)}{effGuests ? ` · ${effGuests} osób` : ""}</div>
+              {pakiet.sekcje.map((s: { id: string; typ: string; label: string; dania: string[] }) => {
+                const lista = s.typ === "fixed" ? s.dania : (wybory[s.id] || []);
+                if (!lista.length) return <div key={s.id} style={{ marginBottom: "10px", opacity: 0.4 }}><div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px", marginBottom: "3px" }}>{s.label.replace(/ \(.*\)/, "").toUpperCase()} — BRAK WYBORU</div></div>;
+                return (
+                  <div key={s.id} style={{ marginBottom: "14px" }}>
+                    <div style={{ fontSize: "10px", fontWeight: 900, color: "#64748b", letterSpacing: "2px", marginBottom: "5px", borderBottom: "1px solid #f1f5f9", paddingBottom: "3px" }}>{s.label.replace(/ \(.*\)/, "").toUpperCase()}{s.typ === "fixed" ? <span style={{ marginLeft: "6px", color: "#22c55e", fontSize: "9px" }}>✓ W CENIE</span> : null}</div>
+                    <ul style={{ margin: 0, paddingLeft: "16px" }}>{lista.map((d: string) => <li key={d} style={{ lineHeight: 1.9, color: "#0f172a" }}>{d}</li>)}</ul>
+                  </div>
+                );
+              })}
+              {(pakiet.doplaty || []).some((d: { id: string }) => doplaty[d.id]) && (
+                <div style={{ marginBottom: "14px" }}>
+                  <div style={{ fontSize: "10px", fontWeight: 900, color: "#6366f1", letterSpacing: "2px", marginBottom: "5px", borderBottom: "1px solid #f1f5f9", paddingBottom: "3px" }}>DOPŁATY</div>
+                  {(pakiet.doplaty || []).filter((d: { id: string }) => doplaty[d.id]).map((d: { id: string; label: string; stala?: number; cena?: number; wybor?: boolean }) => (
+                    <div key={d.id} style={{ lineHeight: 2, color: "#0f172a" }}>• {d.label}{d.stala ? ` — ${fmtZl(d.stala)} ryczałt` : (d.cena ?? 0) > 0 ? ` — +${d.cena} zł/os` : ""}{d.wybor && dopWybory[d.id]?.length ? <span style={{ color: "#64748b" }}> ({dopWybory[d.id].join(", ")})</span> : ""}</div>
+                  ))}
+                </div>
+              )}
+              {notatka && <div style={{ background: "#fefce8", border: "1px solid #fde68a", borderRadius: "8px", padding: "10px 14px", marginBottom: "14px", fontSize: "12px", color: "#92400e", lineHeight: 1.6 }}>📝 {notatka}</div>}
+              <div style={{ background: "#f0fdf4", border: "2px solid #86efac", borderRadius: "10px", padding: "14px 16px", marginBottom: "14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#374151", lineHeight: 2.2 }}><span>Pakiet base:</span><span style={{ fontWeight: 700 }}>{pakiet.cena} zł/os</span></div>
+                {cena.dop > 0 && <><div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#6366f1", lineHeight: 2 }}><span>Dopłaty:</span><span style={{ fontWeight: 700 }}>+{cena.dop} zł/os</span></div><div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: 800, borderTop: "1px dashed #d1fae5", paddingTop: "4px", lineHeight: 2 }}><span>Łącznie/os:</span><span>{cena.perOsoba} zł</span></div></>}
+                {effGuests != null && effGuests > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#374151", lineHeight: 2 }}><span>Gości:</span><span style={{ fontWeight: 700 }}>× {effGuests}</span></div>}
+                {cena.staleDop > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#6366f1", lineHeight: 2 }}><span>Ryczałt:</span><span style={{ fontWeight: 700 }}>+{fmtZl(cena.staleDop)}</span></div>}
+                {cena.total != null && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "20px", fontWeight: 900, color: "#166534", borderTop: "2px solid #86efac", paddingTop: "8px", marginTop: "4px" }}><span>RAZEM</span><span>{fmtZl(cena.total)}</span></div>}
+              </div>
+              {pakiet.regulamin?.length ? <div style={{ fontSize: "11px", color: "#64748b", lineHeight: 1.9, borderTop: "1px solid #e2e8f0", paddingTop: "12px" }}><strong>Regulamin:</strong><br />{pakiet.regulamin.map((r, i) => <div key={i}>• {r}</div>)}</div> : null}
+              <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "12px", borderTop: "1px solid #e2e8f0", paddingTop: "10px" }}>Karczma Łabędź · Marta Aker: 721 434 939, 604 070 908</div>
+            </>
+          )}
+        </div>
+      )}
+      {tryb === "edycja" && (
+        <>
+          <div style={{ marginBottom: "12px" }}>
+            <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px", marginBottom: "8px" }}>PAKIET MENU</div>
+            {dostepne.length === 0 ? (
+              <div style={{ background: "#fef9c3", border: "2px solid #fde68a", borderRadius: "10px", padding: "14px", fontSize: "13px", color: "#92400e", fontWeight: 600 }}>⚠️ Brak pakietów dla typu imprezy: <strong>{ev.type}</strong>. Skontaktuj się z Martą Aker aby ustalić menu indywidualnie.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                {dostepne.map((p) => {
+                  const aktywny = pakietId === p.id;
+                  return (
+                    <button key={p.id} onClick={() => handlePakietClick(p.id)} style={{ background: aktywny ? "#1e293b" : "white", border: `2px solid ${aktywny ? "#1e293b" : "#e2e8f0"}`, borderRadius: "10px", padding: "11px 14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", textAlign: "left", transition: "all 0.12s", boxShadow: aktywny ? "0 2px 12px rgba(0,0,0,0.15)" : "none" }}>
+                      <span style={{ fontSize: "14px", fontWeight: 700, color: aktywny ? "white" : "#0f172a" }}>{aktywny ? "✓ " : ""}{p.nazwa}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, marginLeft: "12px" }}>
+                        <span style={{ fontSize: "11px", color: aktywny ? "rgba(255,255,255,0.6)" : "#64748b" }}>{p.sekcje.filter((s: { typ: string }) => s.typ === "wybor").length} sekcji do wyboru</span>
+                        <span style={{ background: aktywny ? "rgba(255,255,255,0.15)" : "#f0fdf4", color: aktywny ? "white" : "#166534", border: `1px solid ${aktywny ? "rgba(255,255,255,0.3)" : "#86efac"}`, borderRadius: "6px", padding: "3px 10px", fontSize: "14px", fontWeight: 900 }}>{p.cena} zł/os</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {pakiet && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "12px" }}>
+              <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px" }}>SKŁAD MENU</div>
+              {pakiet.sekcje.map((sek) => {
+                const limit = "limit" in sek ? (sek.limit as number) : 0;
+                const wybrane = wybory[sek.id] || [];
+                const pelne = sek.typ === "wybor" && wybrane.length === limit;
+                const empty = sek.typ === "wybor" && wybrane.length === 0;
+                return (
+                  <div key={sek.id} style={{ background: "white", border: `2px solid ${pelne ? "#86efac" : empty ? "#e2e8f0" : "#fde68a"}`, borderRadius: "11px", padding: "12px 14px", transition: "border-color 0.15s" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
+                      <div style={{ fontSize: "12px", fontWeight: 800, color: "#0f172a", flex: 1 }}>{sek.typ === "fixed" ? <span style={{ color: "#22c55e", marginRight: "5px" }}>✓</span> : <span style={{ color: pelne ? "#22c55e" : empty ? "#94a3b8" : "#f59e0b", marginRight: "5px" }}>{pelne ? "●" : empty ? "○" : "◐"}</span>}{sek.label.replace(/ \(.*\)/, "")}{sek.typ === "fixed" ? <span style={{ marginLeft: "6px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>— w cenie</span> : null}</div>
+                      {sek.typ === "wybor" && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ background: pelne ? "#f0fdf4" : empty ? "#f8fafc" : "#fefce8", color: pelne ? "#166534" : empty ? "#94a3b8" : "#92400e", border: `1px solid ${pelne ? "#86efac" : empty ? "#e2e8f0" : "#fde68a"}`, borderRadius: "5px", padding: "2px 8px", fontSize: "11px", fontWeight: 800 }}>{pelne ? "✓ " : ""}{wybrane.length}/{limit}</span>
+                          {wybrane.length > 0 && <button onClick={() => clearSekcja(sek.id)} title="Wyczyść sekcję" style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: "11px", padding: "2px 4px", fontWeight: 700 }}>✕</button>}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
+                      {sek.dania.map((d: string) => {
+                        if (sek.typ === "fixed") return <span key={d} style={{ background: "#f1f5f9", color: "#374151", borderRadius: "6px", padding: "3px 9px", fontSize: "12px" }}>{d}</span>;
+                        const sel = wybrane.includes(d);
+                        const zablok = !sel && pelne;
+                        return <button key={d} onClick={() => toggleWybor(sek.id, d, limit)} style={{ background: sel ? "#1e293b" : zablok ? "#f8fafc" : "white", border: `1.5px solid ${sel ? "#1e293b" : zablok ? "#f1f5f9" : "#d1d5db"}`, borderRadius: "7px", padding: "4px 10px", cursor: zablok ? "not-allowed" : "pointer", fontSize: "12px", fontWeight: sel ? 700 : 400, color: sel ? "white" : zablok ? "#cbd5e1" : "#374151", transition: "all 0.1s" }}>{sel ? "✓ " : ""}{d}</button>;
+                      })}
+                    </div>
+                    {pelne && sek.typ === "wybor" && <div style={{ marginTop: "7px", fontSize: "11px", color: "#166534", fontWeight: 600 }}>✓ Wybrano {limit} z {sek.dania.length} — odznacz danie aby zmienić</div>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {pakiet && (pakiet.doplaty || []).length > 0 && (
+            <div style={{ marginBottom: "12px" }}>
+              <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px", marginBottom: "8px" }}>DOPŁATY (opcjonalne)</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {(pakiet.doplaty || []).map((d: { id: string; label: string; opis?: string; stala?: number; cena?: number; wybor?: boolean; limit?: number; opcje?: string[] }) => (
+                  <div key={d.id} style={{ background: "white", border: `2px solid ${doplaty[d.id] ? "#6366f1" : "#e2e8f0"}`, borderRadius: "10px", padding: "11px 14px", transition: "border-color 0.15s" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <button onClick={() => toggleDoplata(d.id)} style={{ width: "22px", height: "22px", borderRadius: "6px", border: "none", flexShrink: 0, cursor: "pointer", fontSize: "13px", fontWeight: 900, background: doplaty[d.id] ? "#6366f1" : "#e2e8f0", color: doplaty[d.id] ? "white" : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>✓</button>
+                      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700, color: "#0f172a" }}>{d.label}</div>{d.opis ? <div style={{ fontSize: "11px", color: "#64748b", marginTop: "1px" }}>{d.opis}</div> : null}</div>
+                      <span style={{ fontSize: "12px", fontWeight: 800, flexShrink: 0, color: d.stala ? "#0f172a" : "#6366f1", whiteSpace: "nowrap" }}>{d.stala ? fmtZl(d.stala) + " ryczałt" : (d.cena ?? 0) > 0 ? "+" + d.cena + " zł/os" : ""}</span>
+                    </div>
+                    {d.wybor && doplaty[d.id] && d.opcje && d.limit != null && (
+                      <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
+                        <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 700, marginBottom: "6px" }}>Wybierz {d.limit} z {d.opcje.length}: <span style={{ marginLeft: "8px", fontWeight: 900, color: (dopWybory[d.id] || []).length === d.limit ? "#166534" : "#92400e" }}>{(dopWybory[d.id] || []).length}/{d.limit}</span></div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>{d.opcje.map((o: string) => { const sel = (dopWybory[d.id] || []).includes(o); const dLimit = d.limit ?? 0; const peln = !sel && (dopWybory[d.id] || []).length >= dLimit; return <button key={o} onClick={() => toggleDopWybor(d.id, o, dLimit)} style={{ background: sel ? "#6366f1" : peln ? "#f8fafc" : "white", border: `1.5px solid ${sel ? "#6366f1" : peln ? "#f1f5f9" : "#d1d5db"}`, borderRadius: "6px", padding: "4px 10px", cursor: peln ? "not-allowed" : "pointer", fontSize: "12px", fontWeight: sel ? 700 : 400, color: sel ? "white" : peln ? "#cbd5e1" : "#374151" }}>{sel ? "✓ " : ""}{o}</button>; })}</div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {pakiet && (
+            <div style={{ marginBottom: "12px" }}>
+              <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px", marginBottom: "8px" }}>NOTATKA (opcjonalna)</div>
+              <textarea value={notatka} onChange={(e) => setNotatka(e.target.value)} placeholder="Tort urodzinowy od klienta, alergeny, prośby specjalne, ustalenia z klientem..." style={{ width: "100%", minHeight: "72px", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "9px", fontSize: "13px", resize: "vertical", fontFamily: "inherit", lineHeight: 1.6, outline: "none", boxSizing: "border-box" }} />
+            </div>
+          )}
+          {pakiet && (
+            <div style={{ background: cena.total != null ? "#f0fdf4" : "#f8fafc", border: `2px solid ${cena.total != null ? "#86efac" : "#e2e8f0"}`, borderRadius: "11px", padding: "14px" }}>
+              <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px", marginBottom: "10px" }}>KALKULATOR CENY</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px" }}><span style={{ color: "#374151" }}>{pakiet.nazwa}</span><span style={{ fontWeight: 700 }}>{pakiet.cena} zł/os</span></div>
+                {(pakiet.doplaty || []).filter((d) => doplaty[d.id] && !d.stala && (d.cena ?? 0) > 0).map((d) => <div key={d.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#6366f1" }}><span>+ {d.label}</span><span style={{ fontWeight: 700 }}>+{(d.cena ?? 0)} zł/os</span></div>)}
+                {cena.dop > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: 800, borderTop: "1px dashed #e2e8f0", paddingTop: "4px", marginTop: "2px", color: "#0f172a" }}><span>Łącznie na osobę</span><span>{cena.perOsoba} zł</span></div>}
+                {effGuests != null && effGuests > 0 ? <>{(pakiet.doplaty || []).filter((d) => doplaty[d.id] && d.stala).map((d) => <div key={d.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#6366f1" }}><span>+ {d.label} (ryczałt)</span><span style={{ fontWeight: 700 }}>+{fmtZl(d.stala ?? 0)}</span></div>)}<div style={{ display: "flex", justifyContent: "space-between", fontSize: "20px", fontWeight: 900, color: "#166534", borderTop: "2px solid #86efac", paddingTop: "10px", marginTop: "6px" }}><span>RAZEM</span><span>{fmtZl(cena.total)}</span></div></> : <div style={{ color: "#94a3b8", fontSize: "12px", fontStyle: "italic", borderTop: "1px solid #e2e8f0", paddingTop: "8px", marginTop: "4px" }}>Zmień liczbę gości powyżej aby zobaczyć łączną kwotę</div>}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+      {confirmReset && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ background: "white", borderRadius: "16px", padding: "26px", width: "340px", boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
+            <div style={{ fontSize: "28px", textAlign: "center", marginBottom: "10px" }}>⚠️</div>
+            <div style={{ fontSize: "16px", fontWeight: 900, textAlign: "center", marginBottom: "8px", color: "#0f172a" }}>Zmienić pakiet?</div>
+            <div style={{ fontSize: "13px", color: "#64748b", textAlign: "center", lineHeight: 1.6, marginBottom: "20px" }}>Zmiana pakietu usunie wszystkie dotychczas wybrane dania i dopłaty.</div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={() => setConfirmReset(null)} style={{ flex: 1, background: "white", border: "2px solid #e2e8f0", borderRadius: "9px", padding: "11px", cursor: "pointer", fontSize: "13px", fontWeight: 700, color: "#374151" }}>Zostań</button>
+              <button onClick={() => doChangePakiet(confirmReset)} style={{ flex: 1, background: "#ef4444", color: "white", border: "none", borderRadius: "9px", padding: "11px", cursor: "pointer", fontSize: "13px", fontWeight: 900 }}>Tak, zmień</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default MenuTab;

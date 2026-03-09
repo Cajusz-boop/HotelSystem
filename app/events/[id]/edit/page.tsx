@@ -15,6 +15,9 @@ function eventToFormData(e: {
   timeStart: string | null;
   timeEnd: string | null;
   roomName: string | null;
+  depositAmount?: { toNumber?: () => number } | number | null;
+  depositPaid?: boolean | null;
+  isPoprawiny?: boolean | null;
   guestCount: number | null;
   adultsCount: number | null;
   children03: number | null;
@@ -68,6 +71,10 @@ function eventToFormData(e: {
     timeStart: e.timeStart ?? "",
     timeEnd: e.timeEnd ?? "",
     roomName: e.roomName ?? "",
+    roomNames: e.roomName ? e.roomName.split(/,\s*/).filter(Boolean) : [],
+    depositAmount: e.depositAmount != null ? (typeof e.depositAmount === "object" && "toNumber" in e.depositAmount ? (e.depositAmount as { toNumber: () => number }).toNumber() : Number(e.depositAmount)) : "",
+    depositPaid: e.depositPaid ?? false,
+    isPoprawiny: e.isPoprawiny ?? false,
     guestCount: e.guestCount ?? "",
     adultsCount: e.adultsCount ?? "",
     children03: e.children03 ?? "",

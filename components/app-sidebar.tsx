@@ -116,6 +116,7 @@ const navSections: NavSection[] = [
           { href: "/kontrahenci?tab=firmy", labelKey: "sidebar.companies" },
         ],
       },
+      { href: "/centrum-sprzedazy", labelKey: "sidebar.salesCenter", icon: ClipboardList },
       { href: "/biura-podrozy", labelKey: "sidebar.travelAgents", icon: Plane, permission: "module.travel_agents" },
       { href: "/channel-manager", labelKey: "sidebar.channelManager", icon: Globe, permission: "module.channel_manager" },
     ],
@@ -173,6 +174,7 @@ const navSections: NavSection[] = [
     sectionKey: "sidebar.sectionMice",
     defaultOpen: false,
     items: [
+      { href: "/centrum", labelKey: "sidebar.centrumSprzedazy", icon: ClipboardList, permission: "module.mice" },
       {
         href: "/mice",
         labelKey: "sidebar.mice",

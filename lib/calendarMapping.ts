@@ -1,22 +1,29 @@
 /**
- * Mapowanie EventOrder.eventType + roomName → ID kalendarza Google z .env
+ * Mapowanie EventOrder.eventType + roomName + isPoprawiny → ID kalendarza Google z .env
+ * roomName to pojedyncza sala (przy wielu salach funkcja wywoływana osobno dla każdej).
  */
-export function getCalendarIdForEventOrder(eventType: string, roomName?: string | null): string {
+export function getCalendarIdForEventOrder(
+  eventType: string,
+  roomName?: string | null,
+  isPoprawiny?: boolean
+): string {
   const et = String(eventType || "").trim().toUpperCase();
   const room = String(roomName || "").trim();
+  const isPop = Boolean(isPoprawiny);
 
-  if (et === "WESELE") {
-    // Sala Złota: "Sala Złota", "Sala złota", "sala zlota", "Złota"
+  if (et === "WESELE" || isPop) {
     if (/Z[łl]ota|zlota/i.test(room)) {
       const id = process.env.GOOGLE_CALENDAR_WESELA_ZLOTA;
       if (id) return id;
     }
-    // Sala Diamentowa: "Sala Diamentowa", "Sala diamentowa", "Diamentowa"
     if (/Diamentowa|Diamentow/i.test(room)) {
       const id = process.env.GOOGLE_CALENDAR_WESELA_DIAMENTOWA;
       if (id) return id;
     }
-    // Wszystkie inne sale przy WESELE → przyjęcia weselne
+    if (isPop) {
+      const id = process.env.GOOGLE_CALENDAR_POPRAWINY;
+      if (id) return id;
+    }
     const id = process.env.GOOGLE_CALENDAR_PRZYJECIA_WESELNE;
     if (id) return id;
   }
@@ -46,7 +53,7 @@ export function getCalendarIdForEventOrder(eventType: string, roomName?: string 
     const id = process.env.GOOGLE_CALENDAR_SYLWESTER;
     if (id) return id;
   }
-  if (et === "INNE") {
+  if (et === "INNE" || et === "POPRAWINY") {
     const id = process.env.GOOGLE_CALENDAR_IMPREZY_ZAPISOWE;
     if (id) return id;
   }
@@ -65,6 +72,7 @@ export function getAllCalendarIds(): string[] {
     "GOOGLE_CALENDAR_WESELA_ZLOTA",
     "GOOGLE_CALENDAR_WESELA_DIAMENTOWA",
     "GOOGLE_CALENDAR_PRZYJECIA_WESELNE",
+    "GOOGLE_CALENDAR_POPRAWINY",
     "GOOGLE_CALENDAR_CHRZCINY",
     "GOOGLE_CALENDAR_KOMUNIA",
     "GOOGLE_CALENDAR_STYPY",

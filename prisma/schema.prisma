@@ -1696,6 +1696,7 @@ model EventOrder {
   // Menu
   packageId        String?  // ID pakietu menu (opcjonalne)
   cakesAndDesserts String?  @db.Text
+  menu             Json?    // Zapisane menu (pakiet + wybory + dopłaty)
 
   // Tort
   cakeOrderedAt   String?  // gdzie zamówiony
@@ -1740,9 +1741,10 @@ model EventOrder {
   afterpartyMenu     String?  @db.Text
   afterpartyMusic    String?
 
-  // Google integracje
+  // Google integracje (multi-room: googleCalendarEvents = [{roomName, eventId, calId}])
   googleCalendarEventId   String?
   googleCalendarCalId     String?   @db.VarChar(255)
+  googleCalendarEvents    Json?
   googleCalendarSynced    Boolean   @default(false)
   googleCalendarSyncedAt  DateTime?
   googleCalendarError     String?   @db.Text
@@ -1752,6 +1754,14 @@ model EventOrder {
   menuDocId               String?
   checklistDocUrl         String?
   menuDocUrl              String?
+
+  // Zadatek
+  depositAmount Decimal? @db.Decimal(10, 2)
+  depositPaid   Boolean  @default(false)
+
+  // Poprawiny (dzień po weselu)
+  isPoprawiny   Boolean @default(false)
+  parentEventId String?
 
   // Status i meta (zachowane z oryginalnego modelu)
   quoteId   String?
@@ -1766,6 +1776,7 @@ model EventOrder {
   @@index([dateFrom])
   @@index([status])
   @@index([eventType])
+  @@index([parentEventId])
 }
 
 // Kanały watch Google Calendar (webhooks)

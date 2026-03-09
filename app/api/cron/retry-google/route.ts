@@ -45,6 +45,7 @@ export async function GET() {
             cakesAndDesserts: event.cakesAndDesserts,
           }),
         ]);
+        const depAmount = event.depositAmount != null ? (typeof event.depositAmount === "object" && event.depositAmount !== null && "toNumber" in event.depositAmount ? (event.depositAmount as { toNumber: () => number }).toNumber() : Number(event.depositAmount)) : null;
         const calendarEventId = await createCalendarEvent(
           {
             id: event.id,
@@ -60,12 +61,15 @@ export async function GET() {
             notes: event.notes,
             dateFrom: event.dateFrom,
             dateTo: event.dateTo,
+            depositAmount: depAmount,
+            depositPaid: event.depositPaid,
+            isPoprawiny: event.isPoprawiny,
           },
           packageName,
           checklist.docId,
           menu.docId
         );
-        const calId = getCalendarIdForEventOrder(event.eventType, event.roomName);
+        const calId = getCalendarIdForEventOrder(event.eventType, event.roomName, event.isPoprawiny ?? false);
         await prisma.eventOrder.update({
           where: { id: event.id },
           data: {

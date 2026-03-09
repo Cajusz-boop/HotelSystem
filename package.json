@@ -50,7 +50,9 @@
     "db:cleanup:e2e": "npx tsx scripts/cleanup-e2e-data.ts",
     "test:reception-flow": "npx tsx scripts/test-full-reception-flow.ts",
     "db:push:staging": "dotenv -e .env.staging -- prisma db push",
-    "db:migrate:staging": "dotenv -e .env.staging -- prisma migrate deploy"
+    "db:migrate:staging": "dotenv -e .env.staging -- prisma migrate deploy",
+    "gcal:preview": "npx tsx scripts/preview-gcal-events.ts",
+    "gcal:import": "npx tsx scripts/import-gcal-events.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",

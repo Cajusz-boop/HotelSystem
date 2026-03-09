@@ -19,23 +19,54 @@ export type EventOrderForCalendar = {
   notes?: string | null;
   dateFrom: Date;
   dateTo: Date;
+  depositAmount?: number | string | null;
+  depositPaid?: boolean | null;
+  isPoprawiny?: boolean | null;
 };
 
 const TIMEZONE = "Europe/Warsaw";
 
+const EVENT_TYPE_PL: Record<string, string> = {
+  WESELE: "Wesele",
+  KOMUNIA: "Komunia",
+  CHRZCINY: "Chrzciny",
+  URODZINY: "Urodziny/Rocznica",
+  STYPA: "Stypa",
+  FIRMOWA: "Impreza firmowa",
+  SYLWESTER: "Sylwester",
+  INNE: "Impreza",
+  POPRAWINY: "Poprawiny",
+};
+
+function eventTypeToPL(eventType?: string | null, isPoprawiny?: boolean): string {
+  if (isPoprawiny) return "Poprawiny";
+  return EVENT_TYPE_PL[String(eventType || "").toUpperCase()] ?? "Impreza";
+}
+
+function buildSummary(e: EventOrderForCalendar, roomName: string): string {
+  const clientName = e.clientName ?? "Impreza";
+  const guestCount = e.guestCount ?? "—";
+  const eventTypePL = eventTypeToPL(e.eventType, Boolean(e.isPoprawiny));
+  if (e.isPoprawiny) {
+    return `Poprawiny ${clientName} ${guestCount} os — ${roomName}`;
+  }
+  return `${clientName} ${guestCount} os — ${eventTypePL} — ${roomName}`;
+}
+
 function buildDescription(e: EventOrderForCalendar, packageName?: string | null): string {
-  const lines: string[] = [];
-  lines.push(`[LABEDZ_EVENT_ID:${e.id}]`);
-  const df = e.dateFrom instanceof Date ? e.dateFrom : new Date(e.dateFrom);
-  const dt = e.dateTo instanceof Date ? e.dateTo : new Date(e.dateTo);
-  lines.push(`Data: ${df.toLocaleDateString("pl-PL")} – ${dt.toLocaleDateString("pl-PL")}`);
-  if (e.timeStart || e.timeEnd) lines.push(`Godziny: ${e.timeStart ?? "?"} – ${e.timeEnd ?? "?"}`);
-  if (e.guestCount != null) lines.push(`Liczba gości: ${e.guestCount}`);
-  if (e.clientPhone) lines.push(`Telefon: ${e.clientPhone}`);
-  if (packageName) lines.push(`Pakiet menu: ${packageName}`);
-  lines.push(`Status: ${e.status ?? ""}`);
-  if (e.notes) lines.push(`Notatki: ${e.notes}`);
-  lines.push(`Ostatnia aktualizacja (PMS): ${new Date().toISOString()}`);
+  const depAmount = e.depositAmount != null ? String(e.depositAmount) : "0";
+  const depPaid = e.depositPaid ? "✅ zapłacony" : "❌ niezapłacony";
+  const lines: string[] = [
+    `[LABEDZ_EVENT_ID:${e.id}]`,
+    `Tel: ${e.clientPhone ?? "—"}`,
+    `Goście: ${e.guestCount ?? "—"}`,
+    `Godziny: ${e.timeStart ?? "—"} - ${e.timeEnd ?? "—"}`,
+    `Zadatek: ${depAmount} zł ${depPaid}`,
+    ...(packageName ? [`Pakiet menu: ${packageName}`] : []),
+    `Sala: ${e.roomName ?? "—"}`,
+    `Notatki: ${e.notes ?? "—"}`,
+    `Ostatnia aktualizacja (PMS): ${new Date().toISOString().split("T")[0]}`,
+  ];
   return lines.join("\n");
 }
 
@@ -65,13 +96,14 @@ export async function createCalendarEvent(
 ): Promise<string> {
   const auth = getGoogleAuthClient();
   const calendar = google.calendar({ version: "v3", auth });
-  const calId = getCalendarIdForEventOrder(event.eventType ?? "INNE", event.roomName);
-
-  const clientName = event.clientName ?? "Impreza";
-  const eventType = event.eventType ?? "Impreza";
   const roomName = event.roomName ?? "";
+  const calId = getCalendarIdForEventOrder(
+    event.eventType ?? "INNE",
+    roomName,
+    event.isPoprawiny ?? false
+  );
 
-  const summary = `${clientName} — ${eventType} — ${roomName}`;
+  const summary = buildSummary(event, roomName);
 
   const dateFrom = event.dateFrom instanceof Date ? event.dateFrom : new Date(event.dateFrom);
   const dateTo = event.dateTo instanceof Date ? event.dateTo : new Date(event.dateTo);
@@ -124,10 +156,8 @@ export async function updateCalendarEvent(
   const auth = getGoogleAuthClient();
   const calendar = google.calendar({ version: "v3", auth });
 
-  const clientName = event.clientName ?? "Impreza";
-  const eventType = event.eventType ?? "Impreza";
   const roomName = event.roomName ?? "";
-  const summary = `${clientName} — ${eventType} — ${roomName}`;
+  const summary = buildSummary(event, roomName);
 
   const dateFrom = event.dateFrom instanceof Date ? event.dateFrom : new Date(event.dateFrom);
   const dateTo = event.dateTo instanceof Date ? event.dateTo : new Date(event.dateTo);
@@ -152,13 +182,22 @@ export async function updateCalendarEvent(
  * Anuluje wydarzenie (ustawia status cancelled).
  */
 export async function cancelCalendarEvent(googleEventId: string, calId: string): Promise<void> {
-  const auth = getGoogleAuthClient();
-  const calendar = google.calendar({ version: "v3", auth });
-  await calendar.events.patch({
-    calendarId: calId,
-    eventId: googleEventId,
-    requestBody: { status: "cancelled" },
-  });
+  try {
+    const auth = getGoogleAuthClient();
+    const calendar = google.calendar({ version: "v3", auth });
+    await calendar.events.patch({
+      calendarId: calId,
+      eventId: googleEventId,
+      requestBody: { status: "cancelled" },
+    });
+  } catch (error: unknown) {
+    const err = error as { code?: number; status?: number };
+    if (err?.code === 404 || err?.status === 404) {
+      console.log(`GCal event ${googleEventId} already deleted`);
+      return;
+    }
+    throw error;
+  }
 }
 
 /**

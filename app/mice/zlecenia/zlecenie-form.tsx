@@ -195,6 +195,28 @@ export function ZlecenieForm({
 
   return (
     <div className="space-y-6">
+      <div
+        style={{
+          background: "#fef2f2",
+          border: "2px solid #fca5a5",
+          borderRadius: "10px",
+          padding: "12px 16px",
+          marginBottom: "16px",
+          fontSize: "13px",
+          color: "#991b1b",
+          fontWeight: 700,
+        }}
+      >
+        ⚠️ Uwaga: edycja tutaj NIE aktualizuje Google Calendar. Użyj{" "}
+        <a href="/centrum-sprzedazy" style={{ color: "#1d4ed8", textDecoration: "underline" }}>
+          Centrum Sprzedaży
+        </a>{" "}
+        lub{" "}
+        <a href="/events" style={{ color: "#1d4ed8", textDecoration: "underline" }}>
+          formularza imprez
+        </a>{" "}
+        żeby zmiany trafiły do kalendarza.
+      </div>
       <form onSubmit={handleSubmit} className="rounded-lg border p-6 space-y-4 max-w-2xl">
         <h2 className="text-lg font-semibold">Nowe zlecenie realizacji</h2>
 

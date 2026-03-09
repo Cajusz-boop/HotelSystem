@@ -103,6 +103,7 @@ export async function processCalendarEvent(
         name: `${clientName} – ${dateFrom.toLocaleDateString("pl-PL")}`,
         eventType: "INNE",
         clientName,
+        eventDate: dateFrom,
         dateFrom,
         dateTo,
         status: "DRAFT",
