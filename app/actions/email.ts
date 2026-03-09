@@ -12,15 +12,17 @@ function getTransporter() {
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT) || 587;
   const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!host) {
-    return null;
-  }
+  const pass = process.env.SMTP_PASS?.trim();
+
+  if (!host) return null;
+
+  const isRelay = host.includes("smtp-relay");
+  
   return nodemailer.createTransport({
     host,
     port,
     secure: port === 465,
-    ...(user && pass ? { auth: { user, pass } } : {}),
+    auth: isRelay ? undefined : { user, pass },
   });
 }
 
