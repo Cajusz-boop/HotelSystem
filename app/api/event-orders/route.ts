@@ -373,6 +373,8 @@ const FULL_SELECT = {
   googleCalendarEventId: true,
   googleCalendarCalId: true,
   googleCalendarSynced: true,
+  googleCalendarSyncedAt: true,
+  googleCalendarError: true,
 };
 
 export async function GET(req: Request) {

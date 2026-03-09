@@ -22,6 +22,7 @@ function getTransporter() {
     host,
     port,
     secure: port === 465,
+    family: 6,
     auth: isRelay ? undefined : { user, pass },
   });
 }

@@ -132,7 +132,8 @@ export async function PATCH(
       patchData.menu = menu;
     }
 
-    if (Object.keys(patchData).length === 0) {
+    const forceGcalSync = data?.forceGcalSync === true;
+    if (Object.keys(patchData).length === 0 && !forceGcalSync) {
       return NextResponse.json({ error: "Brak danych do aktualizacji" }, { status: 400 });
     }
 
@@ -150,16 +151,23 @@ export async function PATCH(
       }
     }
 
-    const updated = await prisma.eventOrder.update({
-      where: { id },
-      data: {
-        ...patchData,
-        ...(status === "CANCELLED" ? { googleCalendarSynced: true, googleCalendarSyncedAt: new Date(), googleCalendarError: null } : {}),
-      },
-    });
+    let updated;
+    if (Object.keys(patchData).length > 0) {
+      updated = await prisma.eventOrder.update({
+        where: { id },
+        data: {
+          ...patchData,
+          ...(status === "CANCELLED" ? { googleCalendarSynced: true, googleCalendarSyncedAt: new Date(), googleCalendarError: null } : {}),
+        },
+      });
+    } else {
+      const ev = await prisma.eventOrder.findUnique({ where: { id } });
+      if (!ev) return NextResponse.json({ error: "Impreza nie istnieje" }, { status: 404 });
+      updated = ev;
+    }
 
-    // Google Calendar sync — update description when status/notes/deposit changed (non-CANCELLED)
-    const gcalChanged = status !== undefined || notes !== undefined || depositAmount !== undefined || depositPaid !== undefined;
+    // Google Calendar sync — update description when status/notes/deposit changed or forceGcalSync (non-CANCELLED)
+    const gcalChanged = forceGcalSync || status !== undefined || notes !== undefined || depositAmount !== undefined || depositPaid !== undefined;
     if (updated.status !== "CANCELLED" && gcalChanged && updated.googleCalendarEventId && updated.googleCalendarCalId) {
       let packageName: string | null = null;
       if (updated.packageId) {

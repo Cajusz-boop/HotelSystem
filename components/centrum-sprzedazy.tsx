@@ -29,6 +29,8 @@ type EventRecord = {
   googleCalendarEventId: string | null;
   googleCalendarCalId: string | null;
   googleCalendarSynced: boolean;
+  googleCalendarSyncedAt: Date | string | null;
+  googleCalendarError: string | null;
 };
 
 function mapApiToEvent(record: Record<string, unknown>): EventRecord {
@@ -61,6 +63,8 @@ function mapApiToEvent(record: Record<string, unknown>): EventRecord {
     googleCalendarEventId: (record.googleCalendarEventId as string) ?? null,
     googleCalendarCalId: (record.googleCalendarCalId as string) ?? null,
     googleCalendarSynced: Boolean(record.googleCalendarSynced),
+    googleCalendarSyncedAt: (record.googleCalendarSyncedAt as Date | string | null) ?? null,
+    googleCalendarError: (record.googleCalendarError as string) ?? null,
   };
 }
 
@@ -403,6 +407,7 @@ function EventDetailModal({
   handlers,
   showToast,
   onOpenModal,
+  onRefresh,
 }: {
   evId: string;
   events: EventRecord[];
@@ -410,6 +415,7 @@ function EventDetailModal({
   handlers: Handlers;
   showToast: (msg: string, type?: string) => void;
   onOpenModal?: (id: string) => void;
+  onRefresh?: () => void;
 }) {
   const ev = events.find((e) => e.id === evId);
   const [editNote, setEditNote] = useState(false);
@@ -524,17 +530,62 @@ function EventDetailModal({
                 <button onClick={() => { window.location.href = "/mice/kosztorysy"; }} style={{ background: "#7c3aed", color: "white", border: "none", borderRadius: "7px", padding: "6px 12px", cursor: "pointer", fontSize: "11px", fontWeight: 800 }}>Otwórz</button>
               </div>
             )}
-            <div style={{ background: ev.googleCalendarSynced ? "#f0fdf4" : "#fefce8", border: `1.5px solid ${ev.googleCalendarSynced ? "#86efac" : "#fde68a"}`, borderRadius: "10px", padding: "10px 14px", display: "flex", alignItems: "center", gap: "10px" }}>
-              <span style={{ fontSize: "18px" }}>{ev.googleCalendarSynced ? "📅" : "⚠️"}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: "12px", fontWeight: 700, color: ev.googleCalendarSynced ? "#166534" : "#92400e" }}>
-                  {ev.googleCalendarSynced ? "Zsynchronizowane z Google Calendar" : "Nie zsynchronizowane z Google Calendar"}
+            {(() => {
+              const hasLink = ev.googleCalendarEventId && ev.googleCalendarCalId;
+              const hasError = !!ev.googleCalendarError;
+              const lastSync = ev.googleCalendarSyncedAt;
+              let bg: string, borderColor: string, icon: string, text: string, textColor: string;
+              if (!hasLink) {
+                bg = "#fff3e0"; borderColor = "#ffcc80"; icon = "⚠️";
+                text = "Nie powiązane z Google Calendar"; textColor = "#e65100";
+              } else if (hasError) {
+                bg = "#ffebee"; borderColor = "#ef9a9a"; icon = "❌";
+                text = "Błąd synchronizacji"; textColor = "#c62828";
+              } else if (!lastSync) {
+                bg = "#fff8e1"; borderColor = "#ffe082"; icon = "📅";
+                text = "Zaimportowane z GCal — opis zaktualizuje się przy edycji"; textColor = "#f57f17";
+              } else {
+                bg = "#e8f5e9"; borderColor = "#a5d6a7"; icon = "✅";
+                text = "Zsynchronizowane z Google Calendar"; textColor = "#2e7d32";
+              }
+              return (
+                <div style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: "6px", padding: "8px 12px", display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: textColor, marginTop: "12px" }}>
+                  <span>{icon}</span>
+                  <span style={{ flex: 1 }}>{text}</span>
+                  {hasLink && !lastSync && (
+                    <button
+                      onClick={async () => {
+                        const res = await fetch(`/api/event-orders/${ev.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ forceGcalSync: true }),
+                        });
+                        if (res.ok) {
+                          showToast("Zsynchronizowano opis z Google Calendar");
+                          onRefresh?.();
+                        } else {
+                          showToast("Błąd synchronizacji", "err");
+                        }
+                      }}
+                      style={{ background: "white", border: `1px solid ${borderColor}`, borderRadius: "4px", padding: "3px 10px", fontSize: "11px", fontWeight: 600, color: textColor, cursor: "pointer", whiteSpace: "nowrap" }}
+                    >
+                      Synchronizuj teraz
+                    </button>
+                  )}
+                  {hasLink && (
+                    <button
+                      onClick={() => {
+                        const eid = btoa(`${ev.googleCalendarEventId} ${ev.googleCalendarCalId}`);
+                        window.open(`https://calendar.google.com/calendar/event?eid=${eid}`, "_blank");
+                      }}
+                      style={{ background: "white", border: `1px solid ${borderColor}`, borderRadius: "4px", padding: "3px 10px", fontSize: "11px", fontWeight: 600, color: textColor, cursor: "pointer", whiteSpace: "nowrap" }}
+                    >
+                      Otwórz w GCal
+                    </button>
+                  )}
                 </div>
-              </div>
-              {ev.googleCalendarEventId && ev.googleCalendarCalId && (
-                <button onClick={() => { window.open(`https://calendar.google.com/calendar/r/event/${ev.googleCalendarEventId}`, "_blank"); }} style={{ background: "white", border: "1.5px solid #e2e8f0", borderRadius: "7px", padding: "6px 12px", cursor: "pointer", fontSize: "11px", fontWeight: 700, color: "#3b82f6" }}>Otwórz w GCal</button>
-              )}
-            </div>
+              );
+            })()}
             {ev.pop && (
               <div style={{ background: "#fdf2f8", border: "1.5px solid #f9a8d4", borderRadius: "10px", padding: "10px 14px", display: "flex", alignItems: "center", gap: "10px" }}>
                 <span style={{ fontSize: "18px" }}>🎊</span>
@@ -1864,7 +1915,7 @@ export function CentrumSprzedazy() {
       {tab === "tydzien" && <WeekView events={filtered} onOpenModal={openModal} />}
       {tab === "gantt" && <GanttView events={events} onOpenModal={openModal} />}
       {tab === "kosztorysy" && <KosztorysyView />}
-      {modalId && <EventDetailModal evId={modalId} events={events} onClose={() => setModalId(null)} handlers={handlers} showToast={showToast} onOpenModal={openModal} />}
+      {modalId && <EventDetailModal evId={modalId} events={events} onClose={() => setModalId(null)} handlers={handlers} showToast={showToast} onOpenModal={openModal} onRefresh={fetchEvents} />}
       {depId && !modalId && <DepositModal existingAmt={events.find((e) => e.id === depId)?.deposit ?? null} onSave={handleDepSaveFromList} onClose={() => setDepId(null)} />}
       <Toasts toasts={toasts} />
     </div>
