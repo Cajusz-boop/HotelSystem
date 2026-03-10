@@ -11939,6 +11939,8 @@ export interface FolioItem {
   appliesToTransactionId?: string | null;
   /** Dla obciążenia (amount > 0): suma rabatów na pozycję przypisanych do tej transakcji */
   lineItemDiscountTotal?: number;
+  /** Zwracane przy dodawaniu płatności: zaktualizowany paymentStatus rezerwacji */
+  paymentStatus?: string;
 }
 
 /**

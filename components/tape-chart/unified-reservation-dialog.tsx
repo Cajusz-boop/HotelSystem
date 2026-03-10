@@ -342,10 +342,6 @@ export function UnifiedReservationDialog({
     setSuggestionsOpen(false);
     setHighlightedIdx(-1);
     setHasUnsavedChanges(!isEdit);
-    if (!isEdit) {
-      setIsInClosedPeriod(false);
-      setCanEditClosedPeriod(false);
-    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, reservation, createContext, isEdit]);
 

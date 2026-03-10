@@ -18,7 +18,7 @@ export type GCalExternalEvent = {
 };
 
 function parseGCalDate(
-  start: { date?: string; dateTime?: string } | null | undefined
+  start: { date?: string | null; dateTime?: string | null } | null | undefined
 ): string {
   if (!start) return "";
   const raw = start.date ?? start.dateTime;
