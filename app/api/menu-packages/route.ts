@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { resolveDishIdsToNames } from "@/lib/dishes";
 import { NextResponse } from "next/server";
 
 // GET — lista pakietów (z sekcjami i dopłatami)
@@ -24,10 +25,28 @@ export async function GET(req: Request) {
   return NextResponse.json(filtered);
 }
 
+async function sectionData(s: Record<string, unknown>, i: number) {
+  const dishIds = Array.isArray(s.dishIds) ? (s.dishIds as string[]).filter(Boolean) : [];
+  let dishes: string[] = Array.isArray(s.dishes) ? (s.dishes as string[]) : [];
+  if (dishIds.length > 0) {
+    dishes = await resolveDishIdsToNames(dishIds);
+  }
+  return {
+    code: (s.code as string) || `sekcja_${i}`,
+    label: (s.label as string) || `Sekcja ${i + 1}`,
+    type: (s.type as string) || "fixed",
+    choiceLimit: s.type === "wybor" ? ((s.choiceLimit as number) ?? null) : null,
+    dishes,
+    dishIds: dishIds.length ? dishIds : undefined,
+    sortOrder: i,
+  };
+}
+
 // POST — nowy pakiet
 export async function POST(req: Request) {
   const body = await req.json();
   const code = body.code || `pkg_${Date.now()}`;
+  const sectionsData = await Promise.all((body.sections || []).map((s: Record<string, unknown>, i: number) => sectionData(s, i)));
 
   const created = await prisma.menuPackage.create({
     data: {
@@ -39,14 +58,7 @@ export async function POST(req: Request) {
       sortOrder: body.sortOrder ?? 99,
       rules: body.rules || null,
       sections: {
-        create: (body.sections || []).map((s: Record<string, unknown>, i: number) => ({
-          code: (s.code as string) || `sekcja_${i}`,
-          label: (s.label as string) || `Sekcja ${i + 1}`,
-          type: (s.type as string) || "fixed",
-          choiceLimit: s.type === "wybor" ? ((s.choiceLimit as number) ?? null) : null,
-          dishes: (s.dishes as string[]) || [],
-          sortOrder: i,
-        })),
+        create: sectionsData.map(({ dishIds, ...rest }) => ({ ...rest, ...(dishIds?.length ? { dishIds } : {}) })),
       },
       surcharges: {
         create: (body.surcharges || []).map((d: Record<string, unknown>, i: number) => ({

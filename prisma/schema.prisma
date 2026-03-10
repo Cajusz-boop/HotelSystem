@@ -876,6 +876,27 @@ model PackageComponent {
   @@index([packageId])
 }
 
+// ═══ SŁOWNIK DAŃ (centralna baza dań do pakietów menu) ═══
+model Dish {
+  id           String   @id @default(cuid())
+  name         String   // unikalna nazwa dania
+  code         String?  @unique // opcjonalny kod (np. do synchronizacji)
+  defaultPrice Decimal  @db.Decimal(10, 2) // cena / koszt za porcję
+  vatRate      Decimal  @db.Decimal(5, 4)  // np. 0.08 dla 8%
+  category     String?  // np. "Zupa", "Danie główne", "Deser"
+  gtuCode      String?  // kod GTU
+  allergens    Json?    // ["gluten","mleko",...]
+  dietTags     Json?    // ["VEGETARIAN","VEGAN",...]
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([name])
+  @@index([category])
+  @@index([isActive])
+}
+
 // ═══ PAKIETY MENU IMPREZOWEGO ═══
 // Osobne od model Package (który dotyczy rezerwacji hotelowych/SPA)
 model MenuPackage {
@@ -904,7 +925,8 @@ model MenuPackageSection {
   label       String                      // "Zupa", "Dania główne"
   type        String                      // "fixed" lub "wybor"
   choiceLimit Int?                         // limit wyboru (null dla fixed)
-  dishes      Json                        // string[] — lista dań
+  dishes      Json                        // string[] — nazwy dań (cache / legacy)
+  dishIds     Json?                       // string[] — ID z Dish (słownik); gdy obecne, ma pierwszeństwo
   sortOrder   Int      @default(0)
 
   @@index([packageId])

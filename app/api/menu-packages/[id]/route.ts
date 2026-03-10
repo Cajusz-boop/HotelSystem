@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { resolveDishIdsToNames } from "@/lib/dishes";
 import { NextResponse } from "next/server";
 
 export async function GET(
@@ -41,21 +42,29 @@ export async function PUT(
     await prisma.menuPackageSurcharge.deleteMany({ where: { packageId: id } });
 
     if (body.sections?.length) {
-      await prisma.menuPackageSection.createMany({
-        data: body.sections.map(
-          (s: { code: string; label: string; type: string; choiceLimit?: number; dishes: string[] },
+      const sectionsData = await Promise.all(
+        body.sections.map(
+          async (
+            s: { code: string; label: string; type: string; choiceLimit?: number; dishes?: string[]; dishIds?: string[] },
             i: number
-          ) => ({
-            packageId: id,
-            code: s.code,
-            label: s.label,
-            type: s.type,
-            choiceLimit: s.type === "wybor" ? (s.choiceLimit ?? null) : null,
-            dishes: s.dishes,
-            sortOrder: i,
-          })
-        ),
-      });
+          ) => {
+            const dishIds = Array.isArray(s.dishIds) ? s.dishIds.filter(Boolean) : [];
+            let dishes = Array.isArray(s.dishes) ? s.dishes : [];
+            if (dishIds.length > 0) dishes = await resolveDishIdsToNames(dishIds);
+            return {
+              packageId: id,
+              code: s.code,
+              label: s.label,
+              type: s.type,
+              choiceLimit: s.type === "wybor" ? (s.choiceLimit ?? null) : null,
+              dishes,
+              ...(dishIds.length ? { dishIds } : {}),
+              sortOrder: i,
+            };
+          }
+        )
+      );
+      await prisma.menuPackageSection.createMany({ data: sectionsData });
     }
 
     if (body.surcharges?.length) {

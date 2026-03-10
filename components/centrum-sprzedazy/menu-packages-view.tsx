@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { DishAutocomplete } from "./dish-autocomplete";
+import { DishesView } from "./dishes-view";
 
 type MenuPackageSection = {
   id?: string;
@@ -9,6 +11,7 @@ type MenuPackageSection = {
   type: "fixed" | "wybor";
   choiceLimit?: number | null;
   dishes: string[];
+  dishIds?: string[];
 };
 
 type MenuPackageSurcharge = {
@@ -30,7 +33,7 @@ type ApiPackage = {
   price: number | { toNumber?: () => number };
   eventTypes: string[];
   isActive: boolean;
-  sections: { id: string; code: string; label: string; type: string; choiceLimit?: number | null; dishes: string[] }[];
+  sections: { id: string; code: string; label: string; type: string; choiceLimit?: number | null; dishes: string[]; dishIds?: string[] | null }[];
   surcharges: { id: string; code: string; label: string; pricePerPerson?: number | null; flatPrice?: number | null; hasChoice?: boolean; choiceLimit?: number | null; options?: string[] | null; description?: string | null }[];
   rules?: string[] | null;
 };
@@ -57,6 +60,7 @@ function parseDishes(text: string): string[] {
 }
 
 export function MenuPackagesView() {
+  const [subTab, setSubTab] = useState<"pakiety" | "slownik">("pakiety");
   const [packages, setPackages] = useState<ApiPackage[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ApiPackage | null>(null);
@@ -128,13 +132,18 @@ export function MenuPackagesView() {
       code: pkg.code,
       price: String(toNum(pkg.price)),
       eventTypes: Array.isArray(pkg.eventTypes) ? [...pkg.eventTypes] : [],
-      sections: (pkg.sections || []).map((s) => ({
-        code: s.code,
-        label: s.label,
-        type: (s.type || "fixed") as "fixed" | "wybor",
-        choiceLimit: s.choiceLimit ?? null,
-        dishes: Array.isArray(s.dishes) ? [...s.dishes] : [],
-      })),
+      sections: (pkg.sections || []).map((s) => {
+        const dishIds = Array.isArray(s.dishIds) ? s.dishIds.filter(Boolean) : [];
+        const dishes = Array.isArray(s.dishes) ? s.dishes : [];
+        return {
+          code: s.code,
+          label: s.label,
+          type: (s.type || "fixed") as "fixed" | "wybor",
+          choiceLimit: s.choiceLimit ?? null,
+          dishes,
+          dishIds: dishIds.length ? dishIds : undefined,
+        };
+      }),
       surcharges: (pkg.surcharges || []).map((s) => ({
         code: s.code,
         label: s.label,
@@ -162,7 +171,7 @@ export function MenuPackagesView() {
   const addSection = () => {
     setForm((f) => ({
       ...f,
-      sections: [...f.sections, { code: `sekcja_${f.sections.length}`, label: `Sekcja ${f.sections.length + 1}`, type: "wybor", choiceLimit: 1, dishes: [] }],
+      sections: [...f.sections, { code: `sekcja_${f.sections.length}`, label: `Sekcja ${f.sections.length + 1}`, type: "wybor", choiceLimit: 1, dishes: [], dishIds: [] }],
     }));
   };
 
@@ -237,13 +246,18 @@ export function MenuPackagesView() {
       isActive: form.isActive,
       sortOrder: 0,
       rules: form.rules.filter(Boolean).length ? form.rules.filter(Boolean) : null,
-      sections: form.sections.map((s) => ({
-        code: s.code.trim() || `sekcja_${s.label}`,
-        label: s.label.trim() || "Sekcja",
-        type: s.type,
-        choiceLimit: s.type === "wybor" ? (s.choiceLimit ?? 1) : null,
-        dishes: Array.isArray(s.dishes) ? s.dishes : parseDishes(typeof s.dishes === "string" ? (s.dishes as unknown as string) : ""),
-      })),
+      sections: form.sections.map((s) => {
+        const dishIds = Array.isArray(s.dishIds) ? s.dishIds.filter(Boolean) : [];
+        const dishes = Array.isArray(s.dishes) ? s.dishes : parseDishes(typeof s.dishes === "string" ? (s.dishes as unknown as string) : "");
+        return {
+          code: s.code.trim() || `sekcja_${s.label}`,
+          label: s.label.trim() || "Sekcja",
+          type: s.type,
+          choiceLimit: s.type === "wybor" ? (s.choiceLimit ?? 1) : null,
+          dishes: dishIds.length ? [] : dishes,
+          dishIds: dishIds.length ? dishIds : undefined,
+        };
+      }),
       surcharges: form.surcharges.map((s) => ({
         code: s.code.trim() || `doplata_${s.label}`,
         label: s.label.trim() || "Dopłata",
@@ -301,6 +315,19 @@ export function MenuPackagesView() {
 
   return (
     <div style={{ padding: "24px", maxWidth: "1100px", margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "24px", borderBottom: "2px solid #e5e7eb", paddingBottom: "12px" }}>
+        <button onClick={() => setSubTab("pakiety")} style={{ padding: "8px 16px", border: "none", background: subTab === "pakiety" ? "#3b82f6" : "transparent", color: subTab === "pakiety" ? "white" : "#6b7280", borderRadius: "8px", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}>
+          Pakiety menu
+        </button>
+        <button onClick={() => setSubTab("slownik")} style={{ padding: "8px 16px", border: "none", background: subTab === "slownik" ? "#3b82f6" : "transparent", color: subTab === "slownik" ? "white" : "#6b7280", borderRadius: "8px", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}>
+          Słownik dań
+        </button>
+      </div>
+
+      {subTab === "slownik" && <DishesView />}
+
+      {subTab === "pakiety" && (
+        <>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
         <h2 style={{ fontSize: "20px", fontWeight: 800, color: "#1e1e1e", margin: 0 }}>Pakiety menu</h2>
         <div style={{ display: "flex", gap: "8px" }}>
@@ -380,13 +407,18 @@ export function MenuPackagesView() {
                   </button>
                 </div>
                 <div>
-                  <label style={{ fontSize: "11px", color: "#6b7280", display: "block", marginBottom: "4px" }}>Dania (jedno na linię)</label>
-                  <textarea
-                    value={Array.isArray(sec.dishes) ? sec.dishes.join("\n") : ""}
-                    onChange={(e) => updateSection(i, { dishes: parseDishes(e.target.value) })}
-                    rows={4}
-                    placeholder="np.&#10;Zupa pomidorowa&#10;Rosół"
-                    style={{ width: "100%", padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: "6px", fontSize: "13px", fontFamily: "inherit", resize: "vertical" }}
+                  <label style={{ fontSize: "11px", color: "#6b7280", display: "block", marginBottom: "4px" }}>
+                    Dania (wybierz ze słownika — <a href="#" onClick={(e) => { e.preventDefault(); setSubTab("slownik"); }} style={{ color: "#3b82f6", textDecoration: "underline" }}>dodaj do słownika</a>)
+                  </label>
+                  {(sec.dishes?.length ?? 0) > 0 && !(sec.dishIds?.length ?? 0) && (
+                    <div style={{ fontSize: "12px", color: "#92400e", background: "#fefce8", padding: "8px 10px", borderRadius: "6px", marginBottom: "8px" }}>
+                      Stary format: {sec.dishes.join(", ")}. Wybierz ponownie ze słownika, aby powiązać z ceną.
+                    </div>
+                  )}
+                  <DishAutocomplete
+                    value={(sec.dishIds || []).map((id, idx) => ({ id, name: (sec.dishes || [])[idx] ?? id }))}
+                    onChange={(items) => updateSection(i, { dishIds: items.map((x) => x.id), dishes: items.map((x) => x.name) })}
+                    placeholder="Wpisz aby wyszukać danie ze słownika"
                   />
                 </div>
               </div>
@@ -505,6 +537,8 @@ export function MenuPackagesView() {
             </div>
           ))}
         </div>
+      )}
+        </>
       )}
     </div>
   );
