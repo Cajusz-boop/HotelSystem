@@ -7,7 +7,7 @@
  */
 import { prisma } from "../lib/db";
 
-async function getBalance(reservationId: string): Promise<{ balance: number; totalPayments: number } | null> {
+async function getBalance(reservationId: string): Promise<{ balance: number; rawBalance: number; totalPayments: number } | null> {
   const txs = await prisma.transaction.findMany({
     where: { reservationId, status: "ACTIVE" },
     select: { type: true, amount: true },
@@ -24,13 +24,15 @@ async function getBalance(reservationId: string): Promise<{ balance: number; tot
   const rawBalance = charges - discounts - payments;
   const balance = Math.round(rawBalance * 100) / 100;
   const totalPayments = Math.round(payments * 100) / 100;
-  // Tolerancja 0.01 PLN – błędy zaokrągleń (np. 0.0000001) traktuj jak saldo zero
+  // Tolerancja 0.01 PLN – błędy zaokrągleń traktuj jak saldo zero
   const effectiveBalance = Math.abs(balance) < 0.01 ? 0 : balance;
-  return { balance: effectiveBalance, totalPayments };
+  return { balance: effectiveBalance, rawBalance, totalPayments };
 }
 
 async function main() {
   const filter = process.argv[2]; // np. "Ratajczak"
+  const roomFilter = process.argv[3]; // np. "001"
+  const verbose = process.argv.includes("--verbose") || process.argv.includes("-v");
 
   const reservations = await prisma.reservation.findMany({
     where: {
@@ -47,18 +49,27 @@ async function main() {
       room: { select: { number: true } },
     },
     orderBy: { checkIn: "desc" },
-    take: filter ? 20 : 100,
+    take: filter ? 50 : 100,
   });
 
-  console.log(`Znaleziono ${reservations.length} rezerwacji.`);
+  const filtered = roomFilter
+    ? reservations.filter((r) => r.room.number === roomFilter || r.room.number === String(Number(roomFilter)))
+    : reservations;
 
-  for (const r of reservations) {
+  console.log(`Znaleziono ${filtered.length} rezerwacji.`);
+
+  for (const r of filtered) {
     const data = await getBalance(r.id);
     if (!data) continue;
-    const { balance, totalPayments } = data;
+    const { balance, rawBalance, totalPayments } = data;
     const newStatus =
       balance <= 0 ? "PAID" : totalPayments > 0 ? "PARTIAL" : "UNPAID";
 
+    if (verbose || r.paymentStatus !== newStatus) {
+      console.log(
+        `  ${r.guest.name} pok.${r.room.number}: saldo=${rawBalance.toFixed(4)} effective=${balance} payments=${totalPayments} status=${r.paymentStatus ?? "NULL"} -> ${newStatus}`
+      );
+    }
     if (r.paymentStatus === newStatus) continue;
 
     await prisma.reservation.update({
