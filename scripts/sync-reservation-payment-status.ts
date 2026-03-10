@@ -34,7 +34,7 @@ async function getRemaining(reservationId: string): Promise<{ pozostalo: number;
       ? Number(res.paidAmountOverride)
       : totalPayments;
   const pozostalo = naliczono - effectivePaid;
-  const effectiveRemaining = Math.abs(pozostalo) <= 0.02 ? 0 : pozostalo;
+  const effectiveRemaining = Math.abs(pozostalo) <= 1 ? 0 : pozostalo;
   return { pozostalo: effectiveRemaining, effectivePaid };
 }
 

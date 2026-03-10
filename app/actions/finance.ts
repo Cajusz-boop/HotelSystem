@@ -12767,8 +12767,8 @@ export async function updateReservationPaymentStatus(
         ? Number(res.paidAmountOverride)
         : totalPayments;
     const pozostalo = naliczono - effectivePaid;
-    // Tolerancja 0.02 PLN – typowe błędy zaokrągleń (np. 0.01) traktuj jak saldo zero
-    const effectiveBalance = Math.abs(pozostalo) <= 0.02 ? 0 : pozostalo;
+    // Tolerancja 1 PLN – różnice między naliczonym z transakcji a widokiem Rozlicz (np. totalAmount vs ROOM tx)
+    const effectiveBalance = Math.abs(pozostalo) <= 1 ? 0 : pozostalo;
     const paymentStatus =
       effectiveBalance <= 0 ? "PAID" : effectivePaid > 0 ? "PARTIAL" : "UNPAID";
 
