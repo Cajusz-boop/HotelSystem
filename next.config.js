@@ -16,6 +16,7 @@ try {
 
 const nextConfig = {
   output: "standalone",
+  optimizeFonts: false, // unikamy błędów cssnano/browserslist przy optymalizacji Google Fonts (MODULE_NOT_FOUND)
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
   env: {
