@@ -32,13 +32,15 @@ jobs:
           key: ${{ secrets.HETZNER_SSH_KEY }}
           timeout: 300s
           script: |
+            set -e
             cd /var/www/hotel
             git fetch origin && git reset --hard origin/master
             pm2 stop hotel-pms
+            rm -rf .next
             npm ci --production=false
-            npx prisma generate
+            npx prisma@6 generate
             NODE_OPTIONS=--max-old-space-size=2048 npm run build
-            npx prisma db push --skip-generate
+            npx prisma@6 db push --skip-generate
             # Wstrzykuj zmienne SMTP z GitHub Secrets (nie nadpisuje reszty .env)
             if [ -n "${{ secrets.SMTP_HOST }}" ]; then
               sed -i '/^SMTP_/d' .env
