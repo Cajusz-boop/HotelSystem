@@ -1312,7 +1312,29 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
             </div>
           )}
           <div className="border-t pt-1 mt-1" />
-          <div className="flex justify-between font-bold text-sm"><span>POZOSTAŁO DO ZAPŁATY</span><span className="tabular-nums">{Math.max(0, pozostalo).toFixed(2)} PLN</span></div>
+          <div className="flex justify-between items-center font-bold text-sm gap-2">
+            <span>POZOSTAŁO DO ZAPŁATY</span>
+            <span className="tabular-nums">{Math.max(0, pozostalo).toFixed(2)} PLN</span>
+          </div>
+          {isEdit && reservation?.id && Math.max(0, pozostalo) === 0 && effectivePaidRozl > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full mt-2 text-xs text-green-700 border-green-500 hover:bg-green-50"
+              onClick={async () => {
+                const r = await updateReservationPaymentStatus(reservation.id, { uiSaldoZero: true });
+                if (r.success) {
+                  toast.success("Oznaczono jako opłacone");
+                  onPaymentRecorded?.(reservation.id, "PAID");
+                } else {
+                  toast.error(r.error);
+                }
+              }}
+            >
+              Oznacz jako opłacone (zielony pasek)
+            </Button>
+          )}
         </div>
 
         {/* Wpłata, Zapłacono, Zaliczka, Voucher, Kaucja */}
