@@ -574,6 +574,26 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
     });
   }, [isEdit, reservation?.id, onPaymentRecorded]);
 
+  const uiSaldoSyncedRef = useRef<string | null>(null);
+  useEffect(() => {
+    uiSaldoSyncedRef.current = null;
+  }, [reservation?.id]);
+  useEffect(() => {
+    if (!isEdit || !reservation?.id || folioSummaries.length === 0) return;
+    const roomTotal = (totalAmount ?? 0) || roomChargesFromTx;
+    const naliczono = roomTotal + mealsAmount + otherChargesAmount + localTaxAmount;
+    const effectivePaid = form.paidAmountOverride.trim() ? (parseFloat(form.paidAmountOverride) || totalPaid) : totalPaid;
+    const pozostalo = naliczono - effectivePaid;
+    if (pozostalo <= 0 && effectivePaid > 0 && uiSaldoSyncedRef.current !== reservation.id) {
+      uiSaldoSyncedRef.current = reservation.id;
+      updateReservationPaymentStatus(reservation.id, { uiSaldoZero: true }).then((statusRes) => {
+        if (statusRes.success && statusRes.data?.paymentStatus) {
+          onPaymentRecorded?.(reservation.id, statusRes.data.paymentStatus);
+        }
+      });
+    }
+  }, [isEdit, reservation?.id, folioSummaries, transactions, form.paidAmountOverride, form.room, form.checkIn, form.checkOut, totalAmount, roomChargesFromTx, mealsAmount, otherChargesAmount, localTaxAmount, totalPaid, onPaymentRecorded]);
+
   useEffect(() => {
     if (companySearchQuery.trim().length >= 2) {
       searchCompanies(companySearchQuery, 15).then((r) => {

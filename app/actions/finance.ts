@@ -12740,12 +12740,21 @@ export async function refundPayment(params: {
 
 /**
  * Aktualizuje paymentStatus rezerwacji na podstawie widoku Rozlicz (Naliczono, Wpłaty, POZOSTAŁO).
- * Uwzględnia paidAmountOverride – nie folio/transakcje, lecz to co widzi użytkownik.
- * UNPAID = brak wpłat, PARTIAL = część opłacona, PAID = pozostalo <= 0.
+ * Gdy uiSaldoZero=true, ustawia PAID (użytkownik widzi Saldo 0 w modalu).
+ * W przeciwnym razie liczy z transakcji + paidAmountOverride.
  */
 export async function updateReservationPaymentStatus(
-  reservationId: string
+  reservationId: string,
+  opts?: { uiSaldoZero?: boolean }
 ): Promise<ActionResult<{ paymentStatus: string }>> {
+  if (opts?.uiSaldoZero) {
+    await prisma.reservation.update({
+      where: { id: reservationId },
+      data: { paymentStatus: "PAID" },
+    });
+    revalidatePath("/front-office");
+    return { success: true, data: { paymentStatus: "PAID" } };
+  }
   try {
     const [summary, res] = await Promise.all([
       getFolioSummary(reservationId),
