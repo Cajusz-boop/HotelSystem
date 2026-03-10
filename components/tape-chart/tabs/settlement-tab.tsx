@@ -555,14 +555,10 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
 
   useEffect(() => {
     if (!isEdit || !reservation?.id) { setFolioSummaries([]); setPaymentsByMethod([]); setReservationGuests([]); return; }
-    getFolioSummary(reservation.id).then(async (r) => {
+    getFolioSummary(reservation.id).then((r) => {
       if (r.success && r.data?.folios) {
         setFolioSummaries(parseFolios(r.data.folios));
         setPaymentsByMethod(r.data.paymentsByMethod ?? []);
-        const statusRes = await updateReservationPaymentStatus(reservation.id);
-        if (statusRes.success && statusRes.data?.paymentStatus) {
-          onPaymentRecorded?.(reservation.id, statusRes.data.paymentStatus);
-        }
       } else {
         setFolioSummaries([]);
         setPaymentsByMethod([]);
@@ -572,7 +568,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
       if (r.success && r.data) setReservationGuests(r.data);
       else setReservationGuests([]);
     });
-  }, [isEdit, reservation?.id, onPaymentRecorded]);
+  }, [isEdit, reservation?.id]);
 
   useEffect(() => {
     if (companySearchQuery.trim().length >= 2) {
@@ -589,12 +585,8 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
     if (r.success && r.data?.folios) {
       setFolioSummaries(parseFolios(r.data.folios));
       setPaymentsByMethod(r.data.paymentsByMethod ?? []);
-      const statusRes = await updateReservationPaymentStatus(reservation.id);
-      if (statusRes.success && statusRes.data?.paymentStatus) {
-        onPaymentRecorded?.(reservation.id, statusRes.data.paymentStatus);
-      }
     }
-  }, [reservation?.id, onPaymentRecorded]);
+  }, [reservation?.id]);
 
   const loadFolioItems = useCallback(async (folioNum: number) => {
     if (!reservation?.id) return;
