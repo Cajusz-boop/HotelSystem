@@ -12755,8 +12755,10 @@ export async function updateReservationPaymentStatus(
     }
     const balance = summary.data.balance;
     const totalPayments = summary.data.totalPayments ?? 0;
+    // Tolerancja 0.01 PLN – błędy zaokrągleń (np. 0.0000001) traktuj jak saldo zero → PAID
+    const effectiveBalance = Math.abs(balance) < 0.01 ? 0 : balance;
     const paymentStatus =
-      balance <= 0 ? "PAID" : totalPayments > 0 ? "PARTIAL" : "UNPAID";
+      effectiveBalance <= 0 ? "PAID" : totalPayments > 0 ? "PARTIAL" : "UNPAID";
 
     await prisma.reservation.update({
       where: { id: reservationId },

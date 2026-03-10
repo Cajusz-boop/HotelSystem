@@ -21,9 +21,12 @@ async function getBalance(reservationId: string): Promise<{ balance: number; tot
     else if (t.type === "DISCOUNT") discounts += Math.abs(amt);
     else payments += Math.abs(amt);
   }
-  const balance = Math.round((charges - discounts - payments) * 100) / 100;
+  const rawBalance = charges - discounts - payments;
+  const balance = Math.round(rawBalance * 100) / 100;
   const totalPayments = Math.round(payments * 100) / 100;
-  return { balance, totalPayments };
+  // Tolerancja 0.01 PLN – błędy zaokrągleń (np. 0.0000001) traktuj jak saldo zero
+  const effectiveBalance = Math.abs(balance) < 0.01 ? 0 : balance;
+  return { balance: effectiveBalance, totalPayments };
 }
 
 async function main() {
