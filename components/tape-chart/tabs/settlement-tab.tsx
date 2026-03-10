@@ -559,13 +559,9 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
       if (r.success && r.data?.folios) {
         setFolioSummaries(parseFolios(r.data.folios));
         setPaymentsByMethod(r.data.paymentsByMethod ?? []);
-        const bal = r.data.balance ?? 0;
-        const totalPay = r.data.totalPayments ?? 0;
-        if (totalPay > 0 && Math.abs(bal) < 0.01) {
-          const statusRes = await updateReservationPaymentStatus(reservation.id);
-          if (statusRes.success && statusRes.data?.paymentStatus) {
-            onPaymentRecorded?.(reservation.id, statusRes.data.paymentStatus);
-          }
+        const statusRes = await updateReservationPaymentStatus(reservation.id);
+        if (statusRes.success && statusRes.data?.paymentStatus) {
+          onPaymentRecorded?.(reservation.id, statusRes.data.paymentStatus);
         }
       } else {
         setFolioSummaries([]);
@@ -593,13 +589,9 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
     if (r.success && r.data?.folios) {
       setFolioSummaries(parseFolios(r.data.folios));
       setPaymentsByMethod(r.data.paymentsByMethod ?? []);
-      const bal = r.data.balance ?? 0;
-      const totalPay = r.data.totalPayments ?? 0;
-      if (totalPay > 0 && Math.abs(bal) < 0.01) {
-        const statusRes = await updateReservationPaymentStatus(reservation.id);
-        if (statusRes.success && statusRes.data?.paymentStatus) {
-          onPaymentRecorded?.(reservation.id, statusRes.data.paymentStatus);
-        }
+      const statusRes = await updateReservationPaymentStatus(reservation.id);
+      if (statusRes.success && statusRes.data?.paymentStatus) {
+        onPaymentRecorded?.(reservation.id, statusRes.data.paymentStatus);
       }
     }
   }, [reservation?.id, onPaymentRecorded]);
