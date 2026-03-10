@@ -2,7 +2,7 @@
 
 import { ReservationStatus } from "@prisma/client";
 import { computeRateCodePricePerNight } from "@/lib/rate-code-utils";
-import { unstable_cache } from "next/cache";
+import { unstable_cache, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getEffectivePropertyId, getPropertyReservationColors } from "@/app/actions/properties";
 export interface TapeChartReservation {
@@ -493,6 +493,11 @@ export async function getTapeChartData(options?: GetTapeChartDataOptions): Promi
   return unstable_cache(
     () => fetchTapeChartDataUncached(options, propertyId),
     ["tape-chart", propertyId ?? "n", roomIdsKey, fromKey, toKey],
-    { revalidate: TAPE_CHART_CACHE_REVALIDATE }
+    { revalidate: TAPE_CHART_CACHE_REVALIDATE, tags: ["tape-chart"] }
   )();
+}
+
+/** Inwaliduje cache tape-chart (np. po zapisie rezerwacji). Wywołaj z reservations.ts, finance.ts itp. */
+export async function revalidateTapeChartCache(): Promise<void> {
+  revalidateTag("tape-chart");
 }

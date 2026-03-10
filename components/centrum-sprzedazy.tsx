@@ -997,8 +997,8 @@ function EventDetailModal({
   return (
     <>
       <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 500, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "60px" }}>
-        <div ref={ref} style={{ background: "white", borderRadius: "8px", width: "100%", maxWidth: "560px", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 4px 24px rgba(0,0,0,0.12)", overflowY: "auto" }}>
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid #e5e5e5", flexShrink: 0 }}>
+        <div ref={ref} style={{ background: "white", borderRadius: "8px", width: "100%", maxWidth: "560px", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 4px 24px rgba(0,0,0,0.12)", overflowY: "auto", border: "1px solid #e2e8f0" }}>
+          <div style={{ padding: "16px 20px", borderBottom: "1px solid #e2e8f0", flexShrink: 0 }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center", marginBottom: "4px" }}>
@@ -1007,13 +1007,13 @@ function EventDetailModal({
                   <StatusBadge status={ev.status} />
                   <span style={{ background: db.bg, color: db.tx, borderRadius: "3px", padding: "1px 6px", fontSize: "10px", fontWeight: 600 }}>{db.t}</span>
                 </div>
-                <div style={{ fontSize: "16px", fontWeight: 700, color: "#1e1e1e", lineHeight: 1.25, wordBreak: "break-word" }}>{ev.client ?? "—"}</div>
-                <div style={{ fontSize: "12px", color: "#111827", marginTop: "2px" }}>{fmtLong(ev.date)}{(ev.tf || ev.tt) ? ` · ${ev.tf ?? "?"}–${ev.tt ?? "?"}` : ""}{ev.assignedTo && <span style={{ marginLeft: "8px", fontSize: "10px", color: "#111827" }}>👤 {ev.assignedTo}</span>}</div>
+                <div style={{ fontSize: "18px", fontWeight: 700, color: "#1e1e1e", lineHeight: 1.25, wordBreak: "break-word" }}>{ev.client ?? "—"}</div>
+                <div style={{ fontSize: "14px", color: "#111827", marginTop: "2px" }}>{fmtLong(ev.date)}{(ev.tf || ev.tt) ? ` · ${ev.tf ?? "?"}–${ev.tt ?? "?"}` : ""}{ev.assignedTo && <span style={{ marginLeft: "8px", fontSize: "12px", color: "#111827" }}>👤 {ev.assignedTo}</span>}</div>
               </div>
               <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "20px", color: "#111827", cursor: "pointer", alignSelf: "flex-start" }}>×</button>
             </div>
           </div>
-          <div style={{ display: "flex", borderBottom: "1px solid #e5e5e5", marginLeft: "20px", marginRight: "20px", gap: "0" }}>
+          <div style={{ display: "flex", borderBottom: "1px solid #e2e8f0", marginLeft: "20px", marginRight: "20px", gap: "0" }}>
             {(editMode
               ? ([["dane", "Dane"], ["goscie", "Goście i czas"], ["menu", "Menu i tort"], ["szczegoly", "Szczegóły"], ["zadania", "Zadania"]] as const)
               : ([["szczegoly", "Szczegóły"], ["menu", "Menu"], ["zadania", "Zadania"]] as const)
@@ -1024,12 +1024,12 @@ function EventDetailModal({
                 style={{
                   padding: "8px 16px",
                   border: "none",
-                  borderBottom: zakladka === t ? "2px solid #1e1e1e" : "2px solid transparent",
+                  borderBottom: zakladka === t ? "2px solid #3b82f6" : "2px solid transparent",
                   background: "none",
                   cursor: "pointer",
-                  fontSize: "12px",
+                  fontSize: "15px",
                   fontWeight: zakladka === t ? 700 : 500,
-                  color: zakladka === t ? "#1e1e1e" : "#374151",
+                  color: zakladka === t ? "#1e40af" : "#374151",
                   marginBottom: "-1px",
                 }}
               >
@@ -1068,90 +1068,90 @@ function EventDetailModal({
             ) : zakladka === "szczegoly" ? (
             <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "12px" }}>
             {ev.phone ? (
-              <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
-                <a href={`tel:${ev.phone.replace(/\s/g, "")}`} style={{ fontSize: "12px", color: "#1976d2", textDecoration: "none" }}>📞 {ev.phone}</a>
-                <a href={`https://wa.me/${ev.phone.replace(/[\s\+\-]/g, "").replace(/^0/, "48")}?text=${encodeURIComponent(`Dzień dobry, ${ev.client || ""}. W sprawie rezerwacji na ${fmtDate(ev.date)} w Hotelu Łabędź.`)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", color: "#25d366", fontWeight: 600, textDecoration: "none", border: "1px solid #25d366", borderRadius: "3px", padding: "4px 10px" }}>WhatsApp</a>
-                <a href={`sms:${ev.phone.replace(/\s/g, "")}?body=${encodeURIComponent(`Hotel Łabędź - dot. imprezy ${fmtDate(ev.date)}`)}`} style={{ fontSize: "11px", color: "#111827", textDecoration: "none", border: "1px solid #ddd", borderRadius: "3px", padding: "4px 10px" }}>SMS</a>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                <a href={`tel:${ev.phone.replace(/\s/g, "")}`} style={{ fontSize: "15px", color: "#3b82f6", fontWeight: 600, textDecoration: "none" }}>📞 {ev.phone}</a>
+                <a href={`https://wa.me/${ev.phone.replace(/[\s\+\-]/g, "").replace(/^0/, "48")}?text=${encodeURIComponent(`Dzień dobry, ${ev.client || ""}. W sprawie rezerwacji na ${fmtDate(ev.date)} w Hotelu Łabędź.`)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: "14px", color: "#25d366", fontWeight: 600, textDecoration: "none", border: "1px solid #25d366", borderRadius: "4px", padding: "5px 10px" }}>WhatsApp</a>
+                <a href={`sms:${ev.phone.replace(/\s/g, "")}?body=${encodeURIComponent(`Hotel Łabędź - dot. imprezy ${fmtDate(ev.date)}`)}`} style={{ fontSize: "14px", color: "#111827", textDecoration: "none", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "5px 10px", background: "white", fontWeight: 500 }}>SMS</a>
               </div>
             ) : (
-              <div style={{ background: "#f8fafc", border: "2px dashed #e2e8f0", borderRadius: "12px", padding: "12px", textAlign: "center", color: "#111827", fontSize: "13px" }}>📵 Brak numeru telefonu</div>
+              <div style={{ background: "#f8fafc", border: "1px dashed #e2e8f0", borderRadius: "8px", padding: "12px", textAlign: "center", color: "#64748b", fontSize: "15px" }}>Brak numeru telefonu</div>
             )}
             {ev.email && (
-              <div style={{ display: "flex", gap: "6px", alignItems: "center", padding: "10px 14px", background: "#f8fafc", borderRadius: "12px" }}>
-                <a href={`mailto:${ev.email}`} style={{ color: "#1976d2", fontSize: "12px", textDecoration: "none", fontWeight: 600 }}>{ev.email}</a>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", padding: "10px 14px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px" }}>
+                <a href={`mailto:${ev.email}`} style={{ color: "#3b82f6", fontSize: "15px", textDecoration: "none", fontWeight: 600 }}>{ev.email}</a>
                 <button
                   type="button"
                   onClick={() => navigator.clipboard.writeText(ev.email!).then(() => showToast("Email skopiowany"))}
-                  style={{ fontSize: "10px", color: "#111827", background: "white", border: "1px solid #ddd", borderRadius: "3px", padding: "2px 6px", cursor: "pointer" }}
+                  style={{ fontSize: "14px", color: "#111827", background: "white", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "4px 8px", cursor: "pointer", fontWeight: 600 }}
                 >Kopiuj</button>
               </div>
             )}
-            <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
-              <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "9px" }}>STATUS</div>
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "14px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "9px" }}>STATUS</div>
               <div style={{ display: "flex", gap: "8px" }}>
                 {["CONFIRMED", "DRAFT", "DONE"].map((s) => (
-                  <button key={s} onClick={() => doStatus(s)} style={{ flex: 1, padding: "9px 12px", background: ev.status === s ? SC[s].bg : "white", border: `2px solid ${ev.status === s ? SC[s].bd : "#e2e8f0"}`, borderRadius: "9px", cursor: "pointer", fontSize: "13px", fontWeight: 800, color: ev.status === s ? SC[s].tx : "#374151", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                  <button key={s} onClick={() => doStatus(s)} style={{ flex: 1, padding: "9px 12px", background: ev.status === s ? SC[s].bg : "white", border: `1px solid ${ev.status === s ? SC[s].bd : "#e2e8f0"}`, borderRadius: "6px", cursor: "pointer", fontSize: "14px", fontWeight: 600, color: ev.status === s ? SC[s].tx : "#374151", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
                     <StatusDot status={s} />{SC[s].label}{ev.status === s ? " ✓" : ""}
                   </button>
                 ))}
               </div>
             </div>
-            <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
-              <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "9px" }}>SZCZEGÓŁY</div>
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "14px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "9px" }}>SZCZEGÓŁY</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                {[["🏛 Sala", ev.room ?? "—"], ["👥 Goście", ev.guests ? ev.guests + " osób" : "—"], ["⏰ Godziny", (ev.tf || ev.tt) ? `${ev.tf ?? "?"}–${ev.tt ?? "?"}` : "—"], ["📊 Status", SC[ev.status]?.label ?? "—"]].map(([l, v]) => (
-                  <div key={l}><div style={{ fontSize: "10px", color: "#111827", fontWeight: 700, marginBottom: "2px" }}>{l}</div><div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>{v}</div></div>
+                {[["Sala", ev.room ?? "—"], ["Goście", ev.guests ? ev.guests + " osób" : "—"], ["Godziny", (ev.tf || ev.tt) ? `${ev.tf ?? "?"}–${ev.tt ?? "?"}` : "—"], ["Status", SC[ev.status]?.label ?? "—"]].map(([l, v]) => (
+                  <div key={l}><div style={{ fontSize: "12px", color: "#64748b", fontWeight: 600, marginBottom: "2px" }}>{l}</div><div style={{ fontSize: "16px", fontWeight: 600, color: "#111827" }}>{v}</div></div>
                 ))}
               </div>
             </div>
             <>
-            <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "14px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "9px" }}>
-                <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px" }}>ZADATEK</div>
-                <button onClick={() => setShowDep(true)} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "7px", padding: "4px 10px", cursor: "pointer", fontSize: "11px", fontWeight: 700, color: "#3b82f6" }}>{ev.deposit != null ? "✏️ Zmień" : "+ Dodaj"}</button>
+                <div style={{ fontSize: "12px", fontWeight: 900, color: "#111827", letterSpacing: "2px" }}>ZADATEK</div>
+                <button onClick={() => setShowDep(true)} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "6px 12px", cursor: "pointer", fontSize: "14px", fontWeight: 600, color: "#3b82f6" }}>{ev.deposit != null ? "Zmień" : "+ Dodaj"}</button>
               </div>
               {ev.deposit != null ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ fontSize: "22px", fontWeight: 900, color: ev.paid ? "#166534" : "#991b1b" }}>{ev.paid ? "✅" : "❌"} {fmtZl(ev.deposit)}</div>
+                  <div style={{ fontSize: "20px", fontWeight: 700, color: ev.paid ? "#166534" : "#991b1b" }}>{ev.paid ? "✓" : "—"} {fmtZl(ev.deposit)}</div>
                   {ev.deposit && !ev.paid && ev.depositDueDate && new Date(ev.depositDueDate) < new Date() && (
-                    <span style={{ fontSize: "10px", color: "#c62828", fontWeight: 700 }}>Zadatek przeterminowany!</span>
+                    <span style={{ fontSize: "13px", color: "#c62828", fontWeight: 600 }}>Zadatek przeterminowany!</span>
                   )}
-                  <button onClick={doToggleDep} style={{ background: ev.paid ? "#fef2f2" : "#f0fdf4", border: `1.5px solid ${ev.paid ? "#fca5a5" : "#86efac"}`, borderRadius: "9px", padding: "7px 14px", cursor: "pointer", fontSize: "12px", fontWeight: 800, color: ev.paid ? "#991b1b" : "#166534" }}>{ev.paid ? "↩ Cofnij" : "✅ Oznacz opłacony"}</button>
+                  <button onClick={doToggleDep} style={{ background: ev.paid ? "#fef2f2" : "#f0fdf4", border: `1px solid ${ev.paid ? "#fca5a5" : "#86efac"}`, borderRadius: "6px", padding: "7px 14px", cursor: "pointer", fontSize: "14px", fontWeight: 600, color: ev.paid ? "#991b1b" : "#166534" }}>{ev.paid ? "Cofnij" : "Oznacz opłacony"}</button>
                 </div>
               ) : (
-                <div style={{ color: "#111827", fontSize: "13px", fontStyle: "italic" }}>Brak zadatku — kliknij Dodaj</div>
+                <div style={{ color: "#64748b", fontSize: "15px", fontStyle: "italic" }}>Brak zadatku — kliknij Dodaj</div>
               )}
             </div>
-            <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "14px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "9px" }}>
-                <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px" }}>NOTATKA</div>
-                {!editNote && <button onClick={() => setEditNote(true)} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "7px", padding: "4px 10px", cursor: "pointer", fontSize: "11px", fontWeight: 700, color: "#111827" }}>✏️ Edytuj</button>}
+                <div style={{ fontSize: "12px", fontWeight: 900, color: "#111827", letterSpacing: "2px" }}>NOTATKA</div>
+                {!editNote && <button onClick={() => setEditNote(true)} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "6px 12px", cursor: "pointer", fontSize: "14px", fontWeight: 600, color: "#111827" }}>Edytuj</button>}
               </div>
               {editNote ? (
                 <div>
-                  <textarea ref={noteRef} value={noteText} onChange={(e) => setNoteText(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setEditNote(false); } if (e.key === "Enter" && e.ctrlKey) doSaveNote(); }} style={{ width: "100%", minHeight: "80px", padding: "10px", border: "2px solid #3b82f6", borderRadius: "9px", fontSize: "13px", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.6, outline: "none" }} />
+                  <textarea ref={noteRef} value={noteText} onChange={(e) => setNoteText(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setEditNote(false); } if (e.key === "Enter" && e.ctrlKey) doSaveNote(); }} style={{ width: "100%", minHeight: "80px", padding: "10px", border: "1px solid #3b82f6", borderRadius: "6px", fontSize: "15px", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.6, outline: "none" }} />
                   <div style={{ display: "flex", gap: "8px", marginTop: "8px", alignItems: "center" }}>
-                    <button onClick={doSaveNote} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "8px", padding: "8px 18px", cursor: "pointer", fontSize: "13px", fontWeight: 800 }}>Zapisz</button>
-                    <button onClick={() => { setEditNote(false); setNoteText(ev.notes ?? ""); }} style={{ background: "white", border: "1.5px solid #e2e8f0", borderRadius: "8px", padding: "8px 14px", cursor: "pointer", fontSize: "13px", color: "#111827" }}>Anuluj</button>
-                    <span style={{ fontSize: "11px", color: "#111827" }}>Ctrl+Enter</span>
+                    <button onClick={doSaveNote} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "4px", padding: "8px 16px", cursor: "pointer", fontSize: "14px", fontWeight: 600 }}>Zapisz</button>
+                    <button onClick={() => { setEditNote(false); setNoteText(ev.notes ?? ""); }} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "8px 14px", cursor: "pointer", fontSize: "14px", color: "#111827", fontWeight: 500 }}>Anuluj</button>
+                    <span style={{ fontSize: "13px", color: "#64748b" }}>Ctrl+Enter</span>
                   </div>
                 </div>
               ) : (
-                <div onClick={() => setEditNote(true)} style={{ fontSize: "13px", color: ev.notes ? "#0f172a" : "#374151", lineHeight: 1.6, cursor: "text", whiteSpace: "pre-wrap", minHeight: "32px", padding: "8px", background: "white", border: "1.5px dashed #e2e8f0", borderRadius: "8px" }}>{ev.notes || "Brak notatki — kliknij aby dodać..."}</div>
+                <div onClick={() => setEditNote(true)} style={{ fontSize: "15px", color: ev.notes ? "#111827" : "#64748b", lineHeight: 1.6, cursor: "text", whiteSpace: "pre-wrap", minHeight: "36px", padding: "10px", background: "white", border: "1px dashed #e2e8f0", borderRadius: "6px" }}>{ev.notes || "Brak notatki — kliknij aby dodać..."}</div>
               )}
             </div>
             </>
             {ev.quoteId ? (
-              <div style={{ background: "#f5f3ff", border: "1.5px solid #a78bfa", borderRadius: "10px", padding: "10px 14px", display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ background: "#eff6ff", border: "1px solid #3b82f6", borderRadius: "8px", padding: "10px 14px", display: "flex", alignItems: "center", gap: "10px" }}>
                 <span style={{ fontSize: "18px" }}>💰</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "10px", fontWeight: 900, color: "#7c3aed", letterSpacing: "1px" }}>KOSZTORYS</div>
-                  <div style={{ fontSize: "13px", fontWeight: 700, color: "#4c1d95" }}>Powiązany kosztorys</div>
+                  <div style={{ fontSize: "12px", fontWeight: 900, color: "#1e40af", letterSpacing: "1px" }}>KOSZTORYS</div>
+                  <div style={{ fontSize: "15px", fontWeight: 600, color: "#1e40af" }}>Powiązany kosztorys</div>
                 </div>
-                <button onClick={() => window.open(`/mice/kosztorysy`, "_blank")} style={{ background: "#7c3aed", color: "white", border: "none", borderRadius: "7px", padding: "6px 12px", cursor: "pointer", fontSize: "11px", fontWeight: 800 }}>📋 Otwórz kosztorys</button>
+                <button onClick={() => window.open(`/mice/kosztorysy`, "_blank")} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "4px", padding: "7px 14px", cursor: "pointer", fontSize: "14px", fontWeight: 600 }}>Otwórz kosztorys</button>
               </div>
             ) : (
-              <div style={{ background: "#f8fafc", border: "1.5px solid #e2e8f0", borderRadius: "10px", padding: "10px 14px" }}>
+              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "10px 14px" }}>
                 <button
                   onClick={async () => {
                     try {
@@ -1176,8 +1176,8 @@ function EventDetailModal({
                       showToast("Błąd tworzenia kosztorysu", "err");
                     }
                   }}
-                  style={{ background: "white", border: "1px solid #ddd", borderRadius: "7px", padding: "6px 14px", fontSize: "11px", fontWeight: 600, color: "#111827", cursor: "pointer" }}
-                >📋 Utwórz kosztorys</button>
+                  style={{ background: "white", border: "1px solid #3b82f6", borderRadius: "4px", padding: "7px 14px", fontSize: "14px", fontWeight: 600, color: "#1e40af", cursor: "pointer" }}
+                >Utwórz kosztorys</button>
               </div>
             )}
             {(() => {
@@ -1186,20 +1186,20 @@ function EventDetailModal({
               const lastSync = ev.googleCalendarSyncedAt;
               let bg: string, borderColor: string, icon: string, text: string, textColor: string;
               if (!hasLink) {
-                bg = "#fff3e0"; borderColor = "#ffcc80"; icon = "⚠️";
-                text = "Nie powiązane z Google Calendar"; textColor = "#e65100";
+                bg = "#fef3c7"; borderColor = "#fde68a"; icon = "⚠️";
+                text = "Nie powiązane z Google Calendar"; textColor = "#92400e";
               } else if (hasError) {
-                bg = "#ffebee"; borderColor = "#ef9a9a"; icon = "❌";
-                text = "Błąd synchronizacji"; textColor = "#c62828";
+                bg = "#fef2f2"; borderColor = "#fca5a5"; icon = "❌";
+                text = "Błąd synchronizacji"; textColor = "#991b1b";
               } else if (!lastSync) {
-                bg = "#fff8e1"; borderColor = "#ffe082"; icon = "📅";
-                text = "Zaimportowane z GCal — opis zaktualizuje się przy edycji"; textColor = "#f57f17";
+                bg = "#eff6ff"; borderColor = "#93c5fd"; icon = "📅";
+                text = "Zaimportowane z GCal — opis zaktualizuje się przy edycji"; textColor = "#1e40af";
               } else {
-                bg = "#e8f5e9"; borderColor = "#a5d6a7"; icon = "✅";
-                text = "Zsynchronizowane z Google Calendar"; textColor = "#2e7d32";
+                bg = "#f0fdf4"; borderColor = "#86efac"; icon = "✅";
+                text = "Zsynchronizowane z Google Calendar"; textColor = "#166534";
               }
               return (
-                <div style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: "6px", padding: "8px 12px", display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: textColor, marginTop: "12px" }}>
+                <div style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: "6px", padding: "8px 12px", display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: textColor }}>
                   <span>{icon}</span>
                   <span style={{ flex: 1 }}>{text}</span>
                   {hasLink && !lastSync && (
@@ -1217,7 +1217,7 @@ function EventDetailModal({
                           showToast("Błąd synchronizacji", "err");
                         }
                       }}
-                      style={{ background: "white", border: `1px solid ${borderColor}`, borderRadius: "4px", padding: "3px 10px", fontSize: "11px", fontWeight: 600, color: textColor, cursor: "pointer", whiteSpace: "nowrap" }}
+                      style={{ background: "white", border: `1px solid ${borderColor}`, borderRadius: "4px", padding: "5px 10px", fontSize: "13px", fontWeight: 600, color: textColor, cursor: "pointer", whiteSpace: "nowrap" }}
                     >
                       Synchronizuj teraz
                     </button>
@@ -1228,7 +1228,7 @@ function EventDetailModal({
                         const eid = btoa(`${ev.googleCalendarEventId} ${ev.googleCalendarCalId}`);
                         window.open(`https://calendar.google.com/calendar/event?eid=${eid}`, "_blank");
                       }}
-                      style={{ background: "white", border: `1px solid ${borderColor}`, borderRadius: "4px", padding: "3px 10px", fontSize: "11px", fontWeight: 600, color: textColor, cursor: "pointer", whiteSpace: "nowrap" }}
+                      style={{ background: "white", border: `1px solid ${borderColor}`, borderRadius: "4px", padding: "5px 10px", fontSize: "13px", fontWeight: 600, color: textColor, cursor: "pointer", whiteSpace: "nowrap" }}
                     >
                       Otwórz w GCal
                     </button>
@@ -1237,32 +1237,32 @@ function EventDetailModal({
               );
             })()}
             {ev.pop && (
-              <div style={{ background: "#fdf2f8", border: "1.5px solid #f9a8d4", borderRadius: "10px", padding: "10px 14px", display: "flex", alignItems: "center", gap: "10px" }}>
-                <span style={{ fontSize: "18px" }}>🎊</span>
+              <div style={{ background: "#fdf2f8", border: "1px solid #f9a8d4", borderRadius: "8px", padding: "10px 14px", display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ fontSize: "16px" }}>🎊</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "12px", fontWeight: 700, color: "#9d174d" }}>To są poprawiny</div>
+                  <div style={{ fontSize: "14px", fontWeight: 600, color: "#9d174d" }}>To są poprawiny</div>
                   {ev.parentEventId && (
-                    <div style={{ fontSize: "11px", color: "#be185d" }}>Główne wesele: {events.find((e) => e.id === ev.parentEventId)?.client ?? ev.parentEventId}</div>
+                    <div style={{ fontSize: "13px", color: "#be185d" }}>Główne wesele: {events.find((e) => e.id === ev.parentEventId)?.client ?? ev.parentEventId}</div>
                   )}
                 </div>
                 {ev.parentEventId && onOpenModal && (
-                  <button onClick={() => { onClose(); setTimeout(() => onOpenModal(ev.parentEventId!), 100); }} style={{ background: "#ec4899", color: "white", border: "none", borderRadius: "7px", padding: "6px 12px", cursor: "pointer", fontSize: "11px", fontWeight: 800 }}>Otwórz wesele</button>
+                  <button onClick={() => { onClose(); setTimeout(() => onOpenModal(ev.parentEventId!), 100); }} style={{ background: "#ec4899", color: "white", border: "none", borderRadius: "4px", padding: "7px 14px", cursor: "pointer", fontSize: "14px", fontWeight: 600 }}>Otwórz wesele</button>
                 )}
               </div>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-              <button onClick={() => { setEditForm(evToFullForm(ev)); setEditMode(true); setZakladka("dane"); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1.5px solid #e2e8f0", borderRadius: "10px", padding: "12px", fontSize: "13px", fontWeight: 700, color: "#0f172a", cursor: "pointer" }}>✏️ Edytuj</button>
-              <div style={{ marginTop: "12px", padding: "8px 12px", background: "#f9fafb", borderRadius: "4px", border: "1px solid #f0f0f0", fontSize: "12px" }}>
-                <div style={{ fontWeight: 700, color: "#111827", marginBottom: "4px" }}>Dokumenty</div>
+              <button onClick={() => { setEditForm(evToFullForm(ev)); setEditMode(true); setZakladka("dane"); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "12px", fontSize: "15px", fontWeight: 600, color: "#111827", cursor: "pointer" }}>Edytuj</button>
+              <div style={{ marginTop: "0", padding: "10px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "14px" }}>
+                <div style={{ fontWeight: 600, color: "#111827", marginBottom: "4px" }}>Dokumenty</div>
                 {ev.checklistDocId ? (
-                  <a href={`https://docs.google.com/document/d/${ev.checklistDocId}`} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2", fontSize: "11px", display: "block" }}>📄 Checklista Google Docs</a>
+                  <a href={`https://docs.google.com/document/d/${ev.checklistDocId}`} target="_blank" rel="noopener noreferrer" style={{ color: "#3b82f6", fontSize: "14px", display: "block", fontWeight: 500 }}>Checklista Google Docs</a>
                 ) : (
-                  <span style={{ color: "#111827", fontSize: "11px" }}>Checklista: brak (tworzona przy zapisie)</span>
+                  <span style={{ color: "#64748b", fontSize: "14px" }}>Checklista: brak (tworzona przy zapisie)</span>
                 )}
                 {ev.menuDocId ? (
-                  <a href={`https://docs.google.com/document/d/${ev.menuDocId}`} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2", fontSize: "11px", display: "block", marginTop: "2px" }}>📄 Menu Google Docs</a>
+                  <a href={`https://docs.google.com/document/d/${ev.menuDocId}`} target="_blank" rel="noopener noreferrer" style={{ color: "#3b82f6", fontSize: "14px", display: "block", marginTop: "2px", fontWeight: 500 }}>Menu Google Docs</a>
                 ) : (
-                  <span style={{ color: "#111827", fontSize: "11px", display: "block", marginTop: "2px" }}>Menu Docs: brak</span>
+                  <span style={{ color: "#64748b", fontSize: "14px", display: "block", marginTop: "2px" }}>Menu Docs: brak</span>
                 )}
               </div>
               <button onClick={() => {
@@ -1271,7 +1271,7 @@ function EventDetailModal({
                 const html = `<!DOCTYPE html><html><head><title>Karta imprezy — ${ev.client ?? "—"}</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:13px}h1{font-size:18px;margin-bottom:4px}h2{font-size:14px;color:#666;margin-top:16px;border-bottom:1px solid #ddd;padding-bottom:4px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px}.label{font-weight:bold;color:#888;font-size:11px;text-transform:uppercase}.value{font-size:13px;margin-bottom:8px}.notes{background:#f5f5f5;padding:10px;border-radius:4px;white-space:pre-wrap;margin-top:8px}.badge{display:inline-block;padding:2px 10px;border-radius:3px;font-weight:bold;font-size:12px;background:${tc.bg};color:${tc.tx};border:1px solid ${tc.bd}}@media print{body{padding:0}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:center"><div><h1>${ev.client ?? "—"}</h1><span class="badge">${TL[ev.type] ?? "Inne"}</span>${ev.eventNumber ? '<span style="margin-left:8px;color:#999">' + ev.eventNumber + "</span>" : ""}</div><div style="text-align:right;font-size:12px;color:#666">Hotel Łabędź<br/>Wydrukowano: ${new Date().toLocaleDateString("pl-PL")}</div></div><h2>Dane imprezy</h2><div class="grid"><div><div class="label">Data</div><div class="value">${fmtLong(ev.date)}</div></div><div><div class="label">Sala</div><div class="value">${ev.room ?? "—"}</div></div><div><div class="label">Goście</div><div class="value">${ev.guests ? ev.guests + " os." : "—"}</div></div><div><div class="label">Godziny</div><div class="value">${ev.tf || ev.tt ? (ev.tf || "?") + "–" + (ev.tt || "?") : "—"}</div></div><div><div class="label">Telefon</div><div class="value">${ev.phone ?? "—"}</div></div><div><div class="label">Email</div><div class="value">${ev.email ?? "—"}</div></div><div><div class="label">Zadatek</div><div class="value">${ev.deposit != null ? fmtZl(ev.deposit) + (ev.paid ? " ✓" : " ✗") : "—"}</div></div><div><div class="label">Status</div><div class="value">${(SC[ev.status] ?? {}).label ?? ev.status ?? "—"}</div></div></div>${ev.notes ? '<h2>Notatki</h2><div class="notes">' + ev.notes + "</div>" : ""}<h2>Menu</h2><div style="font-size:12px;color:#666">${menuSummary}</div><div style="margin-top:40px;border-top:1px solid #ddd;padding-top:8px;font-size:10px;color:#ccc">Wygenerowano z Centrum Sprzedaży · Hotel Łabędź</div></body></html>`;
                 const w = window.open("", "_blank");
                 if (w) { w.document.write(html); w.document.close(); w.print(); }
-              }} style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", fontSize: "11px", fontWeight: 600, color: "#111827", cursor: "pointer" }}>🖨 Drukuj kartę</button>
+              }} style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "9px 16px", fontSize: "14px", fontWeight: 600, color: "#111827", cursor: "pointer" }}>Drukuj kartę</button>
             </div>
             </div>
             ) : (
@@ -1289,20 +1289,20 @@ function EventDetailModal({
               />
             )}
           </div>
-          <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e5e5", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+          <div style={{ padding: "12px 20px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
             {editMode ? (
               <>
-                <button onClick={handleCancelEdit} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#111827" }}>Anuluj edycję</button>
-                <button onClick={handleSaveEdit} disabled={editSaving} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "6px 20px", cursor: "pointer", fontSize: "11px", fontWeight: 600, opacity: editSaving ? 0.6 : 1 }}>{editSaving ? "Zapisuję..." : "Zapisz"}</button>
+                <button onClick={handleCancelEdit} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "7px 14px", cursor: "pointer", fontSize: "14px", fontWeight: 600, color: "#111827" }}>Anuluj edycję</button>
+                <button onClick={handleSaveEdit} disabled={editSaving} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "4px", padding: "7px 20px", cursor: "pointer", fontSize: "14px", fontWeight: 600, opacity: editSaving ? 0.6 : 1 }}>{editSaving ? "Zapisuję..." : "Zapisz"}</button>
               </>
             ) : (
               <>
                 {ev.status === "CANCELLED" ? (
-                  <button onClick={doRestore} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#2e7d32" }}>Przywróć imprezę</button>
+                  <button onClick={doRestore} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "7px 14px", cursor: "pointer", fontSize: "14px", fontWeight: 600, color: "#166534" }}>Przywróć imprezę</button>
                 ) : (
-                  <button onClick={() => setShowCancel(true)} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#c62828" }}>Anuluj imprezę</button>
+                  <button onClick={() => setShowCancel(true)} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "7px 14px", cursor: "pointer", fontSize: "14px", fontWeight: 600, color: "#c62828" }}>Anuluj imprezę</button>
                 )}
-                <button onClick={onClose} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "6px 16px", cursor: "pointer", fontSize: "11px", fontWeight: 600 }}>Zamknij</button>
+                <button onClick={onClose} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "4px", padding: "7px 18px", cursor: "pointer", fontSize: "14px", fontWeight: 600 }}>Zamknij</button>
               </>
             )}
           </div>
@@ -1339,7 +1339,7 @@ function EventCard({
   const leftBorder = cancelled ? "#ddd" : c.bd;
   const tc = c;
   return (
-    <div ref={ref} id={`ev-${ev.id}`} onClick={onToggle} style={{
+    <div ref={ref} id={`ev-${ev.id}`} onClick={() => onOpenModal(ev.id)} style={{
       display: "grid",
       gridTemplateColumns: "60px 95px minmax(200px,1fr) 150px 70px 90px minmax(100px,1fr) 110px 120px 20px",
       padding: "14px 16px",
@@ -1380,7 +1380,7 @@ function EventCard({
       <div onClick={(e) => e.stopPropagation()}>
         {ev.gcalSource ? <button onClick={(e) => { e.stopPropagation(); onOpenModal(ev.id); }} style={{ fontSize: "12px", color: "#1d4ed8", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Otwórz w GCal</button> : <PhoneBtn phone={ev.phone} client={ev.client} date={ev.date} compact />}
       </div>
-      <span style={{ color: "#111827", fontSize: "18px", textAlign: "right", transition: "transform 0.15s", transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
+      <span onClick={(e) => { e.stopPropagation(); onToggle(); }} style={{ color: "#111827", fontSize: "18px", textAlign: "right", transition: "transform 0.15s", transform: expanded ? "rotate(90deg)" : "none", cursor: "pointer" }}>›</span>
       {expanded && (
         <div style={{ gridColumn: "1 / -1", marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #3b82f6", display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
           <div style={{ flex: "1 1 200px", fontSize: "16px", color: "#111827", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{ev.notes || "Brak notatki."}</div>

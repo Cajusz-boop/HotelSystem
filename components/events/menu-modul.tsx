@@ -234,76 +234,76 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
   const effGuests = guestsOvr ?? ev.guests;
 
   return (
-    <div style={{ fontFamily: "'DM Sans','Segoe UI',system-ui,sans-serif", fontSize: "13px" }}>
+    <div style={{ fontFamily: "'Source Sans 3','Segoe UI',system-ui,sans-serif", fontSize: "13px", padding: "0 20px 16px" }}>
       <iframe ref={iframeRef} style={{ display: "none" }} title="print" />
-      <div style={{ position: "sticky", top: 0, zIndex: 50, background: "white", borderBottom: "2px solid #e2e8f0", padding: "10px 0 10px", marginBottom: "12px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ display: "flex", border: "2px solid #e2e8f0", borderRadius: "8px", overflow: "hidden", flexShrink: 0 }}>
-          {([["edycja", "✏️ Edycja"], ["podglad", "👁 Podgląd"]] as const).map(([t, l]) => (
-            <button key={t} onClick={() => setTryb(t)} style={{ padding: "6px 14px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: 700, background: tryb === t ? "#1e293b" : "white", color: tryb === t ? "white" : "#64748b" }}>{l}</button>
+      <div style={{ position: "sticky", top: 0, zIndex: 50, background: "white", borderBottom: "1px solid #e2e8f0", padding: "10px 0 10px", marginBottom: "12px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", border: "1px solid #3b82f6", borderRadius: "4px", overflow: "hidden", flexShrink: 0 }}>
+          {([["edycja", "Edycja"], ["podglad", "Podgląd"]] as const).map(([t, l]) => (
+            <button key={t} onClick={() => setTryb(t)} style={{ padding: "6px 14px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: tryb === t ? 700 : 500, background: tryb === t ? "#eff6ff" : "white", color: tryb === t ? "#1e40af" : "#374151" }}>{l}</button>
           ))}
         </div>
         {pakiet && (
-          <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#f0fdf4", border: "2px solid #86efac", borderRadius: "8px", padding: "5px 12px", flexShrink: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "5px 12px", flexShrink: 0 }}>
             <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600 }}>{cena.perOsoba} zł/os</span>
-            {cena.total != null && <><span style={{ color: "#86efac" }}>×</span><span style={{ fontSize: "15px", fontWeight: 900, color: "#166534" }}>{fmtZl(cena.total)}</span></>}
+            {cena.total != null && <><span style={{ color: "#94a3b8" }}>×</span><span style={{ fontSize: "15px", fontWeight: 700, color: "#111827" }}>{fmtZl(cena.total)}</span></>}
             {cena.total == null && <span style={{ fontSize: "11px", color: "#94a3b8", fontStyle: "italic" }}>(wpisz gości →)</span>}
           </div>
         )}
         <div style={{ display: "flex", alignItems: "center", gap: "5px", flexShrink: 0 }}>
-          <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, whiteSpace: "nowrap" }}>👥 gości:</span>
-          <input type="number" min={1} max={999} value={guestsOvr ?? ev.guests ?? ""} onChange={(e) => { const v = parseInt(e.target.value); setGuestsOvr(isNaN(v) || v <= 0 ? null : v); }} style={{ width: "64px", padding: "5px 8px", border: "2px solid #e2e8f0", borderRadius: "7px", fontSize: "13px", fontWeight: 700, textAlign: "center", outline: "none" }} />
-          {guestsOvr != null && guestsOvr !== ev.guests && <button onClick={() => setGuestsOvr(null)} style={{ background: "#fee2e2", border: "none", borderRadius: "5px", padding: "4px 7px", cursor: "pointer", fontSize: "11px", color: "#991b1b", fontWeight: 700 }}>↩</button>}
+          <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, whiteSpace: "nowrap" }}>gości:</span>
+          <input type="number" min={1} max={999} value={guestsOvr ?? ev.guests ?? ""} onChange={(e) => { const v = parseInt(e.target.value); setGuestsOvr(isNaN(v) || v <= 0 ? null : v); }} style={{ width: "64px", padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "4px", fontSize: "13px", fontWeight: 600, textAlign: "center", outline: "none" }} />
+          {guestsOvr != null && guestsOvr !== ev.guests && <button onClick={() => setGuestsOvr(null)} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "4px 7px", cursor: "pointer", fontSize: "11px", color: "#64748b", fontWeight: 600 }}>↩</button>}
         </div>
         {pakiet && statusWyb.total > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-            <div style={{ display: "flex", gap: "3px" }}>{Array.from({ length: statusWyb.total }, (_, i) => <div key={i} style={{ width: "10px", height: "10px", borderRadius: "3px", background: i < statusWyb.done ? "#22c55e" : "#e2e8f0" }} />)}</div>
-            <span style={{ fontSize: "11px", fontWeight: 700, color: statusWyb.done === statusWyb.total ? "#166534" : "#92400e" }}>{statusWyb.done}/{statusWyb.total}</span>
+            <div style={{ display: "flex", gap: "3px" }}>{Array.from({ length: statusWyb.total }, (_, i) => <div key={i} style={{ width: "10px", height: "10px", borderRadius: "2px", background: i < statusWyb.done ? "#3b82f6" : "#e2e8f0" }} />)}</div>
+            <span style={{ fontSize: "11px", fontWeight: 700, color: statusWyb.done === statusWyb.total ? "#1e40af" : "#64748b" }}>{statusWyb.done}/{statusWyb.total}</span>
           </div>
         )}
         <div style={{ marginLeft: "auto", display: "flex", gap: "6px", flexShrink: 0 }}>
-          {tryb === "podglad" && pakiet && <button onClick={handlePrint} style={{ background: "#475569", color: "white", border: "none", borderRadius: "8px", padding: "7px 14px", cursor: "pointer", fontSize: "12px", fontWeight: 700 }}>🖨️ Drukuj</button>}
-          <button onClick={handleSave} style={{ background: zapisano ? "#22c55e" : "#3b82f6", color: "white", border: "none", borderRadius: "8px", padding: "7px 16px", cursor: "pointer", fontSize: "12px", fontWeight: 800, transition: "background 0.25s", whiteSpace: "nowrap" }}>{zapisano ? "✅ Zapisano!" : "💾 Zapisz"}</button>
+          {tryb === "podglad" && pakiet && <button onClick={handlePrint} style={{ background: "white", color: "#111827", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "7px 14px", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}>Drukuj</button>}
+          <button onClick={handleSave} style={{ background: zapisano ? "#22c55e" : "#3b82f6", color: "white", border: "none", borderRadius: "4px", padding: "7px 16px", cursor: "pointer", fontSize: "12px", fontWeight: 600, transition: "background 0.25s", whiteSpace: "nowrap" }}>{zapisano ? "Zapisano!" : "Zapisz"}</button>
         </div>
       </div>
       {walidError && (
-        <div style={{ background: "#fef2f2", border: "2px solid #fca5a5", borderRadius: "9px", padding: "10px 14px", marginBottom: "10px", fontSize: "12px", color: "#991b1b", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px" }}>
-          ⚠️ {walidError}
-          <button onClick={() => setWalidError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#991b1b", fontSize: "15px", fontWeight: 900 }}>×</button>
+        <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: "6px", padding: "10px 14px", marginBottom: "10px", fontSize: "12px", color: "#991b1b", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px" }}>
+          {walidError}
+          <button onClick={() => setWalidError(null)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "#991b1b", fontSize: "14px", fontWeight: 700 }}>×</button>
         </div>
       )}
       {tryb === "podglad" && (
-        <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "20px 22px" }}>
+        <div style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "20px 22px" }}>
           {!pakiet ? (
-            <div style={{ textAlign: "center", padding: "48px 20px", color: "#94a3b8" }}><div style={{ fontSize: "40px", marginBottom: "10px" }}>🍽️</div><div style={{ fontSize: "15px", fontWeight: 700 }}>Wybierz pakiet w trybie edycji</div></div>
+            <div style={{ textAlign: "center", padding: "48px 20px", color: "#64748b" }}><div style={{ fontSize: "32px", marginBottom: "10px" }}>🍽️</div><div style={{ fontSize: "14px", fontWeight: 600 }}>Wybierz pakiet w trybie edycji</div></div>
           ) : (
             <>
-              <div style={{ fontSize: "20px", fontWeight: 900, color: "#0f172a", marginBottom: "2px" }}>{pakiet.nazwa} — {pakiet.cena} zł/os</div>
+              <div style={{ fontSize: "18px", fontWeight: 700, color: "#1e1e1e", marginBottom: "2px" }}>{pakiet.nazwa} — {pakiet.cena} zł/os</div>
               <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "20px" }}>{ev.client} · {fmtDate(ev.date)}{effGuests ? ` · ${effGuests} osób` : ""}</div>
               {pakiet.sekcje.map((s: { id: string; typ: string; label: string; dania: string[] }) => {
                 const lista = s.typ === "fixed" ? s.dania : (wybory[s.id] || []);
-                if (!lista.length) return <div key={s.id} style={{ marginBottom: "10px", opacity: 0.4 }}><div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px", marginBottom: "3px" }}>{s.label.replace(/ \(.*\)/, "").toUpperCase()} — BRAK WYBORU</div></div>;
+                if (!lista.length) return <div key={s.id} style={{ marginBottom: "10px", opacity: 0.4 }}><div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "3px" }}>{s.label.replace(/ \(.*\)/, "").toUpperCase()} — BRAK WYBORU</div></div>;
                 return (
                   <div key={s.id} style={{ marginBottom: "14px" }}>
-                    <div style={{ fontSize: "10px", fontWeight: 900, color: "#64748b", letterSpacing: "2px", marginBottom: "5px", borderBottom: "1px solid #f1f5f9", paddingBottom: "3px" }}>{s.label.replace(/ \(.*\)/, "").toUpperCase()}{s.typ === "fixed" ? <span style={{ marginLeft: "6px", color: "#22c55e", fontSize: "9px" }}>✓ W CENIE</span> : null}</div>
+                    <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "5px", borderBottom: "1px solid #f1f5f9", paddingBottom: "3px" }}>{s.label.replace(/ \(.*\)/, "").toUpperCase()}{s.typ === "fixed" ? <span style={{ marginLeft: "6px", color: "#22c55e", fontSize: "9px" }}>✓ W CENIE</span> : null}</div>
                     <ul style={{ margin: 0, paddingLeft: "16px" }}>{lista.map((d: string) => <li key={d} style={{ lineHeight: 1.9, color: "#0f172a" }}>{d}</li>)}</ul>
                   </div>
                 );
               })}
               {(pakiet.doplaty || []).some((d: { id: string }) => doplaty[d.id]) && (
                 <div style={{ marginBottom: "14px" }}>
-                  <div style={{ fontSize: "10px", fontWeight: 900, color: "#6366f1", letterSpacing: "2px", marginBottom: "5px", borderBottom: "1px solid #f1f5f9", paddingBottom: "3px" }}>DOPŁATY</div>
+                  <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "5px", borderBottom: "1px solid #f1f5f9", paddingBottom: "3px" }}>DOPŁATY</div>
                   {(pakiet.doplaty || []).filter((d: { id: string }) => doplaty[d.id]).map((d: { id: string; label: string; stala?: number; cena?: number; wybor?: boolean }) => (
                     <div key={d.id} style={{ lineHeight: 2, color: "#0f172a" }}>• {d.label}{d.stala ? ` — ${fmtZl(d.stala)} ryczałt` : (d.cena ?? 0) > 0 ? ` — +${d.cena} zł/os` : ""}{d.wybor && dopWybory[d.id]?.length ? <span style={{ color: "#64748b" }}> ({dopWybory[d.id].join(", ")})</span> : ""}</div>
                   ))}
                 </div>
               )}
-              {notatka && <div style={{ background: "#fefce8", border: "1px solid #fde68a", borderRadius: "8px", padding: "10px 14px", marginBottom: "14px", fontSize: "12px", color: "#92400e", lineHeight: 1.6 }}>📝 {notatka}</div>}
-              <div style={{ background: "#f0fdf4", border: "2px solid #86efac", borderRadius: "10px", padding: "14px 16px", marginBottom: "14px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#374151", lineHeight: 2.2 }}><span>Pakiet base:</span><span style={{ fontWeight: 700 }}>{pakiet.cena} zł/os</span></div>
-                {cena.dop > 0 && <><div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#6366f1", lineHeight: 2 }}><span>Dopłaty:</span><span style={{ fontWeight: 700 }}>+{cena.dop} zł/os</span></div><div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: 800, borderTop: "1px dashed #d1fae5", paddingTop: "4px", lineHeight: 2 }}><span>Łącznie/os:</span><span>{cena.perOsoba} zł</span></div></>}
-                {effGuests != null && effGuests > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#374151", lineHeight: 2 }}><span>Gości:</span><span style={{ fontWeight: 700 }}>× {effGuests}</span></div>}
-                {cena.staleDop > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#6366f1", lineHeight: 2 }}><span>Ryczałt:</span><span style={{ fontWeight: 700 }}>+{fmtZl(cena.staleDop)}</span></div>}
-                {cena.total != null && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "20px", fontWeight: 900, color: "#166534", borderTop: "2px solid #86efac", paddingTop: "8px", marginTop: "4px" }}><span>RAZEM</span><span>{fmtZl(cena.total)}</span></div>}
+              {notatka && <div style={{ background: "#fefce8", border: "1px solid #fde68a", borderRadius: "6px", padding: "10px 14px", marginBottom: "14px", fontSize: "12px", color: "#92400e", lineHeight: 1.6 }}>📝 {notatka}</div>}
+              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "14px 16px", marginBottom: "14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#374151", lineHeight: 2.2 }}><span>Pakiet base:</span><span style={{ fontWeight: 600 }}>{pakiet.cena} zł/os</span></div>
+                {cena.dop > 0 && <><div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#64748b", lineHeight: 2 }}><span>Dopłaty:</span><span style={{ fontWeight: 600 }}>+{cena.dop} zł/os</span></div><div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: 700, borderTop: "1px dashed #e2e8f0", paddingTop: "4px", lineHeight: 2 }}><span>Łącznie/os:</span><span>{cena.perOsoba} zł</span></div></>}
+                {effGuests != null && effGuests > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#374151", lineHeight: 2 }}><span>Gości:</span><span style={{ fontWeight: 600 }}>× {effGuests}</span></div>}
+                {cena.staleDop > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#64748b", lineHeight: 2 }}><span>Ryczałt:</span><span style={{ fontWeight: 600 }}>+{fmtZl(cena.staleDop)}</span></div>}
+                {cena.total != null && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "18px", fontWeight: 700, color: "#111827", borderTop: "1px solid #e2e8f0", paddingTop: "8px", marginTop: "4px" }}><span>RAZEM</span><span>{fmtZl(cena.total)}</span></div>}
               </div>
               {pakiet.regulamin?.length ? <div style={{ fontSize: "11px", color: "#64748b", lineHeight: 1.9, borderTop: "1px solid #e2e8f0", paddingTop: "12px" }}><strong>Regulamin:</strong><br />{pakiet.regulamin.map((r, i) => <div key={i}>• {r}</div>)}</div> : null}
               <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "12px", borderTop: "1px solid #e2e8f0", paddingTop: "10px" }}>Karczma Łabędź · Marta Aker: 721 434 939, 604 070 908</div>
@@ -314,21 +314,21 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
       {tryb === "edycja" && (
         <>
           <div style={{ marginBottom: "12px" }}>
-            <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px", marginBottom: "8px" }}>PAKIET MENU</div>
+            <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "8px" }}>PAKIET MENU</div>
             {loading ? (
               <div style={{ padding: "20px", textAlign: "center", color: "#64748b", fontSize: "13px" }}>Ładowanie pakietów...</div>
             ) : dostepne.length === 0 ? (
-              <div style={{ background: "#fef9c3", border: "2px solid #fde68a", borderRadius: "10px", padding: "14px", fontSize: "13px", color: "#92400e", fontWeight: 600 }}>⚠️ Brak pakietów dla typu imprezy: <strong>{ev.type}</strong>. Skontaktuj się z Martą Aker aby ustalić menu indywidualnie.</div>
+              <div style={{ background: "#fef9c3", border: "1px solid #fde68a", borderRadius: "8px", padding: "14px", fontSize: "13px", color: "#92400e", fontWeight: 600 }}>Brak pakietów dla typu imprezy: <strong>{ev.type}</strong>. Skontaktuj się z Martą Aker aby ustalić menu indywidualnie.</div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                 {dostepne.map((p) => {
                   const aktywny = pakietId === p.id;
                   return (
-                    <button key={p.id} onClick={() => handlePakietClick(p.id)} style={{ background: aktywny ? "#1e293b" : "white", border: `2px solid ${aktywny ? "#1e293b" : "#e2e8f0"}`, borderRadius: "10px", padding: "11px 14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", textAlign: "left", transition: "all 0.12s", boxShadow: aktywny ? "0 2px 12px rgba(0,0,0,0.15)" : "none" }}>
-                      <span style={{ fontSize: "14px", fontWeight: 700, color: aktywny ? "white" : "#0f172a" }}>{aktywny ? "✓ " : ""}{p.nazwa}</span>
+                    <button key={p.id} onClick={() => handlePakietClick(p.id)} style={{ background: aktywny ? "#eff6ff" : "white", border: `1px solid ${aktywny ? "#3b82f6" : "#e2e8f0"}`, borderRadius: "8px", padding: "11px 14px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", textAlign: "left", transition: "border-color 0.12s" }}>
+                      <span style={{ fontSize: "14px", fontWeight: 600, color: aktywny ? "#1e40af" : "#111827" }}>{aktywny ? "✓ " : ""}{p.nazwa}</span>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, marginLeft: "12px" }}>
-                        <span style={{ fontSize: "11px", color: aktywny ? "rgba(255,255,255,0.6)" : "#64748b" }}>{p.sekcje.filter((s: { typ: string }) => s.typ === "wybor").length} sekcji do wyboru</span>
-                        <span style={{ background: aktywny ? "rgba(255,255,255,0.15)" : "#f0fdf4", color: aktywny ? "white" : "#166534", border: `1px solid ${aktywny ? "rgba(255,255,255,0.3)" : "#86efac"}`, borderRadius: "6px", padding: "3px 10px", fontSize: "14px", fontWeight: 900 }}>{p.cena} zł/os</span>
+                        <span style={{ fontSize: "11px", color: aktywny ? "#1e40af" : "#64748b" }}>{p.sekcje.filter((s: { typ: string }) => s.typ === "wybor").length} sekcji do wyboru</span>
+                        <span style={{ background: aktywny ? "#3b82f6" : "#f8fafc", color: aktywny ? "white" : "#111827", border: `1px solid ${aktywny ? "#3b82f6" : "#e2e8f0"}`, borderRadius: "4px", padding: "3px 10px", fontSize: "13px", fontWeight: 600 }}>{p.cena} zł/os</span>
                       </div>
                     </button>
                   );
@@ -338,29 +338,29 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
           </div>
           {pakiet && (
             <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "12px" }}>
-              <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px" }}>SKŁAD MENU</div>
+              <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px" }}>SKŁAD MENU</div>
               {pakiet.sekcje.map((sek) => {
                 const limit = "limit" in sek ? (sek.limit as number) : 0;
                 const wybrane = wybory[sek.id] || [];
                 const pelne = sek.typ === "wybor" && wybrane.length === limit;
                 const empty = sek.typ === "wybor" && wybrane.length === 0;
                 return (
-                  <div key={sek.id} style={{ background: "white", border: `2px solid ${pelne ? "#86efac" : empty ? "#e2e8f0" : "#fde68a"}`, borderRadius: "11px", padding: "12px 14px", transition: "border-color 0.15s" }}>
+                  <div key={sek.id} style={{ background: "#f8fafc", border: `1px solid ${pelne ? "#86efac" : empty ? "#e2e8f0" : "#fde68a"}`, borderRadius: "8px", padding: "12px 14px", transition: "border-color 0.15s" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
-                      <div style={{ fontSize: "12px", fontWeight: 800, color: "#0f172a", flex: 1 }}>{sek.typ === "fixed" ? <span style={{ color: "#22c55e", marginRight: "5px" }}>✓</span> : <span style={{ color: pelne ? "#22c55e" : empty ? "#94a3b8" : "#f59e0b", marginRight: "5px" }}>{pelne ? "●" : empty ? "○" : "◐"}</span>}{sek.label.replace(/ \(.*\)/, "")}{sek.typ === "fixed" ? <span style={{ marginLeft: "6px", fontSize: "10px", color: "#94a3b8", fontWeight: 600 }}>— w cenie</span> : null}</div>
+                      <div style={{ fontSize: "12px", fontWeight: 600, color: "#111827", flex: 1 }}>{sek.typ === "fixed" ? <span style={{ color: "#22c55e", marginRight: "5px" }}>✓</span> : <span style={{ color: pelne ? "#22c55e" : empty ? "#64748b" : "#d97706", marginRight: "5px" }}>{pelne ? "●" : empty ? "○" : "◐"}</span>}{sek.label.replace(/ \(.*\)/, "")}{sek.typ === "fixed" ? <span style={{ marginLeft: "6px", fontSize: "10px", color: "#64748b", fontWeight: 600 }}>— w cenie</span> : null}</div>
                       {sek.typ === "wybor" && (
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <span style={{ background: pelne ? "#f0fdf4" : empty ? "#f8fafc" : "#fefce8", color: pelne ? "#166534" : empty ? "#94a3b8" : "#92400e", border: `1px solid ${pelne ? "#86efac" : empty ? "#e2e8f0" : "#fde68a"}`, borderRadius: "5px", padding: "2px 8px", fontSize: "11px", fontWeight: 800 }}>{pelne ? "✓ " : ""}{wybrane.length}/{limit}</span>
-                          {wybrane.length > 0 && <button onClick={() => clearSekcja(sek.id)} title="Wyczyść sekcję" style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: "11px", padding: "2px 4px", fontWeight: 700 }}>✕</button>}
+                          <span style={{ background: pelne ? "#f0fdf4" : empty ? "white" : "#fefce8", color: pelne ? "#166534" : empty ? "#64748b" : "#92400e", border: `1px solid ${pelne ? "#86efac" : empty ? "#e2e8f0" : "#fde68a"}`, borderRadius: "4px", padding: "2px 8px", fontSize: "11px", fontWeight: 600 }}>{pelne ? "✓ " : ""}{wybrane.length}/{limit}</span>
+                          {wybrane.length > 0 && <button onClick={() => clearSekcja(sek.id)} title="Wyczyść sekcję" style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", fontSize: "11px", padding: "2px 4px", fontWeight: 600 }}>✕</button>}
                         </div>
                       )}
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
                       {sek.dania.map((d: string) => {
-                        if (sek.typ === "fixed") return <span key={d} style={{ background: "#f1f5f9", color: "#374151", borderRadius: "6px", padding: "3px 9px", fontSize: "12px" }}>{d}</span>;
+                        if (sek.typ === "fixed") return <span key={d} style={{ background: "#f1f5f9", color: "#374151", borderRadius: "4px", padding: "3px 9px", fontSize: "12px" }}>{d}</span>;
                         const sel = wybrane.includes(d);
                         const zablok = !sel && pelne;
-                        return <button key={d} onClick={() => toggleWybor(sek.id, d, limit)} style={{ background: sel ? "#1e293b" : zablok ? "#f8fafc" : "white", border: `1.5px solid ${sel ? "#1e293b" : zablok ? "#f1f5f9" : "#d1d5db"}`, borderRadius: "7px", padding: "4px 10px", cursor: zablok ? "not-allowed" : "pointer", fontSize: "12px", fontWeight: sel ? 700 : 400, color: sel ? "white" : zablok ? "#cbd5e1" : "#374151", transition: "all 0.1s" }}>{sel ? "✓ " : ""}{d}</button>;
+                        return <button key={d} onClick={() => toggleWybor(sek.id, d, limit)} style={{ background: sel ? "#3b82f6" : zablok ? "#f8fafc" : "white", border: `1px solid ${sel ? "#3b82f6" : zablok ? "#f1f5f9" : "#e2e8f0"}`, borderRadius: "4px", padding: "4px 10px", cursor: zablok ? "not-allowed" : "pointer", fontSize: "12px", fontWeight: sel ? 600 : 400, color: sel ? "white" : zablok ? "#cbd5e1" : "#374151", transition: "border-color 0.1s" }}>{sel ? "✓ " : ""}{d}</button>;
                       })}
                     </div>
                     {pelne && sek.typ === "wybor" && <div style={{ marginTop: "7px", fontSize: "11px", color: "#166534", fontWeight: 600 }}>✓ Wybrano {limit} z {sek.dania.length} — odznacz danie aby zmienić</div>}
@@ -371,19 +371,19 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
           )}
           {pakiet && (pakiet.doplaty || []).length > 0 && (
             <div style={{ marginBottom: "12px" }}>
-              <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px", marginBottom: "8px" }}>DOPŁATY (opcjonalne)</div>
+              <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "8px" }}>DOPŁATY (opcjonalne)</div>
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                 {(pakiet.doplaty || []).map((d: { id: string; label: string; opis?: string; stala?: number; cena?: number; wybor?: boolean; limit?: number; opcje?: string[] }) => (
-                  <div key={d.id} style={{ background: "white", border: `2px solid ${doplaty[d.id] ? "#6366f1" : "#e2e8f0"}`, borderRadius: "10px", padding: "11px 14px", transition: "border-color 0.15s" }}>
+                  <div key={d.id} style={{ background: "#f8fafc", border: `1px solid ${doplaty[d.id] ? "#3b82f6" : "#e2e8f0"}`, borderRadius: "8px", padding: "11px 14px", transition: "border-color 0.15s" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <button onClick={() => toggleDoplata(d.id)} style={{ width: "22px", height: "22px", borderRadius: "6px", border: "none", flexShrink: 0, cursor: "pointer", fontSize: "13px", fontWeight: 900, background: doplaty[d.id] ? "#6366f1" : "#e2e8f0", color: doplaty[d.id] ? "white" : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>✓</button>
-                      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 700, color: "#0f172a" }}>{d.label}</div>{d.opis ? <div style={{ fontSize: "11px", color: "#64748b", marginTop: "1px" }}>{d.opis}</div> : null}</div>
-                      <span style={{ fontSize: "12px", fontWeight: 800, flexShrink: 0, color: d.stala ? "#0f172a" : "#6366f1", whiteSpace: "nowrap" }}>{d.stala ? fmtZl(d.stala) + " ryczałt" : (d.cena ?? 0) > 0 ? "+" + d.cena + " zł/os" : ""}</span>
+                      <button onClick={() => toggleDoplata(d.id)} style={{ width: "22px", height: "22px", borderRadius: "4px", border: "none", flexShrink: 0, cursor: "pointer", fontSize: "12px", fontWeight: 600, background: doplaty[d.id] ? "#3b82f6" : "#e2e8f0", color: doplaty[d.id] ? "white" : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>✓</button>
+                      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 600, color: "#111827" }}>{d.label}</div>{d.opis ? <div style={{ fontSize: "11px", color: "#64748b", marginTop: "1px" }}>{d.opis}</div> : null}</div>
+                      <span style={{ fontSize: "12px", fontWeight: 600, flexShrink: 0, color: d.stala ? "#111827" : "#1e40af", whiteSpace: "nowrap" }}>{d.stala ? fmtZl(d.stala) + " ryczałt" : (d.cena ?? 0) > 0 ? "+" + d.cena + " zł/os" : ""}</span>
                     </div>
                     {d.wybor && doplaty[d.id] && d.opcje && d.limit != null && (
                       <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
-                        <div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 700, marginBottom: "6px" }}>Wybierz {d.limit} z {d.opcje.length}: <span style={{ marginLeft: "8px", fontWeight: 900, color: (dopWybory[d.id] || []).length === d.limit ? "#166534" : "#92400e" }}>{(dopWybory[d.id] || []).length}/{d.limit}</span></div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>{d.opcje.map((o: string) => { const sel = (dopWybory[d.id] || []).includes(o); const dLimit = d.limit ?? 0; const peln = !sel && (dopWybory[d.id] || []).length >= dLimit; return <button key={o} onClick={() => toggleDopWybor(d.id, o, dLimit)} style={{ background: sel ? "#6366f1" : peln ? "#f8fafc" : "white", border: `1.5px solid ${sel ? "#6366f1" : peln ? "#f1f5f9" : "#d1d5db"}`, borderRadius: "6px", padding: "4px 10px", cursor: peln ? "not-allowed" : "pointer", fontSize: "12px", fontWeight: sel ? 700 : 400, color: sel ? "white" : peln ? "#cbd5e1" : "#374151" }}>{sel ? "✓ " : ""}{o}</button>; })}</div>
+                        <div style={{ fontSize: "10px", color: "#64748b", fontWeight: 600, marginBottom: "6px" }}>Wybierz {d.limit} z {d.opcje.length}: <span style={{ marginLeft: "8px", fontWeight: 600, color: (dopWybory[d.id] || []).length === d.limit ? "#166534" : "#92400e" }}>{(dopWybory[d.id] || []).length}/{d.limit}</span></div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>{d.opcje.map((o: string) => { const sel = (dopWybory[d.id] || []).includes(o); const dLimit = d.limit ?? 0; const peln = !sel && (dopWybory[d.id] || []).length >= dLimit; return <button key={o} onClick={() => toggleDopWybor(d.id, o, dLimit)} style={{ background: sel ? "#3b82f6" : peln ? "#f8fafc" : "white", border: `1px solid ${sel ? "#3b82f6" : peln ? "#f1f5f9" : "#e2e8f0"}`, borderRadius: "4px", padding: "4px 10px", cursor: peln ? "not-allowed" : "pointer", fontSize: "12px", fontWeight: sel ? 600 : 400, color: sel ? "white" : peln ? "#cbd5e1" : "#374151" }}>{sel ? "✓ " : ""}{o}</button>; })}</div>
                       </div>
                     )}
                   </div>
@@ -393,32 +393,31 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
           )}
           {pakiet && (
             <div style={{ marginBottom: "12px" }}>
-              <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px", marginBottom: "8px" }}>NOTATKA (opcjonalna)</div>
-              <textarea value={notatka} onChange={(e) => setNotatka(e.target.value)} placeholder="Tort urodzinowy od klienta, alergeny, prośby specjalne, ustalenia z klientem..." style={{ width: "100%", minHeight: "72px", padding: "10px 12px", border: "2px solid #e2e8f0", borderRadius: "9px", fontSize: "13px", resize: "vertical", fontFamily: "inherit", lineHeight: 1.6, outline: "none", boxSizing: "border-box" }} />
+              <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "8px" }}>NOTATKA (opcjonalna)</div>
+              <textarea value={notatka} onChange={(e) => setNotatka(e.target.value)} placeholder="Tort urodzinowy od klienta, alergeny, prośby specjalne, ustalenia z klientem..." style={{ width: "100%", minHeight: "72px", padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "13px", resize: "vertical", fontFamily: "inherit", lineHeight: 1.6, outline: "none", boxSizing: "border-box" }} />
             </div>
           )}
           {pakiet && (
-            <div style={{ background: cena.total != null ? "#f0fdf4" : "#f8fafc", border: `2px solid ${cena.total != null ? "#86efac" : "#e2e8f0"}`, borderRadius: "11px", padding: "14px" }}>
-              <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px", marginBottom: "10px" }}>KALKULATOR CENY</div>
+            <div style={{ background: "#f8fafc", border: `1px solid ${cena.total != null ? "#e2e8f0" : "#e2e8f0"}`, borderRadius: "8px", padding: "14px" }}>
+              <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "10px" }}>KALKULATOR CENY</div>
               <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px" }}><span style={{ color: "#374151" }}>{pakiet.nazwa}</span><span style={{ fontWeight: 700 }}>{pakiet.cena} zł/os</span></div>
-                {(pakiet.doplaty || []).filter((d) => doplaty[d.id] && !d.stala && (d.cena ?? 0) > 0).map((d) => <div key={d.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#6366f1" }}><span>+ {d.label}</span><span style={{ fontWeight: 700 }}>+{(d.cena ?? 0)} zł/os</span></div>)}
-                {cena.dop > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: 800, borderTop: "1px dashed #e2e8f0", paddingTop: "4px", marginTop: "2px", color: "#0f172a" }}><span>Łącznie na osobę</span><span>{cena.perOsoba} zł</span></div>}
-                {effGuests != null && effGuests > 0 ? <>{(pakiet.doplaty || []).filter((d) => doplaty[d.id] && d.stala).map((d) => <div key={d.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#6366f1" }}><span>+ {d.label} (ryczałt)</span><span style={{ fontWeight: 700 }}>+{fmtZl(d.stala ?? 0)}</span></div>)}<div style={{ display: "flex", justifyContent: "space-between", fontSize: "20px", fontWeight: 900, color: "#166534", borderTop: "2px solid #86efac", paddingTop: "10px", marginTop: "6px" }}><span>RAZEM</span><span>{fmtZl(cena.total)}</span></div></> : <div style={{ color: "#94a3b8", fontSize: "12px", fontStyle: "italic", borderTop: "1px solid #e2e8f0", paddingTop: "8px", marginTop: "4px" }}>Zmień liczbę gości powyżej aby zobaczyć łączną kwotę</div>}
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px" }}><span style={{ color: "#374151" }}>{pakiet.nazwa}</span><span style={{ fontWeight: 600 }}>{pakiet.cena} zł/os</span></div>
+                {(pakiet.doplaty || []).filter((d) => doplaty[d.id] && !d.stala && (d.cena ?? 0) > 0).map((d) => <div key={d.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#64748b" }}><span>+ {d.label}</span><span style={{ fontWeight: 600 }}>+{(d.cena ?? 0)} zł/os</span></div>)}
+                {cena.dop > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: 600, borderTop: "1px dashed #e2e8f0", paddingTop: "4px", marginTop: "2px", color: "#111827" }}><span>Łącznie na osobę</span><span>{cena.perOsoba} zł</span></div>}
+                {effGuests != null && effGuests > 0 ? <>{(pakiet.doplaty || []).filter((d) => doplaty[d.id] && d.stala).map((d) => <div key={d.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#64748b" }}><span>+ {d.label} (ryczałt)</span><span style={{ fontWeight: 600 }}>+{fmtZl(d.stala ?? 0)}</span></div>)}<div style={{ display: "flex", justifyContent: "space-between", fontSize: "18px", fontWeight: 700, color: "#111827", borderTop: "1px solid #e2e8f0", paddingTop: "10px", marginTop: "6px" }}><span>RAZEM</span><span>{fmtZl(cena.total)}</span></div></> : <div style={{ color: "#64748b", fontSize: "12px", fontStyle: "italic", borderTop: "1px solid #e2e8f0", paddingTop: "8px", marginTop: "4px" }}>Zmień liczbę gości powyżej aby zobaczyć łączną kwotę</div>}
               </div>
             </div>
           )}
         </>
       )}
       {confirmReset && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ background: "white", borderRadius: "16px", padding: "26px", width: "340px", boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
-            <div style={{ fontSize: "28px", textAlign: "center", marginBottom: "10px" }}>⚠️</div>
-            <div style={{ fontSize: "16px", fontWeight: 900, textAlign: "center", marginBottom: "8px", color: "#0f172a" }}>Zmienić pakiet?</div>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ background: "white", borderRadius: "8px", padding: "24px", width: "340px", boxShadow: "0 4px 24px rgba(0,0,0,0.12)", border: "1px solid #e5e5e5" }}>
+            <div style={{ fontSize: "16px", fontWeight: 700, textAlign: "center", marginBottom: "8px", color: "#111827" }}>Zmienić pakiet?</div>
             <div style={{ fontSize: "13px", color: "#64748b", textAlign: "center", lineHeight: 1.6, marginBottom: "20px" }}>Zmiana pakietu usunie wszystkie dotychczas wybrane dania i dopłaty.</div>
             <div style={{ display: "flex", gap: "10px" }}>
-              <button onClick={() => setConfirmReset(null)} style={{ flex: 1, background: "white", border: "2px solid #e2e8f0", borderRadius: "9px", padding: "11px", cursor: "pointer", fontSize: "13px", fontWeight: 700, color: "#374151" }}>Zostań</button>
-              <button onClick={() => doChangePakiet(confirmReset)} style={{ flex: 1, background: "#ef4444", color: "white", border: "none", borderRadius: "9px", padding: "11px", cursor: "pointer", fontSize: "13px", fontWeight: 900 }}>Tak, zmień</button>
+              <button onClick={() => setConfirmReset(null)} style={{ flex: 1, background: "white", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "10px", cursor: "pointer", fontSize: "13px", fontWeight: 600, color: "#374151" }}>Zostań</button>
+              <button onClick={() => doChangePakiet(confirmReset)} style={{ flex: 1, background: "#ef4444", color: "white", border: "none", borderRadius: "4px", padding: "10px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>Tak, zmień</button>
             </div>
           </div>
         </div>

@@ -881,7 +881,7 @@ export async function createReservation(
     });
 
     revalidatePath("/front-office");
-    revalidateTapeChartCache();
+    await revalidateTapeChartCache();
     return {
       success: true,
       data: toUiReservation(resToReturn),
@@ -3161,7 +3161,7 @@ export async function updateReservation(
     });
 
     revalidatePath("/front-office");
-    revalidateTapeChartCache(); // Cache 30 s inaczej nadpisywałby stare dane (np. rateCodePrice)
+    await revalidateTapeChartCache(); // Cache 30 s inaczej nadpisywałby stare dane (np. rateCodePrice)
     return { success: true, data: toUiReservation(finalUpdated) };
   } catch (e) {
     return {
@@ -3281,7 +3281,7 @@ export async function splitReservation(
     ]);
 
     revalidatePath("/front-office");
-    revalidateTapeChartCache();
+    await revalidateTapeChartCache();
     return {
       success: true,
       data: {
@@ -3432,7 +3432,7 @@ export async function updateReservationStatus(
 
     revalidatePath("/front-office");
     revalidatePath("/housekeeping");
-    revalidateTapeChartCache();
+    await revalidateTapeChartCache();
     return { success: true, data: toUiReservation(updated) };
   } catch (e) {
     return {
@@ -3553,7 +3553,7 @@ export async function deleteReservation(reservationId: string, cancellationReaso
     });
 
     revalidatePath("/front-office");
-    revalidateTapeChartCache();
+    await revalidateTapeChartCache();
     return { success: true, data: undefined };
   } catch (e) {
     return {
