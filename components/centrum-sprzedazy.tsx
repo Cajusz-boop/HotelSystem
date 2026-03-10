@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { MenuTab } from "@/components/events/menu-modul";
 import { EventFormTabs, EMPTY_EVENT_FORM, type EventFormTabState } from "@/components/events/event-form-tabs";
+import { MenuPackagesView } from "@/components/centrum-sprzedazy/menu-packages-view";
 
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
@@ -278,12 +279,12 @@ const isWknd = (y: number, m: number, d: number) => {
 };
 
 function dayBadge(days: number) {
-  if (days < 0) return { t: `${Math.abs(days)}d temu`, bg: "#e2e8f0", tx: "#64748b", hot: false };
+  if (days < 0) return { t: `${Math.abs(days)}d temu`, bg: "#e2e8f0", tx: "#374151", hot: false };
   if (days === 0) return { t: "DZIŚ!", bg: "#ef4444", tx: "#fff", hot: true };
   if (days === 1) return { t: "JUTRO", bg: "#f97316", tx: "#fff", hot: true };
   if (days <= 7) return { t: `za ${days}d`, bg: "#fef3c7", tx: "#92400e", hot: true };
   if (days <= 30) return { t: `za ${days}d`, bg: "#dbeafe", tx: "#1e40af", hot: false };
-  return { t: `za ${days}d`, bg: "#f1f5f9", tx: "#64748b", hot: false };
+  return { t: `za ${days}d`, bg: "#f1f5f9", tx: "#374151", hot: false };
 }
 function plural(n: number) {
   return n === 1 ? "1 impreza" : n < 5 ? `${n} imprezy` : `${n} imprez`;
@@ -368,7 +369,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function PhoneBtn({ phone, client, date, compact }: { phone: string | null; client?: string | null; date?: string | null; compact?: boolean }) {
   const [copied, setCopied] = useState(false);
-  if (!phone) return <span style={{ fontSize: "11px", color: "#666" }}>—</span>;
+  if (!phone) return <span style={{ fontSize: "11px", color: "#111827" }}>—</span>;
   const copy = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -385,17 +386,17 @@ function PhoneBtn({ phone, client, date, compact }: { phone: string | null; clie
   if (compact) {
     return (
       <div onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-        <a href={`tel:${tel}`} style={{ fontSize: "12px", color: "#1976d2", textDecoration: "none", fontWeight: 500 }}>{phone}</a>
+        <a href={`tel:${tel}`} style={{ fontSize: "15px", color: "#1976d2", textDecoration: "none", fontWeight: 500 }}>{phone}</a>
         <a href={`https://wa.me/${waNum}?text=${waText}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", color: "#25d366", fontWeight: 600, textDecoration: "none", border: "1px solid #25d366", borderRadius: "3px", padding: "1px 6px" }}>WhatsApp</a>
-        <a href={`sms:${tel}?body=${smsBody}`} style={{ fontSize: "11px", color: "#666", textDecoration: "none", border: "1px solid #ddd", borderRadius: "3px", padding: "1px 6px" }}>SMS</a>
-        <button onClick={copy} title="Kopiuj numer" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "11px", color: copied ? "#2e7d32" : "#555" }}>{copied ? "✓" : "⎘"}</button>
+        <a href={`sms:${tel}?body=${smsBody}`} style={{ fontSize: "11px", color: "#111827", textDecoration: "none", border: "1px solid #ddd", borderRadius: "3px", padding: "1px 6px" }}>SMS</a>
+        <button onClick={copy} title="Kopiuj numer" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "11px", color: copied ? "#2e7d32" : "#374151" }}>{copied ? "✓" : "⎘"}</button>
       </div>
     );
   }
   return (
     <div onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center" }}>
       <a href={`tel:${tel}`} style={{ fontSize: "12px", color: "#1976d2", textDecoration: "none", fontWeight: 500 }}>{phone}</a>
-      <button onClick={copy} title="Kopiuj numer" style={{ marginLeft: "4px", background: "none", border: "none", cursor: "pointer", fontSize: "11px", color: copied ? "#2e7d32" : "#555" }}>{copied ? "✓" : "⎘"}</button>
+      <button onClick={copy} title="Kopiuj numer" style={{ marginLeft: "4px", background: "none", border: "none", cursor: "pointer", fontSize: "11px", color: copied ? "#2e7d32" : "#374151" }}>{copied ? "✓" : "⎘"}</button>
     </div>
   );
 }
@@ -418,7 +419,7 @@ function DepositChip({
             onToggle(ev.id);
           }}
           title={ev.paid ? "Kliknij: oznacz jako NIEopłacony" : "Kliknij: oznacz jako OPŁACONY"}
-          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: "12px", fontWeight: 600, color: ev.paid ? "#2e7d32" : "#c62828", whiteSpace: "nowrap" }}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: "15px", fontWeight: 600, color: ev.paid ? "#2e7d32" : "#c62828", whiteSpace: "nowrap" }}
         >
           {ev.paid ? "✓" : "—"} {fmtZl(ev.deposit)}
         </button>
@@ -434,7 +435,7 @@ function DepositChip({
         e.stopPropagation();
         onOpen(ev.id);
       }}
-      style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: "11px", color: "#666" }}
+      style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: "15px", color: "#111827" }}
     >
       + zadatek
     </button>
@@ -479,19 +480,19 @@ function DepositModal({
           <div style={{ fontSize: "14px", fontWeight: 700, color: "#1e1e1e" }}>{existingAmt != null ? "Zmień zadatek" : "Dodaj zadatek"}</div>
         </div>
         <div style={{ padding: "16px 18px" }}>
-          <label style={{ fontSize: "11px", fontWeight: 600, color: "#4a4a4a", display: "block", marginBottom: "4px" }}>Kwota (zł)</label>
+          <label style={{ fontSize: "11px", fontWeight: 600, color: "#111827", display: "block", marginBottom: "4px" }}>Kwota (zł)</label>
           <input ref={inp} type="text" inputMode="decimal" value={amt} onChange={(e) => setAmt(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} placeholder="np. 1500,50" style={{ width: "100%", padding: "8px 12px", boxSizing: "border-box", border: "1px solid #ddd", borderRadius: "4px", fontSize: "14px", outline: "none" }} />
-          <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>Wpisz kwotę z przecinkiem lub kropką</div>
+          <div style={{ fontSize: "10px", color: "#111827", marginTop: "4px" }}>Wpisz kwotę z przecinkiem lub kropką</div>
         </div>
         <div style={{ display: "flex", gap: "8px", marginBottom: "16px", padding: "0 18px" }}>
           {[true, false].map((p) => (
-            <button key={String(p)} onClick={() => setPaid(p)} style={{ flex: 1, padding: "8px", border: `1px solid ${p === paid ? (p ? "#a5d6a7" : "#ffcc80") : "#e5e5e5"}`, background: p === paid ? (p ? "#e8f5e9" : "#fff3e0") : "white", borderRadius: "3px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: p === paid ? (p ? "#2e7d32" : "#e65100") : "#555" }}>
+            <button key={String(p)} onClick={() => setPaid(p)} style={{ flex: 1, padding: "8px", border: `1px solid ${p === paid ? (p ? "#a5d6a7" : "#ffcc80") : "#e5e5e5"}`, background: p === paid ? (p ? "#e8f5e9" : "#fff3e0") : "white", borderRadius: "3px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: p === paid ? (p ? "#2e7d32" : "#e65100") : "#374151" }}>
               {p ? "Opłacony" : "Nieopłacony"}
             </button>
           ))}
         </div>
         <div style={{ padding: "12px 18px", borderTop: "1px solid #e5e5e5", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, color: "#4a4a4a", cursor: "pointer" }}>Anuluj</button>
+          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, color: "#111827", cursor: "pointer" }}>Anuluj</button>
           <button onClick={save} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "6px 16px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Zapisz</button>
         </div>
       </div>
@@ -509,11 +510,11 @@ function CancelConfirmModal({ clientName, onConfirm, onClose }: { clientName: st
         <div style={{ padding: "16px 20px", borderBottom: "1px solid #e5e5e5" }}>
           <div style={{ fontSize: "16px", fontWeight: 700, color: "#1e1e1e" }}>Anulować imprezę?</div>
         </div>
-        <div style={{ padding: "16px 20px", fontSize: "13px", color: "#555", lineHeight: 1.6 }}>
+        <div style={{ padding: "16px 20px", fontSize: "13px", color: "#111827", lineHeight: 1.6 }}>
           <strong style={{ color: "#1e1e1e" }}>{clientName ?? "—"}</strong> — status zostanie zmieniony na ANULOWANE. Możesz przywrócić imprezę później.
         </div>
         <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e5e5", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, color: "#444", cursor: "pointer" }}>Wróć</button>
+          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, color: "#111827", cursor: "pointer" }}>Wróć</button>
           <button onClick={onConfirm} style={{ background: "#c62828", color: "white", border: "none", borderRadius: "4px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Tak, anuluj</button>
         </div>
       </div>
@@ -539,7 +540,7 @@ function CreateEventField({ label, value, onChange, placeholder, type = "text", 
 }) {
   return (
     <div style={{ marginBottom: compact ? "0" : "16px" }}>
-      <label style={{ fontSize: "11px", fontWeight: 700, color: "#4a4a4a", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>{label}</label>
+      <label style={{ fontSize: "11px", fontWeight: 700, color: "#111827", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>{label}</label>
       <input type={type} value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
         style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "4px", fontSize: "13px", outline: "none", fontFamily: "inherit" }}
         onFocus={(e) => { e.currentTarget.style.borderColor = "#999"; }}
@@ -813,14 +814,14 @@ function CreateEventModal({
             <span style={{ fontSize: "10px", color: "#f57c00", fontWeight: 600, border: "1px solid #f57c0033", borderRadius: "3px", padding: "1px 6px" }}>Nowa</span>
           </div>
           <div style={{ fontSize: "16px", fontWeight: 700, color: "#1e1e1e" }}>Nowa impreza</div>
-          {form.eventDate && <div style={{ fontSize: "12px", color: "#555", marginTop: "2px" }}>{fmtLong(form.eventDate)}</div>}
+          {form.eventDate && <div style={{ fontSize: "12px", color: "#111827", marginTop: "2px" }}>{fmtLong(form.eventDate)}</div>}
         </div>
         <div style={{ display: "flex", borderBottom: "1px solid #e5e5e5", padding: "0 20px", flexShrink: 0 }}>
           {(["dane", "goscie", "menu", "szczegoly"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              style={{ padding: "8px 16px", border: "none", background: "transparent", borderBottom: tab === t ? "2px solid #1e1e1e" : "2px solid transparent", color: tab === t ? "#1e1e1e" : "#555", fontSize: "13px", fontWeight: tab === t ? 700 : 500, cursor: "pointer", marginBottom: "-1px" }}
+              style={{ padding: "8px 16px", border: "none", background: "transparent", borderBottom: tab === t ? "2px solid #1e1e1e" : "2px solid transparent", color: tab === t ? "#1e1e1e" : "#374151", fontSize: "13px", fontWeight: tab === t ? 700 : 500, cursor: "pointer", marginBottom: "-1px" }}
             >
               {t === "dane" ? "Dane" : t === "goscie" ? "Goście i czas" : t === "menu" ? "Menu i tort" : "Szczegóły"}
             </button>
@@ -830,7 +831,7 @@ function CreateEventModal({
           <EventFormTabs tab={tab} form={form} update={updateForm} menuData={menuData} onMenuSave={(d) => { setMenuData(d); showToast("Menu zapisane"); }} evForMenu={evForMenu} />
         </div>
         <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e5e5", display: "flex", gap: "8px", justifyContent: "flex-end", flexShrink: 0 }}>
-          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "8px 16px", fontSize: "12px", fontWeight: 600, color: "#4a4a4a", cursor: "pointer" }}>Anuluj</button>
+          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "8px 16px", fontSize: "12px", fontWeight: 600, color: "#111827", cursor: "pointer" }}>Anuluj</button>
           <button onClick={handleSave} disabled={saving} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "8px 20px", fontSize: "12px", fontWeight: 600, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>{saving ? "Zapisuję..." : "Zapisz imprezę"}</button>
         </div>
       </div>
@@ -962,14 +963,14 @@ function EventDetailModal({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center", marginBottom: "4px" }}>
                   <TypeBadge type={ev.type} pop={ev.pop} room={ev.room} />
-                  {ev.eventNumber && <span style={{ fontSize: "11px", color: "#999", fontWeight: 500 }}>{ev.eventNumber}</span>}
+                  {ev.eventNumber && <span style={{ fontSize: "11px", color: "#111827", fontWeight: 500 }}>{ev.eventNumber}</span>}
                   <StatusBadge status={ev.status} />
                   <span style={{ background: db.bg, color: db.tx, borderRadius: "3px", padding: "1px 6px", fontSize: "10px", fontWeight: 600 }}>{db.t}</span>
                 </div>
                 <div style={{ fontSize: "16px", fontWeight: 700, color: "#1e1e1e", lineHeight: 1.25, wordBreak: "break-word" }}>{ev.client ?? "—"}</div>
-                <div style={{ fontSize: "12px", color: "#555", marginTop: "2px" }}>{fmtLong(ev.date)}{(ev.tf || ev.tt) ? ` · ${ev.tf ?? "?"}–${ev.tt ?? "?"}` : ""}{ev.assignedTo && <span style={{ marginLeft: "8px", fontSize: "10px", color: "#999" }}>👤 {ev.assignedTo}</span>}</div>
+                <div style={{ fontSize: "12px", color: "#111827", marginTop: "2px" }}>{fmtLong(ev.date)}{(ev.tf || ev.tt) ? ` · ${ev.tf ?? "?"}–${ev.tt ?? "?"}` : ""}{ev.assignedTo && <span style={{ marginLeft: "8px", fontSize: "10px", color: "#111827" }}>👤 {ev.assignedTo}</span>}</div>
               </div>
-              <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "20px", color: "#666", cursor: "pointer", alignSelf: "flex-start" }}>×</button>
+              <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "20px", color: "#111827", cursor: "pointer", alignSelf: "flex-start" }}>×</button>
             </div>
           </div>
           <div style={{ display: "flex", borderBottom: "1px solid #e5e5e5", marginLeft: "20px", marginRight: "20px", gap: "0" }}>
@@ -988,7 +989,7 @@ function EventDetailModal({
                   cursor: "pointer",
                   fontSize: "12px",
                   fontWeight: zakladka === t ? 700 : 500,
-                  color: zakladka === t ? "#1e1e1e" : "#999",
+                  color: zakladka === t ? "#1e1e1e" : "#374151",
                   marginBottom: "-1px",
                 }}
               >
@@ -1006,12 +1007,12 @@ function EventDetailModal({
                   return (
                     <label key={item.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 0", borderBottom: "1px solid #f5f5f5", cursor: "pointer" }}>
                       <input type="checkbox" checked={checked} disabled={!!autoChecked} onChange={() => { if (!autoChecked) handleChecklistToggle(item.id, !manualChecked); }} />
-                      <span style={{ fontSize: "12px", color: checked ? "#2e7d32" : "#999", textDecoration: checked ? "line-through" : "none" }}>{item.label}</span>
-                      {autoChecked && <span style={{ fontSize: "9px", color: "#bbb" }}>auto</span>}
+                      <span style={{ fontSize: "12px", color: checked ? "#2e7d32" : "#374151", textDecoration: checked ? "line-through" : "none" }}>{item.label}</span>
+                      {autoChecked && <span style={{ fontSize: "9px", color: "#111827" }}>auto</span>}
                     </label>
                   );
                 })}
-                <div style={{ marginTop: "8px", fontSize: "11px", color: "#888" }}>
+                <div style={{ marginTop: "8px", fontSize: "11px", color: "#111827" }}>
                   {CHECKLIST_ITEMS.filter((i) => (i.auto ? i.auto(ev) : false) || ev.checklist?.[i.id]).length}/{CHECKLIST_ITEMS.length} gotowe
                 </div>
               </div>
@@ -1030,10 +1031,10 @@ function EventDetailModal({
               <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
                 <a href={`tel:${ev.phone.replace(/\s/g, "")}`} style={{ fontSize: "12px", color: "#1976d2", textDecoration: "none" }}>📞 {ev.phone}</a>
                 <a href={`https://wa.me/${ev.phone.replace(/[\s\+\-]/g, "").replace(/^0/, "48")}?text=${encodeURIComponent(`Dzień dobry, ${ev.client || ""}. W sprawie rezerwacji na ${fmtDate(ev.date)} w Hotelu Łabędź.`)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", color: "#25d366", fontWeight: 600, textDecoration: "none", border: "1px solid #25d366", borderRadius: "3px", padding: "4px 10px" }}>WhatsApp</a>
-                <a href={`sms:${ev.phone.replace(/\s/g, "")}?body=${encodeURIComponent(`Hotel Łabędź - dot. imprezy ${fmtDate(ev.date)}`)}`} style={{ fontSize: "11px", color: "#666", textDecoration: "none", border: "1px solid #ddd", borderRadius: "3px", padding: "4px 10px" }}>SMS</a>
+                <a href={`sms:${ev.phone.replace(/\s/g, "")}?body=${encodeURIComponent(`Hotel Łabędź - dot. imprezy ${fmtDate(ev.date)}`)}`} style={{ fontSize: "11px", color: "#111827", textDecoration: "none", border: "1px solid #ddd", borderRadius: "3px", padding: "4px 10px" }}>SMS</a>
               </div>
             ) : (
-              <div style={{ background: "#f8fafc", border: "2px dashed #e2e8f0", borderRadius: "12px", padding: "12px", textAlign: "center", color: "#475569", fontSize: "13px" }}>📵 Brak numeru telefonu</div>
+              <div style={{ background: "#f8fafc", border: "2px dashed #e2e8f0", borderRadius: "12px", padding: "12px", textAlign: "center", color: "#111827", fontSize: "13px" }}>📵 Brak numeru telefonu</div>
             )}
             {ev.email && (
               <div style={{ display: "flex", gap: "6px", alignItems: "center", padding: "10px 14px", background: "#f8fafc", borderRadius: "12px" }}>
@@ -1041,32 +1042,32 @@ function EventDetailModal({
                 <button
                   type="button"
                   onClick={() => navigator.clipboard.writeText(ev.email!).then(() => showToast("Email skopiowany"))}
-                  style={{ fontSize: "10px", color: "#999", background: "white", border: "1px solid #ddd", borderRadius: "3px", padding: "2px 6px", cursor: "pointer" }}
+                  style={{ fontSize: "10px", color: "#111827", background: "white", border: "1px solid #ddd", borderRadius: "3px", padding: "2px 6px", cursor: "pointer" }}
                 >Kopiuj</button>
               </div>
             )}
             <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
-              <div style={{ fontSize: "10px", fontWeight: 900, color: "#475569", letterSpacing: "2px", marginBottom: "9px" }}>STATUS</div>
+              <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "9px" }}>STATUS</div>
               <div style={{ display: "flex", gap: "8px" }}>
                 {["CONFIRMED", "DRAFT", "DONE"].map((s) => (
-                  <button key={s} onClick={() => doStatus(s)} style={{ flex: 1, padding: "9px 12px", background: ev.status === s ? SC[s].bg : "white", border: `2px solid ${ev.status === s ? SC[s].bd : "#e2e8f0"}`, borderRadius: "9px", cursor: "pointer", fontSize: "13px", fontWeight: 800, color: ev.status === s ? SC[s].tx : "#64748b", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                  <button key={s} onClick={() => doStatus(s)} style={{ flex: 1, padding: "9px 12px", background: ev.status === s ? SC[s].bg : "white", border: `2px solid ${ev.status === s ? SC[s].bd : "#e2e8f0"}`, borderRadius: "9px", cursor: "pointer", fontSize: "13px", fontWeight: 800, color: ev.status === s ? SC[s].tx : "#374151", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
                     <StatusDot status={s} />{SC[s].label}{ev.status === s ? " ✓" : ""}
                   </button>
                 ))}
               </div>
             </div>
             <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
-              <div style={{ fontSize: "10px", fontWeight: 900, color: "#475569", letterSpacing: "2px", marginBottom: "9px" }}>SZCZEGÓŁY</div>
+              <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "9px" }}>SZCZEGÓŁY</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                 {[["🏛 Sala", ev.room ?? "—"], ["👥 Goście", ev.guests ? ev.guests + " osób" : "—"], ["⏰ Godziny", (ev.tf || ev.tt) ? `${ev.tf ?? "?"}–${ev.tt ?? "?"}` : "—"], ["📊 Status", SC[ev.status]?.label ?? "—"]].map(([l, v]) => (
-                  <div key={l}><div style={{ fontSize: "10px", color: "#475569", fontWeight: 700, marginBottom: "2px" }}>{l}</div><div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>{v}</div></div>
+                  <div key={l}><div style={{ fontSize: "10px", color: "#111827", fontWeight: 700, marginBottom: "2px" }}>{l}</div><div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>{v}</div></div>
                 ))}
               </div>
             </div>
             <>
             <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "9px" }}>
-                <div style={{ fontSize: "10px", fontWeight: 900, color: "#475569", letterSpacing: "2px" }}>ZADATEK</div>
+                <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px" }}>ZADATEK</div>
                 <button onClick={() => setShowDep(true)} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "7px", padding: "4px 10px", cursor: "pointer", fontSize: "11px", fontWeight: 700, color: "#3b82f6" }}>{ev.deposit != null ? "✏️ Zmień" : "+ Dodaj"}</button>
               </div>
               {ev.deposit != null ? (
@@ -1078,25 +1079,25 @@ function EventDetailModal({
                   <button onClick={doToggleDep} style={{ background: ev.paid ? "#fef2f2" : "#f0fdf4", border: `1.5px solid ${ev.paid ? "#fca5a5" : "#86efac"}`, borderRadius: "9px", padding: "7px 14px", cursor: "pointer", fontSize: "12px", fontWeight: 800, color: ev.paid ? "#991b1b" : "#166534" }}>{ev.paid ? "↩ Cofnij" : "✅ Oznacz opłacony"}</button>
                 </div>
               ) : (
-                <div style={{ color: "#475569", fontSize: "13px", fontStyle: "italic" }}>Brak zadatku — kliknij Dodaj</div>
+                <div style={{ color: "#111827", fontSize: "13px", fontStyle: "italic" }}>Brak zadatku — kliknij Dodaj</div>
               )}
             </div>
             <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "9px" }}>
-                <div style={{ fontSize: "10px", fontWeight: 900, color: "#475569", letterSpacing: "2px" }}>NOTATKA</div>
-                {!editNote && <button onClick={() => setEditNote(true)} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "7px", padding: "4px 10px", cursor: "pointer", fontSize: "11px", fontWeight: 700, color: "#64748b" }}>✏️ Edytuj</button>}
+                <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px" }}>NOTATKA</div>
+                {!editNote && <button onClick={() => setEditNote(true)} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "7px", padding: "4px 10px", cursor: "pointer", fontSize: "11px", fontWeight: 700, color: "#111827" }}>✏️ Edytuj</button>}
               </div>
               {editNote ? (
                 <div>
                   <textarea ref={noteRef} value={noteText} onChange={(e) => setNoteText(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setEditNote(false); } if (e.key === "Enter" && e.ctrlKey) doSaveNote(); }} style={{ width: "100%", minHeight: "80px", padding: "10px", border: "2px solid #3b82f6", borderRadius: "9px", fontSize: "13px", resize: "vertical", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.6, outline: "none" }} />
                   <div style={{ display: "flex", gap: "8px", marginTop: "8px", alignItems: "center" }}>
                     <button onClick={doSaveNote} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "8px", padding: "8px 18px", cursor: "pointer", fontSize: "13px", fontWeight: 800 }}>Zapisz</button>
-                    <button onClick={() => { setEditNote(false); setNoteText(ev.notes ?? ""); }} style={{ background: "white", border: "1.5px solid #e2e8f0", borderRadius: "8px", padding: "8px 14px", cursor: "pointer", fontSize: "13px", color: "#64748b" }}>Anuluj</button>
-                    <span style={{ fontSize: "11px", color: "#475569" }}>Ctrl+Enter</span>
+                    <button onClick={() => { setEditNote(false); setNoteText(ev.notes ?? ""); }} style={{ background: "white", border: "1.5px solid #e2e8f0", borderRadius: "8px", padding: "8px 14px", cursor: "pointer", fontSize: "13px", color: "#111827" }}>Anuluj</button>
+                    <span style={{ fontSize: "11px", color: "#111827" }}>Ctrl+Enter</span>
                   </div>
                 </div>
               ) : (
-                <div onClick={() => setEditNote(true)} style={{ fontSize: "13px", color: ev.notes ? "#0f172a" : "#94a3b8", lineHeight: 1.6, cursor: "text", whiteSpace: "pre-wrap", minHeight: "32px", padding: "8px", background: "white", border: "1.5px dashed #e2e8f0", borderRadius: "8px" }}>{ev.notes || "Brak notatki — kliknij aby dodać..."}</div>
+                <div onClick={() => setEditNote(true)} style={{ fontSize: "13px", color: ev.notes ? "#0f172a" : "#374151", lineHeight: 1.6, cursor: "text", whiteSpace: "pre-wrap", minHeight: "32px", padding: "8px", background: "white", border: "1.5px dashed #e2e8f0", borderRadius: "8px" }}>{ev.notes || "Brak notatki — kliknij aby dodać..."}</div>
               )}
             </div>
             </>
@@ -1135,7 +1136,7 @@ function EventDetailModal({
                       showToast("Błąd tworzenia kosztorysu", "err");
                     }
                   }}
-                  style={{ background: "white", border: "1px solid #ddd", borderRadius: "7px", padding: "6px 14px", fontSize: "11px", fontWeight: 600, color: "#666", cursor: "pointer" }}
+                  style={{ background: "white", border: "1px solid #ddd", borderRadius: "7px", padding: "6px 14px", fontSize: "11px", fontWeight: 600, color: "#111827", cursor: "pointer" }}
                 >📋 Utwórz kosztorys</button>
               </div>
             )}
@@ -1212,16 +1213,16 @@ function EventDetailModal({
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
               <button onClick={() => { setEditForm(evToFullForm(ev)); setEditMode(true); setZakladka("dane"); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1.5px solid #e2e8f0", borderRadius: "10px", padding: "12px", fontSize: "13px", fontWeight: 700, color: "#0f172a", cursor: "pointer" }}>✏️ Edytuj</button>
               <div style={{ marginTop: "12px", padding: "8px 12px", background: "#f9fafb", borderRadius: "4px", border: "1px solid #f0f0f0", fontSize: "12px" }}>
-                <div style={{ fontWeight: 700, color: "#666", marginBottom: "4px" }}>Dokumenty</div>
+                <div style={{ fontWeight: 700, color: "#111827", marginBottom: "4px" }}>Dokumenty</div>
                 {ev.checklistDocId ? (
                   <a href={`https://docs.google.com/document/d/${ev.checklistDocId}`} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2", fontSize: "11px", display: "block" }}>📄 Checklista Google Docs</a>
                 ) : (
-                  <span style={{ color: "#ccc", fontSize: "11px" }}>Checklista: brak (tworzona przy zapisie)</span>
+                  <span style={{ color: "#111827", fontSize: "11px" }}>Checklista: brak (tworzona przy zapisie)</span>
                 )}
                 {ev.menuDocId ? (
                   <a href={`https://docs.google.com/document/d/${ev.menuDocId}`} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2", fontSize: "11px", display: "block", marginTop: "2px" }}>📄 Menu Google Docs</a>
                 ) : (
-                  <span style={{ color: "#ccc", fontSize: "11px", display: "block", marginTop: "2px" }}>Menu Docs: brak</span>
+                  <span style={{ color: "#111827", fontSize: "11px", display: "block", marginTop: "2px" }}>Menu Docs: brak</span>
                 )}
               </div>
               <button onClick={() => {
@@ -1230,7 +1231,7 @@ function EventDetailModal({
                 const html = `<!DOCTYPE html><html><head><title>Karta imprezy — ${ev.client ?? "—"}</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:13px}h1{font-size:18px;margin-bottom:4px}h2{font-size:14px;color:#666;margin-top:16px;border-bottom:1px solid #ddd;padding-bottom:4px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px}.label{font-weight:bold;color:#888;font-size:11px;text-transform:uppercase}.value{font-size:13px;margin-bottom:8px}.notes{background:#f5f5f5;padding:10px;border-radius:4px;white-space:pre-wrap;margin-top:8px}.badge{display:inline-block;padding:2px 10px;border-radius:3px;font-weight:bold;font-size:12px;background:${tc.bg};color:${tc.tx};border:1px solid ${tc.bd}}@media print{body{padding:0}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:center"><div><h1>${ev.client ?? "—"}</h1><span class="badge">${TL[ev.type] ?? "Inne"}</span>${ev.eventNumber ? '<span style="margin-left:8px;color:#999">' + ev.eventNumber + "</span>" : ""}</div><div style="text-align:right;font-size:12px;color:#666">Hotel Łabędź<br/>Wydrukowano: ${new Date().toLocaleDateString("pl-PL")}</div></div><h2>Dane imprezy</h2><div class="grid"><div><div class="label">Data</div><div class="value">${fmtLong(ev.date)}</div></div><div><div class="label">Sala</div><div class="value">${ev.room ?? "—"}</div></div><div><div class="label">Goście</div><div class="value">${ev.guests ? ev.guests + " os." : "—"}</div></div><div><div class="label">Godziny</div><div class="value">${ev.tf || ev.tt ? (ev.tf || "?") + "–" + (ev.tt || "?") : "—"}</div></div><div><div class="label">Telefon</div><div class="value">${ev.phone ?? "—"}</div></div><div><div class="label">Email</div><div class="value">${ev.email ?? "—"}</div></div><div><div class="label">Zadatek</div><div class="value">${ev.deposit != null ? fmtZl(ev.deposit) + (ev.paid ? " ✓" : " ✗") : "—"}</div></div><div><div class="label">Status</div><div class="value">${(SC[ev.status] ?? {}).label ?? ev.status ?? "—"}</div></div></div>${ev.notes ? '<h2>Notatki</h2><div class="notes">' + ev.notes + "</div>" : ""}<h2>Menu</h2><div style="font-size:12px;color:#666">${menuSummary}</div><div style="margin-top:40px;border-top:1px solid #ddd;padding-top:8px;font-size:10px;color:#ccc">Wygenerowano z Centrum Sprzedaży · Hotel Łabędź</div></body></html>`;
                 const w = window.open("", "_blank");
                 if (w) { w.document.write(html); w.document.close(); w.print(); }
-              }} style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", fontSize: "11px", fontWeight: 600, color: "#666", cursor: "pointer" }}>🖨 Drukuj kartę</button>
+              }} style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", fontSize: "11px", fontWeight: 600, color: "#111827", cursor: "pointer" }}>🖨 Drukuj kartę</button>
             </div>
             </div>
             ) : (
@@ -1251,7 +1252,7 @@ function EventDetailModal({
           <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e5e5", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
             {editMode ? (
               <>
-                <button onClick={handleCancelEdit} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#64748b" }}>Anuluj edycję</button>
+                <button onClick={handleCancelEdit} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#111827" }}>Anuluj edycję</button>
                 <button onClick={handleSaveEdit} disabled={editSaving} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "6px 20px", cursor: "pointer", fontSize: "11px", fontWeight: 600, opacity: editSaving ? 0.6 : 1 }}>{editSaving ? "Zapisuję..." : "Zapisz"}</button>
               </>
             ) : (
@@ -1301,46 +1302,46 @@ function EventCard({
     <div ref={ref} id={`ev-${ev.id}`} onClick={onToggle} style={{
       display: "grid",
       gridTemplateColumns: "60px 95px minmax(200px,1fr) 150px 70px 90px minmax(100px,1fr) 110px 120px 20px",
-      padding: "10px 16px",
-      borderBottom: "1px solid #f0f0f0",
+      padding: "14px 16px",
+      borderBottom: "1px solid #3b82f6",
       borderLeft: `3px solid ${leftBorder}`,
       cursor: "pointer",
       alignItems: "center",
       gap: "8px",
-      fontSize: "13px",
+      fontSize: "16px",
       opacity: cancelled ? 0.45 : 1,
       background: "white",
     }} onMouseEnter={(e) => { if (!cancelled) e.currentTarget.style.background = "#fafafa"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "white"; }}>
-      <div style={{ fontSize: "11px", color: "#999" }}>{ev.eventNumber ?? "—"}</div>
+      <div style={{ fontSize: "15px", color: "#111827" }}>{ev.eventNumber ?? "—"}</div>
       <div>
-        <div style={{ fontWeight: 600, color: "#1e1e1e" }}>{fmtDate(ev.date)}</div>
-        <div style={{ fontSize: "10px", fontWeight: 600, color: days === 0 ? "#e53935" : days <= 7 && days > 0 ? "#f57c00" : "#555" }}>
+        <div style={{ fontWeight: 600, color: "#1e1e1e", fontSize: "16px" }}>{fmtDate(ev.date)}</div>
+        <div style={{ fontSize: "14px", fontWeight: 600, color: days === 0 ? "#e53935" : days <= 7 && days > 0 ? "#f57c00" : "#555" }}>
           {days === 0 ? "dziś" : days === 1 ? "jutro" : days > 0 ? `za ${days} d` : `${Math.abs(days)} d temu`}
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
         <span style={{
           background: tc.bg, color: tc.tx, border: `1px solid ${tc.bd}`,
-          borderRadius: "3px", padding: "2px 8px", fontSize: "11px", fontWeight: 700,
+          borderRadius: "3px", padding: "4px 10px", fontSize: "14px", fontWeight: 700,
           whiteSpace: "nowrap", flexShrink: 0,
         }}>{ev.pop ? "Poprawiny" : TL[ev.type] ?? ev.type}</span>
-        <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.client ?? "—"}</span>
-        {ev.assignedTo && <span style={{ fontSize: "10px", color: "#999" }}>👤 {ev.assignedTo}</span>}
-        {ev.status === "DRAFT" && <span style={{ fontSize: "10px", color: "#f57c00", fontWeight: 600, flexShrink: 0 }}>Szkic</span>}
+        <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "16px" }}>{ev.client ?? "—"}</span>
+        {ev.assignedTo && <span style={{ fontSize: "14px", color: "#111827" }}>👤 {ev.assignedTo}</span>}
+        {ev.status === "DRAFT" && <span style={{ fontSize: "14px", color: "#f57c00", fontWeight: 600, flexShrink: 0 }}>Szkic</span>}
       </div>
-      <div style={{ fontSize: "12px", color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ev.room ?? ""}>{ev.room ?? "—"}</div>
-      <div style={{ fontSize: "12px", color: "#666" }}>{ev.guests ? `${ev.guests} os.` : "—"}</div>
-      <div style={{ fontSize: "11px", color: "#555" }}>{ev.tf || ev.tt ? `${ev.tf ?? "?"}–${ev.tt ?? "?"}` : "—"}</div>
-      <div style={{ fontSize: "11px", color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontStyle: ev.notes ? "normal" : "italic" }} title={ev.notes ?? ""}>{ev.notes || "brak notatki"}</div>
+      <div style={{ fontSize: "16px", color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ev.room ?? ""}>{ev.room ?? "—"}</div>
+      <div style={{ fontSize: "16px", color: "#111827" }}>{ev.guests ? `${ev.guests} os.` : "—"}</div>
+      <div style={{ fontSize: "16px", color: "#111827" }}>{ev.tf || ev.tt ? `${ev.tf ?? "?"}–${ev.tt ?? "?"}` : "—"}</div>
+      <div style={{ fontSize: "16px", color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontStyle: ev.notes ? "normal" : "italic" }} title={ev.notes ?? ""}>{ev.notes || "brak notatki"}</div>
       <div style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
         <DepositChip ev={ev} onToggle={onDepositToggle} onOpen={onDepositOpen} />
       </div>
       <div onClick={(e) => e.stopPropagation()}><PhoneBtn phone={ev.phone} client={ev.client} date={ev.date} compact /></div>
-      <span style={{ color: "#555", fontSize: "14px", textAlign: "right", transition: "transform 0.15s", transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
+      <span style={{ color: "#111827", fontSize: "18px", textAlign: "right", transition: "transform 0.15s", transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
       {expanded && (
-        <div style={{ gridColumn: "1 / -1", marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #f0f0f0", display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div style={{ flex: "1 1 200px", fontSize: "12px", color: ev.notes ? "#555" : "#555", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{ev.notes || "Brak notatki."}</div>
-          <button onClick={(e) => { e.stopPropagation(); onOpenModal(ev.id); }} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "6px 16px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Szczegóły</button>
+        <div style={{ gridColumn: "1 / -1", marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #3b82f6", display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 200px", fontSize: "16px", color: "#111827", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{ev.notes || "Brak notatki."}</div>
+          <button onClick={(e) => { e.stopPropagation(); onOpenModal(ev.id); }} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "4px", padding: "8px 18px", fontSize: "15px", fontWeight: 600, cursor: "pointer" }}>Szczegóły</button>
         </div>
       )}
     </div>
@@ -1363,7 +1364,7 @@ function KosztorysyView() {
 
   if (loading)
     return (
-      <div style={{ textAlign: "center", padding: "60px", color: "#64748b" }}>
+      <div style={{ textAlign: "center", padding: "60px", color: "#111827" }}>
         <div style={{ fontSize: "24px", marginBottom: "10px" }}>⏳</div>
         <div style={{ fontWeight: 700 }}>Ładowanie kosztorysów...</div>
       </div>
@@ -1382,7 +1383,7 @@ function KosztorysyView() {
       </div>
 
       {quotes.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "48px", color: "#475569" }}>
+        <div style={{ textAlign: "center", padding: "48px", color: "#111827" }}>
           <div style={{ fontSize: "36px", marginBottom: "8px" }}>💰</div>
           <div style={{ fontSize: "15px", fontWeight: 700 }}>Brak kosztorysów</div>
           <div style={{ fontSize: "13px", marginTop: "6px" }}>Utwórz kosztorys w zakładce Kosztorysy MICE</div>
@@ -1399,7 +1400,7 @@ function KosztorysyView() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <div style={{ fontWeight: 800, fontSize: "14px", color: "#0f172a" }}>{q.name}</div>
-                    <div style={{ fontSize: "12px", color: "#64748b", marginTop: "3px" }}>
+                    <div style={{ fontSize: "12px", color: "#111827", marginTop: "3px" }}>
                       Ważny do: {q.validUntil ? new Date(q.validUntil).toLocaleDateString("pl-PL") : "—"}
                       {" · "}
                       {((q.items as unknown[]) || []).length} pozycji
@@ -1468,8 +1469,8 @@ function DayPopup({
             flexShrink: 0,
           }}
         >
-          <div style={{ color: "#1e1e1e", fontWeight: 700, fontSize: "14px" }}>{day} {monthLabel} · {room}</div>
-          <div style={{ color: "#4a4a4a", fontSize: "12px", marginTop: "2px" }}>{plural(events.length)}</div>
+          <div style={{ color: "#1e1e1e", fontWeight: 700, fontSize: "16px" }}>{day} {monthLabel} · {room}</div>
+          <div style={{ color: "#111827", fontSize: "14px", marginTop: "2px" }}>{plural(events.length)}</div>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
           {events.map((ev, i) => {
@@ -1494,9 +1495,9 @@ function DayPopup({
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <TypeBadge type={ev.type} pop={ev.pop} room={ev.room} small />
-                  <span style={{ fontWeight: 800, fontSize: "13px", color: "#0f172a" }}>{ev.client ?? "—"}</span>
+                  <span style={{ fontWeight: 800, fontSize: "15px", color: "#0f172a" }}>{ev.client ?? "—"}</span>
                 </div>
-                <div style={{ fontSize: "11px", color: "#64748b", marginTop: "3px" }}>
+                <div style={{ fontSize: "13px", color: "#111827", marginTop: "3px" }}>
                   👥 {ev.guests ?? "—"} os.
                   {ev.phone && <span> · 📞 {ev.phone}</span>}
                   {ev.notes && <span> · 📝</span>}
@@ -1541,7 +1542,7 @@ function MonthNav({ month, year, onPrev, onNext, onToday }: { month: number; yea
       <button onClick={onPrev} style={{ background: "white", border: "2px solid #e2e8f0", borderRadius: "9px", padding: "7px 14px", cursor: "pointer", fontSize: "16px", fontWeight: 700 }}>←</button>
       <div style={{ fontSize: "19px", fontWeight: 900, color: "#0f172a", minWidth: "200px", textAlign: "center" }}>{MPL[month]} {year}</div>
       <button onClick={onNext} style={{ background: "white", border: "2px solid #e2e8f0", borderRadius: "9px", padding: "7px 14px", cursor: "pointer", fontSize: "16px", fontWeight: 700 }}>→</button>
-      <button onClick={onToday} style={{ background: "#f1f5f9", border: "2px solid #e2e8f0", borderRadius: "9px", padding: "7px 12px", cursor: "pointer", fontSize: "12px", fontWeight: 800, color: "#64748b" }}>Dzisiaj</button>
+      <button onClick={onToday} style={{ background: "#f1f5f9", border: "2px solid #e2e8f0", borderRadius: "9px", padding: "9px 16px", cursor: "pointer", fontSize: "15px", fontWeight: 800, color: "#111827" }}>Dzisiaj</button>
     </div>
   );
 }
@@ -1569,27 +1570,27 @@ function FreeDatesView({ events, month, year, onMonthChange, onCreateWithDate }:
   return (
     <div style={{ padding: "0 20px 48px" }}>
       <MonthNav month={month} year={year} onPrev={() => onMonthChange((p) => p - 1)} onNext={() => onMonthChange((p) => p + 1)} onToday={() => onMonthChange(() => 0)} />
-      <div style={{ display: "flex", gap: "4px", marginBottom: "12px", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: "6px", marginBottom: "14px", flexWrap: "wrap" }}>
         {ROOMS.filter((r) => r !== "Do ustalenia").map((r) => (
-          <button key={r} onClick={() => setSelectedRoom(r)} style={{ padding: "4px 10px", borderRadius: "3px", fontSize: "11px", fontWeight: 600, border: `1px solid ${selectedRoom === r ? "#1e1e1e" : "#ddd"}`, background: selectedRoom === r ? "#1e1e1e" : "white", color: selectedRoom === r ? "white" : "#666", cursor: "pointer" }}>{r}</button>
+          <button key={r} onClick={() => setSelectedRoom(r)} style={{ padding: "10px 18px", borderRadius: "6px", fontSize: "15px", fontWeight: 600, border: `2px solid ${selectedRoom === r ? "#1e1e1e" : "#ddd"}`, background: selectedRoom === r ? "#1e1e1e" : "white", color: selectedRoom === r ? "white" : "#111827", cursor: "pointer" }}>{r}</button>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "2px", marginBottom: "2px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "3px", marginBottom: "3px" }}>
         {["Pon", "Wt", "Śr", "Czw", "Pt", "Sob", "Ndz"].map((d) => (
-          <div key={d} style={{ textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#475569", padding: "6px 0" }}>{d}</div>
+          <div key={d} style={{ textAlign: "center", fontSize: "15px", fontWeight: 700, color: "#111827", padding: "8px 0" }}>{d}</div>
         ))}
       </div>
       {weeks.map((week, wi) => (
-        <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "2px", marginBottom: "2px" }}>
+        <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "3px", marginBottom: "3px" }}>
           {week.map((day, di) => {
-            if (day === null) return <div key={di} style={{ background: "#f9fafb", minHeight: "44px", borderRadius: "6px" }} />;
+            if (day === null) return <div key={di} style={{ background: "#f9fafb", minHeight: "54px", borderRadius: "6px" }} />;
             const isPast = new Date(year, month, day) < TODAY;
             const busy = busyDays.has(day);
             const isToday = day === todayD;
             const bg = isPast ? "#f1f5f9" : busy ? "#fef2f2" : "#f0fdf4";
-            const borderColor = busy ? "#fca5a5" : isPast ? "#e2e8f0" : "#86efac";
+            const borderColor = busy ? "#fca5a5" : isPast ? "#3b82f6" : "#86efac";
             return (
-              <div key={di} onClick={() => { if (!isPast && !busy) { const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`; onCreateWithDate(dateStr, selectedRoom); } }} style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: "6px", minHeight: "44px", padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", cursor: isPast || busy ? "default" : "pointer", fontSize: "14px", fontWeight: 700, color: isPast ? "#94a3b8" : busy ? "#dc2626" : "#166534" }}>
+              <div key={di} onClick={() => { if (!isPast && !busy) { const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`; onCreateWithDate(dateStr, selectedRoom); } }} style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: "6px", minHeight: "54px", padding: "8px", display: "flex", alignItems: "center", justifyContent: "center", cursor: isPast || busy ? "default" : "pointer", fontSize: "18px", fontWeight: 700, color: isPast ? "#374151" : busy ? "#dc2626" : "#166534" }}>
                 {day}
               </div>
             );
@@ -1628,14 +1629,14 @@ function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange, on
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "2px", marginBottom: "2px" }}>
         {["Pon", "Wt", "Śr", "Czw", "Pt", "Sob", "Ndz"].map((d) => (
-          <div key={d} style={{ textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#475569", padding: "6px 0" }}>{d}</div>
+          <div key={d} style={{ textAlign: "center", fontSize: "14px", fontWeight: 700, color: "#111827", padding: "6px 0" }}>{d}</div>
         ))}
       </div>
 
       {weeks.map((week, wi) => (
         <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "2px", marginBottom: "2px" }}>
           {week.map((day, di) => {
-            if (day === null) return <div key={di} style={{ background: "#f9fafb", minHeight: "110px", borderRadius: "6px" }} />;
+            if (day === null) return <div key={di} style={{ background: "#f9fafb", minHeight: "130px", borderRadius: "6px" }} />;
             const dayEvs = monthEvs.filter((e) => new Date(e.date).getDate() === day);
             const isToday = day === todayD;
             const isWeekend = di >= 5;
@@ -1646,14 +1647,14 @@ function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange, on
                   const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
                   onCreateWithDate ? onCreateWithDate(dateStr) : (window.location.href = `/events/new?date=${dateStr}`);
                 }}
-                style={{ background: isToday ? "#fef2f2" : isWeekend ? "#fafafa" : "white", border: `1px solid ${isToday ? "#fca5a5" : "#f1f5f9"}`, borderRadius: "6px", minHeight: "110px", padding: "4px", display: "flex", flexDirection: "column", cursor: "pointer" }}
+                style={{ background: isToday ? "#fef2f2" : isWeekend ? "#fafafa" : "white", border: `1px solid ${isToday ? "#fca5a5" : "#3b82f6"}`, borderRadius: "6px", minHeight: "130px", padding: "5px", display: "flex", flexDirection: "column", cursor: "pointer" }}
               >
-                <div style={{ fontSize: "14px", fontWeight: 700, color: isToday ? "#ef4444" : "#64748b", marginBottom: "3px", display: "flex", alignItems: "center", gap: "4px" }}>
+                <div style={{ fontSize: "16px", fontWeight: 700, color: isToday ? "#ef4444" : "#64748b", marginBottom: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
                   {isToday && <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#ef4444" }} />}
                   {day}
-                  {dayEvs.length > 0 && <span style={{ fontSize: "11px", color: "#475569", fontWeight: 700 }}>({dayEvs.length})</span>}
+                  {dayEvs.length > 0 && <span style={{ fontSize: "13px", color: "#111827", fontWeight: 700 }}>({dayEvs.length})</span>}
                 </div>
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px", overflow: "hidden" }}>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "3px", overflow: "hidden" }}>
                   {dayEvs.slice(0, maxVisible).map((ev) => {
                     const tc = getEventColor(ev);
                     const emoji = TYPE_EMOJI[ev.type] ?? "📋";
@@ -1661,7 +1662,7 @@ function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange, on
                       <div
                         key={ev.id}
                         onClick={(e) => { e.stopPropagation(); onOpenModal(ev.id); }}
-                        style={{ background: tc.bg, borderLeft: `3px solid ${tc.bd}`, borderRadius: "3px", padding: "2px 6px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: tc.tx, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: "18px" }}
+                        style={{ background: tc.bg, borderLeft: `3px solid ${tc.bd}`, borderRadius: "3px", padding: "4px 6px", cursor: "pointer", fontSize: "15px", fontWeight: 600, color: tc.tx, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: "1.35" }}
                         onMouseEnter={(e) => { e.currentTarget.style.background = tc.bd + "22"; }}
                         onMouseLeave={(e) => { e.currentTarget.style.background = tc.bg; }}
                       >
@@ -1675,7 +1676,7 @@ function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange, on
                         e.stopPropagation();
                         setPopupDay({ day, events: dayEvs, x: e.clientX, y: e.clientY });
                       }}
-                      style={{ fontSize: "10px", color: "#1976d2", fontWeight: 700, textAlign: "center", cursor: "pointer", padding: "2px", borderRadius: "3px" }}
+                      style={{ fontSize: "13px", color: "#1976d2", fontWeight: 700, textAlign: "center", cursor: "pointer", padding: "3px", borderRadius: "3px" }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = "#e3f2fd"; }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
                     >
@@ -1708,10 +1709,10 @@ function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange, on
             }}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px", paddingBottom: "8px", borderBottom: "1px solid #f0f0f0" }}>
-              <span style={{ fontSize: "14px", fontWeight: 700, color: "#1e1e1e" }}>
+              <span style={{ fontSize: "16px", fontWeight: 700, color: "#1e1e1e" }}>
                 {popupDay.day} {MPL[month]} — {popupDay.events.length} imprez
               </span>
-              <button onClick={() => setPopupDay(null)} style={{ background: "none", border: "none", fontSize: "16px", color: "#ccc", cursor: "pointer" }}>×</button>
+              <button onClick={() => setPopupDay(null)} style={{ background: "none", border: "none", fontSize: "16px", color: "#111827", cursor: "pointer" }}>×</button>
             </div>
             {popupDay.events.map((ev) => {
               const tc = getEventColor(ev);
@@ -1723,16 +1724,16 @@ function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange, on
                     borderLeft: `3px solid ${tc.bd}`,
                     background: tc.bg,
                     borderRadius: "4px",
-                    padding: "6px 10px",
+                    padding: "8px 12px",
                     marginBottom: "4px",
                     cursor: "pointer",
-                    fontSize: "12px",
+                    fontSize: "15px",
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
                   onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
                 >
-                  <div style={{ fontWeight: 700, color: tc.tx }}>{ev.client ?? "—"}</div>
-                  <div style={{ fontSize: "10px", color: tc.tx + "88", marginTop: "1px" }}>
+                  <div style={{ fontWeight: 700, color: tc.tx, fontSize: "16px" }}>{ev.client ?? "—"}</div>
+                  <div style={{ fontSize: "13px", color: tc.tx + "88", marginTop: "2px" }}>
                     {ev.room ?? "—"} {ev.guests ? `· ${ev.guests} os.` : ""}
                   </div>
                 </div>
@@ -1744,7 +1745,7 @@ function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange, on
                 setPopupDay(null);
                 onCreateWithDate ? onCreateWithDate(dateStr) : (window.location.href = `/events/new?date=${dateStr}`);
               }}
-              style={{ width: "100%", marginTop: "6px", padding: "6px", background: "#f5f5f5", border: "1px dashed #ddd", borderRadius: "4px", fontSize: "11px", fontWeight: 600, color: "#4a4a4a", cursor: "pointer", textAlign: "center" }}
+              style={{ width: "100%", marginTop: "6px", padding: "6px", background: "#f5f5f5", border: "1px dashed #ddd", borderRadius: "4px", fontSize: "11px", fontWeight: 600, color: "#111827", cursor: "pointer", textAlign: "center" }}
             >
               + Nowa impreza na ten dzień
             </button>
@@ -1771,7 +1772,7 @@ function TimelineView({ events, onOpenModal }: { events: EventRecord[]; onOpenMo
     <div style={{ padding: "0 20px 48px" }}>
       <div style={{ fontSize: "17px", fontWeight: 900, color: "#0f172a", marginBottom: "16px" }}>Nadchodzące imprezy</div>
       <div style={{ position: "relative", paddingLeft: "60px" }}>
-        <div style={{ position: "absolute", left: "28px", top: 0, bottom: 0, width: "2px", background: "#e2e8f0" }} />
+        <div style={{ position: "absolute", left: "28px", top: 0, bottom: 0, width: "2px", background: "#3b82f6" }} />
 
         {grouped.map(([dateStr, dayEvs]) => {
           const d = new Date(dateStr);
@@ -1783,14 +1784,14 @@ function TimelineView({ events, onOpenModal }: { events: EventRecord[]; onOpenMo
 
           return (
             <div key={dateStr} style={{ marginBottom: "20px", position: "relative" }}>
-              <div style={{ position: "absolute", left: "-44px", top: "8px", width: "34px", height: "34px", borderRadius: "50%", background: isToday ? "#ef4444" : "white", border: isToday ? "none" : "2px solid #e2e8f0", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
+              <div style={{ position: "absolute", left: "-44px", top: "8px", width: "34px", height: "34px", borderRadius: "50%", background: isToday ? "#ef4444" : "white", border: isToday ? "none" : "2px solid #3b82f6", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
                 <div style={{ fontSize: "13px", fontWeight: 900, color: isToday ? "white" : "#0f172a", lineHeight: 1 }}>{day}</div>
-                <div style={{ fontSize: "7px", fontWeight: 700, color: isToday ? "rgba(255,255,255,0.8)" : "#94a3b8", lineHeight: 1 }}>{dow}</div>
+                <div style={{ fontSize: "7px", fontWeight: 700, color: isToday ? "rgba(255,255,255,0.8)" : "#374151", lineHeight: 1 }}>{dow}</div>
               </div>
 
               <div style={{ marginBottom: "6px" }}>
                 <span style={{ background: db.bg, color: db.tx, borderRadius: "5px", padding: "2px 8px", fontSize: "11px", fontWeight: 800 }}>{db.t}</span>
-                <span style={{ fontSize: "11px", color: "#475569", marginLeft: "8px", fontWeight: 600 }}>{fmtLong(dateStr)} · {plural(dayEvs.length)}</span>
+                <span style={{ fontSize: "11px", color: "#111827", marginLeft: "8px", fontWeight: 600 }}>{fmtLong(dateStr)} · {plural(dayEvs.length)}</span>
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
@@ -1799,7 +1800,7 @@ function TimelineView({ events, onOpenModal }: { events: EventRecord[]; onOpenMo
                   const emoji = TYPE_EMOJI[ev.type] ?? "📋";
                   return (
                     <div key={ev.id} onClick={() => onOpenModal(ev.id)}
-                      style={{ background: "white", border: "1px solid #e8edf2", borderLeft: `4px solid ${tc.bd}`, borderRadius: "9px", padding: "10px 14px", cursor: "pointer", transition: "box-shadow 0.12s" }}
+                      style={{ background: "white", border: "1px solid #3b82f6", borderLeft: `4px solid ${tc.bd}`, borderRadius: "9px", padding: "10px 14px", cursor: "pointer", transition: "box-shadow 0.12s" }}
                       onMouseEnter={(e) => { e.currentTarget.style.boxShadow = `0 3px 14px ${tc.bd}33`; }}
                       onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
@@ -1808,7 +1809,7 @@ function TimelineView({ events, onOpenModal }: { events: EventRecord[]; onOpenMo
                         <TypeBadge type={ev.type} pop={ev.pop} room={ev.room} small />
                         <StatusDot status={ev.status} />
                       </div>
-                      <div style={{ display: "flex", gap: "14px", marginTop: "5px", fontSize: "12px", color: "#64748b", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", gap: "14px", marginTop: "5px", fontSize: "12px", color: "#111827", flexWrap: "wrap" }}>
                         <span>🏛 {ev.room ?? "—"}</span>
                         <span>👥 {ev.guests ?? "—"} os.</span>
                         {(ev.tf || ev.tt) && <span>⏰ {ev.tf ?? "?"}–{ev.tt ?? "?"}</span>}
@@ -1854,11 +1855,11 @@ function HeatmapView({ events, month, year, onOpenModal, onMonthChange }: { even
     <div style={{ padding: "0 20px 48px" }}>
       <MonthNav month={month} year={year} onPrev={() => onMonthChange((p) => p - 1)} onNext={() => onMonthChange((p) => p + 1)} onToday={() => onMonthChange(() => 0)} />
 
-      <div style={{ overflowX: "auto", background: "white", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-        <div style={{ display: "flex", position: "sticky" as const, top: 0, zIndex: 10, background: "white", borderBottom: "2px solid #e2e8f0" }}>
-          <div style={{ width: "80px", minWidth: "80px", padding: "10px 8px", fontSize: "10px", fontWeight: 900, color: "#475569" }}>DZIEŃ</div>
+      <div style={{ overflowX: "auto", background: "white", borderRadius: "12px", border: "1px solid #3b82f6" }}>
+        <div style={{ display: "flex", position: "sticky" as const, top: 0, zIndex: 10, background: "white", borderBottom: "2px solid #3b82f6" }}>
+          <div style={{ width: "80px", minWidth: "80px", padding: "12px 10px", fontSize: "16px", fontWeight: 900, color: "#111827" }}>DZIEŃ</div>
           {ROOMS.map((r) => (
-            <div key={r} style={{ flex: 1, minWidth: "140px", padding: "10px 8px", textAlign: "center", fontSize: "10px", fontWeight: 800, color: "#374151", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}>
+            <div key={r} style={{ flex: 1, minWidth: "140px", padding: "12px 10px", textAlign: "center", fontSize: "16px", fontWeight: 800, color: "#111827", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
               <span style={{ width: "8px", height: "8px", borderRadius: "3px", background: RC[r], display: "inline-block" }} />
               {r}
             </div>
@@ -1870,18 +1871,18 @@ function HeatmapView({ events, month, year, onOpenModal, onMonthChange }: { even
           const isToday = d === todayD;
           const isWeekend = [0, 6].includes(new Date(year, month, d).getDay());
           return (
-            <div key={d} style={{ display: "flex", borderBottom: "1px solid #f1f5f9", background: isToday ? "#fef2f2" : isWeekend ? "#fafafa" : "white" }}>
-              <div style={{ width: "80px", minWidth: "80px", padding: "8px", display: "flex", alignItems: "center", gap: "6px", borderRight: "1px solid #e2e8f0" }}>
-                <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: isToday ? "#ef4444" : "transparent", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ fontSize: "13px", fontWeight: 900, color: isToday ? "white" : "#0f172a", lineHeight: 1 }}>{d}</span>
-                  <span style={{ fontSize: "7px", fontWeight: 700, color: isToday ? "rgba(255,255,255,0.8)" : "#94a3b8", lineHeight: 1 }}>{dow}</span>
+            <div key={d} style={{ display: "flex", borderBottom: "1px solid #3b82f6", background: isToday ? "#fef2f2" : isWeekend ? "#fafafa" : "white" }}>
+              <div style={{ width: "80px", minWidth: "80px", padding: "8px", display: "flex", alignItems: "center", gap: "6px", borderRight: "1px solid #3b82f6" }}>
+                <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: isToday ? "#ef4444" : "transparent", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                  <span style={{ fontSize: "18px", fontWeight: 900, color: isToday ? "white" : "#0f172a", lineHeight: 1 }}>{d}</span>
+                  <span style={{ fontSize: "12px", fontWeight: 700, color: isToday ? "rgba(255,255,255,0.8)" : "#374151", lineHeight: 1 }}>{dow}</span>
                 </div>
               </div>
               {ROOMS.map((room) => {
                 const key = `${d}-${room}`;
                 const roomEvs = byDayRoom[key] ?? [];
                 return (
-                  <div key={room} style={{ flex: 1, minWidth: "140px", padding: "4px", borderRight: "1px solid #f3f4f6", display: "flex", flexDirection: "column", gap: "3px" }}>
+                  <div key={room} style={{ flex: 1, minWidth: "140px", padding: "4px", borderRight: "1px solid #3b82f6", display: "flex", flexDirection: "column", gap: "3px" }}>
                     {roomEvs.map((ev) => {
                       const tc = getEventColor(ev);
                       const emoji = TYPE_EMOJI[ev.type] ?? "📋";
@@ -1890,8 +1891,8 @@ function HeatmapView({ events, month, year, onOpenModal, onMonthChange }: { even
                           style={{ background: tc.bg, border: `1px solid ${tc.bd}`, borderRadius: "6px", padding: "5px 7px", cursor: "pointer" }}
                           onMouseEnter={(e) => { e.currentTarget.style.boxShadow = `0 2px 8px ${tc.bd}44`; }}
                           onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; }}>
-                          <div style={{ fontWeight: 800, color: tc.tx, fontSize: "11px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emoji} {ev.client ?? "—"}</div>
-                          <div style={{ fontSize: "9px", color: tc.tx + "99", marginTop: "2px" }}>👥{ev.guests ?? "—"} {ev.tf ? `· ${ev.tf}` : ""}</div>
+                          <div style={{ fontWeight: 800, color: tc.tx, fontSize: "16px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emoji} {ev.client ?? "—"}</div>
+                          <div style={{ fontSize: "14px", color: tc.tx + "99", marginTop: "3px" }}>👥{ev.guests ?? "—"} {ev.tf ? `· ${ev.tf}` : ""}</div>
                         </div>
                       );
                     })}
@@ -1925,7 +1926,7 @@ function WeekView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal:
           {weekDays[0].getDate()}–{weekDays[6].getDate()} {MPL[weekDays[0].getMonth()]} {weekDays[0].getFullYear()}
         </div>
         <button onClick={() => setWeekOffset((o) => o + 1)} style={{ background: "white", border: "2px solid #e2e8f0", borderRadius: "9px", padding: "7px 14px", cursor: "pointer", fontSize: "16px", fontWeight: 700 }}>→</button>
-        <button onClick={() => setWeekOffset(0)} style={{ background: "#f1f5f9", border: "2px solid #e2e8f0", borderRadius: "9px", padding: "7px 12px", cursor: "pointer", fontSize: "12px", fontWeight: 800, color: "#64748b" }}>Dzisiaj</button>
+        <button onClick={() => setWeekOffset(0)} style={{ background: "#f1f5f9", border: "2px solid #e2e8f0", borderRadius: "9px", padding: "9px 16px", cursor: "pointer", fontSize: "15px", fontWeight: 800, color: "#111827" }}>Dzisiaj</button>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "8px" }}>
@@ -1937,14 +1938,14 @@ function WeekView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal:
           const dayEvs = events.filter((e) => e.date === dateStr && e.status !== "CANCELLED");
 
           return (
-            <div key={dateStr} style={{ background: isToday ? "#fef2f2" : "white", border: `1px solid ${isToday ? "#fca5a5" : "#e2e8f0"}`, borderRadius: "12px", padding: "10px", minHeight: "220px", display: "flex", flexDirection: "column" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px", paddingBottom: "8px", borderBottom: "1px solid #f1f5f9" }}>
-                <div style={{ width: "34px", height: "34px", borderRadius: "50%", background: isToday ? "#ef4444" : "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <span style={{ fontSize: "14px", fontWeight: 900, color: isToday ? "white" : "#0f172a" }}>{day}</span>
+            <div key={dateStr} style={{ background: isToday ? "#fef2f2" : "white", border: `1px solid ${isToday ? "#fca5a5" : "#3b82f6"}`, borderRadius: "12px", padding: "10px", minHeight: "220px", display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px", paddingBottom: "8px", borderBottom: "1px solid #3b82f6" }}>
+                <div style={{ width: "44px", height: "44px", borderRadius: "50%", background: isToday ? "#ef4444" : "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <span style={{ fontSize: "20px", fontWeight: 900, color: isToday ? "white" : "#0f172a" }}>{day}</span>
                 </div>
                 <div>
-                  <div style={{ fontSize: "12px", fontWeight: 700, color: "#64748b" }}>{dow}</div>
-                  {dayEvs.length > 0 && <div style={{ fontSize: "11px", fontWeight: 800, color: "#0f172a" }}>{plural(dayEvs.length)}</div>}
+                  <div style={{ fontSize: "17px", fontWeight: 700, color: "#111827" }}>{dow}</div>
+                  {dayEvs.length > 0 && <div style={{ fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>{plural(dayEvs.length)}</div>}
                 </div>
               </div>
 
@@ -1957,11 +1958,11 @@ function WeekView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal:
                       style={{ background: tc.bg, border: `1px solid ${tc.bd}`, borderRadius: "8px", padding: "7px 9px", cursor: "pointer" }}
                       onMouseEnter={(e) => { e.currentTarget.style.boxShadow = `0 2px 8px ${tc.bd}44`; }}
                       onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                        <span style={{ fontSize: "13px" }}>{emoji}</span>
-                        <span style={{ fontWeight: 800, fontSize: "12px", color: tc.tx, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{ev.client ?? "—"}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ fontSize: "18px" }}>{emoji}</span>
+                        <span style={{ fontWeight: 800, fontSize: "17px", color: tc.tx, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{ev.client ?? "—"}</span>
                       </div>
-                      <div style={{ display: "flex", gap: "8px", marginTop: "3px", fontSize: "10px", color: tc.tx + "99" }}>
+                      <div style={{ display: "flex", gap: "8px", marginTop: "4px", fontSize: "15px", color: tc.tx + "99" }}>
                         <span>🏛 {ev.room?.replace("Sala ", "") ?? "—"}</span>
                         <span>👥{ev.guests ?? "—"}</span>
                         {ev.tf && <span>⏰{ev.tf}</span>}
@@ -1970,7 +1971,7 @@ function WeekView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal:
                   );
                 })}
                 {dayEvs.length === 0 && (
-                  <div style={{ textAlign: "center", padding: "24px", color: "#d1d5db", fontSize: "11px" }}>Brak imprez</div>
+                  <div style={{ textAlign: "center", padding: "24px", color: "#111827", fontSize: "16px" }}>Brak imprez</div>
                 )}
               </div>
             </div>
@@ -2014,24 +2015,24 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
         <button onClick={() => setOffset((o) => o - 1)} style={{ background: "white", border: "2px solid #e2e8f0", borderRadius: "9px", padding: "7px 14px", cursor: "pointer", fontSize: "16px", fontWeight: 700 }}>←</button>
         <div style={{ fontSize: "19px", fontWeight: 900, color: "#0f172a", minWidth: "200px", textAlign: "center" }}>{MPL[month]} {year}</div>
         <button onClick={() => setOffset((o) => o + 1)} style={{ background: "white", border: "2px solid #e2e8f0", borderRadius: "9px", padding: "7px 14px", cursor: "pointer", fontSize: "16px", fontWeight: 700 }}>→</button>
-        <button onClick={() => setOffset(0)} style={{ background: "#f1f5f9", border: "2px solid #e2e8f0", borderRadius: "9px", padding: "7px 12px", cursor: "pointer", fontSize: "12px", fontWeight: 800, color: "#64748b" }}>Dzisiaj</button>
+        <button onClick={() => setOffset(0)} style={{ background: "#f1f5f9", border: "2px solid #e2e8f0", borderRadius: "9px", padding: "9px 16px", cursor: "pointer", fontSize: "15px", fontWeight: 800, color: "#111827" }}>Dzisiaj</button>
         <div style={{ marginLeft: "auto", display: "flex", gap: "12px", flexWrap: "wrap" }}>
           {ROOMS.map((r) => (
-            <div key={r} style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "11px", fontWeight: 700 }}>
+            <div key={r} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "16px", fontWeight: 700 }}>
               <span style={{ width: "11px", height: "11px", borderRadius: "3px", background: RC[r], display: "inline-block" }} />
               {r}
             </div>
           ))}
         </div>
       </div>
-      <div style={{ background: "white", borderRadius: "13px", border: "1px solid #e2e8f0", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", overflowX: "auto" }}>
+      <div style={{ background: "white", borderRadius: "13px", border: "1px solid #3b82f6", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", overflowX: "auto" }}>
         <div style={{ width: "100%" }}>
-          <div style={{ display: "flex", borderBottom: "2px solid #e2e8f0", position: "sticky", top: 0, zIndex: 20, background: "white" }}>
-            <div style={{ width: LW, minWidth: LW, padding: "9px 12px", fontSize: "10px", fontWeight: 900, color: "#475569", letterSpacing: "1px", borderRight: "2px solid #e2e8f0", background: "white" }}>SALA</div>
+          <div style={{ display: "flex", borderBottom: "2px solid #3b82f6", position: "sticky", top: 0, zIndex: 20, background: "white" }}>
+            <div style={{ width: LW, minWidth: LW, padding: "10px 12px", fontSize: "15px", fontWeight: 900, color: "#111827", letterSpacing: "1px", borderRight: "2px solid #3b82f6", background: "white" }}>SALA</div>
             {dayArr.map((d) => (
-              <div key={d} style={{ width: CW, minWidth: CW, textAlign: "center", padding: "6px 0 4px", fontSize: "10px", fontWeight: d === todayD ? 900 : 600, color: d === todayD ? "#ef4444" : isWknd(year, month, d) ? "#94a3b8" : "#374151", background: d === todayD ? "#fef2f2" : isWknd(year, month, d) ? "#f9fafb" : "white", borderRight: "1px solid #f1f5f9" }}>
+              <div key={d} style={{ width: CW, minWidth: CW, textAlign: "center", padding: "8px 0 6px", fontSize: "15px", fontWeight: d === todayD ? 900 : 600, color: d === todayD ? "#ef4444" : "#374151", background: d === todayD ? "#fef2f2" : isWknd(year, month, d) ? "#f9fafb" : "white", borderRight: "1px solid #3b82f6" }}>
                 <div>{d}</div>
-                <div style={{ fontSize: "8px", color: d === todayD ? "#ef4444" : "#d1d5db" }}>{DPLS[new Date(year, month, d).getDay()]}</div>
+                <div style={{ fontSize: "13px", color: d === todayD ? "#ef4444" : "#374151" }}>{DPLS[new Date(year, month, d).getDay()]}</div>
               </div>
             ))}
           </div>
@@ -2042,13 +2043,13 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
               return norm.includes(room);
             });
             return (
-              <div key={room} style={{ display: "flex", borderBottom: "1px solid #f1f5f9", minHeight: RH, position: "relative" }}>
-                <div style={{ width: LW, minWidth: LW, padding: "0 12px", display: "flex", alignItems: "center", gap: "7px", borderRight: "2px solid #e2e8f0", background: "#fafafa", position: "sticky", left: 0, zIndex: 5 }}>
-                  <span style={{ width: "9px", height: "9px", borderRadius: "3px", background: col, flexShrink: 0 }} />
-                  <span style={{ fontSize: "11px", fontWeight: 800, color: "#374151" }}>{room}</span>
+              <div key={room} style={{ display: "flex", borderBottom: "1px solid #3b82f6", minHeight: RH, position: "relative" }}>
+                <div style={{ width: LW, minWidth: LW, padding: "0 12px", display: "flex", alignItems: "center", gap: "8px", borderRight: "2px solid #3b82f6", background: "#fafafa", position: "sticky", left: 0, zIndex: 5 }}>
+                  <span style={{ width: "12px", height: "12px", borderRadius: "3px", background: col, flexShrink: 0 }} />
+                  <span style={{ fontSize: "16px", fontWeight: 800, color: "#111827" }}>{room}</span>
                 </div>
                 <div style={{ display: "flex", flex: 1, position: "relative" }}>
-                  {dayArr.map((d) => <div key={d} style={{ width: CW, minWidth: CW, borderRight: "1px solid #f1f5f9", background: d === todayD ? "rgba(239,68,68,0.05)" : isWknd(year, month, d) ? "#f9fafb" : "transparent" }} />)}
+                  {dayArr.map((d) => <div key={d} style={{ width: CW, minWidth: CW, borderRight: "1px solid #3b82f6", background: d === todayD ? "rgba(239,68,68,0.05)" : isWknd(year, month, d) ? "#f9fafb" : "transparent" }} />)}
                   {(() => {
                     const byDay: Record<number, EventRecord[]> = {};
                     rowEvs.forEach((ev) => {
@@ -2099,7 +2100,7 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
                           >
                             <div
                               style={{
-                                fontSize: "8px",
+                                fontSize: "14px",
                                 fontWeight: 900,
                                 color: tc.tx,
                                 lineHeight: 1.1,
@@ -2113,7 +2114,7 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
                             </div>
                             <div style={{ display: "flex", alignItems: "center", gap: "2px", justifyContent: "center", marginTop: "1px" }}>
                               <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: tc.bd }} />
-                              <div style={{ fontSize: "7px", fontWeight: 700, color: tc.bd, lineHeight: 1 }}>{ev.guests ? ev.guests + "os" : ""}</div>
+                              <div style={{ fontSize: "12px", fontWeight: 700, color: tc.bd, lineHeight: 1 }}>{ev.guests ? ev.guests + " os" : ""}</div>
                             </div>
                           </div>,
                         ];
@@ -2167,7 +2168,7 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
                                   <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: "3px", background: tc.bd }} />
                                   <div
                                     style={{
-                                      fontSize: "7px",
+                                      fontSize: "12px",
                                       fontWeight: 900,
                                       color: tc.tx,
                                       textAlign: "center",
@@ -2241,8 +2242,8 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
                               <div key={type} style={{ flex: cnt, background: (TC[type] ?? TC.INNE).bd, height: "100%" }} />
                             ))}
                           </div>
-                          <div style={{ fontSize: count > 9 ? "15px" : "18px", fontWeight: 700, color: "#1e1e1e", lineHeight: 1, marginTop: "2px" }}>{count}</div>
-                          <div style={{ fontSize: "7px", fontWeight: 600, color: "#4a4a4a", lineHeight: 1, marginTop: "1px" }}>{label}</div>
+                          <div style={{ fontSize: count > 9 ? "16px" : "20px", fontWeight: 700, color: "#1e1e1e", lineHeight: 1, marginTop: "2px" }}>{count}</div>
+                          <div style={{ fontSize: "10px", fontWeight: 600, color: "#111827", lineHeight: 1, marginTop: "2px" }}>{label}</div>
                         </div>,
                       ];
                     });
@@ -2251,21 +2252,21 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
               </div>
             );
           })}
-          <div style={{ display: "flex", background: "#f8fafc", borderTop: "2px solid #e2e8f0" }}>
-            <div style={{ width: LW, minWidth: LW, padding: "7px 12px", fontSize: "9px", fontWeight: 900, color: "#64748b", letterSpacing: "1px", borderRight: "2px solid #e2e8f0", position: "sticky", left: 0, zIndex: 5, background: "#f8fafc" }}>RAZEM</div>
+          <div style={{ display: "flex", background: "#f8fafc", borderTop: "2px solid #3b82f6" }}>
+            <div style={{ width: LW, minWidth: LW, padding: "9px 12px", fontSize: "12px", fontWeight: 900, color: "#111827", letterSpacing: "1px", borderRight: "2px solid #3b82f6", position: "sticky", left: 0, zIndex: 5, background: "#f8fafc" }}>RAZEM</div>
             {dayArr.map((d) => {
               const cnt = monthEvs.filter((e) => new Date(e.date).getDate() === d).length;
               return (
-                <div key={d} style={{ width: CW, minWidth: CW, display: "flex", alignItems: "center", justifyContent: "center", borderRight: "1px solid #f1f5f9", background: d === todayD ? "#fef2f2" : isWknd(year, month, d) ? "#f1f5f9" : "transparent" }}>
+                <div key={d} style={{ width: CW, minWidth: CW, display: "flex", alignItems: "center", justifyContent: "center", borderRight: "1px solid #3b82f6", background: d === todayD ? "#fef2f2" : isWknd(year, month, d) ? "#f1f5f9" : "transparent" }}>
                   {cnt > 0 && (
                     <span
                       style={{
                         background: cnt > 10 ? "#ef4444" : cnt > 5 ? "#f59e0b" : "#1e293b",
                         color: "white",
                         borderRadius: "50%",
-                        width: "19px",
-                        height: "19px",
-                        fontSize: "9px",
+                        width: "22px",
+                        height: "22px",
+                        fontSize: "12px",
                         fontWeight: 900,
                         display: "flex",
                         alignItems: "center",
@@ -2295,33 +2296,33 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
         />
       )}
       {monthEvs.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "48px", color: "#475569" }}>
+        <div style={{ textAlign: "center", padding: "48px", color: "#111827" }}>
           <div style={{ fontSize: "36px", marginBottom: "8px" }}>📅</div>
           <div style={{ fontSize: "15px", fontWeight: 700 }}>Brak imprez w tym miesiącu</div>
         </div>
       ) : (
         <div style={{ marginTop: "18px" }}>
-          <div style={{ fontSize: "10px", fontWeight: 900, color: "#64748b", letterSpacing: "2px", marginBottom: "10px" }}>IMPREZY W MIESIĄCU ({monthEvs.length})</div>
+          <div style={{ fontSize: "13px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "10px" }}>IMPREZY W MIESIĄCU ({monthEvs.length})</div>
           <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
             {monthEvs.map((ev) => {
               const c = getEventColor(ev);
               const db = dayBadge(daysTo(ev.date));
               return (
-                <div key={ev.id} onClick={() => onOpenModal(ev.id)} style={{ background: "white", border: "1px solid #e2e8f0", borderLeft: `4px solid ${c.bd}`, borderRadius: "9px", padding: "9px 13px", cursor: "pointer", transition: "box-shadow 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.boxShadow = `0 4px 16px ${c.bd}33`; }} onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; }}>
+                <div key={ev.id} onClick={() => onOpenModal(ev.id)} style={{ background: "white", border: "1px solid #3b82f6", borderLeft: `4px solid ${c.bd}`, borderRadius: "9px", padding: "9px 13px", cursor: "pointer", transition: "box-shadow 0.15s" }} onMouseEnter={(e) => { e.currentTarget.style.boxShadow = `0 4px 16px ${c.bd}33`; }} onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "none"; }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "9px", flexWrap: "wrap" }}>
                     <div style={{ minWidth: "86px", flexShrink: 0 }}>
-                      <div style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a" }}>{fmtDate(ev.date)}</div>
-                      <span style={{ background: db.bg, color: db.tx, borderRadius: "4px", padding: "1px 5px", fontSize: "9px", fontWeight: 800 }}>{db.t}</span>
+                      <div style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>{fmtDate(ev.date)}</div>
+                      <span style={{ background: db.bg, color: db.tx, borderRadius: "4px", padding: "1px 5px", fontSize: "11px", fontWeight: 800 }}>{db.t}</span>
                     </div>
                     <TypeBadge type={ev.type} pop={ev.pop} room={ev.room} />
-                    <div style={{ fontWeight: 700, color: "#0f172a", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: "100px" }}>{ev.client ?? "—"}</div>
-                    <div style={{ fontSize: "11px", color: "#64748b", whiteSpace: "nowrap", flexShrink: 0 }}>🏛 {ev.room ?? "—"}</div>
-                    <div style={{ fontSize: "11px", color: "#64748b", whiteSpace: "nowrap", flexShrink: 0 }}>👥 {ev.guests ?? "—"}</div>
+                    <div style={{ fontWeight: 700, color: "#0f172a", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: "100px", fontSize: "15px" }}>{ev.client ?? "—"}</div>
+                    <div style={{ fontSize: "13px", color: "#111827", whiteSpace: "nowrap", flexShrink: 0 }}>🏛 {ev.room ?? "—"}</div>
+                    <div style={{ fontSize: "13px", color: "#111827", whiteSpace: "nowrap", flexShrink: 0 }}>👥 {ev.guests ?? "—"}</div>
                     <PhoneBtn phone={ev.phone} client={ev.client} date={ev.date} compact />
                   </div>
-                  <div style={{ marginTop: "5px", paddingTop: "5px", borderTop: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <span style={{ fontSize: "11px", fontWeight: 700, color: ev.deposit != null ? (ev.paid ? "#166534" : "#991b1b") : "#94a3b8" }}>{ev.deposit != null ? (ev.paid ? "✅ " + fmtZl(ev.deposit) : "❌ " + fmtZl(ev.deposit)) : "brak zadatku"}</span>
-                    {ev.notes && <span style={{ fontSize: "11px", color: "#64748b" }}>· 📝 {ev.notes}</span>}
+                  <div style={{ marginTop: "5px", paddingTop: "5px", borderTop: "1px solid #3b82f6", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: ev.deposit != null ? (ev.paid ? "#166534" : "#991b1b") : "#374151" }}>{ev.deposit != null ? (ev.paid ? "✅ " + fmtZl(ev.deposit) : "❌ " + fmtZl(ev.deposit)) : "brak zadatku"}</span>
+                    {ev.notes && <span style={{ fontSize: "13px", color: "#111827" }}>· 📝 {ev.notes}</span>}
                   </div>
                 </div>
               );
@@ -2343,7 +2344,7 @@ export function CentrumSprzedazy() {
   const [archive, setArchive] = useState(false);
   const [specialFilter, setSpecialFilter] = useState<"unpaid" | null>(null);
   const [sort, setSort] = useState("date");
-  const [tab, setTab] = useState<"lista" | "kalendarz" | "wolne" | "os" | "sale" | "tydzien" | "gantt" | "kosztorysy">("lista");
+  const [tab, setTab] = useState<"lista" | "kalendarz" | "wolne" | "os" | "sale" | "tydzien" | "gantt" | "kosztorysy" | "pakiety">("lista");
   const [ganttOffset, setGanttOffset] = useState(0);
   const ganttBase = new Date(TODAY.getFullYear(), TODAY.getMonth() + ganttOffset, 1);
   const ganttYear = ganttBase.getFullYear();
@@ -2379,7 +2380,7 @@ export function CentrumSprzedazy() {
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("centrum_prefs") || "{}");
-      if (saved.tab && ["lista", "kalendarz", "wolne", "os", "sale", "tydzien", "gantt", "kosztorysy"].includes(saved.tab)) setTab(saved.tab);
+      if (saved.tab && ["lista", "kalendarz", "wolne", "os", "sale", "tydzien", "gantt", "kosztorysy", "pakiety"].includes(saved.tab)) setTab(saved.tab);
       if (saved.fType) setFType(saved.fType);
       if (saved.fStatus) setFStatus(saved.fStatus);
     } catch { /* ignore */ }
@@ -2574,7 +2575,7 @@ export function CentrumSprzedazy() {
       <div style={{ fontFamily: "'Source Sans 3','Segoe UI',system-ui,sans-serif", background: "#f0f4f8", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
           <div style={{ width: "40px", height: "40px", border: "4px solid #e2e8f0", borderTopColor: "#3b82f6", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-          <div style={{ fontSize: "14px", fontWeight: 600, color: "#64748b" }}>Ładowanie imprez…</div>
+          <div style={{ fontSize: "14px", fontWeight: 600, color: "#111827" }}>Ładowanie imprez…</div>
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -2586,7 +2587,7 @@ export function CentrumSprzedazy() {
       <div style={{ fontFamily: "'Source Sans 3','Segoe UI',system-ui,sans-serif", background: "#f0f4f8", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ textAlign: "center", padding: "32px" }}>
           <div style={{ fontSize: "18px", fontWeight: 700, color: "#991b1b", marginBottom: "12px" }}>Błąd pobierania</div>
-          <div style={{ fontSize: "14px", color: "#64748b", marginBottom: "20px" }}>{error}</div>
+          <div style={{ fontSize: "14px", color: "#111827", marginBottom: "20px" }}>{error}</div>
           <button onClick={fetchEvents} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "9px", padding: "12px 24px", cursor: "pointer", fontSize: "14px", fontWeight: 700 }}>Spróbuj ponownie</button>
         </div>
       </div>
@@ -2596,17 +2597,17 @@ export function CentrumSprzedazy() {
   return (
     <div style={{ fontFamily: "'Source Sans 3','Segoe UI',system-ui,-apple-system,sans-serif", background: "#fff", minHeight: "100vh", color: "#1e1e1e" }}>
       <style>{`@keyframes toastIn{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}} *{box-sizing:border-box} input::placeholder{color:#555}`}</style>
-      <div style={{ background: "white", padding: "14px 24px", borderBottom: "1px solid #e5e5e5", display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap", position: "sticky", top: 0, zIndex: 100 }}>
+      <div style={{ background: "white", padding: "14px 24px", borderBottom: "2px solid #3b82f6", display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap", position: "sticky", top: 0, zIndex: 100 }}>
         <div>
-          <div style={{ fontSize: "16px", fontWeight: 700, color: "#1e1e1e" }}>Centrum Sprzedaży</div>
-          <div style={{ fontSize: "11px", color: "#555" }}>Hotel Łabędź · {events.filter((e) => e.status !== "CANCELLED").length} imprez</div>
+          <div style={{ fontSize: "18px", fontWeight: 700, color: "#1e1e1e" }}>Centrum Sprzedaży</div>
+          <div style={{ fontSize: "15px", color: "#111827" }}>Hotel Łabędź · {events.filter((e) => e.status !== "CANCELLED").length} imprez</div>
         </div>
-        <div style={{ display: "flex", gap: "12px", fontSize: "11px", color: "#555" }}>
+        <div style={{ display: "flex", gap: "12px", fontSize: "15px", color: "#111827" }}>
           {stats.thisWeek > 0 && <span style={{ color: "#e53935", fontWeight: 600 }}>{stats.thisWeek} ten tyg.</span>}
           {stats.unpaid > 0 && <span style={{ color: "#f57c00", fontWeight: 600 }}>{stats.unpaid} nieopł. ({fmtZl(stats.sumUnpaid)})</span>}
           {stats.drafts > 0 && <span>{stats.drafts} szkiców</span>}
         </div>
-        <div style={{ display: "flex", marginLeft: "auto", borderBottom: "1px solid #e5e5e5" }}>
+        <div style={{ display: "flex", marginLeft: "auto", borderBottom: "1px solid #3b82f6" }}>
           {[
             ["lista", "Lista"],
             ["kalendarz", "Kalendarz"],
@@ -2616,30 +2617,23 @@ export function CentrumSprzedazy() {
             ["tydzien", "Tydzień"],
             ["gantt", "Gantt"],
             ["kosztorysy", "Kosztorysy"],
+            ["pakiety", "Pakiety menu"],
           ].map(([t, l]) => (
-            <button key={t} onClick={() => setTab(t as typeof tab)} style={{ padding: "8px 14px", border: "none", background: "transparent", cursor: "pointer", borderBottom: tab === t ? "2px solid #1e1e1e" : "2px solid transparent", color: tab === t ? "#1e1e1e" : "#555", fontSize: "12px", fontWeight: tab === t ? 700 : 500, marginBottom: "-1px" }}>{l}</button>
+            <button key={t} onClick={() => setTab(t as typeof tab)} style={{ padding: "10px 16px", border: "none", background: "transparent", cursor: "pointer", borderBottom: tab === t ? "2px solid #3b82f6" : "2px solid transparent", color: tab === t ? "#1e1e1e" : "#111827", fontSize: "15px", fontWeight: tab === t ? 700 : 500, marginBottom: "-1px" }}>{l}</button>
           ))}
         </div>
-        <button onClick={() => { setCreateDate(""); setCreateModalOpen(true); }} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "7px 14px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>+ Nowa impreza</button>
-      </div>
-      <div style={{ padding: "8px 24px", borderBottom: "1px solid #f5f5f5", display: "flex", gap: "12px", flexWrap: "wrap" }}>
-        {Object.entries(TC).map(([type, tc]) => (
-          <span key={type} style={{ display: "inline-flex", alignItems: "center", gap: "3px", fontSize: "10px", color: "#555" }}>
-            <span style={{ width: "7px", height: "7px", borderRadius: "2px", background: tc.bd }} />
-            {TL[type]}
-          </span>
-        ))}
+        <button onClick={() => { setCreateDate(""); setCreateModalOpen(true); }} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "4px", padding: "7px 14px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>+ Nowa impreza</button>
       </div>
       {weekEvs.length > 0 && (
-        <div style={{ borderBottom: "1px solid #f0f0f0", padding: "8px 24px", display: "flex", gap: "8px", alignItems: "center", overflowX: "auto", fontSize: "11px" }}>
+        <div style={{ borderBottom: "1px solid #3b82f6", padding: "10px 24px", display: "flex", gap: "10px", alignItems: "center", overflowX: "auto", fontSize: "15px" }}>
           <span style={{ color: "#e53935", fontWeight: 700, whiteSpace: "nowrap" }}>Ten tydzień:</span>
           {weekEvs.map((e) => {
             const tc = getEventColor(e);
             return (
-              <button key={e.id} onClick={() => { setTab("lista"); setFStatus("ACTIVE"); setFType("ALL"); setExpId(e.id); }} style={{ background: "white", border: `1px solid ${tc.bd}`, borderRadius: "3px", padding: "3px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", whiteSpace: "nowrap" }}>
+              <button key={e.id} onClick={() => { setTab("lista"); setFStatus("ACTIVE"); setFType("ALL"); setExpId(e.id); }} style={{ background: "white", border: `1px solid ${tc.bd}`, borderRadius: "5px", padding: "6px 14px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontSize: "15px", whiteSpace: "nowrap" }}>
                 <span style={{ width: "6px", height: "6px", borderRadius: "2px", background: tc.bd }} />
                 <strong style={{ color: "#1e1e1e" }}>{e.client ?? "—"}</strong>
-                <span style={{ color: "#555" }}>{fmtDate(e.date)}</span>
+                <span style={{ color: "#111827" }}>{fmtDate(e.date)}</span>
               </button>
             );
           })}
@@ -2647,25 +2641,8 @@ export function CentrumSprzedazy() {
       )}
       {tab === "lista" && (
         <>
-          {(() => {
-            const monthEvs = filtered.filter((e) => {
-              const d = new Date(e.date);
-              return d.getMonth() === new Date().getMonth() && d.getFullYear() === new Date().getFullYear();
-            });
-            const deposits = monthEvs.filter((e) => e.deposit != null);
-            const totalDeposits = deposits.reduce((a, e) => a + Number(e.deposit ?? 0), 0);
-            return (
-              <div style={{ display: "flex", gap: "16px", padding: "8px 24px", fontSize: "11px", color: "#888", borderBottom: "1px solid #f0f0f0", marginBottom: "0" }}>
-                <span><strong style={{ color: "#1e1e1e" }}>{filtered.length}</strong> imprez</span>
-                <span><strong style={{ color: "#1e1e1e" }}>{fmtZl(totalDeposits)}</strong> zadatków</span>
-                <span><strong style={{ color: "#1e1e1e" }}>{monthEvs.length}</strong> w tym miesiącu</span>
-                <span>Wesela: <strong>{filtered.filter((e) => e.type === "WESELE").length}</strong></span>
-                <span>Komunie: <strong>{filtered.filter((e) => e.type === "KOMUNIA").length}</strong></span>
-              </div>
-            );
-          })()}
-          <div style={{ padding: "10px 24px", display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center", borderBottom: "1px solid #f0f0f0" }}>
-            <button onClick={() => { setSpecialFilter(null); setFType("ALL"); }} style={{ padding: "4px 10px", borderRadius: "3px", border: `1px solid ${fType === "ALL" && !specialFilter ? "#1e1e1e" : "#e5e5e5"}`, background: fType === "ALL" && !specialFilter ? "#f5f5f5" : "white", color: fType === "ALL" && !specialFilter ? "#1e1e1e" : "#555", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>
+          <div style={{ padding: "10px 24px", display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center", borderBottom: "1px solid #3b82f6" }}>
+            <button onClick={() => { setSpecialFilter(null); setFType("ALL"); }} style={{ padding: "8px 16px", borderRadius: "5px", border: `1px solid ${fType === "ALL" && !specialFilter ? "#3b82f6" : "#e5e5e5"}`, background: fType === "ALL" && !specialFilter ? "#eff6ff" : "white", color: fType === "ALL" && !specialFilter ? "#1e40af" : "#111827", fontSize: "15px", fontWeight: 600, cursor: "pointer" }}>
               Wszystkie {Object.values(typeCounts).reduce((a, v) => a + v, 0)}
             </button>
             {Object.entries(TL).map(([type, label]) => {
@@ -2674,30 +2651,28 @@ export function CentrumSprzedazy() {
               const c = TC[type];
               const active = fType === type;
               return (
-                <button key={type} onClick={() => { setSpecialFilter(null); setFType(active ? "ALL" : type); }} style={{ padding: "4px 10px", borderRadius: "3px", border: `1px solid ${active ? c.bd : "#e5e5e5"}`, background: active ? c.bg : "white", color: active ? c.tx : "#555", fontSize: "11px", fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                <button key={type} onClick={() => { setSpecialFilter(null); setFType(active ? "ALL" : type); }} style={{ padding: "8px 16px", borderRadius: "5px", border: `1px solid ${active ? c.bd : "#e5e5e5"}`, background: active ? c.bg : "white", color: active ? c.tx : "#111827", fontSize: "15px", fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}>
                   <span style={{ width: "5px", height: "5px", borderRadius: "2px", background: c.bd }} />{label} {cnt}
                 </button>
               );
             })}
-            <button onClick={() => { setFStatus("ALL"); setFType("ALL"); setSpecialFilter("unpaid"); }} style={{ padding: "4px 10px", borderRadius: "3px", fontSize: "11px", fontWeight: 600, border: "1px solid #c62828", color: "#c62828", background: "white", cursor: "pointer" }}>💰 Do przypomnienia ({stats.unpaid})</button>
+            <button onClick={() => { setFStatus("ALL"); setFType("ALL"); setSpecialFilter("unpaid"); }} style={{ padding: "8px 16px", borderRadius: "5px", fontSize: "15px", fontWeight: 600, border: "1px solid #c62828", color: "#c62828", background: "white", cursor: "pointer" }}>💰 Do przypomnienia ({stats.unpaid})</button>
             <div style={{ flex: 1 }} />
-            <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape" && !modalId) clearSearch(); }} placeholder="Szukaj..." style={{ width: "200px", padding: "5px 10px", border: "1px solid #ddd", borderRadius: "3px", fontSize: "12px", outline: "none" }} />
-            {search && <button onClick={clearSearch} type="button" style={{ padding: "5px 8px", marginLeft: "4px", background: "none", border: "1px solid #ddd", borderRadius: "3px", cursor: "pointer", fontSize: "11px" }}>×</button>}
-            <div style={{ display: "flex", border: "1px solid #ddd", borderRadius: "3px", overflow: "hidden" }}>
+            <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape" && !modalId) clearSearch(); }} placeholder="Szukaj..." style={{ width: "200px", padding: "6px 12px", border: "1px solid #3b82f6", borderRadius: "3px", fontSize: "13px", outline: "none" }} />
+            {search && <button onClick={clearSearch} type="button" style={{ padding: "6px 10px", marginLeft: "4px", background: "none", border: "1px solid #ddd", borderRadius: "3px", cursor: "pointer", fontSize: "13px" }}>×</button>}
+            <div style={{ display: "flex", border: "1px solid #3b82f6", borderRadius: "3px", overflow: "hidden" }}>
               {[["ACTIVE", "Aktywne"], ["CONFIRMED", "Potwierdzone"], ["DRAFT", "Szkice"], ["DONE", "Zakończone"], ["CANCELLED", "Anulowane"], ["ALL", "Wszystkie"]].map(([s, l]) => (
-                <button key={s} onClick={() => { setSpecialFilter(null); setFStatus(s); }} type="button" style={{ padding: "4px 8px", border: "none", borderRight: "1px solid #eee", background: fStatus === s ? "#f5f5f5" : "white", fontSize: "10px", fontWeight: fStatus === s ? 700 : 500, color: fStatus === s ? "#1e1e1e" : "#555", cursor: "pointer" }}>{l}{s === "CANCELLED" && stats.cancelled > 0 ? ` (${stats.cancelled})` : ""}</button>
+                <button key={s} onClick={() => { setSpecialFilter(null); setFStatus(s); }} type="button" style={{ padding: "5px 10px", border: "none", borderRight: "1px solid #3b82f6", background: fStatus === s ? "#eff6ff" : "white", fontSize: "12px", fontWeight: fStatus === s ? 700 : 500, color: fStatus === s ? "#1e40af" : "#555", cursor: "pointer" }}>{l}{s === "CANCELLED" && stats.cancelled > 0 ? ` (${stats.cancelled})` : ""}</button>
               ))}
             </div>
-            <button onClick={handleExport} type="button" style={{ padding: "5px 10px", borderRadius: "3px", fontSize: "11px", fontWeight: 600, border: "1px solid #ddd", color: "#666", background: "white", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>📥 Eksport</button>
-            <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ padding: "5px 10px", border: "1px solid #ddd", borderRadius: "3px", fontSize: "12px", background: "white", cursor: "pointer", color: "#555", flexShrink: 0 }}>
+            <button onClick={handleExport} type="button" style={{ padding: "6px 12px", borderRadius: "3px", fontSize: "13px", fontWeight: 600, border: "1px solid #3b82f6", color: "#1e40af", background: "white", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>📥 Eksport</button>
+            <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ padding: "6px 12px", border: "1px solid #ddd", borderRadius: "3px", fontSize: "13px", background: "white", cursor: "pointer", color: "#111827", flexShrink: 0 }}>
               <option value="date">Data ↑</option>
               <option value="client">Klient A–Z</option>
               <option value="type">Typ + Data</option>
             </select>
-            <button onClick={() => setArchive(!archive)} type="button" style={{ padding: "5px 10px", border: `1px solid ${archive ? "#1e1e1e" : "#ddd"}`, borderRadius: "3px", background: archive ? "#f5f5f5" : "white", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: archive ? "#1e1e1e" : "#4a4a4a", whiteSpace: "nowrap", flexShrink: 0 }}>{archive ? "✓ " : ""}Archiwum</button>
-            <div style={{ padding: "5px 10px", border: "1px solid #e5e5e5", borderRadius: "3px", background: "white", fontSize: "12px", fontWeight: 600, flexShrink: 0, color: filtered.length === 0 ? "#e53935" : "#1e1e1e", whiteSpace: "nowrap" }}>{plural(filtered.length)}</div>
-            {stats.sumPaid > 0 && <div style={{ padding: "5px 10px", border: "1px solid #e5e5e5", borderRadius: "3px", background: "white", fontSize: "11px", fontWeight: 600, color: "#2e7d32", whiteSpace: "nowrap", flexShrink: 0 }}>{fmtZl(stats.sumPaid)}</div>}
-            {anyFilter && <button onClick={() => { setSearch(""); setFType("ALL"); setFStatus("ACTIVE"); setArchive(false); setSpecialFilter(null); }} type="button" style={{ padding: "5px 10px", border: "1px solid #ddd", borderRadius: "3px", background: "white", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#c62828", whiteSpace: "nowrap", flexShrink: 0 }}>Wyczyść</button>}
+            <button onClick={() => setArchive(!archive)} type="button" style={{ padding: "6px 12px", border: `1px solid ${archive ? "#3b82f6" : "#ddd"}`, borderRadius: "3px", background: archive ? "#eff6ff" : "white", cursor: "pointer", fontSize: "13px", fontWeight: 600, color: archive ? "#1e40af" : "#4a4a4a", whiteSpace: "nowrap", flexShrink: 0 }}>{archive ? "✓ " : ""}Archiwum</button>
+            {anyFilter && <button onClick={() => { setSearch(""); setFType("ALL"); setFStatus("ACTIVE"); setArchive(false); setSpecialFilter(null); }} type="button" style={{ padding: "6px 12px", border: "1px solid #ddd", borderRadius: "3px", background: "white", cursor: "pointer", fontSize: "13px", fontWeight: 600, color: "#c62828", whiteSpace: "nowrap", flexShrink: 0 }}>Wyczyść</button>}
           </div>
           {filtered.length === 0 && search && fType !== "ALL" && (
             <div style={{ margin: "0 20px 6px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: "9px", padding: "9px 14px", fontSize: "13px", color: "#92400e", fontWeight: 600 }}>
@@ -2709,11 +2684,12 @@ export function CentrumSprzedazy() {
               <div style={{
                 display: "grid",
                 gridTemplateColumns: "60px 95px minmax(200px,1fr) 150px 70px 90px minmax(100px,1fr) 110px 120px 20px",
-                padding: "8px 16px",
-                borderBottom: "2px solid #e5e5e5",
-                fontSize: "10px", fontWeight: 700, color: "#555",
+                padding: "12px 16px",
+                borderBottom: "2px solid #3b82f6",
+                fontSize: "14px", fontWeight: 700, color: "#1e40af",
                 textTransform: "uppercase", letterSpacing: "0.5px",
                 gap: "8px",
+                background: "#eff6ff",
               }}>
                 <span>Nr</span>
                 <span>Data</span>
@@ -2730,8 +2706,8 @@ export function CentrumSprzedazy() {
             {filtered.length === 0 ? (
               <div style={{ textAlign: "center", padding: "70px 20px" }}>
                 <div style={{ fontSize: "44px", marginBottom: "10px" }}>🔍</div>
-                <div style={{ fontSize: "17px", fontWeight: 800, color: "#475569" }}>Brak wyników</div>
-                <div style={{ fontSize: "13px", color: "#475569", marginTop: "6px" }}>{search ? <>Nic nie pasuje do <strong>"{search}"</strong></> : "Spróbuj zmienić filtry"}</div>
+                <div style={{ fontSize: "17px", fontWeight: 800, color: "#111827" }}>Brak wyników</div>
+                <div style={{ fontSize: "13px", color: "#111827", marginTop: "6px" }}>{search ? <>Nic nie pasuje do <strong>"{search}"</strong></> : "Spróbuj zmienić filtry"}</div>
                 {anyFilter && <button onClick={() => { setSearch(""); setFType("ALL"); setFStatus("ACTIVE"); setArchive(false); setSpecialFilter(null); }} type="button" style={{ marginTop: "14px", background: "#3b82f6", color: "white", border: "none", borderRadius: "9px", padding: "10px 22px", cursor: "pointer", fontSize: "13px", fontWeight: 800 }}>Wyczyść wszystkie filtry</button>}
               </div>
             ) : (
@@ -2749,6 +2725,7 @@ export function CentrumSprzedazy() {
       {tab === "tydzien" && <WeekView events={filtered} onOpenModal={openModal} />}
       {tab === "gantt" && <GanttView events={events} onOpenModal={openModal} />}
       {tab === "kosztorysy" && <KosztorysyView />}
+      {tab === "pakiety" && <MenuPackagesView />}
       {modalId && <EventDetailModal evId={modalId} events={events} onClose={() => setModalId(null)} handlers={handlers} showToast={showToast} onOpenModal={openModal} onRefresh={fetchEvents} />}
       {createModalOpen && (
         <CreateEventModal

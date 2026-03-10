@@ -2,12 +2,14 @@ import { prisma } from "@/lib/db";
 import { NextResponse } from "next/server";
 
 // GET — lista pakietów (z sekcjami i dopłatami)
+// ?includeInactive=true — zwraca także nieaktywne (do zarządzania)
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const eventType = searchParams.get("eventType");
+  const includeInactive = searchParams.get("includeInactive") === "true";
 
   const all = await prisma.menuPackage.findMany({
-    where: { isActive: true },
+    where: includeInactive ? {} : { isActive: true },
     include: {
       sections: { orderBy: { sortOrder: "asc" } },
       surcharges: { orderBy: { sortOrder: "asc" } },
