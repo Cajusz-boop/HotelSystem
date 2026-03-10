@@ -15,15 +15,18 @@ type EventRecord = {
   type: string;
   client: string | null;
   phone: string | null;
+  email: string | null;
   room: string | null;
   guests: number | null;
   deposit: number | null;
   paid: boolean;
+  depositDueDate: string | null;
   status: string;
   notes: string;
   pop: boolean;
   parentEventId: string | null;
   menu?: Record<string, unknown> | null;
+  eventNumber: string | null;
   quoteId: string | null;
   checklistDocId: string | null;
   menuDocId: string | null;
@@ -71,6 +74,8 @@ type EventRecord = {
   afterpartyGuests?: number | null;
   afterpartyMenu?: string | null;
   afterpartyMusic?: string | null;
+  assignedTo?: string | null;
+  checklist?: Record<string, boolean> | null;
 };
 
 function mapApiToEvent(record: Record<string, unknown>): EventRecord {
@@ -88,15 +93,18 @@ function mapApiToEvent(record: Record<string, unknown>): EventRecord {
     type: (record.eventType as string) ?? "INNE",
     client: (record.clientName as string) ?? null,
     phone: (record.clientPhone as string) ?? null,
+    email: (record.clientEmail as string) ?? null,
     room: (record.roomName as string) ?? null,
     guests: record.guestCount != null ? Number(record.guestCount) : null,
     deposit: depNum,
     paid: Boolean(record.depositPaid),
+    depositDueDate: (record.depositDueDate as string) ?? null,
     status: (record.status as string) ?? "DRAFT",
     notes: (record.notes as string) ?? "",
     pop: Boolean(record.isPoprawiny),
     parentEventId: (record.parentEventId as string) ?? null,
     menu: (record.menu as Record<string, unknown> | null) ?? null,
+    eventNumber: (record.eventNumber as string) ?? null,
     quoteId: (record.quoteId as string) ?? null,
     checklistDocId: (record.checklistDocId as string) ?? null,
     menuDocId: (record.menuDocId as string) ?? null,
@@ -144,6 +152,8 @@ function mapApiToEvent(record: Record<string, unknown>): EventRecord {
     afterpartyGuests: record.afterpartyGuests != null ? Number(record.afterpartyGuests) : null,
     afterpartyMenu: (record.afterpartyMenu as string) ?? null,
     afterpartyMusic: (record.afterpartyMusic as string) ?? null,
+    assignedTo: (record.assignedTo as string) ?? null,
+    checklist: (record.checklist as Record<string, boolean>) ?? null,
   };
 }
 
@@ -164,6 +174,11 @@ function getEventColor(ev: { type: string; room?: string | null }) {
     return TC_WESELE_DIAMENTOWA;
   }
   return TC[ev.type] || TC.INNE;
+}
+function getRoomColor(roomStr: string | null | undefined): string {
+  if (!roomStr) return "#94a3b8";
+  const first = roomStr.split(",")[0]?.trim();
+  return first && RC[first] ? RC[first] : "#94a3b8";
 }
 
 const TYPE_EMOJI: Record<string, string> = {
@@ -203,6 +218,21 @@ const ROOMS = [
   "Wiata",
   "Do ustalenia",
 ];
+const CHECKLIST_ITEMS = [
+  { id: "menu", label: "Menu uzupełnione", auto: (ev: EventRecord) => ev.menu != null },
+  { id: "deposit", label: "Zadatek opłacony", auto: (ev: EventRecord) => ev.paid },
+  { id: "guests", label: "Liczba gości potwierdzona", auto: (ev: EventRecord) => (ev.guests ?? 0) > 0 },
+  { id: "room", label: "Sala potwierdzona", auto: (ev: EventRecord) => !!(ev.room && ev.room !== "Do ustalenia") },
+  { id: "phone", label: "Telefon kontaktowy", auto: (ev: EventRecord) => !!ev.phone },
+  { id: "email", label: "Email klienta", auto: (ev: EventRecord) => !!ev.email },
+  { id: "hours", label: "Godziny ustalone", auto: (ev: EventRecord) => !!ev.tf },
+  { id: "cake", label: "Tort zamówiony", auto: null },
+  { id: "flowers", label: "Kwiaty zamówione", auto: null },
+  { id: "dj", label: "DJ/orkiestra potwierdzone", auto: null },
+  { id: "seating", label: "Układ stołów gotowy", auto: null },
+  { id: "final", label: "Potwierdzenie końcowe z klientem", auto: null },
+] as const;
+
 const RC: Record<string, string> = {
   "Sala Złota": "#f59e0b",
   "Sala Diamentowa": "#8b5cf6",
@@ -336,9 +366,9 @@ function StatusBadge({ status }: { status: string }) {
   return <span style={{ background: s.bg, color: s.tx, border: `1px solid ${s.bd}`, borderRadius: "5px", padding: "2px 8px", fontSize: "11px", fontWeight: 700, whiteSpace: "nowrap" }}>{s.label}</span>;
 }
 
-function PhoneBtn({ phone }: { phone: string | null }) {
+function PhoneBtn({ phone, client, date, compact }: { phone: string | null; client?: string | null; date?: string | null; compact?: boolean }) {
   const [copied, setCopied] = useState(false);
-  if (!phone) return <span style={{ fontSize: "11px", color: "#ddd" }}>—</span>;
+  if (!phone) return <span style={{ fontSize: "11px", color: "#666" }}>—</span>;
   const copy = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -347,10 +377,25 @@ function PhoneBtn({ phone }: { phone: string | null }) {
       setTimeout(() => setCopied(false), 1600);
     });
   };
+  const tel = phone.replace(/\s/g, "");
+  const waNum = phone.replace(/[\s\+\-]/g, "").replace(/^0/, "48");
+  const waText = encodeURIComponent(`Dzień dobry, ${client || ""}. W sprawie rezerwacji na ${date ? fmtDate(date) : ""} w Hotelu Łabędź.`);
+  const smsBody = encodeURIComponent(`Hotel Łabędź - dot. imprezy ${date ? fmtDate(date) : ""}`);
+
+  if (compact) {
+    return (
+      <div onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+        <a href={`tel:${tel}`} style={{ fontSize: "12px", color: "#1976d2", textDecoration: "none", fontWeight: 500 }}>{phone}</a>
+        <a href={`https://wa.me/${waNum}?text=${waText}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", color: "#25d366", fontWeight: 600, textDecoration: "none", border: "1px solid #25d366", borderRadius: "3px", padding: "1px 6px" }}>WhatsApp</a>
+        <a href={`sms:${tel}?body=${smsBody}`} style={{ fontSize: "11px", color: "#666", textDecoration: "none", border: "1px solid #ddd", borderRadius: "3px", padding: "1px 6px" }}>SMS</a>
+        <button onClick={copy} title="Kopiuj numer" style={{ background: "none", border: "none", cursor: "pointer", fontSize: "11px", color: copied ? "#2e7d32" : "#555" }}>{copied ? "✓" : "⎘"}</button>
+      </div>
+    );
+  }
   return (
     <div onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", alignItems: "center" }}>
-      <a href={`tel:${phone.replace(/\s/g, "")}`} style={{ fontSize: "12px", color: "#1976d2", textDecoration: "none", fontWeight: 500 }}>{phone}</a>
-      <button onClick={copy} title="Kopiuj numer" style={{ marginLeft: "4px", background: "none", border: "none", cursor: "pointer", fontSize: "11px", color: copied ? "#2e7d32" : "#999" }}>{copied ? "✓" : "⎘"}</button>
+      <a href={`tel:${tel}`} style={{ fontSize: "12px", color: "#1976d2", textDecoration: "none", fontWeight: 500 }}>{phone}</a>
+      <button onClick={copy} title="Kopiuj numer" style={{ marginLeft: "4px", background: "none", border: "none", cursor: "pointer", fontSize: "11px", color: copied ? "#2e7d32" : "#555" }}>{copied ? "✓" : "⎘"}</button>
     </div>
   );
 }
@@ -366,16 +411,21 @@ function DepositChip({
 }) {
   if (ev.deposit != null) {
     return (
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle(ev.id);
-        }}
-        title={ev.paid ? "Kliknij: oznacz jako NIEopłacony" : "Kliknij: oznacz jako OPŁACONY"}
-        style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: "12px", fontWeight: 600, color: ev.paid ? "#2e7d32" : "#c62828", whiteSpace: "nowrap" }}
-      >
-        {ev.paid ? "✓" : "—"} {fmtZl(ev.deposit)}
-      </button>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle(ev.id);
+          }}
+          title={ev.paid ? "Kliknij: oznacz jako NIEopłacony" : "Kliknij: oznacz jako OPŁACONY"}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: "12px", fontWeight: 600, color: ev.paid ? "#2e7d32" : "#c62828", whiteSpace: "nowrap" }}
+        >
+          {ev.paid ? "✓" : "—"} {fmtZl(ev.deposit)}
+        </button>
+        {ev.deposit && !ev.paid && ev.depositDueDate && new Date(ev.depositDueDate) < new Date() && (
+          <span style={{ fontSize: "10px", color: "#c62828", fontWeight: 700 }}>przeterminowany!</span>
+        )}
+      </span>
     );
   }
   return (
@@ -384,7 +434,7 @@ function DepositChip({
         e.stopPropagation();
         onOpen(ev.id);
       }}
-      style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: "11px", color: "#ddd" }}
+      style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: "11px", color: "#666" }}
     >
       + zadatek
     </button>
@@ -429,19 +479,19 @@ function DepositModal({
           <div style={{ fontSize: "14px", fontWeight: 700, color: "#1e1e1e" }}>{existingAmt != null ? "Zmień zadatek" : "Dodaj zadatek"}</div>
         </div>
         <div style={{ padding: "16px 18px" }}>
-          <label style={{ fontSize: "11px", fontWeight: 600, color: "#888", display: "block", marginBottom: "4px" }}>Kwota (zł)</label>
+          <label style={{ fontSize: "11px", fontWeight: 600, color: "#4a4a4a", display: "block", marginBottom: "4px" }}>Kwota (zł)</label>
           <input ref={inp} type="text" inputMode="decimal" value={amt} onChange={(e) => setAmt(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} placeholder="np. 1500,50" style={{ width: "100%", padding: "8px 12px", boxSizing: "border-box", border: "1px solid #ddd", borderRadius: "4px", fontSize: "14px", outline: "none" }} />
-          <div style={{ fontSize: "10px", color: "#ccc", marginTop: "4px" }}>Wpisz kwotę z przecinkiem lub kropką</div>
+          <div style={{ fontSize: "10px", color: "#555", marginTop: "4px" }}>Wpisz kwotę z przecinkiem lub kropką</div>
         </div>
         <div style={{ display: "flex", gap: "8px", marginBottom: "16px", padding: "0 18px" }}>
           {[true, false].map((p) => (
-            <button key={String(p)} onClick={() => setPaid(p)} style={{ flex: 1, padding: "8px", border: `1px solid ${p === paid ? (p ? "#a5d6a7" : "#ffcc80") : "#e5e5e5"}`, background: p === paid ? (p ? "#e8f5e9" : "#fff3e0") : "white", borderRadius: "3px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: p === paid ? (p ? "#2e7d32" : "#e65100") : "#999" }}>
+            <button key={String(p)} onClick={() => setPaid(p)} style={{ flex: 1, padding: "8px", border: `1px solid ${p === paid ? (p ? "#a5d6a7" : "#ffcc80") : "#e5e5e5"}`, background: p === paid ? (p ? "#e8f5e9" : "#fff3e0") : "white", borderRadius: "3px", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: p === paid ? (p ? "#2e7d32" : "#e65100") : "#555" }}>
               {p ? "Opłacony" : "Nieopłacony"}
             </button>
           ))}
         </div>
         <div style={{ padding: "12px 18px", borderTop: "1px solid #e5e5e5", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, color: "#888", cursor: "pointer" }}>Anuluj</button>
+          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, color: "#4a4a4a", cursor: "pointer" }}>Anuluj</button>
           <button onClick={save} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "6px 16px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Zapisz</button>
         </div>
       </div>
@@ -463,7 +513,7 @@ function CancelConfirmModal({ clientName, onConfirm, onClose }: { clientName: st
           <strong style={{ color: "#1e1e1e" }}>{clientName ?? "—"}</strong> — status zostanie zmieniony na ANULOWANE. Możesz przywrócić imprezę później.
         </div>
         <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e5e5", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, color: "#666", cursor: "pointer" }}>Wróć</button>
+          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, color: "#444", cursor: "pointer" }}>Wróć</button>
           <button onClick={onConfirm} style={{ background: "#c62828", color: "white", border: "none", borderRadius: "4px", padding: "6px 14px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Tak, anuluj</button>
         </div>
       </div>
@@ -489,7 +539,7 @@ function CreateEventField({ label, value, onChange, placeholder, type = "text", 
 }) {
   return (
     <div style={{ marginBottom: compact ? "0" : "16px" }}>
-      <label style={{ fontSize: "11px", fontWeight: 700, color: "#888", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>{label}</label>
+      <label style={{ fontSize: "11px", fontWeight: 700, color: "#4a4a4a", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>{label}</label>
       <input type={type} value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
         style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "4px", fontSize: "13px", outline: "none", fontFamily: "inherit" }}
         onFocus={(e) => { e.currentTarget.style.borderColor = "#999"; }}
@@ -504,6 +554,7 @@ function evToFullForm(e: EventRecord): EventFormTabState {
     eventType: e.type || "WESELE",
     clientName: e.client ?? "",
     clientPhone: e.phone ?? "",
+    clientEmail: e.email ?? "",
     eventDate: e.date ?? "",
     roomName: e.room ?? "",
     addPoprawiny: false,
@@ -511,6 +562,7 @@ function evToFullForm(e: EventRecord): EventFormTabState {
     poprawinyGuestCount: "",
     depositAmount: e.deposit != null ? String(e.deposit) : "",
     depositPaid: e.paid ?? false,
+    depositDueDate: e.depositDueDate ?? "",
     timeStart: e.tf ?? "",
     timeEnd: e.tt ?? "",
     churchTime: e.churchTime ?? "",
@@ -545,6 +597,7 @@ function evToFullForm(e: EventRecord): EventFormTabState {
     facebookConsent: e.facebookConsent ?? false,
     ownNapkins: e.ownNapkins ?? false,
     dutyPerson: e.dutyPerson ?? "",
+    assignedTo: e.assignedTo ?? "",
     afterpartyEnabled: e.afterpartyEnabled ?? false,
     afterpartyTimeFrom: e.afterpartyTimeFrom ?? "",
     afterpartyTimeTo: e.afterpartyTimeTo ?? "",
@@ -562,6 +615,7 @@ function toCreatePayload(form: EventFormTabState, menuData: Record<string, unkno
     eventType: form.eventType,
     clientName: form.clientName || "Nowa impreza",
     clientPhone: form.clientPhone || null,
+    clientEmail: form.clientEmail || null,
     dateFrom: dateVal,
     eventDate: dateVal,
     dateTo: dateVal,
@@ -602,6 +656,7 @@ function toCreatePayload(form: EventFormTabState, menuData: Record<string, unkno
     facebookConsent: form.facebookConsent,
     ownNapkins: form.ownNapkins,
     dutyPerson: form.dutyPerson || null,
+    assignedTo: form.assignedTo || null,
     afterpartyEnabled: form.afterpartyEnabled,
     afterpartyTimeFrom: form.afterpartyTimeFrom || null,
     afterpartyTimeTo: form.afterpartyTimeTo || null,
@@ -611,6 +666,7 @@ function toCreatePayload(form: EventFormTabState, menuData: Record<string, unkno
     notes: form.notes || "",
     depositAmount: form.depositAmount ? parseFloat(String(form.depositAmount).replace(",", ".")) : null,
     depositPaid: form.depositPaid,
+    depositDueDate: form.depositDueDate || null,
     addPoprawiny: form.eventType === "WESELE" && form.addPoprawiny,
     poprawinyDate: form.addPoprawiny ? form.poprawinyDate : null,
     poprawinyGuestCount: form.addPoprawiny && form.poprawinyGuestCount !== "" ? Number(form.poprawinyGuestCount) : null,
@@ -626,6 +682,7 @@ function toEditPayload(form: EventFormTabState, menuData: Record<string, unknown
     eventType: form.eventType,
     clientName: form.clientName || "Nowa impreza",
     clientPhone: form.clientPhone || null,
+    clientEmail: form.clientEmail || null,
     dateFrom: dateVal,
     eventDate: dateVal,
     dateTo: dateVal,
@@ -666,6 +723,7 @@ function toEditPayload(form: EventFormTabState, menuData: Record<string, unknown
     facebookConsent: form.facebookConsent,
     ownNapkins: form.ownNapkins,
     dutyPerson: form.dutyPerson || null,
+    assignedTo: form.assignedTo || null,
     afterpartyEnabled: form.afterpartyEnabled,
     afterpartyTimeFrom: form.afterpartyTimeFrom || null,
     afterpartyTimeTo: form.afterpartyTimeTo || null,
@@ -675,6 +733,7 @@ function toEditPayload(form: EventFormTabState, menuData: Record<string, unknown
     notes: form.notes || "",
     depositAmount: form.depositAmount ? parseFloat(String(form.depositAmount).replace(",", ".")) : null,
     depositPaid,
+    depositDueDate: form.depositDueDate || null,
     status,
     ...(menuData && { menu: menuData }),
   };
@@ -754,14 +813,14 @@ function CreateEventModal({
             <span style={{ fontSize: "10px", color: "#f57c00", fontWeight: 600, border: "1px solid #f57c0033", borderRadius: "3px", padding: "1px 6px" }}>Nowa</span>
           </div>
           <div style={{ fontSize: "16px", fontWeight: 700, color: "#1e1e1e" }}>Nowa impreza</div>
-          {form.eventDate && <div style={{ fontSize: "12px", color: "#999", marginTop: "2px" }}>{fmtLong(form.eventDate)}</div>}
+          {form.eventDate && <div style={{ fontSize: "12px", color: "#555", marginTop: "2px" }}>{fmtLong(form.eventDate)}</div>}
         </div>
         <div style={{ display: "flex", borderBottom: "1px solid #e5e5e5", padding: "0 20px", flexShrink: 0 }}>
           {(["dane", "goscie", "menu", "szczegoly"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              style={{ padding: "8px 16px", border: "none", background: "transparent", borderBottom: tab === t ? "2px solid #1e1e1e" : "2px solid transparent", color: tab === t ? "#1e1e1e" : "#bbb", fontSize: "13px", fontWeight: tab === t ? 700 : 500, cursor: "pointer", marginBottom: "-1px" }}
+              style={{ padding: "8px 16px", border: "none", background: "transparent", borderBottom: tab === t ? "2px solid #1e1e1e" : "2px solid transparent", color: tab === t ? "#1e1e1e" : "#555", fontSize: "13px", fontWeight: tab === t ? 700 : 500, cursor: "pointer", marginBottom: "-1px" }}
             >
               {t === "dane" ? "Dane" : t === "goscie" ? "Goście i czas" : t === "menu" ? "Menu i tort" : "Szczegóły"}
             </button>
@@ -771,7 +830,7 @@ function CreateEventModal({
           <EventFormTabs tab={tab} form={form} update={updateForm} menuData={menuData} onMenuSave={(d) => { setMenuData(d); showToast("Menu zapisane"); }} evForMenu={evForMenu} />
         </div>
         <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e5e5", display: "flex", gap: "8px", justifyContent: "flex-end", flexShrink: 0 }}>
-          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "8px 16px", fontSize: "12px", fontWeight: 600, color: "#888", cursor: "pointer" }}>Anuluj</button>
+          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "8px 16px", fontSize: "12px", fontWeight: 600, color: "#4a4a4a", cursor: "pointer" }}>Anuluj</button>
           <button onClick={handleSave} disabled={saving} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "8px 20px", fontSize: "12px", fontWeight: 600, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>{saving ? "Zapisuję..." : "Zapisz imprezę"}</button>
         </div>
       </div>
@@ -804,7 +863,7 @@ function EventDetailModal({
   const [noteText, setNoteText] = useState("");
   const [showDep, setShowDep] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
-  const [zakladka, setZakladka] = useState<"dane" | "goscie" | "menu" | "szczegoly">("dane");
+  const [zakladka, setZakladka] = useState<"dane" | "goscie" | "menu" | "szczegoly" | "zadania">("dane");
   const [editMenuData, setEditMenuData] = useState<Record<string, unknown> | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
@@ -845,6 +904,25 @@ function EventDetailModal({
   const doCancel = () => handlers.changeStatus(evId, "CANCELLED").then(() => { setShowCancel(false); showToast("Impreza anulowana", "warn"); onClose(); }).catch(onErr);
   const doRestore = () => handlers.changeStatus(evId, "CONFIRMED").then(() => showToast("Impreza przywrócona ✅")).catch(onErr);
 
+  const handleChecklistToggle = async (itemId: string, checked: boolean) => {
+    const next = { ...(ev.checklist ?? {}), [itemId]: checked };
+    try {
+      const res = await fetch(`/api/event-orders/${ev.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checklist: next }),
+      });
+      if (res.ok) {
+        onRefresh?.();
+        showToast(checked ? "Zaznaczono" : "Odznaczono");
+      } else {
+        showToast("Błąd zapisu", "err");
+      }
+    } catch {
+      showToast("Błąd zapisu", "err");
+    }
+  };
+
   const handleSaveEdit = async () => {
     setEditSaving(true);
     try {
@@ -884,19 +962,20 @@ function EventDetailModal({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center", marginBottom: "4px" }}>
                   <TypeBadge type={ev.type} pop={ev.pop} room={ev.room} />
+                  {ev.eventNumber && <span style={{ fontSize: "11px", color: "#999", fontWeight: 500 }}>{ev.eventNumber}</span>}
                   <StatusBadge status={ev.status} />
                   <span style={{ background: db.bg, color: db.tx, borderRadius: "3px", padding: "1px 6px", fontSize: "10px", fontWeight: 600 }}>{db.t}</span>
                 </div>
                 <div style={{ fontSize: "16px", fontWeight: 700, color: "#1e1e1e", lineHeight: 1.25, wordBreak: "break-word" }}>{ev.client ?? "—"}</div>
-                <div style={{ fontSize: "12px", color: "#999", marginTop: "2px" }}>{fmtLong(ev.date)}{(ev.tf || ev.tt) ? ` · ${ev.tf ?? "?"}–${ev.tt ?? "?"}` : ""}</div>
+                <div style={{ fontSize: "12px", color: "#555", marginTop: "2px" }}>{fmtLong(ev.date)}{(ev.tf || ev.tt) ? ` · ${ev.tf ?? "?"}–${ev.tt ?? "?"}` : ""}{ev.assignedTo && <span style={{ marginLeft: "8px", fontSize: "10px", color: "#999" }}>👤 {ev.assignedTo}</span>}</div>
               </div>
-              <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "20px", color: "#ccc", cursor: "pointer", alignSelf: "flex-start" }}>×</button>
+              <button onClick={onClose} style={{ background: "none", border: "none", fontSize: "20px", color: "#666", cursor: "pointer", alignSelf: "flex-start" }}>×</button>
             </div>
           </div>
           <div style={{ display: "flex", borderBottom: "1px solid #e5e5e5", marginLeft: "20px", marginRight: "20px", gap: "0" }}>
             {(editMode
-              ? ([["dane", "Dane"], ["goscie", "Goście i czas"], ["menu", "Menu i tort"], ["szczegoly", "Szczegóły"]] as const)
-              : ([["szczegoly", "Szczegóły"], ["menu", "Menu"]] as const)
+              ? ([["dane", "Dane"], ["goscie", "Goście i czas"], ["menu", "Menu i tort"], ["szczegoly", "Szczegóły"], ["zadania", "Zadania"]] as const)
+              : ([["szczegoly", "Szczegóły"], ["menu", "Menu"], ["zadania", "Zadania"]] as const)
             ).map(([t, label]) => (
               <button
                 key={t}
@@ -918,7 +997,25 @@ function EventDetailModal({
             ))}
           </div>
           <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-            {editMode ? (
+            {zakladka === "zadania" ? (
+              <div style={{ padding: "16px 20px" }}>
+                {CHECKLIST_ITEMS.map((item) => {
+                  const autoChecked = item.auto ? item.auto(ev) : false;
+                  const manualChecked = ev.checklist?.[item.id] ?? false;
+                  const checked = autoChecked || manualChecked;
+                  return (
+                    <label key={item.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 0", borderBottom: "1px solid #f5f5f5", cursor: "pointer" }}>
+                      <input type="checkbox" checked={checked} disabled={!!autoChecked} onChange={() => { if (!autoChecked) handleChecklistToggle(ev.id, item.id, !manualChecked); }} />
+                      <span style={{ fontSize: "12px", color: checked ? "#2e7d32" : "#999", textDecoration: checked ? "line-through" : "none" }}>{item.label}</span>
+                      {autoChecked && <span style={{ fontSize: "9px", color: "#bbb" }}>auto</span>}
+                    </label>
+                  );
+                })}
+                <div style={{ marginTop: "8px", fontSize: "11px", color: "#888" }}>
+                  {CHECKLIST_ITEMS.filter((i) => (i.auto ? i.auto(ev) : false) || ev.checklist?.[i.id]).length}/{CHECKLIST_ITEMS.length} gotowe
+                </div>
+              </div>
+            ) : editMode ? (
               <EventFormTabs
                 tab={zakladka}
                 form={editForm}
@@ -930,12 +1027,26 @@ function EventDetailModal({
             ) : zakladka === "szczegoly" ? (
             <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "12px" }}>
             {ev.phone ? (
-              <a href={`tel:${ev.phone.replace(/\s/g, "")}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", background: "#f0fdf4", border: "2px solid #22c55e", borderRadius: "12px", padding: "14px", textDecoration: "none", fontSize: "16px", fontWeight: 900, color: "#166534" }}>📞 Zadzwoń: {ev.phone}</a>
+              <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                <a href={`tel:${ev.phone.replace(/\s/g, "")}`} style={{ fontSize: "12px", color: "#1976d2", textDecoration: "none" }}>📞 {ev.phone}</a>
+                <a href={`https://wa.me/${ev.phone.replace(/[\s\+\-]/g, "").replace(/^0/, "48")}?text=${encodeURIComponent(`Dzień dobry, ${ev.client || ""}. W sprawie rezerwacji na ${fmtDate(ev.date)} w Hotelu Łabędź.`)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", color: "#25d366", fontWeight: 600, textDecoration: "none", border: "1px solid #25d366", borderRadius: "3px", padding: "4px 10px" }}>WhatsApp</a>
+                <a href={`sms:${ev.phone.replace(/\s/g, "")}?body=${encodeURIComponent(`Hotel Łabędź - dot. imprezy ${fmtDate(ev.date)}`)}`} style={{ fontSize: "11px", color: "#666", textDecoration: "none", border: "1px solid #ddd", borderRadius: "3px", padding: "4px 10px" }}>SMS</a>
+              </div>
             ) : (
-              <div style={{ background: "#f8fafc", border: "2px dashed #e2e8f0", borderRadius: "12px", padding: "12px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>📵 Brak numeru telefonu</div>
+              <div style={{ background: "#f8fafc", border: "2px dashed #e2e8f0", borderRadius: "12px", padding: "12px", textAlign: "center", color: "#475569", fontSize: "13px" }}>📵 Brak numeru telefonu</div>
+            )}
+            {ev.email && (
+              <div style={{ display: "flex", gap: "6px", alignItems: "center", padding: "10px 14px", background: "#f8fafc", borderRadius: "12px" }}>
+                <a href={`mailto:${ev.email}`} style={{ color: "#1976d2", fontSize: "12px", textDecoration: "none", fontWeight: 600 }}>{ev.email}</a>
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(ev.email!).then(() => showToast("Email skopiowany"))}
+                  style={{ fontSize: "10px", color: "#999", background: "white", border: "1px solid #ddd", borderRadius: "3px", padding: "2px 6px", cursor: "pointer" }}
+                >Kopiuj</button>
+              </div>
             )}
             <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
-              <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px", marginBottom: "9px" }}>STATUS</div>
+              <div style={{ fontSize: "10px", fontWeight: 900, color: "#475569", letterSpacing: "2px", marginBottom: "9px" }}>STATUS</div>
               <div style={{ display: "flex", gap: "8px" }}>
                 {["CONFIRMED", "DRAFT", "DONE"].map((s) => (
                   <button key={s} onClick={() => doStatus(s)} style={{ flex: 1, padding: "9px 12px", background: ev.status === s ? SC[s].bg : "white", border: `2px solid ${ev.status === s ? SC[s].bd : "#e2e8f0"}`, borderRadius: "9px", cursor: "pointer", fontSize: "13px", fontWeight: 800, color: ev.status === s ? SC[s].tx : "#64748b", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
@@ -945,31 +1056,34 @@ function EventDetailModal({
               </div>
             </div>
             <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
-              <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px", marginBottom: "9px" }}>SZCZEGÓŁY</div>
+              <div style={{ fontSize: "10px", fontWeight: 900, color: "#475569", letterSpacing: "2px", marginBottom: "9px" }}>SZCZEGÓŁY</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                 {[["🏛 Sala", ev.room ?? "—"], ["👥 Goście", ev.guests ? ev.guests + " osób" : "—"], ["⏰ Godziny", (ev.tf || ev.tt) ? `${ev.tf ?? "?"}–${ev.tt ?? "?"}` : "—"], ["📊 Status", SC[ev.status]?.label ?? "—"]].map(([l, v]) => (
-                  <div key={l}><div style={{ fontSize: "10px", color: "#94a3b8", fontWeight: 700, marginBottom: "2px" }}>{l}</div><div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>{v}</div></div>
+                  <div key={l}><div style={{ fontSize: "10px", color: "#475569", fontWeight: 700, marginBottom: "2px" }}>{l}</div><div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>{v}</div></div>
                 ))}
               </div>
             </div>
             <>
             <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "9px" }}>
-                <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px" }}>ZADATEK</div>
+                <div style={{ fontSize: "10px", fontWeight: 900, color: "#475569", letterSpacing: "2px" }}>ZADATEK</div>
                 <button onClick={() => setShowDep(true)} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "7px", padding: "4px 10px", cursor: "pointer", fontSize: "11px", fontWeight: 700, color: "#3b82f6" }}>{ev.deposit != null ? "✏️ Zmień" : "+ Dodaj"}</button>
               </div>
               {ev.deposit != null ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
                   <div style={{ fontSize: "22px", fontWeight: 900, color: ev.paid ? "#166534" : "#991b1b" }}>{ev.paid ? "✅" : "❌"} {fmtZl(ev.deposit)}</div>
+                  {ev.deposit && !ev.paid && ev.depositDueDate && new Date(ev.depositDueDate) < new Date() && (
+                    <span style={{ fontSize: "10px", color: "#c62828", fontWeight: 700 }}>Zadatek przeterminowany!</span>
+                  )}
                   <button onClick={doToggleDep} style={{ background: ev.paid ? "#fef2f2" : "#f0fdf4", border: `1.5px solid ${ev.paid ? "#fca5a5" : "#86efac"}`, borderRadius: "9px", padding: "7px 14px", cursor: "pointer", fontSize: "12px", fontWeight: 800, color: ev.paid ? "#991b1b" : "#166534" }}>{ev.paid ? "↩ Cofnij" : "✅ Oznacz opłacony"}</button>
                 </div>
               ) : (
-                <div style={{ color: "#94a3b8", fontSize: "13px", fontStyle: "italic" }}>Brak zadatku — kliknij Dodaj</div>
+                <div style={{ color: "#475569", fontSize: "13px", fontStyle: "italic" }}>Brak zadatku — kliknij Dodaj</div>
               )}
             </div>
             <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "14px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "9px" }}>
-                <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px" }}>NOTATKA</div>
+                <div style={{ fontSize: "10px", fontWeight: 900, color: "#475569", letterSpacing: "2px" }}>NOTATKA</div>
                 {!editNote && <button onClick={() => setEditNote(true)} style={{ background: "white", border: "1px solid #e2e8f0", borderRadius: "7px", padding: "4px 10px", cursor: "pointer", fontSize: "11px", fontWeight: 700, color: "#64748b" }}>✏️ Edytuj</button>}
               </div>
               {editNote ? (
@@ -978,7 +1092,7 @@ function EventDetailModal({
                   <div style={{ display: "flex", gap: "8px", marginTop: "8px", alignItems: "center" }}>
                     <button onClick={doSaveNote} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "8px", padding: "8px 18px", cursor: "pointer", fontSize: "13px", fontWeight: 800 }}>Zapisz</button>
                     <button onClick={() => { setEditNote(false); setNoteText(ev.notes ?? ""); }} style={{ background: "white", border: "1.5px solid #e2e8f0", borderRadius: "8px", padding: "8px 14px", cursor: "pointer", fontSize: "13px", color: "#64748b" }}>Anuluj</button>
-                    <span style={{ fontSize: "11px", color: "#94a3b8" }}>Ctrl+Enter</span>
+                    <span style={{ fontSize: "11px", color: "#475569" }}>Ctrl+Enter</span>
                   </div>
                 </div>
               ) : (
@@ -986,14 +1100,43 @@ function EventDetailModal({
               )}
             </div>
             </>
-            {ev.quoteId && (
+            {ev.quoteId ? (
               <div style={{ background: "#f5f3ff", border: "1.5px solid #a78bfa", borderRadius: "10px", padding: "10px 14px", display: "flex", alignItems: "center", gap: "10px" }}>
                 <span style={{ fontSize: "18px" }}>💰</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: "10px", fontWeight: 900, color: "#7c3aed", letterSpacing: "1px" }}>KOSZTORYS</div>
-                  <div style={{ fontSize: "13px", fontWeight: 700, color: "#4c1d95" }}>Powiązany kosztorys: {ev.quoteId}</div>
+                  <div style={{ fontSize: "13px", fontWeight: 700, color: "#4c1d95" }}>Powiązany kosztorys</div>
                 </div>
-                <button onClick={() => { window.location.href = "/mice/kosztorysy"; }} style={{ background: "#7c3aed", color: "white", border: "none", borderRadius: "7px", padding: "6px 12px", cursor: "pointer", fontSize: "11px", fontWeight: 800 }}>Otwórz</button>
+                <button onClick={() => window.open(`/mice/kosztorysy`, "_blank")} style={{ background: "#7c3aed", color: "white", border: "none", borderRadius: "7px", padding: "6px 12px", cursor: "pointer", fontSize: "11px", fontWeight: 800 }}>📋 Otwórz kosztorys</button>
+              </div>
+            ) : (
+              <div style={{ background: "#f8fafc", border: "1.5px solid #e2e8f0", borderRadius: "10px", padding: "10px 14px" }}>
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch("/api/mice/kosztorysy", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          name: `${ev.client ?? "Klient"} — ${TL[ev.type] ?? "Impreza"} ${fmtDate(ev.date)}`,
+                          items: ev.menu ? [{ name: "Pakiet menu", quantity: ev.guests ?? 1, unitPrice: 0, amount: 0 }] : [],
+                        }),
+                      });
+                      if (!res.ok) throw new Error("Błąd tworzenia");
+                      const quote = await res.json();
+                      await fetch(`/api/event-orders/${ev.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ quoteId: quote.id }),
+                      });
+                      onRefresh?.();
+                      showToast("Kosztorys utworzony");
+                    } catch {
+                      showToast("Błąd tworzenia kosztorysu", "err");
+                    }
+                  }}
+                  style={{ background: "white", border: "1px solid #ddd", borderRadius: "7px", padding: "6px 14px", fontSize: "11px", fontWeight: 600, color: "#666", cursor: "pointer" }}
+                >📋 Utwórz kosztorys</button>
               </div>
             )}
             {(() => {
@@ -1068,7 +1211,26 @@ function EventDetailModal({
             )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
               <button onClick={() => { setEditForm(evToFullForm(ev)); setEditMode(true); setZakladka("dane"); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1.5px solid #e2e8f0", borderRadius: "10px", padding: "12px", fontSize: "13px", fontWeight: 700, color: "#0f172a", cursor: "pointer" }}>✏️ Edytuj</button>
-              <button onClick={() => { const docId = ev.menuDocId ?? ev.checklistDocId; if (docId) window.open(`https://docs.google.com/document/d/${docId}/edit`, "_blank"); else showToast("Dokumenty Google Docs — w przygotowaniu", "warn"); }} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1.5px solid #e2e8f0", borderRadius: "10px", padding: "12px", cursor: "pointer", fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>📄 Dokumenty</button>
+              <div style={{ marginTop: "12px", padding: "8px 12px", background: "#f9fafb", borderRadius: "4px", border: "1px solid #f0f0f0", fontSize: "12px" }}>
+                <div style={{ fontWeight: 700, color: "#666", marginBottom: "4px" }}>Dokumenty</div>
+                {ev.checklistDocId ? (
+                  <a href={`https://docs.google.com/document/d/${ev.checklistDocId}`} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2", fontSize: "11px", display: "block" }}>📄 Checklista Google Docs</a>
+                ) : (
+                  <span style={{ color: "#ccc", fontSize: "11px" }}>Checklista: brak (tworzona przy zapisie)</span>
+                )}
+                {ev.menuDocId ? (
+                  <a href={`https://docs.google.com/document/d/${ev.menuDocId}`} target="_blank" rel="noopener noreferrer" style={{ color: "#1976d2", fontSize: "11px", display: "block", marginTop: "2px" }}>📄 Menu Google Docs</a>
+                ) : (
+                  <span style={{ color: "#ccc", fontSize: "11px", display: "block", marginTop: "2px" }}>Menu Docs: brak</span>
+                )}
+              </div>
+              <button onClick={() => {
+                const tc = getEventColor(ev);
+                const menuSummary = ev.menu ? "Menu zapisane" : "Menu nie wybrane";
+                const html = `<!DOCTYPE html><html><head><title>Karta imprezy — ${ev.client ?? "—"}</title><style>body{font-family:Arial,sans-serif;padding:20px;font-size:13px}h1{font-size:18px;margin-bottom:4px}h2{font-size:14px;color:#666;margin-top:16px;border-bottom:1px solid #ddd;padding-bottom:4px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px}.label{font-weight:bold;color:#888;font-size:11px;text-transform:uppercase}.value{font-size:13px;margin-bottom:8px}.notes{background:#f5f5f5;padding:10px;border-radius:4px;white-space:pre-wrap;margin-top:8px}.badge{display:inline-block;padding:2px 10px;border-radius:3px;font-weight:bold;font-size:12px;background:${tc.bg};color:${tc.tx};border:1px solid ${tc.bd}}@media print{body{padding:0}}</style></head><body><div style="display:flex;justify-content:space-between;align-items:center"><div><h1>${ev.client ?? "—"}</h1><span class="badge">${TL[ev.type] ?? "Inne"}</span>${ev.eventNumber ? '<span style="margin-left:8px;color:#999">' + ev.eventNumber + "</span>" : ""}</div><div style="text-align:right;font-size:12px;color:#666">Hotel Łabędź<br/>Wydrukowano: ${new Date().toLocaleDateString("pl-PL")}</div></div><h2>Dane imprezy</h2><div class="grid"><div><div class="label">Data</div><div class="value">${fmtLong(ev.date)}</div></div><div><div class="label">Sala</div><div class="value">${ev.room ?? "—"}</div></div><div><div class="label">Goście</div><div class="value">${ev.guests ? ev.guests + " os." : "—"}</div></div><div><div class="label">Godziny</div><div class="value">${ev.tf || ev.tt ? (ev.tf || "?") + "–" + (ev.tt || "?") : "—"}</div></div><div><div class="label">Telefon</div><div class="value">${ev.phone ?? "—"}</div></div><div><div class="label">Email</div><div class="value">${ev.email ?? "—"}</div></div><div><div class="label">Zadatek</div><div class="value">${ev.deposit != null ? fmtZl(ev.deposit) + (ev.paid ? " ✓" : " ✗") : "—"}</div></div><div><div class="label">Status</div><div class="value">${(SC[ev.status] ?? {}).label ?? ev.status ?? "—"}</div></div></div>${ev.notes ? '<h2>Notatki</h2><div class="notes">' + ev.notes + "</div>" : ""}<h2>Menu</h2><div style="font-size:12px;color:#666">${menuSummary}</div><div style="margin-top:40px;border-top:1px solid #ddd;padding-top:8px;font-size:10px;color:#ccc">Wygenerowano z Centrum Sprzedaży · Hotel Łabędź</div></body></html>`;
+                const w = window.open("", "_blank");
+                if (w) { w.document.write(html); w.document.close(); w.print(); }
+              }} style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "6px 14px", fontSize: "11px", fontWeight: 600, color: "#666", cursor: "pointer" }}>🖨 Drukuj kartę</button>
             </div>
             </div>
             ) : (
@@ -1138,7 +1300,7 @@ function EventCard({
   return (
     <div ref={ref} id={`ev-${ev.id}`} onClick={onToggle} style={{
       display: "grid",
-      gridTemplateColumns: "95px minmax(200px,1fr) 150px 70px 90px minmax(100px,1fr) 110px 120px 20px",
+      gridTemplateColumns: "60px 95px minmax(200px,1fr) 150px 70px 90px minmax(100px,1fr) 110px 120px 20px",
       padding: "10px 16px",
       borderBottom: "1px solid #f0f0f0",
       borderLeft: `3px solid ${leftBorder}`,
@@ -1149,9 +1311,10 @@ function EventCard({
       opacity: cancelled ? 0.45 : 1,
       background: "white",
     }} onMouseEnter={(e) => { if (!cancelled) e.currentTarget.style.background = "#fafafa"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "white"; }}>
+      <div style={{ fontSize: "11px", color: "#999" }}>{ev.eventNumber ?? "—"}</div>
       <div>
         <div style={{ fontWeight: 600, color: "#1e1e1e" }}>{fmtDate(ev.date)}</div>
-        <div style={{ fontSize: "10px", fontWeight: 600, color: days === 0 ? "#e53935" : days <= 7 && days > 0 ? "#f57c00" : "#bbb" }}>
+        <div style={{ fontSize: "10px", fontWeight: 600, color: days === 0 ? "#e53935" : days <= 7 && days > 0 ? "#f57c00" : "#555" }}>
           {days === 0 ? "dziś" : days === 1 ? "jutro" : days > 0 ? `za ${days} d` : `${Math.abs(days)} d temu`}
         </div>
       </div>
@@ -1162,20 +1325,21 @@ function EventCard({
           whiteSpace: "nowrap", flexShrink: 0,
         }}>{ev.pop ? "Poprawiny" : TL[ev.type] ?? ev.type}</span>
         <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.client ?? "—"}</span>
+        {ev.assignedTo && <span style={{ fontSize: "10px", color: "#999" }}>👤 {ev.assignedTo}</span>}
         {ev.status === "DRAFT" && <span style={{ fontSize: "10px", color: "#f57c00", fontWeight: 600, flexShrink: 0 }}>Szkic</span>}
       </div>
       <div style={{ fontSize: "12px", color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ev.room ?? ""}>{ev.room ?? "—"}</div>
       <div style={{ fontSize: "12px", color: "#666" }}>{ev.guests ? `${ev.guests} os.` : "—"}</div>
-      <div style={{ fontSize: "11px", color: "#999" }}>{ev.tf || ev.tt ? `${ev.tf ?? "?"}–${ev.tt ?? "?"}` : "—"}</div>
-      <div style={{ fontSize: "11px", color: "#bbb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontStyle: ev.notes ? "normal" : "italic" }} title={ev.notes ?? ""}>{ev.notes || "brak notatki"}</div>
+      <div style={{ fontSize: "11px", color: "#555" }}>{ev.tf || ev.tt ? `${ev.tf ?? "?"}–${ev.tt ?? "?"}` : "—"}</div>
+      <div style={{ fontSize: "11px", color: "#555", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontStyle: ev.notes ? "normal" : "italic" }} title={ev.notes ?? ""}>{ev.notes || "brak notatki"}</div>
       <div style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
         <DepositChip ev={ev} onToggle={onDepositToggle} onOpen={onDepositOpen} />
       </div>
-      <div onClick={(e) => e.stopPropagation()}><PhoneBtn phone={ev.phone} /></div>
-      <span style={{ color: "#ccc", fontSize: "14px", textAlign: "right", transition: "transform 0.15s", transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
+      <div onClick={(e) => e.stopPropagation()}><PhoneBtn phone={ev.phone} client={ev.client} date={ev.date} compact /></div>
+      <span style={{ color: "#555", fontSize: "14px", textAlign: "right", transition: "transform 0.15s", transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
       {expanded && (
         <div style={{ gridColumn: "1 / -1", marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #f0f0f0", display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div style={{ flex: "1 1 200px", fontSize: "12px", color: ev.notes ? "#555" : "#ccc", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{ev.notes || "Brak notatki."}</div>
+          <div style={{ flex: "1 1 200px", fontSize: "12px", color: ev.notes ? "#555" : "#555", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{ev.notes || "Brak notatki."}</div>
           <button onClick={(e) => { e.stopPropagation(); onOpenModal(ev.id); }} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "6px 16px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>Szczegóły</button>
         </div>
       )}
@@ -1218,7 +1382,7 @@ function KosztorysyView() {
       </div>
 
       {quotes.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "48px", color: "#94a3b8" }}>
+        <div style={{ textAlign: "center", padding: "48px", color: "#475569" }}>
           <div style={{ fontSize: "36px", marginBottom: "8px" }}>💰</div>
           <div style={{ fontSize: "15px", fontWeight: 700 }}>Brak kosztorysów</div>
           <div style={{ fontSize: "13px", marginTop: "6px" }}>Utwórz kosztorys w zakładce Kosztorysy MICE</div>
@@ -1270,7 +1434,7 @@ function DayPopup({
   const ref = useRef<HTMLDivElement>(null);
   useEscape(onClose);
   useClickOutside(ref, onClose);
-  const col = RC[room] ?? "#94a3b8";
+  const col = getRoomColor(room);
 
   return (
     <div
@@ -1305,7 +1469,7 @@ function DayPopup({
           }}
         >
           <div style={{ color: "#1e1e1e", fontWeight: 700, fontSize: "14px" }}>{day} {monthLabel} · {room}</div>
-          <div style={{ color: "#888", fontSize: "12px", marginTop: "2px" }}>{plural(events.length)}</div>
+          <div style={{ color: "#4a4a4a", fontSize: "12px", marginTop: "2px" }}>{plural(events.length)}</div>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
           {events.map((ev, i) => {
@@ -1382,6 +1546,60 @@ function MonthNav({ month, year, onPrev, onNext, onToday }: { month: number; yea
   );
 }
 
+function FreeDatesView({ events, month, year, onMonthChange, onCreateWithDate }: { events: EventRecord[]; month: number; year: number; onMonthChange: (fn: (p: number) => number) => void; onCreateWithDate: (dateStr: string, room?: string) => void }) {
+  const [selectedRoom, setSelectedRoom] = useState("Sala Złota");
+  const dInM = new Date(year, month + 1, 0).getDate();
+  const firstDow = new Date(year, month, 1).getDay();
+  const startOffset = firstDow === 0 ? 6 : firstDow - 1;
+  const todayD = TODAY.getFullYear() === year && TODAY.getMonth() === month ? TODAY.getDate() : null;
+
+  const roomEvs = events.filter((e) => {
+    const d = new Date(e.date + "T00:00:00");
+    return d.getFullYear() === year && d.getMonth() === month && (e.room ?? "").includes(selectedRoom) && e.status !== "CANCELLED";
+  });
+  const busyDays = new Set(roomEvs.map((e) => new Date(e.date + "T00:00:00").getDate()));
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < startOffset; i++) cells.push(null);
+  for (let d = 1; d <= dInM; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+  const weeks: (number | null)[][] = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
+  return (
+    <div style={{ padding: "0 20px 48px" }}>
+      <MonthNav month={month} year={year} onPrev={() => onMonthChange((p) => p - 1)} onNext={() => onMonthChange((p) => p + 1)} onToday={() => onMonthChange(() => 0)} />
+      <div style={{ display: "flex", gap: "4px", marginBottom: "12px", flexWrap: "wrap" }}>
+        {ROOMS.filter((r) => r !== "Do ustalenia").map((r) => (
+          <button key={r} onClick={() => setSelectedRoom(r)} style={{ padding: "4px 10px", borderRadius: "3px", fontSize: "11px", fontWeight: 600, border: `1px solid ${selectedRoom === r ? "#1e1e1e" : "#ddd"}`, background: selectedRoom === r ? "#1e1e1e" : "white", color: selectedRoom === r ? "white" : "#666", cursor: "pointer" }}>{r}</button>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "2px", marginBottom: "2px" }}>
+        {["Pon", "Wt", "Śr", "Czw", "Pt", "Sob", "Ndz"].map((d) => (
+          <div key={d} style={{ textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#475569", padding: "6px 0" }}>{d}</div>
+        ))}
+      </div>
+      {weeks.map((week, wi) => (
+        <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "2px", marginBottom: "2px" }}>
+          {week.map((day, di) => {
+            if (day === null) return <div key={di} style={{ background: "#f9fafb", minHeight: "44px", borderRadius: "6px" }} />;
+            const isPast = new Date(year, month, day) < TODAY;
+            const busy = busyDays.has(day);
+            const isToday = day === todayD;
+            const bg = isPast ? "#f1f5f9" : busy ? "#fef2f2" : "#f0fdf4";
+            const borderColor = busy ? "#fca5a5" : isPast ? "#e2e8f0" : "#86efac";
+            return (
+              <div key={di} onClick={() => { if (!isPast && !busy) { const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`; onCreateWithDate(dateStr, selectedRoom); } }} style={{ background: bg, border: `1px solid ${borderColor}`, borderRadius: "6px", minHeight: "44px", padding: "6px", display: "flex", alignItems: "center", justifyContent: "center", cursor: isPast || busy ? "default" : "pointer", fontSize: "14px", fontWeight: 700, color: isPast ? "#94a3b8" : busy ? "#dc2626" : "#166534" }}>
+                {day}
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange, onCreateWithDate }: { events: EventRecord[]; month: number; year: number; onOpenModal: (id: string) => void; onMonthChange: (fn: (p: number) => number) => void; onCreateWithDate?: (dateStr: string) => void }) {
   const [popupDay, setPopupDay] = useState<{ day: number; events: EventRecord[]; x: number; y: number } | null>(null);
 
@@ -1410,7 +1628,7 @@ function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange, on
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "2px", marginBottom: "2px" }}>
         {["Pon", "Wt", "Śr", "Czw", "Pt", "Sob", "Ndz"].map((d) => (
-          <div key={d} style={{ textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#94a3b8", padding: "6px 0" }}>{d}</div>
+          <div key={d} style={{ textAlign: "center", fontSize: "12px", fontWeight: 700, color: "#475569", padding: "6px 0" }}>{d}</div>
         ))}
       </div>
 
@@ -1433,7 +1651,7 @@ function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange, on
                 <div style={{ fontSize: "14px", fontWeight: 700, color: isToday ? "#ef4444" : "#64748b", marginBottom: "3px", display: "flex", alignItems: "center", gap: "4px" }}>
                   {isToday && <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#ef4444" }} />}
                   {day}
-                  {dayEvs.length > 0 && <span style={{ fontSize: "11px", color: "#94a3b8", fontWeight: 700 }}>({dayEvs.length})</span>}
+                  {dayEvs.length > 0 && <span style={{ fontSize: "11px", color: "#475569", fontWeight: 700 }}>({dayEvs.length})</span>}
                 </div>
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px", overflow: "hidden" }}>
                   {dayEvs.slice(0, maxVisible).map((ev) => {
@@ -1526,7 +1744,7 @@ function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange, on
                 setPopupDay(null);
                 onCreateWithDate ? onCreateWithDate(dateStr) : (window.location.href = `/events/new?date=${dateStr}`);
               }}
-              style={{ width: "100%", marginTop: "6px", padding: "6px", background: "#f5f5f5", border: "1px dashed #ddd", borderRadius: "4px", fontSize: "11px", fontWeight: 600, color: "#888", cursor: "pointer", textAlign: "center" }}
+              style={{ width: "100%", marginTop: "6px", padding: "6px", background: "#f5f5f5", border: "1px dashed #ddd", borderRadius: "4px", fontSize: "11px", fontWeight: 600, color: "#4a4a4a", cursor: "pointer", textAlign: "center" }}
             >
               + Nowa impreza na ten dzień
             </button>
@@ -1572,7 +1790,7 @@ function TimelineView({ events, onOpenModal }: { events: EventRecord[]; onOpenMo
 
               <div style={{ marginBottom: "6px" }}>
                 <span style={{ background: db.bg, color: db.tx, borderRadius: "5px", padding: "2px 8px", fontSize: "11px", fontWeight: 800 }}>{db.t}</span>
-                <span style={{ fontSize: "11px", color: "#94a3b8", marginLeft: "8px", fontWeight: 600 }}>{fmtLong(dateStr)} · {plural(dayEvs.length)}</span>
+                <span style={{ fontSize: "11px", color: "#475569", marginLeft: "8px", fontWeight: 600 }}>{fmtLong(dateStr)} · {plural(dayEvs.length)}</span>
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
@@ -1638,7 +1856,7 @@ function HeatmapView({ events, month, year, onOpenModal, onMonthChange }: { even
 
       <div style={{ overflowX: "auto", background: "white", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
         <div style={{ display: "flex", position: "sticky" as const, top: 0, zIndex: 10, background: "white", borderBottom: "2px solid #e2e8f0" }}>
-          <div style={{ width: "80px", minWidth: "80px", padding: "10px 8px", fontSize: "10px", fontWeight: 900, color: "#94a3b8" }}>DZIEŃ</div>
+          <div style={{ width: "80px", minWidth: "80px", padding: "10px 8px", fontSize: "10px", fontWeight: 900, color: "#475569" }}>DZIEŃ</div>
           {ROOMS.map((r) => (
             <div key={r} style={{ flex: 1, minWidth: "140px", padding: "10px 8px", textAlign: "center", fontSize: "10px", fontWeight: 800, color: "#374151", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px" }}>
               <span style={{ width: "8px", height: "8px", borderRadius: "3px", background: RC[r], display: "inline-block" }} />
@@ -1809,7 +2027,7 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
       <div style={{ background: "white", borderRadius: "13px", border: "1px solid #e2e8f0", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", overflowX: "auto" }}>
         <div style={{ width: "100%" }}>
           <div style={{ display: "flex", borderBottom: "2px solid #e2e8f0", position: "sticky", top: 0, zIndex: 20, background: "white" }}>
-            <div style={{ width: LW, minWidth: LW, padding: "9px 12px", fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "1px", borderRight: "2px solid #e2e8f0", background: "white" }}>SALA</div>
+            <div style={{ width: LW, minWidth: LW, padding: "9px 12px", fontSize: "10px", fontWeight: 900, color: "#475569", letterSpacing: "1px", borderRight: "2px solid #e2e8f0", background: "white" }}>SALA</div>
             {dayArr.map((d) => (
               <div key={d} style={{ width: CW, minWidth: CW, textAlign: "center", padding: "6px 0 4px", fontSize: "10px", fontWeight: d === todayD ? 900 : 600, color: d === todayD ? "#ef4444" : isWknd(year, month, d) ? "#94a3b8" : "#374151", background: d === todayD ? "#fef2f2" : isWknd(year, month, d) ? "#f9fafb" : "white", borderRight: "1px solid #f1f5f9" }}>
                 <div>{d}</div>
@@ -1818,7 +2036,7 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
             ))}
           </div>
           {ROOMS.map((room) => {
-            const col = RC[room] ?? "#94a3b8";
+            const col = getRoomColor(room);
             const rowEvs = monthEvs.filter((e) => {
               const norm = normalizeRoom(e.room);
               return norm.includes(room);
@@ -2024,7 +2242,7 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
                             ))}
                           </div>
                           <div style={{ fontSize: count > 9 ? "15px" : "18px", fontWeight: 700, color: "#1e1e1e", lineHeight: 1, marginTop: "2px" }}>{count}</div>
-                          <div style={{ fontSize: "7px", fontWeight: 600, color: "#888", lineHeight: 1, marginTop: "1px" }}>{label}</div>
+                          <div style={{ fontSize: "7px", fontWeight: 600, color: "#4a4a4a", lineHeight: 1, marginTop: "1px" }}>{label}</div>
                         </div>,
                       ];
                     });
@@ -2077,7 +2295,7 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
         />
       )}
       {monthEvs.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "48px", color: "#94a3b8" }}>
+        <div style={{ textAlign: "center", padding: "48px", color: "#475569" }}>
           <div style={{ fontSize: "36px", marginBottom: "8px" }}>📅</div>
           <div style={{ fontSize: "15px", fontWeight: 700 }}>Brak imprez w tym miesiącu</div>
         </div>
@@ -2099,7 +2317,7 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
                     <div style={{ fontWeight: 700, color: "#0f172a", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: "100px" }}>{ev.client ?? "—"}</div>
                     <div style={{ fontSize: "11px", color: "#64748b", whiteSpace: "nowrap", flexShrink: 0 }}>🏛 {ev.room ?? "—"}</div>
                     <div style={{ fontSize: "11px", color: "#64748b", whiteSpace: "nowrap", flexShrink: 0 }}>👥 {ev.guests ?? "—"}</div>
-                    <PhoneBtn phone={ev.phone} />
+                    <PhoneBtn phone={ev.phone} client={ev.client} date={ev.date} compact />
                   </div>
                   <div style={{ marginTop: "5px", paddingTop: "5px", borderTop: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: "8px" }}>
                     <span style={{ fontSize: "11px", fontWeight: 700, color: ev.deposit != null ? (ev.paid ? "#166534" : "#991b1b") : "#94a3b8" }}>{ev.deposit != null ? (ev.paid ? "✅ " + fmtZl(ev.deposit) : "❌ " + fmtZl(ev.deposit)) : "brak zadatku"}</span>
@@ -2123,8 +2341,9 @@ export function CentrumSprzedazy() {
   const [fType, setFType] = useState("ALL");
   const [fStatus, setFStatus] = useState("ACTIVE");
   const [archive, setArchive] = useState(false);
+  const [specialFilter, setSpecialFilter] = useState<"unpaid" | null>(null);
   const [sort, setSort] = useState("date");
-  const [tab, setTab] = useState<"lista" | "kalendarz" | "os" | "sale" | "tydzien" | "gantt" | "kosztorysy">("lista");
+  const [tab, setTab] = useState<"lista" | "kalendarz" | "wolne" | "os" | "sale" | "tydzien" | "gantt" | "kosztorysy">("lista");
   const [ganttOffset, setGanttOffset] = useState(0);
   const ganttBase = new Date(TODAY.getFullYear(), TODAY.getMonth() + ganttOffset, 1);
   const ganttYear = ganttBase.getFullYear();
@@ -2156,6 +2375,19 @@ export function CentrumSprzedazy() {
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("centrum_prefs") || "{}");
+      if (saved.tab && ["lista", "kalendarz", "wolne", "os", "sale", "tydzien", "gantt", "kosztorysy"].includes(saved.tab)) setTab(saved.tab);
+      if (saved.fType) setFType(saved.fType);
+      if (saved.fStatus) setFStatus(saved.fStatus);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("centrum_prefs", JSON.stringify({ tab, fType, fStatus }));
+  }, [tab, fType, fStatus]);
 
   const patchEvent = useCallback(async (id: string, body: Record<string, unknown>) => {
     const res = await fetch(`/api/event-orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -2257,6 +2489,9 @@ export function CentrumSprzedazy() {
   const filtered = useMemo(() => {
     let list = events.filter((e) => {
       const d = daysTo(e.date);
+      if (specialFilter === "unpaid") {
+        return e.deposit != null && !e.paid && d >= 0 && d <= 60;
+      }
       if (!archive && d < -14) return false;
       if (fStatus === "ACTIVE" && e.status === "CANCELLED") return false;
       if (fStatus === "CONFIRMED" && e.status !== "CONFIRMED") return false;
@@ -2275,7 +2510,7 @@ export function CentrumSprzedazy() {
     if (sort === "client") list.sort((a, b) => (a.client ?? "").localeCompare(b.client ?? "", "pl"));
     if (sort === "type") list.sort((a, b) => (a.type !== b.type ? a.type.localeCompare(b.type) : new Date(a.date).getTime() - new Date(b.date).getTime()));
     return list;
-  }, [events, search, fType, fStatus, archive, sort]);
+  }, [events, search, fType, fStatus, archive, sort, specialFilter]);
 
   const stats = useMemo(() => {
     const f = events.filter((e) => daysTo(e.date) >= 0 && e.status !== "CANCELLED");
@@ -2311,11 +2546,32 @@ export function CentrumSprzedazy() {
   }, [events, archive, fStatus]);
 
   const clearSearch = () => { setSearch(""); searchRef.current?.focus(); };
-  const anyFilter = search || fType !== "ALL" || fStatus !== "ACTIVE" || archive;
+
+  const handleExport = async () => {
+    const { exportToExcel } = await import("@/lib/export-excel");
+    const data = filtered.map((ev) => ({
+      Nr: ev.eventNumber || "",
+      Data: fmtDate(ev.date),
+      Typ: TL[ev.type] ?? ev.type ?? "Inne",
+      Klient: ev.client || "",
+      Telefon: ev.phone || "",
+      Email: ev.email || "",
+      Sala: ev.room || "",
+      Goście: ev.guests ?? "",
+      Godziny: ev.tf && ev.tt ? `${ev.tf}-${ev.tt}` : "",
+      Zadatek: ev.deposit != null ? Number(ev.deposit) : "",
+      Opłacony: ev.paid ? "TAK" : ev.deposit ? "NIE" : "",
+      Status: (SC[ev.status] ?? {}).label ?? ev.status ?? "",
+      Notatka: ev.notes || "",
+    }));
+    await exportToExcel(data, "Imprezy", `imprezy-${new Date().toISOString().split("T")[0]}.xlsx`);
+    showToast("Eksport zakończony");
+  };
+  const anyFilter = search || fType !== "ALL" || fStatus !== "ACTIVE" || archive || specialFilter;
 
   if (loading) {
     return (
-      <div style={{ fontFamily: "'DM Sans','Segoe UI',system-ui,sans-serif", background: "#f0f4f8", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ fontFamily: "'Source Sans 3','Segoe UI',system-ui,sans-serif", background: "#f0f4f8", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
           <div style={{ width: "40px", height: "40px", border: "4px solid #e2e8f0", borderTopColor: "#3b82f6", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
           <div style={{ fontSize: "14px", fontWeight: 600, color: "#64748b" }}>Ładowanie imprez…</div>
@@ -2327,7 +2583,7 @@ export function CentrumSprzedazy() {
 
   if (error) {
     return (
-      <div style={{ fontFamily: "'DM Sans','Segoe UI',system-ui,sans-serif", background: "#f0f4f8", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ fontFamily: "'Source Sans 3','Segoe UI',system-ui,sans-serif", background: "#f0f4f8", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ textAlign: "center", padding: "32px" }}>
           <div style={{ fontSize: "18px", fontWeight: 700, color: "#991b1b", marginBottom: "12px" }}>Błąd pobierania</div>
           <div style={{ fontSize: "14px", color: "#64748b", marginBottom: "20px" }}>{error}</div>
@@ -2338,14 +2594,14 @@ export function CentrumSprzedazy() {
   }
 
   return (
-    <div style={{ fontFamily: "'Segoe UI',system-ui,-apple-system,sans-serif", background: "#fff", minHeight: "100vh", color: "#1e1e1e" }}>
-      <style>{`@keyframes toastIn{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}} *{box-sizing:border-box}`}</style>
+    <div style={{ fontFamily: "'Source Sans 3','Segoe UI',system-ui,-apple-system,sans-serif", background: "#fff", minHeight: "100vh", color: "#1e1e1e" }}>
+      <style>{`@keyframes toastIn{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}} *{box-sizing:border-box} input::placeholder{color:#555}`}</style>
       <div style={{ background: "white", padding: "14px 24px", borderBottom: "1px solid #e5e5e5", display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap", position: "sticky", top: 0, zIndex: 100 }}>
         <div>
           <div style={{ fontSize: "16px", fontWeight: 700, color: "#1e1e1e" }}>Centrum Sprzedaży</div>
-          <div style={{ fontSize: "11px", color: "#999" }}>Hotel Łabędź · {events.filter((e) => e.status !== "CANCELLED").length} imprez</div>
+          <div style={{ fontSize: "11px", color: "#555" }}>Hotel Łabędź · {events.filter((e) => e.status !== "CANCELLED").length} imprez</div>
         </div>
-        <div style={{ display: "flex", gap: "12px", fontSize: "11px", color: "#999" }}>
+        <div style={{ display: "flex", gap: "12px", fontSize: "11px", color: "#555" }}>
           {stats.thisWeek > 0 && <span style={{ color: "#e53935", fontWeight: 600 }}>{stats.thisWeek} ten tyg.</span>}
           {stats.unpaid > 0 && <span style={{ color: "#f57c00", fontWeight: 600 }}>{stats.unpaid} nieopł. ({fmtZl(stats.sumUnpaid)})</span>}
           {stats.drafts > 0 && <span>{stats.drafts} szkiców</span>}
@@ -2354,20 +2610,21 @@ export function CentrumSprzedazy() {
           {[
             ["lista", "Lista"],
             ["kalendarz", "Kalendarz"],
+            ["wolne", "Wolne terminy"],
             ["os", "Oś czasu"],
             ["sale", "Sale×Dni"],
             ["tydzien", "Tydzień"],
             ["gantt", "Gantt"],
             ["kosztorysy", "Kosztorysy"],
           ].map(([t, l]) => (
-            <button key={t} onClick={() => setTab(t as typeof tab)} style={{ padding: "8px 14px", border: "none", background: "transparent", cursor: "pointer", borderBottom: tab === t ? "2px solid #1e1e1e" : "2px solid transparent", color: tab === t ? "#1e1e1e" : "#bbb", fontSize: "12px", fontWeight: tab === t ? 700 : 500, marginBottom: "-1px" }}>{l}</button>
+            <button key={t} onClick={() => setTab(t as typeof tab)} style={{ padding: "8px 14px", border: "none", background: "transparent", cursor: "pointer", borderBottom: tab === t ? "2px solid #1e1e1e" : "2px solid transparent", color: tab === t ? "#1e1e1e" : "#555", fontSize: "12px", fontWeight: tab === t ? 700 : 500, marginBottom: "-1px" }}>{l}</button>
           ))}
         </div>
         <button onClick={() => { setCreateDate(""); setCreateModalOpen(true); }} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "7px 14px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>+ Nowa impreza</button>
       </div>
       <div style={{ padding: "8px 24px", borderBottom: "1px solid #f5f5f5", display: "flex", gap: "12px", flexWrap: "wrap" }}>
         {Object.entries(TC).map(([type, tc]) => (
-          <span key={type} style={{ display: "inline-flex", alignItems: "center", gap: "3px", fontSize: "10px", color: "#aaa" }}>
+          <span key={type} style={{ display: "inline-flex", alignItems: "center", gap: "3px", fontSize: "10px", color: "#555" }}>
             <span style={{ width: "7px", height: "7px", borderRadius: "2px", background: tc.bd }} />
             {TL[type]}
           </span>
@@ -2382,7 +2639,7 @@ export function CentrumSprzedazy() {
               <button key={e.id} onClick={() => { setTab("lista"); setFStatus("ACTIVE"); setFType("ALL"); setExpId(e.id); }} style={{ background: "white", border: `1px solid ${tc.bd}`, borderRadius: "3px", padding: "3px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", whiteSpace: "nowrap" }}>
                 <span style={{ width: "6px", height: "6px", borderRadius: "2px", background: tc.bd }} />
                 <strong style={{ color: "#1e1e1e" }}>{e.client ?? "—"}</strong>
-                <span style={{ color: "#999" }}>{fmtDate(e.date)}</span>
+                <span style={{ color: "#555" }}>{fmtDate(e.date)}</span>
               </button>
             );
           })}
@@ -2390,8 +2647,25 @@ export function CentrumSprzedazy() {
       )}
       {tab === "lista" && (
         <>
+          {(() => {
+            const monthEvs = filtered.filter((e) => {
+              const d = new Date(e.date);
+              return d.getMonth() === new Date().getMonth() && d.getFullYear() === new Date().getFullYear();
+            });
+            const deposits = monthEvs.filter((e) => e.deposit != null);
+            const totalDeposits = deposits.reduce((a, e) => a + Number(e.deposit ?? 0), 0);
+            return (
+              <div style={{ display: "flex", gap: "16px", padding: "8px 24px", fontSize: "11px", color: "#888", borderBottom: "1px solid #f0f0f0", marginBottom: "0" }}>
+                <span><strong style={{ color: "#1e1e1e" }}>{filtered.length}</strong> imprez</span>
+                <span><strong style={{ color: "#1e1e1e" }}>{fmtZl(totalDeposits)}</strong> zadatków</span>
+                <span><strong style={{ color: "#1e1e1e" }}>{monthEvs.length}</strong> w tym miesiącu</span>
+                <span>Wesela: <strong>{filtered.filter((e) => e.type === "WESELE").length}</strong></span>
+                <span>Komunie: <strong>{filtered.filter((e) => e.type === "KOMUNIA").length}</strong></span>
+              </div>
+            );
+          })()}
           <div style={{ padding: "10px 24px", display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center", borderBottom: "1px solid #f0f0f0" }}>
-            <button onClick={() => setFType("ALL")} style={{ padding: "4px 10px", borderRadius: "3px", border: `1px solid ${fType === "ALL" ? "#1e1e1e" : "#e5e5e5"}`, background: fType === "ALL" ? "#f5f5f5" : "white", color: fType === "ALL" ? "#1e1e1e" : "#999", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>
+            <button onClick={() => { setSpecialFilter(null); setFType("ALL"); }} style={{ padding: "4px 10px", borderRadius: "3px", border: `1px solid ${fType === "ALL" && !specialFilter ? "#1e1e1e" : "#e5e5e5"}`, background: fType === "ALL" && !specialFilter ? "#f5f5f5" : "white", color: fType === "ALL" && !specialFilter ? "#1e1e1e" : "#555", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>
               Wszystkie {Object.values(typeCounts).reduce((a, v) => a + v, 0)}
             </button>
             {Object.entries(TL).map(([type, label]) => {
@@ -2400,28 +2674,30 @@ export function CentrumSprzedazy() {
               const c = TC[type];
               const active = fType === type;
               return (
-                <button key={type} onClick={() => setFType(active ? "ALL" : type)} style={{ padding: "4px 10px", borderRadius: "3px", border: `1px solid ${active ? c.bd : "#e5e5e5"}`, background: active ? c.bg : "white", color: active ? c.tx : "#999", fontSize: "11px", fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "3px" }}>
+                <button key={type} onClick={() => { setSpecialFilter(null); setFType(active ? "ALL" : type); }} style={{ padding: "4px 10px", borderRadius: "3px", border: `1px solid ${active ? c.bd : "#e5e5e5"}`, background: active ? c.bg : "white", color: active ? c.tx : "#555", fontSize: "11px", fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "3px" }}>
                   <span style={{ width: "5px", height: "5px", borderRadius: "2px", background: c.bd }} />{label} {cnt}
                 </button>
               );
             })}
+            <button onClick={() => { setFStatus("ALL"); setFType("ALL"); setSpecialFilter("unpaid"); }} style={{ padding: "4px 10px", borderRadius: "3px", fontSize: "11px", fontWeight: 600, border: "1px solid #c62828", color: "#c62828", background: "white", cursor: "pointer" }}>💰 Do przypomnienia ({stats.unpaid})</button>
             <div style={{ flex: 1 }} />
             <input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape" && !modalId) clearSearch(); }} placeholder="Szukaj..." style={{ width: "200px", padding: "5px 10px", border: "1px solid #ddd", borderRadius: "3px", fontSize: "12px", outline: "none" }} />
             {search && <button onClick={clearSearch} type="button" style={{ padding: "5px 8px", marginLeft: "4px", background: "none", border: "1px solid #ddd", borderRadius: "3px", cursor: "pointer", fontSize: "11px" }}>×</button>}
             <div style={{ display: "flex", border: "1px solid #ddd", borderRadius: "3px", overflow: "hidden" }}>
               {[["ACTIVE", "Aktywne"], ["CONFIRMED", "Potwierdzone"], ["DRAFT", "Szkice"], ["DONE", "Zakończone"], ["CANCELLED", "Anulowane"], ["ALL", "Wszystkie"]].map(([s, l]) => (
-                <button key={s} onClick={() => setFStatus(s)} type="button" style={{ padding: "4px 8px", border: "none", borderRight: "1px solid #eee", background: fStatus === s ? "#f5f5f5" : "white", fontSize: "10px", fontWeight: fStatus === s ? 700 : 500, color: fStatus === s ? "#1e1e1e" : "#bbb", cursor: "pointer" }}>{l}{s === "CANCELLED" && stats.cancelled > 0 ? ` (${stats.cancelled})` : ""}</button>
+                <button key={s} onClick={() => { setSpecialFilter(null); setFStatus(s); }} type="button" style={{ padding: "4px 8px", border: "none", borderRight: "1px solid #eee", background: fStatus === s ? "#f5f5f5" : "white", fontSize: "10px", fontWeight: fStatus === s ? 700 : 500, color: fStatus === s ? "#1e1e1e" : "#555", cursor: "pointer" }}>{l}{s === "CANCELLED" && stats.cancelled > 0 ? ` (${stats.cancelled})` : ""}</button>
               ))}
             </div>
+            <button onClick={handleExport} type="button" style={{ padding: "5px 10px", borderRadius: "3px", fontSize: "11px", fontWeight: 600, border: "1px solid #ddd", color: "#666", background: "white", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>📥 Eksport</button>
             <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ padding: "5px 10px", border: "1px solid #ddd", borderRadius: "3px", fontSize: "12px", background: "white", cursor: "pointer", color: "#555", flexShrink: 0 }}>
               <option value="date">Data ↑</option>
               <option value="client">Klient A–Z</option>
               <option value="type">Typ + Data</option>
             </select>
-            <button onClick={() => setArchive(!archive)} type="button" style={{ padding: "5px 10px", border: `1px solid ${archive ? "#1e1e1e" : "#ddd"}`, borderRadius: "3px", background: archive ? "#f5f5f5" : "white", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: archive ? "#1e1e1e" : "#888", whiteSpace: "nowrap", flexShrink: 0 }}>{archive ? "✓ " : ""}Archiwum</button>
+            <button onClick={() => setArchive(!archive)} type="button" style={{ padding: "5px 10px", border: `1px solid ${archive ? "#1e1e1e" : "#ddd"}`, borderRadius: "3px", background: archive ? "#f5f5f5" : "white", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: archive ? "#1e1e1e" : "#4a4a4a", whiteSpace: "nowrap", flexShrink: 0 }}>{archive ? "✓ " : ""}Archiwum</button>
             <div style={{ padding: "5px 10px", border: "1px solid #e5e5e5", borderRadius: "3px", background: "white", fontSize: "12px", fontWeight: 600, flexShrink: 0, color: filtered.length === 0 ? "#e53935" : "#1e1e1e", whiteSpace: "nowrap" }}>{plural(filtered.length)}</div>
             {stats.sumPaid > 0 && <div style={{ padding: "5px 10px", border: "1px solid #e5e5e5", borderRadius: "3px", background: "white", fontSize: "11px", fontWeight: 600, color: "#2e7d32", whiteSpace: "nowrap", flexShrink: 0 }}>{fmtZl(stats.sumPaid)}</div>}
-            {anyFilter && <button onClick={() => { setSearch(""); setFType("ALL"); setFStatus("ACTIVE"); setArchive(false); }} type="button" style={{ padding: "5px 10px", border: "1px solid #ddd", borderRadius: "3px", background: "white", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#c62828", whiteSpace: "nowrap", flexShrink: 0 }}>Wyczyść</button>}
+            {anyFilter && <button onClick={() => { setSearch(""); setFType("ALL"); setFStatus("ACTIVE"); setArchive(false); setSpecialFilter(null); }} type="button" style={{ padding: "5px 10px", border: "1px solid #ddd", borderRadius: "3px", background: "white", cursor: "pointer", fontSize: "11px", fontWeight: 600, color: "#c62828", whiteSpace: "nowrap", flexShrink: 0 }}>Wyczyść</button>}
           </div>
           {filtered.length === 0 && search && fType !== "ALL" && (
             <div style={{ margin: "0 20px 6px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: "9px", padding: "9px 14px", fontSize: "13px", color: "#92400e", fontWeight: 600 }}>
@@ -2432,13 +2708,14 @@ export function CentrumSprzedazy() {
             {filtered.length > 0 && (
               <div style={{
                 display: "grid",
-                gridTemplateColumns: "95px minmax(200px,1fr) 150px 70px 90px minmax(100px,1fr) 110px 120px 20px",
+                gridTemplateColumns: "60px 95px minmax(200px,1fr) 150px 70px 90px minmax(100px,1fr) 110px 120px 20px",
                 padding: "8px 16px",
                 borderBottom: "2px solid #e5e5e5",
-                fontSize: "10px", fontWeight: 700, color: "#aaa",
+                fontSize: "10px", fontWeight: 700, color: "#555",
                 textTransform: "uppercase", letterSpacing: "0.5px",
                 gap: "8px",
               }}>
+                <span>Nr</span>
                 <span>Data</span>
                 <span>Klient</span>
                 <span>Sala</span>
@@ -2454,8 +2731,8 @@ export function CentrumSprzedazy() {
               <div style={{ textAlign: "center", padding: "70px 20px" }}>
                 <div style={{ fontSize: "44px", marginBottom: "10px" }}>🔍</div>
                 <div style={{ fontSize: "17px", fontWeight: 800, color: "#475569" }}>Brak wyników</div>
-                <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "6px" }}>{search ? <>Nic nie pasuje do <strong>"{search}"</strong></> : "Spróbuj zmienić filtry"}</div>
-                {anyFilter && <button onClick={() => { setSearch(""); setFType("ALL"); setFStatus("ACTIVE"); setArchive(false); }} type="button" style={{ marginTop: "14px", background: "#3b82f6", color: "white", border: "none", borderRadius: "9px", padding: "10px 22px", cursor: "pointer", fontSize: "13px", fontWeight: 800 }}>Wyczyść wszystkie filtry</button>}
+                <div style={{ fontSize: "13px", color: "#475569", marginTop: "6px" }}>{search ? <>Nic nie pasuje do <strong>"{search}"</strong></> : "Spróbuj zmienić filtry"}</div>
+                {anyFilter && <button onClick={() => { setSearch(""); setFType("ALL"); setFStatus("ACTIVE"); setArchive(false); setSpecialFilter(null); }} type="button" style={{ marginTop: "14px", background: "#3b82f6", color: "white", border: "none", borderRadius: "9px", padding: "10px 22px", cursor: "pointer", fontSize: "13px", fontWeight: 800 }}>Wyczyść wszystkie filtry</button>}
               </div>
             ) : (
               filtered.map((ev) => (
@@ -2465,6 +2742,7 @@ export function CentrumSprzedazy() {
           </div>
         </>
       )}
+      {tab === "wolne" && <FreeDatesView events={filtered} month={ganttMonth} year={ganttYear} onMonthChange={setGanttOffset} onCreateWithDate={(dateStr, room) => { setCreateDate(dateStr); setCreateModalOpen(true); /* room could prefill form */ }} />}
       {tab === "kalendarz" && <CalendarMonthView events={filtered} month={ganttMonth} year={ganttYear} onOpenModal={openModal} onMonthChange={setGanttOffset} onCreateWithDate={(dateStr) => { setCreateDate(dateStr); setCreateModalOpen(true); }} />}
       {tab === "os" && <TimelineView events={filtered} onOpenModal={openModal} />}
       {tab === "sale" && <HeatmapView events={filtered} month={ganttMonth} year={ganttYear} onOpenModal={openModal} onMonthChange={setGanttOffset} />}

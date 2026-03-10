@@ -90,6 +90,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: "Source Sans 3", "Segoe UI", system-ui, -apple-system, sans-serif;
   }
   /* Wymusza klikalność gdy skrypt doda klasę (Radix zostawia pointer-events:none na body). */
   body.pms-allow-clicks {

@@ -9,6 +9,7 @@ function subDays(d: Date, n: number): Date {
 import { createChecklistDoc, createMenuDoc } from "@/lib/googleDocs";
 import { createCalendarEvent } from "@/lib/googleCalendarEvents";
 import { getCalendarIdForEventOrder } from "@/lib/calendarMapping";
+import { resolvePackageName } from "@/lib/menuPackageName";
 
 /**
  * Cron: ponowienie tworzenia dokumentów Google dla imprez z googlePending.
@@ -30,11 +31,7 @@ export async function GET() {
       try {
         let packageName: string | null = null;
         if (event.packageId) {
-          const pkg = await prisma.package.findUnique({
-            where: { id: event.packageId },
-            select: { name: true },
-          });
-          packageName = pkg?.name ?? null;
+          packageName = await resolvePackageName(event.packageId);
         }
         const [checklist, menu] = await Promise.all([
           createChecklistDoc(event),

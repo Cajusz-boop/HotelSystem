@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { createAuditLog } from "@/lib/audit";
 import { updateChecklistDoc } from "@/lib/googleDocs";
 import {
   updateCalendarEvent,
@@ -28,6 +29,7 @@ function sanitizeEventData(body: Record<string, unknown>) {
   if (b.eventType != null && EVENT_TYPES.includes(String(b.eventType))) base.eventType = b.eventType;
   if (b.clientName !== undefined) base.clientName = b.clientName != null ? String(b.clientName) : null;
   if (b.clientPhone !== undefined) base.clientPhone = b.clientPhone != null ? String(b.clientPhone) : null;
+  if (b.clientEmail !== undefined) base.clientEmail = b.clientEmail != null ? String(b.clientEmail) : null;
   if (b.eventDate !== undefined) base.eventDate = eventDate;
   if (b.timeStart !== undefined) base.timeStart = b.timeStart != null ? String(b.timeStart) : null;
   if (b.timeEnd !== undefined) base.timeEnd = b.timeEnd != null ? String(b.timeEnd) : null;
@@ -71,6 +73,7 @@ function sanitizeEventData(body: Record<string, unknown>) {
   if (b.facebookConsent !== undefined) base.facebookConsent = Boolean(b.facebookConsent);
   if (b.ownNapkins !== undefined) base.ownNapkins = Boolean(b.ownNapkins);
   if (b.dutyPerson !== undefined) base.dutyPerson = b.dutyPerson != null ? String(b.dutyPerson) : null;
+  if (b.assignedTo !== undefined) base.assignedTo = b.assignedTo != null ? String(b.assignedTo) : null;
   if (b.afterpartyEnabled !== undefined) base.afterpartyEnabled = Boolean(b.afterpartyEnabled);
   if (b.afterpartyTimeFrom !== undefined) base.afterpartyTimeFrom = b.afterpartyTimeFrom != null ? String(b.afterpartyTimeFrom) : null;
   if (b.afterpartyTimeTo !== undefined) base.afterpartyTimeTo = b.afterpartyTimeTo != null ? String(b.afterpartyTimeTo) : null;
@@ -88,6 +91,7 @@ function sanitizeEventData(body: Record<string, unknown>) {
   if (b.notes !== undefined) base.notes = b.notes != null ? String(b.notes) : null;
   if (b.depositAmount !== undefined) base.depositAmount = typeof b.depositAmount === "number" ? b.depositAmount : (b.depositAmount != null ? parseFloat(String(b.depositAmount)) : null);
   if (b.depositPaid !== undefined) base.depositPaid = Boolean(b.depositPaid);
+  if (b.depositDueDate !== undefined) base.depositDueDate = b.depositDueDate ? (typeof b.depositDueDate === "string" ? new Date(b.depositDueDate) : b.depositDueDate instanceof Date ? b.depositDueDate : null) : null;
   if (b.isPoprawiny !== undefined) base.isPoprawiny = Boolean(b.isPoprawiny);
   if (b.parentEventId !== undefined) base.parentEventId = b.parentEventId != null ? String(b.parentEventId) : null;
   if (b.menu !== undefined) base.menu = b.menu != null && typeof b.menu === "object" && !Array.isArray(b.menu) ? (b.menu as object) : undefined;
@@ -128,6 +132,22 @@ export async function PATCH(
     if (notes !== undefined) {
       patchData.notes = notes != null ? String(notes) : null;
     }
+    const clientEmail = data?.clientEmail;
+    if (clientEmail !== undefined) {
+      patchData.clientEmail = clientEmail != null ? String(clientEmail) : null;
+    }
+    const assignedTo = data?.assignedTo;
+    if (assignedTo !== undefined) {
+      patchData.assignedTo = assignedTo != null ? String(assignedTo) : null;
+    }
+    const depositDueDate = data?.depositDueDate;
+    if (depositDueDate !== undefined) {
+      patchData.depositDueDate = depositDueDate != null ? (typeof depositDueDate === "string" ? new Date(depositDueDate) : depositDueDate instanceof Date ? depositDueDate : null) : null;
+    }
+    const checklist = data?.checklist;
+    if (checklist !== undefined) {
+      patchData.checklist = checklist != null && typeof checklist === "object" ? checklist : null;
+    }
     const menu = data?.menu;
     if (menu !== undefined) {
       patchData.menu = menu;
@@ -152,6 +172,10 @@ export async function PATCH(
       }
     }
 
+    const existing = Object.keys(patchData).length > 0
+      ? await prisma.eventOrder.findUnique({ where: { id } })
+      : null;
+
     let updated;
     if (Object.keys(patchData).length > 0) {
       updated = await prisma.eventOrder.update({
@@ -165,6 +189,20 @@ export async function PATCH(
       const ev = await prisma.eventOrder.findUnique({ where: { id } });
       if (!ev) return NextResponse.json({ error: "Impreza nie istnieje" }, { status: 404 });
       updated = ev;
+    }
+
+    if (existing && updated) {
+      try {
+        await createAuditLog({
+          actionType: "UPDATE",
+          entityType: "EventOrder",
+          entityId: id,
+          oldValue: JSON.parse(JSON.stringify(existing)) as Record<string, unknown>,
+          newValue: JSON.parse(JSON.stringify(updated)) as Record<string, unknown>,
+        });
+      } catch (e) {
+        console.error("AuditLog EventOrder UPDATE:", e);
+      }
     }
 
     // Google Calendar sync — update description when status/notes/deposit changed or forceGcalSync (non-CANCELLED)
@@ -244,6 +282,7 @@ export async function PUT(
       return NextResponse.json({ error: "Brak danych do aktualizacji" }, { status: 400 });
     }
 
+    const existing = await prisma.eventOrder.findUnique({ where: { id } });
     const event = await prisma.eventOrder.update({
       where: { id },
       data: {
@@ -252,6 +291,18 @@ export async function PUT(
         roomIds: sanitized.roomIds as object | undefined,
       },
     });
+
+    try {
+      await createAuditLog({
+        actionType: "UPDATE",
+        entityType: "EventOrder",
+        entityId: id,
+        oldValue: existing ? (JSON.parse(JSON.stringify(existing)) as Record<string, unknown>) : null,
+        newValue: JSON.parse(JSON.stringify(event)) as Record<string, unknown>,
+      });
+    } catch (e) {
+      console.error("AuditLog EventOrder PUT:", e);
+    }
 
     let packageName: string | null = null;
     if (event.packageId) {
@@ -338,6 +389,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const existing = await prisma.eventOrder.findUnique({ where: { id } });
     const updated = await prisma.eventOrder.update({
       where: { id },
       data: { status: "CANCELLED" },
@@ -348,6 +400,17 @@ export async function DELETE(
       } catch (err) {
         console.log("GCal cancel (event possibly already deleted):", (err as Error).message);
       }
+    }
+    try {
+      await createAuditLog({
+        actionType: "DELETE",
+        entityType: "EventOrder",
+        entityId: id,
+        oldValue: existing ? (JSON.parse(JSON.stringify(existing)) as Record<string, unknown>) : null,
+        newValue: null,
+      });
+    } catch (e) {
+      console.error("AuditLog EventOrder DELETE:", e);
     }
     return NextResponse.json({ success: true });
   } catch (e) {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Mail, Settings, MessageSquare, FileText, Palette, Receipt, ClipboardList, FileCheck, Users, Shield, Key, Database, Building2, FormInput, BookOpen, CalendarRange, FileX, Upload, Printer, Globe, Calculator } from "lucide-react";
+import { Mail, Settings, MessageSquare, FileText, Palette, Receipt, ClipboardList, FileCheck, Users, Shield, Key, Database, Building2, FormInput, BookOpen, CalendarRange, FileX, Upload, Printer, Globe, Calculator, Timer } from "lucide-react";
 
 const settingsItems = [
   {
@@ -94,6 +94,12 @@ const settingsItems = [
     icon: FileCheck,
     title: "KSeF (e-Faktury)",
     description: "Konfiguracja NIP, token autoryzacyjny i środowisko (Test/Produkcja)",
+  },
+  {
+    href: "/ustawienia/sesja",
+    icon: Timer,
+    title: "Sesja i blokada ekranu",
+    description: "Czas blokady ekranu i wylogowania (max 2× PIN dziennie = 8h)",
   },
   {
     href: "/ustawienia/2fa",

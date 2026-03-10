@@ -7,6 +7,7 @@ import {
   updateCalendarEvent,
 } from "@/lib/googleCalendarEvents";
 import { getCalendarIdForEventOrder } from "@/lib/calendarMapping";
+import { resolvePackageName } from "@/lib/menuPackageName";
 
 /**
  * POST /api/admin/google-sync/event-orders?force=true
@@ -45,11 +46,7 @@ export async function POST(request: NextRequest) {
   for (const e of events) {
     let packageName: string | null = null;
     if (e.packageId) {
-      const pkg = await prisma.package.findUnique({
-        where: { id: e.packageId },
-        select: { name: true },
-      });
-      packageName = pkg?.name ?? null;
+      packageName = await resolvePackageName(e.packageId);
     }
 
     const depAmount = e.depositAmount != null ? (typeof e.depositAmount === "object" && e.depositAmount !== null && "toNumber" in e.depositAmount ? (e.depositAmount as { toNumber: () => number }).toNumber() : Number(e.depositAmount)) : null;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { createAuditLog } from "@/lib/audit";
 import { createChecklistDoc, createMenuDoc } from "@/lib/googleDocs";
 import { createCalendarEvent } from "@/lib/googleCalendarEvents";
 import { getCalendarIdForEventOrder } from "@/lib/calendarMapping";
@@ -26,6 +27,7 @@ function sanitizeEventData(body: Record<string, unknown>) {
     eventType: EVENT_TYPES.includes(String(b.eventType ?? "")) ? String(b.eventType) : "INNE",
     clientName: b.clientName != null ? String(b.clientName) : null,
     clientPhone: b.clientPhone != null ? String(b.clientPhone) : null,
+    clientEmail: b.clientEmail != null ? String(b.clientEmail) : null,
     eventDate: eventDate,
     timeStart: b.timeStart != null ? String(b.timeStart) : null,
     timeEnd: b.timeEnd != null ? String(b.timeEnd) : null,
@@ -69,6 +71,7 @@ function sanitizeEventData(body: Record<string, unknown>) {
     facebookConsent: Boolean(b.facebookConsent),
     ownNapkins: Boolean(b.ownNapkins),
     dutyPerson: b.dutyPerson != null ? String(b.dutyPerson) : null,
+    assignedTo: b.assignedTo != null ? String(b.assignedTo) : null,
     afterpartyEnabled: Boolean(b.afterpartyEnabled),
     afterpartyTimeFrom: b.afterpartyTimeFrom != null ? String(b.afterpartyTimeFrom) : null,
     afterpartyTimeTo: b.afterpartyTimeTo != null ? String(b.afterpartyTimeTo) : null,
@@ -82,6 +85,7 @@ function sanitizeEventData(body: Record<string, unknown>) {
     notes: b.notes != null ? String(b.notes) : null,
     depositAmount: typeof b.depositAmount === "number" ? b.depositAmount : (b.depositAmount != null ? parseFloat(String(b.depositAmount)) : null),
     depositPaid: Boolean(b.depositPaid),
+    depositDueDate: b.depositDueDate ? (typeof b.depositDueDate === "string" ? new Date(b.depositDueDate) : b.depositDueDate instanceof Date ? b.depositDueDate : null) : null,
     isPoprawiny: Boolean(b.isPoprawiny),
     parentEventId: b.parentEventId != null ? String(b.parentEventId) : null,
     addPoprawiny: Boolean(b.addPoprawiny),
@@ -179,6 +183,40 @@ export async function POST(req: Request) {
 
     let event = await createMainEvent();
 
+    const TYPE_PREFIX: Record<string, string> = {
+      WESELE: "W", KOMUNIA: "K", CHRZCINY: "Ch", URODZINY: "U",
+      STYPA: "S", FIRMOWA: "F", SYLWESTER: "Sy", INNE: "I",
+    };
+    const assignEventNumber = async (created: { id: string; eventType: string }) => {
+      const prefix = TYPE_PREFIX[created.eventType] ?? "I";
+      const year = new Date().getFullYear();
+      const count = await prisma.eventOrder.count({
+        where: {
+          eventType: created.eventType,
+          createdAt: { gte: new Date(`${year}-01-01`) },
+        },
+      });
+      const eventNumber = `${prefix}-${year}-${String(count).padStart(3, "0")}`;
+      await prisma.eventOrder.update({
+        where: { id: created.id },
+        data: { eventNumber },
+      });
+      return { ...created, eventNumber };
+    };
+    event = await assignEventNumber(event) as typeof event;
+
+    try {
+      await createAuditLog({
+        actionType: "CREATE",
+        entityType: "EventOrder",
+        entityId: event.id,
+        oldValue: null,
+        newValue: JSON.parse(JSON.stringify(event)) as Record<string, unknown>,
+      });
+    } catch (e) {
+      console.error("AuditLog EventOrder CREATE:", e);
+    }
+
     if (addPoprawiny && poprawinyDate) {
       const poprawinyDateFrom = poprawinyDate instanceof Date ? poprawinyDate : new Date(poprawinyDate);
       const poprawinyData = toCreateData({
@@ -194,6 +232,18 @@ export async function POST(req: Request) {
       const poprawinyEvent = await prisma.eventOrder.create({
         data: poprawinyData,
       });
+      await assignEventNumber(poprawinyEvent);
+      try {
+        await createAuditLog({
+          actionType: "CREATE",
+          entityType: "EventOrder",
+          entityId: poprawinyEvent.id,
+          oldValue: null,
+          newValue: JSON.parse(JSON.stringify(poprawinyEvent)) as Record<string, unknown>,
+        });
+      } catch (e) {
+        console.error("AuditLog EventOrder CREATE (poprawiny):", e);
+      }
 
       let packageName: string | null = null;
       if (event.packageId) {
@@ -351,6 +401,7 @@ const FULL_SELECT = {
   eventType: true,
   clientName: true,
   clientPhone: true,
+  clientEmail: true,
   eventDate: true,
   dateFrom: true,
   dateTo: true,
@@ -390,6 +441,8 @@ const FULL_SELECT = {
   facebookConsent: true,
   ownNapkins: true,
   dutyPerson: true,
+  assignedTo: true,
+  checklist: true,
   afterpartyEnabled: true,
   afterpartyTimeFrom: true,
   afterpartyTimeTo: true,
@@ -400,10 +453,12 @@ const FULL_SELECT = {
   roomName: true,
   depositAmount: true,
   depositPaid: true,
+  depositDueDate: true,
   notes: true,
   isPoprawiny: true,
   parentEventId: true,
   menu: true,
+  eventNumber: true,
   quoteId: true,
   roomIds: true,
   checklistDocId: true,

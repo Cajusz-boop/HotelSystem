@@ -33,6 +33,7 @@ vi.mock("@/lib/db", () => {
     invoice: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
     },
     cennikConfig: {
@@ -229,6 +230,7 @@ function mockDocumentNumbering() {
 describe("Fakturowanie – createVatInvoice", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(prisma.invoice.findFirst).mockResolvedValue(null);
   });
 
   it("Błąd: brak rezerwacji", async () => {
@@ -299,6 +301,26 @@ describe("Fakturowanie – createVatInvoice", () => {
     if (!result.success) {
       expect(result.error).toContain("większa od zera");
       expect(result.error).toContain("cenę");
+    }
+  });
+
+  it("Błąd: duplikat faktury – rezerwacja ma już wystawioną fakturę NORMAL", async () => {
+    const roomTx = makeRoomTransaction(235);
+    const res = makeReservation({ transactions: [roomTx] });
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
+    vi.mocked(prisma.invoice.findFirst).mockResolvedValue({
+      id: "inv-1",
+      number: "FV/022/03/K",
+      reservationId: "res-1",
+      invoiceType: "NORMAL",
+    } as never);
+
+    const result = await createVatInvoice("res-1");
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error).toContain("ma już wystawioną fakturę");
+      expect(result.error).toContain("FV/022/03/K");
     }
   });
 

@@ -9,6 +9,7 @@ import { OnboardingGuide } from "@/components/onboarding-guide";
 import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help";
 import { FiscalRelay } from "@/components/fiscal-relay";
 import { ConnectionMonitor } from "@/components/connection-monitor";
+import { SessionGuard } from "@/components/session-guard";
 import { getSession } from "@/lib/auth";
 import { getMyPermissions } from "@/app/actions/permissions";
 import "./globals.css";
@@ -35,6 +36,9 @@ export default async function RootLayout({
     <html lang="pl" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet" />
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#8B6914" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -92,6 +96,7 @@ if('serviceWorker' in navigator){
         <Providers>
           <div className="no-print print-preview-hide">
             <ConnectionMonitor />
+            <SessionGuard session={session} />
           </div>
           <a href="#main-content" className="skip-link print-preview-hide">
             Przejdź do treści

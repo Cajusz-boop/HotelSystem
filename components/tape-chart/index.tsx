@@ -634,7 +634,7 @@ export function TapeChart({
     { id: "prices", label: "Ceny" },
   ] as const;
 
-  const INITIAL_DAYS_BACK = 7; // widok startowy: pierwsza kolumna = dziś minus 7 dni (jak na taśmie recepcji)
+  const INITIAL_DAYS_BACK = 3; // widok startowy: pierwsza kolumna = dziś minus 3 dni (np. So 7.03 gdy Dziś 10.03)
   const [viewStartDate, setViewStartDate] = useState<Date>(() => {
     const baseStr = initialTodayStr ?? todayStr ?? "2026-01-01";
     const [y, m, d] = baseStr.split("-").map(Number);

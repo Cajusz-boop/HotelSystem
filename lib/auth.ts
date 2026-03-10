@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 import { getAuthDisabledCache } from "@/lib/auth-disabled-cache";
 
 const COOKIE_NAME = "pms_session";
-const SESSION_DURATION_DAYS = 7;
+/** JWT exp jako backup – ciasteczko jest sesyjne (usuwa się po zamknięciu przeglądarki) */
+const JWT_EXP_HOURS = 24;
 
 function getSecret(): Uint8Array {
   const secret = process.env.SESSION_SECRET ?? "dev-secret-change-in-production";
@@ -65,7 +66,9 @@ export async function getSession(): Promise<SessionPayload | null> {
   }
 }
 
-/** Tworzy token sesji i zwraca ustawienia cookie (do ustawienia w response) */
+/** Tworzy token sesji i zwraca ustawienia cookie (do ustawienia w response).
+ * Ciasteczko jest SESYJNE – usuwa się po zamknięciu przeglądarki (brak maxAge).
+ * Idle timeout (middleware) nadal wylogowuje po 30 min bezczynności. */
 export async function createSessionToken(
   payload: {
     userId: string;
@@ -75,8 +78,8 @@ export async function createSessionToken(
     isActive?: boolean;
     passwordExpired?: boolean;
   }
-): Promise<{ name: string; value: string; options: { httpOnly: true; secure: boolean; sameSite: "lax"; path: string; maxAge: number } }> {
-  const exp = Math.floor(Date.now() / 1000) + SESSION_DURATION_DAYS * 24 * 60 * 60;
+): Promise<{ name: string; value: string; options: { httpOnly: true; secure: boolean; sameSite: "lax"; path: string } }> {
+  const exp = Math.floor(Date.now() / 1000) + JWT_EXP_HOURS * 60 * 60;
   const token = await new SignJWT({
     userId: payload.userId,
     email: payload.email,
@@ -96,7 +99,7 @@ export async function createSessionToken(
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: SESSION_DURATION_DAYS * 24 * 60 * 60,
+      // Brak maxAge = ciasteczko sesyjne → usuwa się po zamknięciu przeglądarki
     },
   };
 }

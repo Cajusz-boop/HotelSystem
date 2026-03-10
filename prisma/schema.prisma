@@ -876,6 +876,58 @@ model PackageComponent {
   @@index([packageId])
 }
 
+// ═══ PAKIETY MENU IMPREZOWEGO ═══
+// Osobne od model Package (który dotyczy rezerwacji hotelowych/SPA)
+model MenuPackage {
+  id          String   @id @default(cuid())
+  code        String   @unique           // "stypa_58", "wesele_290" — zachowaj stare ID
+  name        String                      // "Stypa podstawowa", "Wesele propozycja 1"
+  price       Decimal  @db.Decimal(10,2)  // cena za osobę (58, 290, itd.)
+  eventTypes  Json                        // ["STYPA"] lub ["URODZINY","CHRZCINY","KOMUNIA"]
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+
+  sections    MenuPackageSection[]
+  surcharges  MenuPackageSurcharge[]
+  rules       Json?                       // regulamin — string[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model MenuPackageSection {
+  id          String   @id @default(cuid())
+  packageId   String
+  package     MenuPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  code        String                      // "zupa", "glowne", "surowki"
+  label       String                      // "Zupa", "Dania główne"
+  type        String                      // "fixed" lub "wybor"
+  choiceLimit Int?                         // limit wyboru (null dla fixed)
+  dishes      Json                        // string[] — lista dań
+  sortOrder   Int      @default(0)
+
+  @@index([packageId])
+}
+
+model MenuPackageSurcharge {
+  id          String   @id @default(cuid())
+  packageId   String
+  package     MenuPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  code        String                      // "napoje", "ciasta", "udko"
+  label       String                      // "Napoje nielimitowane", "Ciasta"
+  pricePerPerson Decimal? @db.Decimal(10,2) // 25 zł/os (null jeśli ryczałt)
+  flatPrice   Decimal? @db.Decimal(10,2)   // 800 zł ryczałt (null jeśli per person)
+  hasChoice   Boolean  @default(false)     // czy ma opcje do wyboru
+  choiceLimit Int?                          // ile opcji wybrać
+  options     Json?                         // string[] — opcje do wyboru
+  description String?                       // opis tekstowy
+  sortOrder   Int      @default(0)
+
+  @@index([packageId])
+}
+
 // Towary sprzedawane w recepcji (pamiątki, napoje)
 model ShopProduct {
   id          String   @id @default(cuid())
@@ -1630,6 +1682,7 @@ model HotelConfig {
   seasons                 Json?   // okresy sezonowe: [{ id, name, type: "PEAK"|"OFF_PEAK", dateFrom: "MM-DD", dateTo: "MM-DD" }]
   cancellationPolicyTemplates Json?   // szablony polityki anulacji: [{ id, name, freeUntilDaysBefore, penaltyPercent, description? }]
   authDisabled   Boolean  @default(false)  // wyłączenie wymogu logowania (tryb demo/szkoleniowy)
+  sessionSettings Json?   // { screenLockMinutes: number, hardLogoutMinutes: number } — 0 = wyłączony lock
   maxVoidHours   Int?     // maks. czas na anulowanie transakcji (w godzinach); null = bez limitu
   bankAccount    String?  @db.VarChar(50)  // numer konta bankowego
   bankName       String?  @db.VarChar(200)  // nazwa banku
@@ -1672,8 +1725,9 @@ model EventOrder {
 
   // Dane podstawowe
   eventType   String   @default("INNE")  // WESELE | KOMUNIA | CHRZCINY | URODZINY | STYPA | FIRMOWA | INNE
-  clientName  String?
-  clientPhone String?
+  clientName   String?
+  clientPhone  String?
+  clientEmail  String?   @db.VarChar(255)
   eventDate   DateTime? @db.Date
   timeStart   String?   // HH:mm
   timeEnd     String?   // HH:mm
@@ -1756,20 +1810,24 @@ model EventOrder {
   menuDocUrl              String?
 
   // Zadatek
-  depositAmount Decimal? @db.Decimal(10, 2)
-  depositPaid   Boolean  @default(false)
+  depositAmount  Decimal?   @db.Decimal(10, 2)
+  depositPaid    Boolean    @default(false)
+  depositDueDate DateTime?  @db.Date
 
   // Poprawiny (dzień po weselu)
   isPoprawiny   Boolean @default(false)
   parentEventId String?
 
   // Status i meta (zachowane z oryginalnego modelu)
-  quoteId   String?
+  eventNumber String?  @db.VarChar(20)
+  quoteId     String?
   roomIds   Json?
   dateFrom  DateTime @db.Date
   dateTo    DateTime @db.Date
   status    String   @default("DRAFT")  // DRAFT, CONFIRMED, DONE, CANCELLED
-  notes     String?  @db.Text
+  notes      String?   @db.Text
+  assignedTo String?   @db.VarChar(255)
+  checklist  Json?     // { "cake": true, "flowers": false, ... }
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

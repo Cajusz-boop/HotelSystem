@@ -14,7 +14,16 @@ const EVENT_TYPES = [
   { value: "INNE", label: "Inne" },
 ] as const;
 
-const ROOMS = ["Sala Złota", "Sala Diamentowa", "Restauracja", "Pokój 10", "Pokój 30", "Wiata", "Do ustalenia"] as const;
+const ROOMS_DATA = [
+  { name: "Sala Złota", capacity: 120 },
+  { name: "Sala Diamentowa", capacity: 80 },
+  { name: "Restauracja", capacity: 60 },
+  { name: "Pokój 10", capacity: 15 },
+  { name: "Pokój 30", capacity: 30 },
+  { name: "Wiata", capacity: 50 },
+  { name: "Do ustalenia", capacity: null as number | null },
+] as const;
+const ROOMS = ROOMS_DATA.map((r) => r.name);
 
 const TIME_OPTIONS = (() => {
   const opts: string[] = [];
@@ -154,6 +163,7 @@ export type EventFormTabState = {
   eventType: string;
   clientName: string;
   clientPhone: string;
+  clientEmail: string;
   eventDate: string;
   roomName: string;
   addPoprawiny: boolean;
@@ -161,6 +171,7 @@ export type EventFormTabState = {
   poprawinyGuestCount: number | "";
   depositAmount: string;
   depositPaid: boolean;
+  depositDueDate: string;
   timeStart: string;
   timeEnd: string;
   churchTime: string;
@@ -195,6 +206,7 @@ export type EventFormTabState = {
   facebookConsent: boolean;
   ownNapkins: boolean;
   dutyPerson: string;
+  assignedTo: string;
   afterpartyEnabled: boolean;
   afterpartyTimeFrom: string;
   afterpartyTimeTo: string;
@@ -208,6 +220,7 @@ export const EMPTY_EVENT_FORM: EventFormTabState = {
   eventType: "WESELE",
   clientName: "",
   clientPhone: "",
+  clientEmail: "",
   eventDate: "",
   roomName: "",
   addPoprawiny: false,
@@ -215,6 +228,7 @@ export const EMPTY_EVENT_FORM: EventFormTabState = {
   poprawinyGuestCount: "",
   depositAmount: "",
   depositPaid: false,
+  depositDueDate: "",
   timeStart: "",
   timeEnd: "",
   churchTime: "",
@@ -249,6 +263,7 @@ export const EMPTY_EVENT_FORM: EventFormTabState = {
   facebookConsent: false,
   ownNapkins: false,
   dutyPerson: "",
+  assignedTo: "",
   afterpartyEnabled: false,
   afterpartyTimeFrom: "",
   afterpartyTimeTo: "",
@@ -324,6 +339,7 @@ export function EventFormTabs({
         </div>
         <Field label="Imię i nazwisko klienta" value={form.clientName} onChange={(v) => update("clientName", v)} placeholder="np. Jan Kowalski" />
         <Field label="Telefon" value={form.clientPhone} onChange={(v) => update("clientPhone", v)} placeholder="np. 500 123 456" type="tel" />
+        <Field label="Email klienta" value={form.clientEmail} onChange={(v) => update("clientEmail", v)} placeholder="np. jan@kowalski.pl" type="email" />
         <Field label="Data imprezy" value={form.eventDate} onChange={(v) => update("eventDate", v)} type="date" />
         <div style={{ marginBottom: "16px" }}>
           <label style={labelStyle}>Sale (można wybrać kilka)</label>
@@ -387,6 +403,7 @@ export function EventFormTabs({
           </>
         )}
         <Field label="Zadatek (zł)" value={form.depositAmount} onChange={(v) => update("depositAmount", v)} placeholder="np. 1500,50" />
+        <Field label="Termin płatności zadatku" value={form.depositDueDate} onChange={(v) => update("depositDueDate", v)} type="date" />
         <div style={{ display: "flex", gap: "8px", marginTop: "12px", marginBottom: "16px" }}>
           <button
             type="button"
@@ -444,7 +461,24 @@ export function EventFormTabs({
             </div>
           </div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+        {(() => {
+          const selectedRooms = form.roomName ? form.roomName.split(/,\s*/).filter(Boolean) : [];
+          const guests = totalGuests || 0;
+          const warnings: string[] = [];
+          selectedRooms.forEach((rn) => {
+            const rd = ROOMS_DATA.find((r) => r.name === rn);
+            if (rd && rd.capacity != null && guests > rd.capacity) {
+              warnings.push(`${rn}: max ${rd.capacity} os., wpisano ${guests}`);
+            }
+          });
+          if (warnings.length === 0) return null;
+          return (
+            <div style={{ background: "#fff3e0", border: "1px solid #ffcc80", borderRadius: "4px", padding: "6px 10px", fontSize: "11px", color: "#e65100", marginTop: "12px" }}>
+              ⚠️ {warnings.join(" · ")}
+            </div>
+          );
+        })()}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginTop: "16px" }}>
           <NumField label="Orkiestra/DJ (os.)" value={form.orchestraCount} onChange={(v) => update("orchestraCount", v)} />
           <NumField label="Kamerzysta" value={form.cameramanCount} onChange={(v) => update("cameramanCount", v)} />
           <NumField label="Fotograf" value={form.photographerCount} onChange={(v) => update("photographerCount", v)} />
@@ -530,6 +564,7 @@ export function EventFormTabs({
         <YesNoButton label="Zgoda na Facebook" value={form.facebookConsent} onChange={(v) => update("facebookConsent", v)} />
         <YesNoButton label="Własne serwetki" value={form.ownNapkins} onChange={(v) => update("ownNapkins", v)} />
         <Field label="Osoba dyżurna" value={form.dutyPerson} onChange={(v) => update("dutyPerson", v)} />
+        <Field label="Opiekun imprezy" value={form.assignedTo} onChange={(v) => update("assignedTo", v)} placeholder="np. Marta Kowalska" />
 
         {showAfterparty && (
           <>

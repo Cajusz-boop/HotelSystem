@@ -3,22 +3,59 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 
 // ═══════════════════════════════════════════════════════════════
-// BAZA PAKIETÓW MENU — Karczma Łabędź
+// PAKIETY MENU — z bazy danych (GET /api/menu-packages)
 // ═══════════════════════════════════════════════════════════════
 
-const PAKIETY = [
-  { id: "stypa_58", typy: ["STYPA"], nazwa: "Stypa podstawowa", cena: 58, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z makaronem"] }, { id: "miesa", label: "Dania główne", typ: "fixed", dania: ["Schabowy", "Ziemniaki", "Surówka z białej kapusty"] }, { id: "desery", label: "Ciasta", typ: "fixed", dania: ["Sernik", "Szarlotka", "Krówka"] }, { id: "napoje", label: "Napoje", typ: "fixed", dania: ["Sok jabłkowy", "Kawa i herbata — szwedzki stół"] }], doplaty: [] as { id: string; label: string; cena: number; wybor?: boolean; limit?: number; opcje?: string[]; opis?: string; stala?: number }[], regulamin: [] as string[] },
-  { id: "stypa_69", typy: ["STYPA"], nazwa: "Stypa rozszerzona", cena: 69, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z makaronem"] }, { id: "miesa", label: "Dania główne", typ: "fixed", dania: ["Schabowy", "De volaille", "Udko z kurczaka", "Ziemniaki", "Surówka z białej kapusty", "Bukiet warzyw gotowanych"] }, { id: "desery", label: "Ciasta", typ: "fixed", dania: ["Sernik", "Szarlotka", "Krówka"] }, { id: "napoje", label: "Napoje", typ: "fixed", dania: ["Sok jabłkowy", "Kawa i herbata — szwedzki stół"] }], doplaty: [], regulamin: [] },
-  { id: "stypa_78", typy: ["STYPA"], nazwa: "Stypa pełna", cena: 78, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z makaronem"] }, { id: "miesa", label: "Dania główne", typ: "fixed", dania: ["Udko z kurczaka", "Karkówka w sosie", "Schabowy", "De volaille", "Ziemniaki", "Surówka z białej kapusty", "Buraczki", "Bukiet warzyw gotowanych"] }, { id: "desery", label: "Ciasta", typ: "fixed", dania: ["Sernik", "Szarlotka", "Krówka"] }, { id: "napoje", label: "Napoje", typ: "fixed", dania: ["Sok jabłkowy", "Kawa i herbata"] }], doplaty: [], regulamin: [] },
-  { id: "obiad_100", typy: ["FIRMOWA", "CHRZCINY", "URODZINY", "INNE"], nazwa: "Obiad", cena: 100, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z makaronem"] }, { id: "surowki", label: "Surówki", typ: "wybor", limit: 2, dania: ["Buraczki", "Surówka z białej kapusty", "Surówka z selera z prażonym słonecznikiem", "Bukiet warzyw gotowanych z masłem i bułką tartą"] }, { id: "glowne", label: "Dania obiadowe", typ: "wybor", limit: 3, dania: ["Kotlet schabowy", "Kieszonka wieprzowa faszerowana pieczarkami", "Pierś otulona boczkiem podana na cukinii z marchewką", "De volaille z serem", "Rumiane udko z kurczaka", "Dorsz w sosie koperkowym"] }, { id: "sosy", label: "Danie w sosie", typ: "wybor", limit: 1, dania: ["Eskalop w sosie porowym", "Zraz w sosie własnym", "Karkówka w sosie podana z kaszą pęczak"] }, { id: "stol", label: "Szwedzki stół (w cenie)", typ: "fixed", dania: ["Kawa i herbata bez ograniczeń", "Pieczywo"] }], doplaty: [{ id: "ciasta", label: "Ciasta", cena: 20, wybor: true, limit: 3, opcje: ["Sernik złota rosa", "3-bit", "Krówka", "Pychotka", "Słonecznikowiec", "Szarlotka"] }, { id: "ciepledop", label: "Dod. danie ciepłe", cena: 20 }, { id: "napoje", label: "Pakiet napojów", cena: 20, opis: "Coca-Cola, Fanta, Sprite, woda, sok jabłkowy, sok pomarańczowy" }], regulamin: [] },
-  { id: "dzienna_190", typy: ["URODZINY", "CHRZCINY", "KOMUNIA", "FIRMOWA", "INNE"], nazwa: "Impreza dzienna", cena: 190, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z makaronem"] }, { id: "surowki", label: "Surówki", typ: "wybor", limit: 2, dania: ["Buraczki", "Surówka z białej kapusty", "Surówka z selera z prażonym słonecznikiem", "Bukiet warzyw gotowanych z masłem i bułką tartą"] }, { id: "glowne", label: "Dania obiadowe", typ: "wybor", limit: 3, dania: ["Kotlet schabowy", "Kieszonka wieprzowa faszerowana pieczarkami", "Pierś otulona boczkiem podana na cukinii z marchewką", "De volaille z serem", "Rumiane udko z kurczaka", "Dorsz w sosie koperkowym"] }, { id: "sosy", label: "Danie w sosie", typ: "wybor", limit: 1, dania: ["Eskalop w sosie porowym", "Zraz w sosie własnym", "Karkówka w sosie podana z kaszą pęczak"] }, { id: "zimne", label: "Zimne przekąski", typ: "wybor", limit: 6, dania: ["Rolada szpinakowa z łososiem", "Mini tortilla warzywna z szynką", "Rolady (dwa rodzaje)", "Schab ze śliwką", "Ryba po japońsku", "Klopsiki w zalewie octowej", "Sałatka grecka", "Sałatka jarzynowa", "Sałatka w koszyczkach", "Śledź z burakiem"] }, { id: "ciepledod", label: "Dania ciepłe", typ: "wybor", limit: 2, dania: ["Polędwiczki wieprzowe w sosie pieprzowym z chrupiącą bagietką", "Udko z serem camembert", "Gołąbki mięsne", "Żeberka na słodko z ziemniakami opiekanymi", "Medaliony drobiowe z frytkami", "Strogonow wieprzowy z plackami ziemniaczanymi", "Barszcz z pierogami"] }, { id: "stol", label: "Szwedzki stół (w cenie)", typ: "fixed", dania: ["Kawa i herbata bez ograniczeń", "Pieczywo"] }], doplaty: [{ id: "ciasta", label: "Ciasta", cena: 20, wybor: true, limit: 3, opcje: ["Sernik złota rosa", "3-bit", "Krówka", "Pychotka", "Słonecznikowiec", "Szarlotka"] }, { id: "ciepledop", label: "Dod. danie ciepłe", cena: 20 }, { id: "napoje", label: "Pakiet napojów", cena: 20, opis: "Coca-Cola, Fanta, Sprite, woda, sok jabłkowy, sok pomarańczowy" }], regulamin: ["Dzieci 0–3 lat — bezpłatnie", "Dzieci 4–7 lat — 50% stawki", "Dzieci powyżej 7 lat — 100%", "Alkohol we własnym zakresie bez opłaty korkowej", "Możliwość wniesienia ciast i tortu z paragonem"] },
-  { id: "nocna_190", typy: ["URODZINY", "CHRZCINY", "INNE"], nazwa: "Impreza nocna", cena: 190, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z makaronem"] }, { id: "surowki", label: "Surówki", typ: "wybor", limit: 2, dania: ["Buraczki", "Surówka z białej kapusty", "Surówka z selera z prażonym słonecznikiem", "Bukiet warzyw gotowanych z masłem i bułką tartą"] }, { id: "glowne", label: "Dania obiadowe", typ: "wybor", limit: 3, dania: ["Kotlet schabowy", "Kieszonka wieprzowa faszerowana pieczarkami", "Pierś otulona boczkiem podana na cukinii z marchewką", "De volaille z serem", "Rumiane udko z kurczaka", "Dorsz w sosie koperkowym"] }, { id: "sosy", label: "Danie w sosie", typ: "wybor", limit: 1, dania: ["Eskalop w sosie porowym", "Zraz w sosie własnym", "Karkówka w sosie podana z kaszą pęczak"] }, { id: "zimne", label: "Zimne przekąski", typ: "wybor", limit: 5, dania: ["Rolada szpinakowa z łososiem", "Mini tortilla warzywna z szynką", "Rolady (dwa rodzaje)", "Schab ze śliwką", "Ryba po japońsku", "Klopsiki w zalewie octowej", "Sałatka grecka", "Sałatka jarzynowa", "Śledź z burakiem"] }, { id: "ciepledod", label: "Dania ciepłe", typ: "wybor", limit: 3, dania: ["Polędwiczki wieprzowe w sosie pieprzowym z chrupiącą bagietką", "Udko z serem camembert", "Gołąbki mięsne", "Żeberka na słodko z ziemniakami opiekanymi", "Medaliony drobiowe z frytkami", "Strogonow wieprzowy z plackami ziemniaczanymi", "Barszcz z pierogami"] }, { id: "stol", label: "Szwedzki stół (w cenie)", typ: "fixed", dania: ["Kawa i herbata bez ograniczeń", "Pieczywo"] }], doplaty: [{ id: "ciasta", label: "Ciasta", cena: 20, wybor: true, limit: 3, opcje: ["Sernik złota rosa", "3-bit", "Krówka", "Pychotka", "Słonecznikowiec", "Szarlotka"] }, { id: "ciepledop", label: "Dod. danie ciepłe", cena: 20 }, { id: "napoje", label: "Pakiet napojów", cena: 20, opis: "Coca-Cola, Fanta, Sprite, woda, sok jabłkowy, sok pomarańczowy" }], regulamin: ["Dzieci 0–3 lat — bezpłatnie", "Dzieci 4–7 lat — 50% stawki", "Dzieci powyżej 7 lat — 100%", "Alkohol we własnym zakresie bez opłaty korkowej", "Możliwość wniesienia ciast i tortu z paragonem"] },
-  { id: "dzienna_200", typy: ["URODZINY", "CHRZCINY", "KOMUNIA", "FIRMOWA", "INNE"], nazwa: "Impreza dzienna Plus", cena: 200, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z makaronem"] }, { id: "surowki", label: "Surówki", typ: "wybor", limit: 2, dania: ["Buraczki", "Surówka z białej kapusty", "Surówka z selera z prażonym słonecznikiem", "Bukiet warzyw gotowanych z masłem i bułką tartą"] }, { id: "glowne", label: "Dania obiadowe", typ: "wybor", limit: 3, dania: ["Kotlet schabowy", "Kieszonka wieprzowa faszerowana pieczarkami", "Pierś otulona boczkiem podana na cukinii z marchewką", "De volaille z serem", "Rumiane udko z kurczaka", "Dorsz w sosie koperkowym"] }, { id: "sosy", label: "Danie w sosie", typ: "wybor", limit: 1, dania: ["Eskalop w sosie porowym", "Zraz w sosie własnym", "Karkówka w sosie podana z kaszą pęczak"] }, { id: "zimne", label: "Zimne przekąski", typ: "wybor", limit: 6, dania: ["Rolada szpinakowa z łososiem", "Mini tortilla warzywna z szynką", "Rolady (dwa rodzaje)", "Schab ze śliwką", "Ryba po japońsku", "Klopsiki w zalewie octowej", "Sałatka grecka", "Sałatka jarzynowa", "Sałatka w koszyczkach", "Śledź z burakiem"] }, { id: "ciepledod", label: "Dania ciepłe", typ: "wybor", limit: 2, dania: ["Polędwiczki wieprzowe w sosie pieprzowym z chrupiącą bagietką", "Udko z serem camembert", "Gołąbki mięsne", "Żeberka na słodko z ziemniakami opiekanymi", "Medaliony drobiowe z frytkami", "Strogonow wieprzowy z plackami ziemniaczanymi", "Barszcz z pierogami"] }, { id: "stol", label: "Szwedzki stół (w cenie)", typ: "fixed", dania: ["Kawa i herbata bez ograniczeń", "Pieczywo"] }], doplaty: [{ id: "ciasta", label: "Ciasta", cena: 20, wybor: true, limit: 3, opcje: ["Sernik złota rosa", "3-bit", "Krówka", "Pychotka", "Słonecznikowiec", "Szarlotka"] }, { id: "ciepledop", label: "Dod. danie ciepłe", cena: 20 }, { id: "napoje", label: "Pakiet napojów", cena: 20, opis: "Coca-Cola, Fanta, Sprite, woda, sok jabłkowy, sok pomarańczowy" }], regulamin: ["Dzieci 0–3 lat — bezpłatnie", "Dzieci 4–7 lat — 50% stawki", "Dzieci powyżej 7 lat — 100%", "Alkohol we własnym zakresie bez opłaty korkowej", "Możliwość wniesienia ciast i tortu z paragonem"] },
-  { id: "impreza_220", typy: ["URODZINY", "CHRZCINY", "KOMUNIA", "FIRMOWA", "INNE"], nazwa: "Impreza rozszerzona", cena: 220, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół drobiowo-wołowy z kluseczkami"] }, { id: "surowki", label: "Surówki", typ: "wybor", limit: 2, dania: ["Buraczki zasmażane na ciepło", "Surówka z białej kapusty", "Surówka z selera z prażonym słonecznikiem", "Bukiet warzyw gotowanych z masłem i bułką tartą", "Surówka Colesław", "Fasolka szparagowa z bułką tartą"] }, { id: "glowne", label: "Dania obiadowe", typ: "wybor", limit: 4, dania: ["Kotlet schabowy", "Rulon drobiowy z porem i serem gorgonzola", "Pierś z ananasem", "Udko z serem camembert", "Dorsz w sosie koperkowym", "Udko kacze", "Eskalop w sosie porowym", "Zraz w sosie własnym", "Karkówka w sosie podana z kaszą pęczak"] }, { id: "zimne", label: "Zimne przekąski", typ: "wybor", limit: 6, dania: ["Mini tortilla warzywna z szynką", "Tatarki wołowe na krążkach party", "Tatar z łososia", "Tymbaliki z pstrąga", "Rolady (dwa rodzaje)", "Schab ze śliwką", "Sałatka Cezar", "Sałatka jarzynowa na babeczkach", "Sałatka z wędzonym kurczakiem", "Sałatka z ryżem i grillowanym kurczakiem", "Śledź z burakiem", "Sałatka w koszyczkach"] }, { id: "ciepledod", label: "Dania ciepłe", typ: "wybor", limit: 3, dania: ["Polędwiczki wieprzowe w sosie pieprzowym z chrupiącą bagietką", "Strogonow wieprzowy z plackami ziemniaczanymi", "Barszcz z pierogami", "Barszcz z krokietem", "Żeberka na słodko z ziemniakami opiekanymi", "Szaszłyki z mięsa mielonego otulone boczkiem z sosem czosnkowym", "Zupa krem z cukinii z grzankami"] }, { id: "stol", label: "Szwedzki stół (w cenie)", typ: "fixed", dania: ["Kawa i herbata bez ograniczeń", "Pieczywo"] }], doplaty: [{ id: "ciasta", label: "Ciasta", cena: 25, wybor: true, limit: 3, opcje: ["Sernik z wiśnią", "Krówka", "Słonecznikowiec", "Szarlotka", "Mini eklery", "Malinowa chmurka", "Deser Oreo", "Deser z karmelem", "Deser leśny mech"] }, { id: "ciepledop", label: "Dod. danie ciepłe", cena: 20 }, { id: "napoje", label: "Pakiet napojów", cena: 20, opis: "Coca-Cola, Fanta, Sprite, woda, sok jabłkowy, sok pomarańczowy" }], regulamin: ["Dzieci 0–3 lat — bezpłatnie", "Dzieci 4–7 lat — 50% stawki", "Dzieci powyżej 7 lat — 100%", "DJ — 100% stawki", "Alkohol we własnym zakresie bez opłaty korkowej", "Możliwość wniesienia ciast i tortu z paragonem"] },
-  { id: "komunia_235", typy: ["KOMUNIA"], nazwa: "Menu komunijne", cena: 235, sekcje: [{ id: "zupa", label: "Zupa", typ: "fixed", dania: ["Rosół z kluskami i lubczykiem"] }, { id: "surowki", label: "Surówki", typ: "fixed", dania: ["Mizeria", "Fasolka z masłem i bułką tartą", "Surówka z białej kapusty", "Buraczki"] }, { id: "glowne", label: "Mięsa i ziemniaki", typ: "fixed", dania: ["Pierś otulona boczkiem podana na cukinii z marchewką", "De volaille z serem", "Ryba w sosie śmietanowym", "Fileciki drobiowe panierowane z frytkami", "Zraz z kaszą pęczak", "Ziemniaki z wody"] }, { id: "desery", label: "Ciasta i desery", typ: "fixed", dania: ["Sernik", "Słonecznikowiec", "Krówka", "Malinowa chmurka", "Eklery", "Tarta lemon curd", "Cake pops"] }, { id: "zimne", label: "Zimne przekąski", typ: "fixed", dania: ["Rolada szpinakowa z łososiem", "Carpaccio z buraka", "Krążki tatara wołowego z cebulą i ogórkiem", "Sałatka Cezar", "Sałatka Gyros", "Deska przysmaków karczmy"] }, { id: "ciepledod", label: "Dania ciepłe", typ: "fixed", dania: ["Gołąbki w sosie pomidorowym", "Cukinia faszerowana mięsem mielonym z sosem czosnkowym", "Krem z cukinii z chipsem z szynki parmeńskiej", "Mix pierogów"] }, { id: "stol", label: "Na stole / Szwedzki stół", typ: "fixed", dania: ["Chleb, owoce", "Kawa i herbata bez ograniczeń", "Coca-Cola, Fanta, Sprite, woda z cytryną, sok jabłkowy, sok pomarańczowy — nielimitowane"] }], doplaty: [], regulamin: ["Dzieci 0–3 lat — bezpłatnie", "Dzieci 4–7 lat — 50% stawki", "Dzieci powyżej 7 lat — 100%", "Alkohol we własnym zakresie bez opłaty korkowej"] },
-  { id: "wesele_290", typy: ["WESELE"], nazwa: "Wesele propozycja 1", cena: 290, sekcje: [{ id: "zupa", label: "Zupa", typ: "wybor", limit: 1, dania: ["Rosół z kury z makaronem", "Krem z białych warzyw z pesto rukolowym"] }, { id: "glowne", label: "Danie serwowane", typ: "wybor", limit: 1, dania: ["Polędwiczki wieprzowe podane na puree chrzanowo-pietruszkowym muśnięte sosem z zielonego pieprzu", "Rulon drobiowy nadziewany szpinakiem serwowany z pieczonym batatem w aromatycznych ziołach"] }, { id: "surowki", label: "Surówki zimne", typ: "wybor", limit: 2, dania: ["Surówka z białej kapusty", "Surówka z kapusty pekińskiej", "Mizeria"] }, { id: "surowkiciep", label: "Surówka na ciepło", typ: "wybor", limit: 1, dania: ["Fasolka z masełkiem", "Groszek z marchewką"] }, { id: "dodatki", label: "Dodatki do dań", typ: "wybor", limit: 3, dania: ["Ziemniaki z koperkiem", "Ziemniaki zapiekane", "Kasza pęczak", "Kulki ziemniaczane"] }, { id: "zimny", label: "Zimny bufet", typ: "wybor", limit: 12, dania: ["Deska naszych przysmaków", "Tatarki (z pstrąga, wołowe, z łososia)", "Mini tortilla z łososiem", "Mini tortilla z szynką", "Śledzik w śmietanie z jabłkiem", "Ryba w sosie pomidorowym", "Klopsiki w zalewie octowej", "Kąski pstrąga w galarecie", "Tymbaliki z łososiem", "Pasztet wiejski z sosem żurawinowo-chrzanowym", "Sałatka w koszyczku", "Sałatki w ambuszkach (3 rodzaje: orzeźwiająca, z kolorowym makaronem, ananasem i ryżem)", "Sałatka Cezar", "Sałatka z grillowanym kurczakiem", "Półmisek frykasów (koreczki, koperty ze szpinakiem i suszonymi pomidorami, vol-au-venty, sałatka jarzynowa w słonej babeczce)"] }, { id: "bufet", label: "Bufet ciepły", typ: "wybor", limit: 6, dania: ["De volaille z serem", "Kieszonka wieprzowa", "Rumiane udko z kurczaka", "Udko z camembert", "Kotlet mielony z farszem pieczarkowym", "Zraz w sosie własnym", "Karkówka w sosie własnym", "Sandacz w sosie koperkowym", "Eskalop", "Żeberka na słodko", "Żeberka w kapuście kiszonej", "Gołąbki mięsne w sosie pomidorowym", "Mix pierogów z okrasą", "Pierogi z kaczką z masełkiem szałwiowym", "Pierś z kurczaka ze szpinakiem", "Gulasz wieprzowy"] }, { id: "stol", label: "W cenie", typ: "fixed", dania: ["Kawa i herbata bez ograniczeń", "Pieczywo"] }], doplaty: [{ id: "napoje", label: "Napoje nielimitowane", cena: 25, opis: "Coca-Cola, Fanta, Sprite, woda z cytryną, sok jabłkowy, sok pomarańczowy" }, { id: "ciasta", label: "Ciasta", cena: 25, wybor: true, limit: 5, opcje: ["Rafaello", "Sernik z wiśnią", "Krówka", "Szarlotka", "Czarny Las", "Słonecznikowiec", "Góra lodowa", "Malinowa chmurka", "Królowa śniegu", "Łabędzi puch"] }], regulamin: ["Dzieci 0–3 lat — bezpłatnie", "Dzieci 4–7 lat — 50%", "Zespół — 100%, kamerzysta/fotograf — 50%", "Alkohol we własnym zakresie bez opłaty korkowej", "Tort — dostarczyć z paragonem z cukierni"] },
-  { id: "wesele_350", typy: ["WESELE"], nazwa: "Wesele propozycja 2", cena: 350, sekcje: [{ id: "zupa", label: "Zupa", typ: "wybor", limit: 1, dania: ["Rosół z kury z makaronem", "Krem z białych warzyw z pesto rukolowym"] }, { id: "glowne", label: "Danie serwowane", typ: "wybor", limit: 1, dania: ["Polędwiczki wieprzowe podane na puree chrzanowo-pietruszkowym muśnięte sosem z zielonego pieprzu", "Rulon drobiowy nadziewany szpinakiem serwowany z pieczonym batatem w aromatycznych ziołach"] }, { id: "surowki", label: "Surówki zimne", typ: "wybor", limit: 2, dania: ["Surówka z białej kapusty", "Surówka z kapusty pekińskiej", "Mizeria"] }, { id: "surowkiciep", label: "Surówka na ciepło", typ: "wybor", limit: 1, dania: ["Fasolka z masełkiem", "Groszek z marchewką"] }, { id: "dodatki", label: "Dodatki do dań", typ: "wybor", limit: 3, dania: ["Ziemniaki z koperkiem", "Ziemniaki zapiekane", "Kasza pęczak", "Kulki ziemniaczane"] }, { id: "zimny", label: "Zimny bufet", typ: "wybor", limit: 12, dania: ["Deska naszych przysmaków", "Tatarki (z pstrąga, wołowe, z łososia)", "Mini tortilla z łososiem", "Mini tortilla z szynką", "Śledzik w śmietanie z jabłkiem", "Ryba w sosie pomidorowym", "Klopsiki w zalewie octowej", "Kąski pstrąga w galarecie", "Tymbaliki z łososiem", "Pasztet wiejski z sosem żurawinowo-chrzanowym", "Sałatka w koszyczku", "Sałatki w ambuszkach (3 rodzaje)", "Sałatka Cezar", "Sałatka z grillowanym kurczakiem", "Półmisek frykasów"] }, { id: "bufet", label: "Bufet ciepły", typ: "wybor", limit: 6, dania: ["De volaille z serem", "Kieszonka wieprzowa", "Rumiane udko z kurczaka", "Udko z camembert", "Kotlet mielony z farszem pieczarkowym", "Zraz w sosie własnym", "Karkówka w sosie własnym", "Sandacz w sosie koperkowym", "Eskalop", "Żeberka na słodko", "Żeberka w kapuście kiszonej", "Gołąbki mięsne w sosie pomidorowym", "Mix pierogów z okrasą", "Pierogi z kaczką z masełkiem szałwiowym", "Pierś z kurczaka ze szpinakiem", "Gulasz wieprzowy"] }, { id: "stol", label: "W cenie", typ: "fixed", dania: ["Kawa i herbata bez ograniczeń", "Pieczywo"] }], doplaty: [{ id: "napoje", label: "Napoje nielimitowane", cena: 25, opis: "Coca-Cola, Fanta, Sprite, woda z cytryną, sok jabłkowy, sok pomarańczowy" }, { id: "ciasta", label: "Ciasta", cena: 25, wybor: true, limit: 5, opcje: ["Rafaello", "Sernik z wiśnią", "Krówka", "Szarlotka", "Czarny Las", "Słonecznikowiec", "Góra lodowa", "Malinowa chmurka", "Królowa śniegu", "Łabędzi puch"] }, { id: "ryby", label: "Stół rybny", cena: 40, opis: "Sielawa, jesiotr, pstrąg, węgorz, 5 rodzajów śledzi, ryba po grecku/japońsku/żydowsku, w galarecie, sałatki rybne" }, { id: "wozek", label: "Wózek z jadłem", cena: 25, opis: "Gulasz z babką ziemniaczaną, bigos z pajdą chleba, pierogi mix" }, { id: "udko", label: "Udko pieczone", cena: 0, stala: 800, opis: "Cena ryczałtowa 800 zł za całość" }, { id: "prosie", label: "Pieczone prosię", cena: 0, stala: 2000, opis: "Cena ryczałtowa 2000 zł za całość" }, { id: "wegorz", label: "Węgorz wędzony", cena: 20 }], regulamin: ["Poza sezonem (1.11–1.04) w soboty — 10 zł/os taniej", "Poniżej 90 osób w soboty — +15 zł/os", "Dzieci 0–3 lat — bezpłatnie", "Dzieci 4–7 lat — 50%", "Zespół — 100%, kamerzysta/fotograf — 50%", "Poprawiny — 6000 zł (6 godzin)", "Alkohol we własnym zakresie bez opłaty korkowej", "Tort — dostarczyć z paragonem z cukierni"] },
-];
+type ApiPackage = {
+  id: string;
+  code: string;
+  name: string;
+  price: number | { toNumber?: () => number };
+  eventTypes: string[];
+  sections: { code: string; label: string; type: string; choiceLimit?: number | null; dishes: string[] }[];
+  surcharges: { code: string; label: string; pricePerPerson?: number | null; flatPrice?: number | null; hasChoice?: boolean; choiceLimit?: number | null; options?: string[] | null; description?: string | null }[];
+  rules?: string[] | null;
+};
+
+type LegacyPackage = {
+  id: string;
+  typy: string[];
+  nazwa: string;
+  cena: number;
+  sekcje: { id: string; label: string; typ: string; limit?: number; dania: string[] }[];
+  doplaty: { id: string; label: string; cena?: number; stala?: number; wybor?: boolean; limit?: number; opcje?: string[]; opis?: string }[];
+  regulamin: string[];
+};
+
+function toLegacy(p: ApiPackage): LegacyPackage {
+  const priceNum = typeof p.price === "object" && p.price && "toNumber" in p.price ? (p.price as { toNumber: () => number }).toNumber() : Number(p.price);
+  return {
+    id: p.code,
+    typy: p.eventTypes || [],
+    nazwa: p.name,
+    cena: priceNum,
+    sekcje: (p.sections || []).map((s) => ({
+      id: s.code,
+      label: s.label,
+      typ: s.type,
+      ...(s.type === "wybor" && s.choiceLimit != null ? { limit: s.choiceLimit } : {}),
+      dania: Array.isArray(s.dishes) ? s.dishes : [],
+    })),
+    doplaty: (p.surcharges || []).map((d) => {
+      const pp = d.pricePerPerson != null ? (typeof d.pricePerPerson === "object" && "toNumber" in d.pricePerPerson ? (d.pricePerPerson as { toNumber: () => number }).toNumber() : Number(d.pricePerPerson)) : undefined;
+      const fp = d.flatPrice != null ? (typeof d.flatPrice === "object" && "toNumber" in d.flatPrice ? (d.flatPrice as { toNumber: () => number }).toNumber() : Number(d.flatPrice)) : undefined;
+      return {
+        id: d.code,
+        label: d.label,
+        ...(pp != null && pp > 0 ? { cena: pp } : {}),
+        ...(fp != null && fp > 0 ? { stala: fp } : {}),
+        ...(d.hasChoice ? { wybor: true, limit: d.choiceLimit ?? undefined, opcje: d.options ?? undefined } : {}),
+        ...(d.description ? { opis: d.description } : {}),
+      };
+    }),
+    regulamin: Array.isArray(p.rules) ? p.rules : [],
+  };
+}
 
 const fmtZl = (n: number | null | undefined) => (n != null ? n.toLocaleString("pl-PL") + "\u00a0zł" : "—");
 const fmtDate = (d: string | Date) => new Date(d).toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric" });
@@ -27,7 +64,7 @@ type EvType = { type: string; client?: string | null; date: string; guests?: num
 type SavedMenu = { pakietId?: string | null; wybory?: Record<string, string[]>; doplaty?: Record<string, boolean>; dopWybory?: Record<string, string[]>; notatka?: string } | null;
 
 function obliczCene(
-  pakiet: (typeof PAKIETY)[0] | undefined,
+  pakiet: LegacyPackage | undefined,
   doplaty: Record<string, boolean>,
   guestsOverride: number | null,
   evGuests: number | null | undefined
@@ -48,7 +85,7 @@ function obliczCene(
 
 type SekcjaWybor = { id: string; label: string; typ: string; limit: number; dania: string[] };
 function statusWyborow(
-  pakiet: (typeof PAKIETY)[0] | undefined,
+  pakiet: LegacyPackage | undefined,
   wybory: Record<string, string[]>
 ) {
   if (!pakiet) return { todo: [] as SekcjaWybor[], done: 0, total: 0 };
@@ -59,7 +96,7 @@ function statusWyborow(
 }
 
 function generatePrintHTML(
-  pakiet: (typeof PAKIETY)[0],
+  pakiet: LegacyPackage,
   wybory: Record<string, string[]>,
   doplaty: Record<string, boolean>,
   dopWybory: Record<string, string[]>,
@@ -105,7 +142,19 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
   const [zapisano, setZapisano] = useState(false);
   const [walidError, setWalidError] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState<string | null>(null);
+  const [allPackages, setAllPackages] = useState<LegacyPackage[]>([]);
+  const [loading, setLoading] = useState(true);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    fetch("/api/menu-packages")
+      .then((r) => r.json())
+      .then((data: ApiPackage[]) => {
+        setAllPackages(data.map(toLegacy));
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
     if (!savedMenu) return;
@@ -116,8 +165,11 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
     setNotatka(savedMenu.notatka ?? "");
   }, [savedMenu]);
 
-  const dostepne = useMemo(() => PAKIETY.filter((p) => p.typy.includes(ev.type)), [ev.type]);
-  const pakiet = useMemo(() => PAKIETY.find((p) => p.id === pakietId), [pakietId]);
+  const dostepne = useMemo(() => allPackages.filter((p) => p.typy.includes(ev.type)), [allPackages, ev.type]);
+  const pakiet = useMemo(
+    () => allPackages.find((p) => p.code === pakietId || p.id === pakietId),
+    [allPackages, pakietId]
+  );
   const cena = useMemo(() => obliczCene(pakiet, doplaty, guestsOvr, ev.guests), [pakiet, doplaty, guestsOvr, ev.guests]);
   const statusWyb = useMemo(() => statusWyborow(pakiet, wybory), [pakiet, wybory]);
 
@@ -263,7 +315,9 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
         <>
           <div style={{ marginBottom: "12px" }}>
             <div style={{ fontSize: "10px", fontWeight: 900, color: "#94a3b8", letterSpacing: "2px", marginBottom: "8px" }}>PAKIET MENU</div>
-            {dostepne.length === 0 ? (
+            {loading ? (
+              <div style={{ padding: "20px", textAlign: "center", color: "#64748b", fontSize: "13px" }}>Ładowanie pakietów...</div>
+            ) : dostepne.length === 0 ? (
               <div style={{ background: "#fef9c3", border: "2px solid #fde68a", borderRadius: "10px", padding: "14px", fontSize: "13px", color: "#92400e", fontWeight: 600 }}>⚠️ Brak pakietów dla typu imprezy: <strong>{ev.type}</strong>. Skontaktuj się z Martą Aker aby ustalić menu indywidualnie.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>

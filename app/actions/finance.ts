@@ -4811,6 +4811,18 @@ export async function createVatInvoice(
         error: "Do wystawienia faktury VAT wymagany jest NIP nabywcy. Uzupełnij NIP w danych firmy przy rezerwacji.",
       };
     }
+    // Zapobieganie duplikatom: dla NORMAL nie twórz drugiej faktury, gdy już istnieje
+    if (invoiceType === "NORMAL") {
+      const existing = await prisma.invoice.findFirst({
+        where: { reservationId, invoiceType: "NORMAL" },
+      });
+      if (existing) {
+        return {
+          success: false,
+          error: `Rezerwacja ma już wystawioną fakturę VAT: ${existing.number}. Nie można wystawić drugiej faktury normalnej dla tej samej rezerwacji.`,
+        };
+      }
+    }
     // Auto-naliczanie noclegu: jeśli brak transakcji ROOM, nalicz automatycznie
     const hasRoomCharge = reservation.transactions.some(
       (t) => t.type === "ROOM" && Number(t.amount) > 0 && (t.status === "ACTIVE" || t.status == null)
@@ -12192,6 +12204,10 @@ export async function addFolioPayment(
       entityId: params.reservationId,
       newValue: { message: `Dodano płatność ${params.paymentMethod}: ${params.amount.toFixed(2)} PLN` },
     });
+
+    await updateReservationPaymentStatus(params.reservationId).catch((err) =>
+      console.error("[updateReservationPaymentStatus]", err)
+    );
     
     revalidatePath("/finance");
     revalidatePath("/front-office");
