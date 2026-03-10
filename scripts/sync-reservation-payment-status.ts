@@ -39,9 +39,10 @@ async function getRemaining(reservationId: string): Promise<{ pozostalo: number;
 }
 
 async function main() {
-  const filter = process.argv[2]; // np. "Ratajczak"
-  const roomFilter = process.argv[3]; // np. "001"
+  const args = process.argv.slice(2).filter((a) => a !== "-v" && a !== "--verbose");
   const verbose = process.argv.includes("--verbose") || process.argv.includes("-v");
+  const filter = args[0]; // np. "Ratajczak"
+  const roomFilter = args[1]; // np. "001" – drugi arg, nie -v
 
   const reservations = await prisma.reservation.findMany({
     where: {
