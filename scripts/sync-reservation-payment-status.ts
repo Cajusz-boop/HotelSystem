@@ -1,0 +1,77 @@
+/**
+ * Synchronizuje paymentStatus rezerwacji na podstawie salda folio.
+ * Użyj dla rezerwacji, gdzie wpłata jest zapisana, ale pasek na grafiku nadal jest fioletowy (nieopłacony).
+ *
+ * Uruchomienie: npx tsx scripts/sync-reservation-payment-status.ts
+ * Lub z filtrem: npx tsx scripts/sync-reservation-payment-status.ts Ratajczak
+ */
+import { prisma } from "../lib/db";
+
+async function getBalance(reservationId: string): Promise<{ balance: number; totalPayments: number } | null> {
+  const txs = await prisma.transaction.findMany({
+    where: { reservationId, status: "ACTIVE" },
+    select: { type: true, amount: true },
+  });
+  let charges = 0;
+  let discounts = 0;
+  let payments = 0;
+  for (const t of txs) {
+    const amt = Number(t.amount);
+    if (amt > 0) charges += amt;
+    else if (t.type === "DISCOUNT") discounts += Math.abs(amt);
+    else payments += Math.abs(amt);
+  }
+  const balance = Math.round((charges - discounts - payments) * 100) / 100;
+  const totalPayments = Math.round(payments * 100) / 100;
+  return { balance, totalPayments };
+}
+
+async function main() {
+  const filter = process.argv[2]; // np. "Ratajczak"
+
+  const reservations = await prisma.reservation.findMany({
+    where: {
+      status: { notIn: ["CANCELLED", "NO_SHOW"] },
+      ...(filter
+        ? { guest: { name: { contains: filter } } }
+        : {}),
+    },
+    select: {
+      id: true,
+      confirmationNumber: true,
+      paymentStatus: true,
+      guest: { select: { name: true } },
+      room: { select: { number: true } },
+    },
+    orderBy: { checkIn: "desc" },
+    take: filter ? 20 : 100,
+  });
+
+  console.log(`Znaleziono ${reservations.length} rezerwacji.`);
+
+  for (const r of reservations) {
+    const data = await getBalance(r.id);
+    if (!data) continue;
+    const { balance, totalPayments } = data;
+    const newStatus =
+      balance <= 0 ? "PAID" : totalPayments > 0 ? "PARTIAL" : "UNPAID";
+
+    if (r.paymentStatus === newStatus) continue;
+
+    await prisma.reservation.update({
+      where: { id: r.id },
+      data: { paymentStatus: newStatus },
+    });
+    console.log(
+      `  [FIX] ${r.guest.name} pok.${r.room.number} ${r.paymentStatus ?? "NULL"} -> ${newStatus}`
+    );
+  }
+  console.log("Gotowe.");
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });

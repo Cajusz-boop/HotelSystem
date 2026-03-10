@@ -1078,6 +1078,15 @@ export function KwhotelGrafik({
             prev.map((r) => (r.id === updated.id ? updated : r))
           );
         }}
+        onPaymentRecorded={(reservationId, paymentStatus) => {
+          if (paymentStatus) {
+            setReservations((prev) =>
+              prev.map((r) =>
+                r.id === reservationId ? { ...r, paymentStatus: paymentStatus as "UNPAID" | "PARTIAL" | "PAID" } : r
+              )
+            );
+          }
+        }}
       />
       <UnifiedReservationDialog
         mode="create"

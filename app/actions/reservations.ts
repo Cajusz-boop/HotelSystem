@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { revalidateTapeChartCache } from "@/app/actions/tape-chart";
 import { prisma } from "@/lib/db";
 import { createAuditLog, getClientIp } from "@/lib/audit";
 import {
@@ -554,13 +555,8 @@ export async function getReservationEditData(
     if (!res) return { success: false, error: "Rezerwacja nie istnieje" };
 
     const isInClosedPeriod = isReservationInClosedPeriod(res.checkIn, res.checkOut);
-    let canEditClosedPeriod = false;
-    if (isInClosedPeriod) {
-      const session = await getSession();
-      if (session) {
-        canEditClosedPeriod = session.role === "ADMIN" || session.role === "MANAGER" || await can(session.role, "reservation.edit_closed_period");
-      }
-    }
+    // Ograniczenie edycji zamkniętego okresu wyłączone – wszyscy mogą edytować zawsze
+    const canEditClosedPeriod = true;
 
     return {
       success: true,
@@ -885,6 +881,7 @@ export async function createReservation(
     });
 
     revalidatePath("/front-office");
+    revalidateTapeChartCache();
     return {
       success: true,
       data: toUiReservation(resToReturn),
@@ -2596,21 +2593,7 @@ export async function moveReservation(
     }
 
     const isInClosedPeriod = isReservationInClosedPeriod(reservation.checkIn, reservation.checkOut);
-    let editingClosedPeriod = false;
-    if (isInClosedPeriod) {
-      const hasPermission = session && (
-        session.role === "ADMIN" || 
-        session.role === "MANAGER" || 
-        await can(session.role, "reservation.edit_closed_period")
-      );
-      if (!hasPermission) {
-        return {
-          success: false,
-          error: "Nie można edytować rezerwacji w zamkniętym okresie (po Night Audit).",
-        };
-      }
-      editingClosedPeriod = true;
-    }
+    const editingClosedPeriod = isInClosedPeriod; // Ograniczenie wyłączone – wszyscy mogą edytować
 
     const newRoom = await prisma.room.findUnique({ where: { number: newRoomNumber } });
     if (!newRoom) {
@@ -2738,21 +2721,7 @@ export async function updateReservation(
     if (!prev) return { success: false, error: "Rezerwacja nie istnieje" };
 
     const isInClosedPeriod = isReservationInClosedPeriod(prev.checkIn, prev.checkOut);
-    let editingClosedPeriod = false;
-    if (isInClosedPeriod) {
-      const hasPermission = session && (
-        session.role === "ADMIN" || 
-        session.role === "MANAGER" || 
-        await can(session.role, "reservation.edit_closed_period")
-      );
-      if (!hasPermission) {
-        return {
-          success: false,
-          error: "Nie można edytować rezerwacji w zamkniętym okresie (po Night Audit).",
-        };
-      }
-      editingClosedPeriod = true;
-    }
+    const editingClosedPeriod = isInClosedPeriod; // Ograniczenie wyłączone – wszyscy mogą edytować
 
     const data: Partial<{
       guestId: string;
@@ -3192,6 +3161,7 @@ export async function updateReservation(
     });
 
     revalidatePath("/front-office");
+    revalidateTapeChartCache(); // Cache 30 s inaczej nadpisywałby stare dane (np. rateCodePrice)
     return { success: true, data: toUiReservation(finalUpdated) };
   } catch (e) {
     return {
@@ -3224,21 +3194,7 @@ export async function splitReservation(
     if (!prev) return { success: false, error: "Rezerwacja nie istnieje" };
 
     const isInClosedPeriod = isReservationInClosedPeriod(prev.checkIn, prev.checkOut);
-    let editingClosedPeriod = false;
-    if (isInClosedPeriod) {
-      const hasPermission = session && (
-        session.role === "ADMIN" || 
-        session.role === "MANAGER" || 
-        await can(session.role, "reservation.edit_closed_period")
-      );
-      if (!hasPermission) {
-        return {
-          success: false,
-          error: "Nie można edytować rezerwacji w zamkniętym okresie (po Night Audit).",
-        };
-      }
-      editingClosedPeriod = true;
-    }
+    const editingClosedPeriod = isInClosedPeriod; // Ograniczenie wyłączone – wszyscy mogą edytować
 
     const splitD = new Date(splitDate + "T12:00:00Z");
     const checkIn = new Date(prev.checkIn);
@@ -3325,6 +3281,7 @@ export async function splitReservation(
     ]);
 
     revalidatePath("/front-office");
+    revalidateTapeChartCache();
     return {
       success: true,
       data: {
@@ -3475,6 +3432,7 @@ export async function updateReservationStatus(
 
     revalidatePath("/front-office");
     revalidatePath("/housekeeping");
+    revalidateTapeChartCache();
     return { success: true, data: toUiReservation(updated) };
   } catch (e) {
     return {
@@ -3595,6 +3553,7 @@ export async function deleteReservation(reservationId: string, cancellationReaso
     });
 
     revalidatePath("/front-office");
+    revalidateTapeChartCache();
     return { success: true, data: undefined };
   } catch (e) {
     return {

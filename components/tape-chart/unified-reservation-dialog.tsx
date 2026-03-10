@@ -106,6 +106,8 @@ interface UnifiedReservationDialogProps {
   onSaved?: (updated: Reservation) => void;
   /** Edit mode: when reservation is deleted */
   onDeleted?: (reservationId: string) => void;
+  /** Wywoływane po zarejestrowaniu wpłaty – aby odświeżyć kolor paska (paymentStatus) na grafiku */
+  onPaymentRecorded?: (reservationId: string, paymentStatus?: string) => void;
   effectivePricePerNight?: number;
   initialTab?: UnifiedReservationTab;
   /** Tryb faktury zbiorczej: lista ID rezerwacji + primary (dane firmy, gościa) */
@@ -194,6 +196,7 @@ export function UnifiedReservationDialog({
   reservation,
   onSaved,
   onDeleted,
+  onPaymentRecorded,
   effectivePricePerNight: effectivePriceProp,
   initialTab,
   consolidatedReservationIds,
@@ -232,8 +235,6 @@ export function UnifiedReservationDialog({
   const [dayRatesDialogOpen, setDayRatesDialogOpen] = useState(false);
   const [dayRates, setDayRates] = useState<Array<{ date: string; rate: number }>>([]);
   const [dayRatesSaving, setDayRatesSaving] = useState(false);
-  const [isInClosedPeriod, setIsInClosedPeriod] = useState(false);
-  const [canEditClosedPeriod, setCanEditClosedPeriod] = useState(false);
   /** W trybie edycji: true gdy są niezapisane zmiany; po Zapisz ustawiane na false, okno pozostaje otwarte */
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
@@ -302,8 +303,6 @@ export function UnifiedReservationDialog({
             invoiceScope: d.invoiceScope ?? "ALL",
             paidAmountOverride: d.paidAmountOverride != null ? String(d.paidAmountOverride) : "",
           }));
-          setIsInClosedPeriod(d.isInClosedPeriod ?? false);
-          setCanEditClosedPeriod(d.canEditClosedPeriod ?? false);
         }
       });
       // Załaduj firmę (NIP) powiązaną z rezerwacją
@@ -962,32 +961,6 @@ export function UnifiedReservationDialog({
           </DialogClose>
         </DialogHeader>
 
-        {/* Banner o zamkniętym okresie */}
-        {isEdit && isInClosedPeriod && (
-          <div className={`mx-4 mt-3 p-3 rounded-md border-l-4 flex items-start gap-3 ${
-            canEditClosedPeriod 
-              ? "bg-blue-50 border-blue-500 text-blue-800" 
-              : "bg-amber-50 border-amber-500 text-amber-800"
-          }`}>
-            <AlertTriangle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${canEditClosedPeriod ? "text-blue-500" : "text-amber-500"}`} />
-            <div className="text-sm">
-              {canEditClosedPeriod ? (
-                <>
-                  <span className="font-medium">Rezerwacja w zamkniętym okresie (po Night Audit).</span>
-                  <br />
-                  <span>Edycja możliwa dzięki specjalnym uprawnieniom.</span>
-                </>
-              ) : (
-                <>
-                  <span className="font-medium">Nie można edytować rezerwacji w zamkniętym okresie (po Night Audit).</span>
-                  <br />
-                  <span>Skontaktuj się z administratorem, aby uzyskać uprawnienia do edycji.</span>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Banner błędu */}
         {error && (
           <div data-testid="create-reservation-error" className="mx-4 mt-3 p-3 rounded-md border-l-4 bg-red-50 border-red-500 text-red-800 flex items-start gap-3">
@@ -1000,7 +973,7 @@ export function UnifiedReservationDialog({
           {/* LEWA KOLUMNA (40%) - Formularz */}
           <div className="w-[40%] min-w-0 overflow-y-auto bg-muted/30 border-r flex-shrink-0">
             <form id="reservation-form" onSubmit={handleSubmit} className="p-4 space-y-6">
-              <fieldset disabled={(isEdit && isInClosedPeriod && !canEditClosedPeriod) || isConsolidated} className="space-y-6">
+              <fieldset disabled={isConsolidated} className="space-y-6">
               <SettlementTab
                 ref={settlementTabRef}
                 mode={mode}
@@ -1024,6 +997,7 @@ export function UnifiedReservationDialog({
                 nipLookupLoading={nipLookupLoading}
                 onNipLookup={handleNipLookup}
                 layout="form"
+                onPaymentRecorded={onPaymentRecorded}
               />
               </fieldset>
             </form>
@@ -1070,6 +1044,7 @@ export function UnifiedReservationDialog({
                   nipLookupLoading={nipLookupLoading}
                   onNipLookup={handleNipLookup}
                   layout="rozliczenie"
+                  onPaymentRecorded={onPaymentRecorded}
                 />
                 )}
               </TabsContent>
@@ -1204,7 +1179,7 @@ export function UnifiedReservationDialog({
               </Button>
             )}
             {!isConsolidated && (
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200" disabled={saving || (isEdit && isInClosedPeriod && !canEditClosedPeriod)} onClick={() => { saveAndPrintRef.current = true; handleSubmit(); }} title="Ctrl+Shift+Enter">
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200" disabled={saving} onClick={() => { saveAndPrintRef.current = true; handleSubmit(); }} title="Ctrl+Shift+Enter">
               {saving && saveAndPrintRef.current ? "Zapisywanie…" : "Zapisz i drukuj"}
             </Button>
             )}
@@ -1215,7 +1190,7 @@ export function UnifiedReservationDialog({
               form="reservation-form"
               size="sm"
               className={isEdit && !hasUnsavedChanges ? "h-8 text-xs bg-gray-200 text-gray-500 cursor-default" : "h-8 text-xs bg-green-600 hover:bg-green-700 text-white"}
-              disabled={saving || (isEdit && isInClosedPeriod && !canEditClosedPeriod) || (isEdit && !hasUnsavedChanges)}
+              disabled={saving || (isEdit && !hasUnsavedChanges)}
               title="Ctrl+Enter"
               data-testid="create-reservation-save"
             >

@@ -287,6 +287,8 @@ interface SettlementTabProps {
   onNipLookup: () => void;
   /** full = 3-kolumnowy grid (domyślny), form = tylko lewa kolumna (formularz), rozliczenie = tylko prawa kolumna (cennik+folio) */
   layout?: "full" | "form" | "rozliczenie";
+  /** Wywoływane po zarejestrowaniu wpłaty – pozwala odświeżyć kolor paska (paymentStatus) na grafiku */
+  onPaymentRecorded?: (reservationId: string, paymentStatus?: string) => void;
 }
 
 export interface SettlementTabRef {
@@ -358,6 +360,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   nipLookupLoading,
   onNipLookup,
   layout = "full",
+  onPaymentRecorded,
 }, ref) {
   const isEdit = mode === "edit";
   const [localTaxLoading, setLocalTaxLoading] = useState(false);
@@ -1301,7 +1304,14 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
                   setPaymentRegisterLoading(true);
                   const r = await addFolioPayment({ reservationId: reservation.id, amount: amt, paymentMethod: (form.paymentMethod || "CASH") as "CASH" | "CARD" | "TRANSFER" | "PREPAID" });
                   setPaymentRegisterLoading(false);
-                  if (r.success) { toast.success(`Zarejestrowano wpłatę: ${amt.toFixed(2)} PLN`); onFormChange({ paymentAmount: "" }); refreshFolios(); getTransactionsForReservation(reservation.id).then((res) => res.success && res.data && setTransactions(res.data)); }
+                  if (r.success) {
+                    toast.success(`Zarejestrowano wpłatę: ${amt.toFixed(2)} PLN`);
+                    onFormChange({ paymentAmount: "" });
+                    refreshFolios();
+                    getTransactionsForReservation(reservation.id).then((res) => res.success && res.data && setTransactions(res.data));
+                    const status = (r.data as { paymentStatus?: string })?.paymentStatus;
+                    onPaymentRecorded?.(reservation.id, status);
+                  }
                   else toast.error(r.error);
                 }}>{paymentRegisterLoading ? "Zapisywanie…" : "Zapisz wpłatę"}</Button>
             </div>
@@ -1317,7 +1327,14 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
                     setAdvanceLoading(true);
                     const r = await addFolioPayment({ reservationId: reservation.id, amount: amt, paymentMethod: "TRANSFER", description: "Zaliczka" });
                     setAdvanceLoading(false);
-                    if (r.success) { toast.success(`Zarejestrowano zaliczkę: ${amt.toFixed(2)} PLN`); onFormChange({ advanceAmount: "" }); refreshFolios(); getTransactionsForReservation(reservation.id).then((res) => res.success && res.data && setTransactions(res.data)); }
+                    if (r.success) {
+                      toast.success(`Zarejestrowano zaliczkę: ${amt.toFixed(2)} PLN`);
+                      onFormChange({ advanceAmount: "" });
+                      refreshFolios();
+                      getTransactionsForReservation(reservation.id).then((res) => res.success && res.data && setTransactions(res.data));
+                      const status = (r.data as { paymentStatus?: string })?.paymentStatus;
+                      onPaymentRecorded?.(reservation.id, status);
+                    }
                     else toast.error(r.error);
                   }}>{advanceLoading ? "…" : "Zapisz zaliczkę"}</Button>
               </div>
@@ -1337,7 +1354,14 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
                     const desc = VOUCHER_TYPE_OPTIONS.find((o) => o.value === form.voucherType)?.label ?? "Voucher";
                     const r = await addFolioPayment({ reservationId: reservation.id, amount: amt, paymentMethod: "VOUCHER", description: desc });
                     setVoucherLoading(false);
-                    if (r.success) { toast.success(`Zarejestrowano ${desc.toLowerCase()}: ${amt.toFixed(2)} PLN`); onFormChange({ voucherAmount: "" }); refreshFolios(); getTransactionsForReservation(reservation.id).then((res) => res.success && res.data && setTransactions(res.data)); }
+                    if (r.success) {
+                      toast.success(`Zarejestrowano ${desc.toLowerCase()}: ${amt.toFixed(2)} PLN`);
+                      onFormChange({ voucherAmount: "" });
+                      refreshFolios();
+                      getTransactionsForReservation(reservation.id).then((res) => res.success && res.data && setTransactions(res.data));
+                      const status = (r.data as { paymentStatus?: string })?.paymentStatus;
+                      onPaymentRecorded?.(reservation.id, status);
+                    }
                     else toast.error(r.error);
                   }}>{voucherLoading ? "…" : "Zapisz"}</Button>
               </div>

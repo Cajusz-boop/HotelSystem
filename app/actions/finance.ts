@@ -12205,9 +12205,10 @@ export async function addFolioPayment(
       newValue: { message: `Dodano płatność ${params.paymentMethod}: ${params.amount.toFixed(2)} PLN` },
     });
 
-    await updateReservationPaymentStatus(params.reservationId).catch((err) =>
-      console.error("[updateReservationPaymentStatus]", err)
-    );
+    const statusResult = await updateReservationPaymentStatus(params.reservationId).catch((err) => {
+      console.error("[updateReservationPaymentStatus]", err);
+      return null;
+    });
     
     revalidatePath("/finance");
     revalidatePath("/front-office");
@@ -12216,6 +12217,7 @@ export async function addFolioPayment(
       success: true,
       data: {
         id: transaction.id,
+        paymentStatus: statusResult?.success && statusResult.data ? statusResult.data.paymentStatus : undefined,
         type: transaction.type,
         category: transaction.category,
         description: transaction.description,

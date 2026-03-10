@@ -3310,6 +3310,15 @@ export function TapeChart({
             );
           }
         }}
+        onPaymentRecorded={(reservationId, paymentStatus) => {
+          if (paymentStatus) {
+            setReservations((prev) =>
+              prev.map((r) =>
+                r.id === reservationId ? { ...r, paymentStatus: paymentStatus as "UNPAID" | "PARTIAL" | "PAID" } : r
+              )
+            );
+          }
+        }}
       />
       <RoomSearchDialog
         open={roomSearchOpen}
