@@ -411,8 +411,30 @@ export function MenuPackagesView() {
                     Dania (wybierz ze słownika — <a href="#" onClick={(e) => { e.preventDefault(); setSubTab("slownik"); }} style={{ color: "#3b82f6", textDecoration: "underline" }}>dodaj do słownika</a>)
                   </label>
                   {(sec.dishes?.length ?? 0) > 0 && !(sec.dishIds?.length ?? 0) && (
-                    <div style={{ fontSize: "12px", color: "#92400e", background: "#fefce8", padding: "8px 10px", borderRadius: "6px", marginBottom: "8px" }}>
-                      Stary format: {sec.dishes.join(", ")}. Wybierz ponownie ze słownika, aby powiązać z ceną.
+                    <div style={{ fontSize: "12px", color: "#92400e", background: "#fefce8", padding: "8px 10px", borderRadius: "6px", marginBottom: "8px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
+                      <span>Stary format: {sec.dishes.join(", ")}</span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const raw = sec.dishes || [];
+                          const names = raw.flatMap((s) => String(s).split(",").map((x) => x.trim()).filter(Boolean));
+                          if (!names.length) return;
+                          try {
+                            const res = await fetch("/api/dishes/ensure", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ names }),
+                            });
+                            const items = await res.json();
+                            if (Array.isArray(items) && items.length) {
+                              updateSection(i, { dishIds: items.map((x: { id: string }) => x.id), dishes: items.map((x: { name: string }) => x.name) });
+                            }
+                          } catch { /* ignore */ }
+                        }}
+                        style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "6px", padding: "6px 12px", fontSize: "12px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}
+                      >
+                        Dodaj te dania do słownika
+                      </button>
                     </div>
                   )}
                   <DishAutocomplete

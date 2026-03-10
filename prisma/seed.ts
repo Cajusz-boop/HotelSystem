@@ -74,21 +74,31 @@ async function main() {
     }
   }
 
-  // Użytkownik Google OAuth (logowanie przez Google Workspace)
-  const googleEmail = "lukasz.wojenkowski@labedzhotel.pl";
-  const existingGoogleUser = await prisma.user.findUnique({ where: { email: googleEmail } }).catch(() => null);
-  if (!existingGoogleUser) {
-    const hash = await bcrypt.hash(crypto.randomUUID(), 10);
-    await prisma.user.create({
-      data: {
-        email: googleEmail,
-        name: "Łukasz Wojenkowski",
-        passwordHash: hash,
-        role: "MANAGER",
-        passwordChangedAt: new Date(),
-      },
-    });
-    console.log("Utworzono użytkownika Google:", googleEmail);
+  // Użytkownicy Google OAuth (logowanie przez Google Workspace – @labedzhotel.pl)
+  const googleUsers = [
+    { email: "lukasz.wojenkowski@labedzhotel.pl", name: "Łukasz Wojenkowski", role: "OWNER" as const },
+    { email: "recepcja@labedzhotel.pl", name: "Recepcja", role: "RECEPTION" as const },
+    { email: "hotel@labedzhotel.pl", name: "Hotel", role: "MANAGER" as const },
+    { email: "sprzedaz@labedzhotel.pl", name: "Sprzedaż", role: "RECEPTION" as const },
+    { email: "jonna.wojenkowska@labedzhotel.pl", name: "Joanna Wojenkowska", role: "OWNER" as const },
+    { email: "zaopatrzenie@labedzhotel.pl", name: "Zaopatrzenie", role: "RECEPTION" as const },
+  ];
+
+  for (const u of googleUsers) {
+    const existing = await prisma.user.findUnique({ where: { email: u.email } }).catch(() => null);
+    if (!existing) {
+      const hash = await bcrypt.hash(crypto.randomUUID(), 10);
+      await prisma.user.create({
+        data: {
+          email: u.email,
+          name: u.name,
+          passwordHash: hash,
+          role: u.role,
+          passwordChangedAt: new Date(),
+        },
+      });
+      console.log("Utworzono użytkownika Google:", u.email);
+    }
   }
 
   const defaultProperty = await prisma.property.upsert({

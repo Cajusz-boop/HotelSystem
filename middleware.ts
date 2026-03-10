@@ -37,10 +37,19 @@ async function checkUserActive(userId: string, origin: string): Promise<boolean>
     return cached.isActive;
   }
 
+  // W production używaj wewnętrznego URL (127.0.0.1) — unika self-fetch przez sieć,
+  // który mógł timeout'ować i powodować ~1 min opóźnienia logowania
+  const port = process.env.PORT || "3000";
+  const apiBase =
+    process.env.NODE_ENV === "production"
+      ? process.env.INTERNAL_ORIGIN || `http://127.0.0.1:${port}`
+      : origin;
+
   try {
-    const res = await fetch(`${origin}/api/auth/check-active?userId=${encodeURIComponent(userId)}`, {
+    const res = await fetch(`${apiBase}/api/auth/check-active?userId=${encodeURIComponent(userId)}`, {
       headers: { "x-internal-secret": process.env.SESSION_SECRET || "" },
       cache: "no-store",
+      signal: AbortSignal.timeout(5000), // max 5s — unikaj długiego blokowania
     });
 
     if (!res.ok) return true; // fail-open
@@ -71,18 +80,14 @@ function getClientIp(request: NextRequest): string {
 /**
  * Sprawdza czy logowanie jest wyłączone.
  * 1. Czyta z globalThis cache (zero latencji) — ustawianego przez server action.
- * 2. process.env.AUTH_DISABLED — ustawiane przez next.config.js z config-snapshot.json.
- * 3. Jeśli cache nie załadowany — fetch do /api/auth/is-disabled.
+ * 2. Gdy cache wygasł — fetch do /api/auth/is-disabled (baza = źródło prawdy).
+ * 3. process.env.AUTH_DISABLED — tylko jako fallback przy błędzie fetcha.
  */
 async function isAuthDisabled(request: NextRequest): Promise<boolean> {
   const cached = getAuthDisabledCache();
   if (cached !== undefined) return cached;
 
-  if (process.env.AUTH_DISABLED === "true") {
-    setAuthDisabledCache(true);
-    return true;
-  }
-
+  // Najpierw fetch z bazy — wartość z UI ma priorytet nad process.env (ustawiane przy starcie)
   if (!isAuthCacheLoaded()) {
     try {
       const origin = request.nextUrl.origin;
@@ -97,12 +102,14 @@ async function isAuthDisabled(request: NextRequest): Promise<boolean> {
         return disabled;
       }
     } catch {
-      // Fetch nie zadziałał
+      // Fetch nie zadziałał — fallback na env
     }
-    setAuthDisabledCache(false);
   }
 
-  return false;
+  // Fallback: env (z config-snapshot przy starcie serwera)
+  const fromEnv = process.env.AUTH_DISABLED === "true";
+  setAuthDisabledCache(fromEnv);
+  return fromEnv;
 }
 
 export async function middleware(request: NextRequest) {

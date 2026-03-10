@@ -42,8 +42,10 @@ export function DishesView() {
       const res = await fetch(url);
       const data = await res.json();
       setDishes(Array.isArray(data) ? data : []);
-    } catch {
+      if (!res.ok) console.error("[DishesView] API error:", res.status, data);
+    } catch (e) {
       setDishes([]);
+      console.error("[DishesView] Fetch error:", e);
     } finally {
       setLoading(false);
     }

@@ -1,14 +1,25 @@
 import { prisma } from "@/lib/db";
 import { NextResponse } from "next/server";
 
+function toNum(v: unknown): number {
+  if (v == null) return 0;
+  if (typeof v === "number") return v;
+  if (typeof v === "object" && v !== null && "toNumber" in v) return (v as { toNumber: () => number }).toNumber();
+  return Number(v);
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const dish = await prisma.dish.findUnique({ where: { id } });
-  if (!dish) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(dish);
+  const d = await prisma.dish.findUnique({ where: { id } });
+  if (!d) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json({
+    ...d,
+    defaultPrice: toNum(d.defaultPrice),
+    vatRate: toNum(d.vatRate),
+  });
 }
 
 export async function PUT(
@@ -25,7 +36,7 @@ export async function PUT(
   });
   if (existing) return NextResponse.json({ error: "Inne danie o takiej nazwie już istnieje" }, { status: 400 });
 
-  const updated = await prisma.dish.update({
+  const d = await prisma.dish.update({
     where: { id },
     data: {
       name,
@@ -41,7 +52,11 @@ export async function PUT(
     },
   });
 
-  return NextResponse.json(updated);
+  return NextResponse.json({
+    ...d,
+    defaultPrice: toNum(d.defaultPrice),
+    vatRate: toNum(d.vatRate),
+  });
 }
 
 export async function DELETE(
