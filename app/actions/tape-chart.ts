@@ -2,7 +2,6 @@
 
 import { ReservationStatus } from "@prisma/client";
 import { computeRateCodePricePerNight } from "@/lib/rate-code-utils";
-import { unstable_cache, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getEffectivePropertyId, getPropertyReservationColors } from "@/app/actions/properties";
 export interface TapeChartReservation {
@@ -190,8 +189,6 @@ export interface GetTapeChartDataOptions {
   /** Koniec zakresu dat (YYYY-MM-DD). Domyślnie: 90 dni w przód. */
   dateTo?: string;
 }
-
-const TAPE_CHART_CACHE_REVALIDATE = 30;
 
 /** Wewnętrzna implementacja – bez cache. */
 async function fetchTapeChartDataUncached(
@@ -483,21 +480,8 @@ async function fetchTapeChartDataUncached(
   };
 }
 
-/** Pobiera dane do Tape Chart: rezerwacje i pokoje. Cache 30 s. Działa także gdy w bazie brak RateCode / rateCodeId (stary schemat). */
+/** Pobiera dane do Tape Chart: rezerwacje i pokoje. Bez cache – revalidateTag nie działa z PM2 (wieloma workerami). */
 export async function getTapeChartData(options?: GetTapeChartDataOptions): Promise<TapeChartData> {
   const propertyId = await getEffectivePropertyId();
-  const roomIdsKey = options?.roomIds?.slice().sort().join(",") ?? "all";
-  const fromKey = options?.dateFrom ?? "default";
-  const toKey = options?.dateTo ?? "default";
-
-  return unstable_cache(
-    () => fetchTapeChartDataUncached(options, propertyId),
-    ["tape-chart", propertyId ?? "n", roomIdsKey, fromKey, toKey],
-    { revalidate: TAPE_CHART_CACHE_REVALIDATE, tags: ["tape-chart"] }
-  )();
-}
-
-/** Inwaliduje cache tape-chart (np. po zapisie rezerwacji). Wywołaj z reservations.ts, finance.ts itp. */
-export async function revalidateTapeChartCache(): Promise<void> {
-  revalidateTag("tape-chart");
+  return fetchTapeChartDataUncached(options, propertyId);
 }
