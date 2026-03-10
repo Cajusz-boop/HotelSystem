@@ -12739,26 +12739,37 @@ export async function refundPayment(params: {
 }
 
 /**
- * Aktualizuje paymentStatus rezerwacji na podstawie salda folio (partial payment tracking).
- * UNPAID = brak wpłat, PARTIAL = część opłacona, PAID = saldo <= 0.
+ * Aktualizuje paymentStatus rezerwacji na podstawie widoku Rozlicz (Naliczono, Wpłaty, POZOSTAŁO).
+ * Uwzględnia paidAmountOverride – nie folio/transakcje, lecz to co widzi użytkownik.
+ * UNPAID = brak wpłat, PARTIAL = część opłacona, PAID = pozostalo <= 0.
  */
 export async function updateReservationPaymentStatus(
   reservationId: string
 ): Promise<ActionResult<{ paymentStatus: string }>> {
   try {
-    const summary = await getFolioSummary(reservationId);
+    const [summary, res] = await Promise.all([
+      getFolioSummary(reservationId),
+      prisma.reservation.findUnique({
+        where: { id: reservationId },
+        select: { paidAmountOverride: true },
+      }),
+    ]);
     if (!summary.success || !summary.data) {
       return {
         success: false,
-        error: !summary.success && "error" in summary ? summary.error : "Błąd podsumowania folio",
+        error: !summary.success && "error" in summary ? summary.error : "Błąd podsumowania",
       };
     }
-    const balance = summary.data.balance;
+    const naliczono = summary.data.totalCharges - (summary.data.totalDiscounts ?? 0);
     const totalPayments = summary.data.totalPayments ?? 0;
-    // Tolerancja 0.01 PLN – błędy zaokrągleń (np. 0.0000001) traktuj jak saldo zero → PAID
-    const effectiveBalance = Math.abs(balance) < 0.01 ? 0 : balance;
+    const effectivePaid =
+      res?.paidAmountOverride != null && Number(res.paidAmountOverride) >= 0
+        ? Number(res.paidAmountOverride)
+        : totalPayments;
+    const pozostalo = naliczono - effectivePaid;
+    const effectiveBalance = Math.abs(pozostalo) < 0.01 ? 0 : pozostalo;
     const paymentStatus =
-      effectiveBalance <= 0 ? "PAID" : totalPayments > 0 ? "PARTIAL" : "UNPAID";
+      effectiveBalance <= 0 ? "PAID" : effectivePaid > 0 ? "PARTIAL" : "UNPAID";
 
     await prisma.reservation.update({
       where: { id: reservationId },

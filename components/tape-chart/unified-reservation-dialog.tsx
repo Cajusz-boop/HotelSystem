@@ -249,6 +249,9 @@ export function UnifiedReservationDialog({
   const proformaAfterCreateRef = useRef(false);
   const saveBtnRef = useRef<HTMLButtonElement>(null);
   const searchGuestRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savingRef = useRef(false);
+  const handleSubmitRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   // Reset form on open / context change
   useEffect(() => {
@@ -391,10 +394,21 @@ export function UnifiedReservationDialog({
     getRatePlanInfoForRoomDate(form.room.trim(), form.checkIn).then((info) => setIsNonRefundable(info.isNonRefundable));
   }, [form.room, form.checkIn]);
 
+  const scheduleAutoSave = useCallback(() => {
+    if (!isEdit || !reservation?.id) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      autoSaveTimerRef.current = null;
+      if (savingRef.current) return;
+      handleSubmitRef.current();
+    }, 800);
+  }, [isEdit, reservation?.id]);
+
   const onFormChange = useCallback((patch: Partial<SettlementTabFormState>) => {
     setForm((prev) => ({ ...prev, ...patch }));
     setHasUnsavedChanges(true);
-  }, []);
+    scheduleAutoSave();
+  }, [scheduleAutoSave]);
 
   // Guest autocomplete search
   const searchGuest = useCallback((query: string, field: "name" | "email" | "phone") => {
@@ -422,11 +436,12 @@ export function UnifiedReservationDialog({
       guestDateOfBirth: g.dateOfBirth ?? "",
     }));
     setHasUnsavedChanges(true);
+    scheduleAutoSave();
     setGuestSuggestions([]);
     setSuggestionsOpen(false);
     setHighlightedIdx(-1);
     requestAnimationFrame(() => saveBtnRef.current?.focus());
-  }, []);
+  }, [scheduleAutoSave]);
 
   const handleGuestKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -455,10 +470,12 @@ export function UnifiedReservationDialog({
           companyCity: result.data!.city ?? "",
           companyFound: true,
         }));
+        setHasUnsavedChanges(true);
+        scheduleAutoSave();
       }
     } catch { /* ignore */ }
     finally { setNipLookupLoading(false); }
-  }, [form.nipInput]);
+  }, [form.nipInput, scheduleAutoSave]);
 
   // Auto-lookup NIP (tylko polski – WL)
   useEffect(() => {
@@ -640,6 +657,25 @@ export function UnifiedReservationDialog({
       setSaving(false);
     }
   }, [form, isEdit, reservation, rooms, onSaved, onCreated, onOpenChange, openRegistrationCard, hasUnsavedChanges, effectivePricePerNight]);
+
+  handleSubmitRef.current = handleSubmit;
+  savingRef.current = saving;
+
+  // Czyszczenie timera auto-zapisu przy zamknięciu dialogu
+  useEffect(() => {
+    if (!open) {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, [open]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

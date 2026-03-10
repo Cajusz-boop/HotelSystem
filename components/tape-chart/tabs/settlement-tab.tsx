@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updateGuestBlacklist, getReservationsByGuestId, searchGuests, updateReservationStatus, getActiveGuestDiscount } from "@/app/actions/reservations";
-import { getTransactionsForReservation, getFolioSummary, setFolioAssignment, createNewFolio, getFolioItems, transferFolioItem, addFolioDiscount, collectSecurityDeposit, refundSecurityDeposit, getReservationGuestsForFolio, addReservationOccupant, removeReservationOccupant, postRoomChargeOnCheckout, chargeLocalTax, addFolioPayment, voidFolioItem, overrideRoomPrice, type ReservationGuestForFolio } from "@/app/actions/finance";
+import { getTransactionsForReservation, getFolioSummary, setFolioAssignment, createNewFolio, getFolioItems, transferFolioItem, addFolioDiscount, collectSecurityDeposit, refundSecurityDeposit, getReservationGuestsForFolio, addReservationOccupant, removeReservationOccupant, postRoomChargeOnCheckout, chargeLocalTax, addFolioPayment, voidFolioItem, overrideRoomPrice, updateReservationPaymentStatus, type ReservationGuestForFolio } from "@/app/actions/finance";
 import { type FolioBillTo } from "@/lib/finance-constants";
 import { searchCompanies } from "@/app/actions/companies";
 import type { Reservation } from "@/lib/tape-chart-types";
@@ -497,9 +497,10 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
     });
   }, [form.room, rooms]);
 
-  // Aktualizuj rateCodePrice przy zmianie liczby osób – gdy wybrany kod ma wzór (basePrice + pricePerPerson × pax)
-  // NIE dodawaj form.rateCodePrice do deps – powodowało to nadpisywanie przy każdej literze i brak możliwości skasowania
+  // Aktualizuj rateCodePrice przy zmianie liczby osób – TYLKO gdy billingMode="person" (cena za osobo-dobę).
+  // W trybie "room" (cena pokoju za dobę) użytkownik może ręcznie wpisać cenę – nie nadpisuj!
   useEffect(() => {
+    if ((form.billingMode ?? "room") !== "person") return;
     if (!form.rateCodeId) return;
     const c = rateCodes.find((r) => r.id === form.rateCodeId);
     if (!c || c.basePrice == null || c.pricePerPerson == null) return;
@@ -507,7 +508,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
     const computed = computeRateCodePricePerNight(c, pax);
     if (computed == null) return;
     onFormChange({ rateCodePrice: String(computed) });
-  }, [form.rateCodeId, form.adults, form.children, rateCodes, onFormChange]);
+  }, [form.billingMode, form.rateCodeId, form.adults, form.children, rateCodes, onFormChange]);
 
   // Load edit-mode data
   useEffect(() => {
@@ -554,10 +555,18 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
 
   useEffect(() => {
     if (!isEdit || !reservation?.id) { setFolioSummaries([]); setPaymentsByMethod([]); setReservationGuests([]); return; }
-    getFolioSummary(reservation.id).then((r) => {
+    getFolioSummary(reservation.id).then(async (r) => {
       if (r.success && r.data?.folios) {
         setFolioSummaries(parseFolios(r.data.folios));
         setPaymentsByMethod(r.data.paymentsByMethod ?? []);
+        const bal = r.data.balance ?? 0;
+        const totalPay = r.data.totalPayments ?? 0;
+        if (totalPay > 0 && Math.abs(bal) < 0.01) {
+          const statusRes = await updateReservationPaymentStatus(reservation.id);
+          if (statusRes.success && statusRes.data?.paymentStatus) {
+            onPaymentRecorded?.(reservation.id, statusRes.data.paymentStatus);
+          }
+        }
       } else {
         setFolioSummaries([]);
         setPaymentsByMethod([]);
@@ -567,7 +576,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
       if (r.success && r.data) setReservationGuests(r.data);
       else setReservationGuests([]);
     });
-  }, [isEdit, reservation?.id]);
+  }, [isEdit, reservation?.id, onPaymentRecorded]);
 
   useEffect(() => {
     if (companySearchQuery.trim().length >= 2) {
@@ -584,8 +593,16 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
     if (r.success && r.data?.folios) {
       setFolioSummaries(parseFolios(r.data.folios));
       setPaymentsByMethod(r.data.paymentsByMethod ?? []);
+      const bal = r.data.balance ?? 0;
+      const totalPay = r.data.totalPayments ?? 0;
+      if (totalPay > 0 && Math.abs(bal) < 0.01) {
+        const statusRes = await updateReservationPaymentStatus(reservation.id);
+        if (statusRes.success && statusRes.data?.paymentStatus) {
+          onPaymentRecorded?.(reservation.id, statusRes.data.paymentStatus);
+        }
+      }
     }
-  }, [reservation?.id]);
+  }, [reservation?.id, onPaymentRecorded]);
 
   const loadFolioItems = useCallback(async (folioNum: number) => {
     if (!reservation?.id) return;

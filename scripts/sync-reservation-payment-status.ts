@@ -7,11 +7,17 @@
  */
 import { prisma } from "../lib/db";
 
-async function getBalance(reservationId: string): Promise<{ balance: number; rawBalance: number; totalPayments: number } | null> {
-  const txs = await prisma.transaction.findMany({
-    where: { reservationId, status: "ACTIVE" },
-    select: { type: true, amount: true },
-  });
+async function getRemaining(reservationId: string): Promise<{ pozostalo: number; totalPayments: number } | null> {
+  const [txs, res] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { reservationId, status: "ACTIVE" },
+      select: { type: true, amount: true },
+    }),
+    prisma.reservation.findUnique({
+      where: { id: reservationId },
+      select: { paidAmountOverride: true },
+    }),
+  ]);
   let charges = 0;
   let discounts = 0;
   let payments = 0;
@@ -21,12 +27,15 @@ async function getBalance(reservationId: string): Promise<{ balance: number; raw
     else if (t.type === "DISCOUNT") discounts += Math.abs(amt);
     else payments += Math.abs(amt);
   }
-  const rawBalance = charges - discounts - payments;
-  const balance = Math.round(rawBalance * 100) / 100;
+  const naliczono = charges - discounts;
   const totalPayments = Math.round(payments * 100) / 100;
-  // Tolerancja 0.01 PLN – błędy zaokrągleń traktuj jak saldo zero
-  const effectiveBalance = Math.abs(balance) < 0.01 ? 0 : balance;
-  return { balance: effectiveBalance, rawBalance, totalPayments };
+  const effectivePaid =
+    res?.paidAmountOverride != null && Number(res.paidAmountOverride) >= 0
+      ? Number(res.paidAmountOverride)
+      : totalPayments;
+  const pozostalo = naliczono - effectivePaid;
+  const effectiveRemaining = Math.abs(pozostalo) < 0.01 ? 0 : pozostalo;
+  return { pozostalo: effectiveRemaining, effectivePaid };
 }
 
 async function main() {
@@ -59,15 +68,15 @@ async function main() {
   console.log(`Znaleziono ${filtered.length} rezerwacji.`);
 
   for (const r of filtered) {
-    const data = await getBalance(r.id);
+    const data = await getRemaining(r.id);
     if (!data) continue;
-    const { balance, rawBalance, totalPayments } = data;
+    const { pozostalo, effectivePaid } = data;
     const newStatus =
-      balance <= 0 ? "PAID" : totalPayments > 0 ? "PARTIAL" : "UNPAID";
+      pozostalo <= 0 ? "PAID" : effectivePaid > 0 ? "PARTIAL" : "UNPAID";
 
     if (verbose || r.paymentStatus !== newStatus) {
       console.log(
-        `  ${r.guest.name} pok.${r.room.number}: saldo=${rawBalance.toFixed(4)} effective=${balance} payments=${totalPayments} status=${r.paymentStatus ?? "NULL"} -> ${newStatus}`
+        `  ${r.guest.name} pok.${r.room.number}: pozostalo=${pozostalo.toFixed(2)} zapłacono=${effectivePaid.toFixed(2)} status=${r.paymentStatus ?? "NULL"} -> ${newStatus}`
       );
     }
     if (r.paymentStatus === newStatus) continue;
