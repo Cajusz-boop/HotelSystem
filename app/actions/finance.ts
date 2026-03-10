@@ -12767,7 +12767,8 @@ export async function updateReservationPaymentStatus(
         ? Number(res.paidAmountOverride)
         : totalPayments;
     const pozostalo = naliczono - effectivePaid;
-    const effectiveBalance = Math.abs(pozostalo) < 0.01 ? 0 : pozostalo;
+    // Tolerancja 0.02 PLN – typowe błędy zaokrągleń (np. 0.01) traktuj jak saldo zero
+    const effectiveBalance = Math.abs(pozostalo) <= 0.02 ? 0 : pozostalo;
     const paymentStatus =
       effectiveBalance <= 0 ? "PAID" : effectivePaid > 0 ? "PARTIAL" : "UNPAID";
 
@@ -12775,6 +12776,7 @@ export async function updateReservationPaymentStatus(
       where: { id: reservationId },
       data: { paymentStatus },
     });
+    revalidatePath("/front-office");
     return { success: true, data: { paymentStatus } };
   } catch (e) {
     return {
