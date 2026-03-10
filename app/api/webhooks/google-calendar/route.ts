@@ -48,8 +48,9 @@ export async function POST(request: NextRequest) {
         syncToken?: string;
         pageToken?: string;
         singleEvents?: boolean;
+        showDeleted?: boolean;
         timeMin?: string;
-      } = { calendarId, singleEvents: true };
+      } = { calendarId, singleEvents: true, showDeleted: true };
       if (syncToken) {
         listParams.syncToken = syncToken;
       } else {
@@ -74,7 +75,8 @@ export async function POST(request: NextRequest) {
       const items = res.data.items ?? [];
       for (const ev of items) {
         if (!ev.id) continue;
-        if (!ev.start?.date && !ev.start?.dateTime) continue;
+        // Usunięte/anulowane mogą nie mieć start – nadal przetwarzamy (sync status CANCELLED)
+        if (ev.status !== "cancelled" && !ev.start?.date && !ev.start?.dateTime) continue;
         try {
           await processCalendarEvent(
             {

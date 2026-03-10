@@ -77,6 +77,10 @@ type EventRecord = {
   afterpartyMusic?: string | null;
   assignedTo?: string | null;
   checklist?: Record<string, boolean> | null;
+  /** Wydarzenia z GCal: Wstępna rezerwacja / Rezygnacje */
+  gcalSource?: "wstepna" | "rezygnacje";
+  gcalEventId?: string;
+  gcalCalId?: string;
 };
 
 function mapApiToEvent(record: Record<string, unknown>): EventRecord {
@@ -158,6 +162,42 @@ function mapApiToEvent(record: Record<string, unknown>): EventRecord {
   };
 }
 
+type GCalExternalEvent = { id: string; calId: string; source: "wstepna" | "rezygnacje"; summary: string; date: string; dateFrom: string; dateTo: string; description?: string | null };
+
+function mapGCalToEventRecord(e: GCalExternalEvent): EventRecord {
+  return {
+    id: `gcal:${e.id}:${e.calId}`,
+    date: e.date,
+    tf: null,
+    tt: null,
+    type: "INNE",
+    client: e.summary,
+    phone: null,
+    email: null,
+    room: null,
+    guests: null,
+    deposit: null,
+    paid: false,
+    depositDueDate: null,
+    status: e.source === "rezygnacje" ? "CANCELLED" : "DRAFT",
+    notes: e.description ?? "",
+    pop: false,
+    parentEventId: null,
+    eventNumber: null,
+    quoteId: null,
+    checklistDocId: null,
+    menuDocId: null,
+    googleCalendarEventId: null,
+    googleCalendarCalId: null,
+    googleCalendarSynced: false,
+    googleCalendarSyncedAt: null,
+    googleCalendarError: null,
+    gcalSource: e.source,
+    gcalEventId: e.id,
+    gcalCalId: e.calId,
+  };
+}
+
 const TC: Record<string, { bg: string; bd: string; tx: string; dot: string }> = {
   WESELE: { bg: "#FFF8E1", bd: "#F6BF26", tx: "#7B5E00", dot: "#F6BF26" },
   KOMUNIA: { bg: "#E8EAF6", bd: "#3F51B5", tx: "#1A237E", dot: "#3F51B5" },
@@ -170,10 +210,10 @@ const TC: Record<string, { bg: string; bd: string; tx: string; dot: string }> = 
 };
 const TC_WESELE_DIAMENTOWA = { bg: "#E3F2FD", bd: "#039BE5", tx: "#01579B", dot: "#039BE5" };
 
-function getEventColor(ev: { type: string; room?: string | null }) {
-  if (ev.type === "WESELE" && ev.room?.includes("Diamentowa")) {
-    return TC_WESELE_DIAMENTOWA;
-  }
+function getEventColor(ev: { type: string; room?: string | null; gcalSource?: "wstepna" | "rezygnacje" }) {
+  if (ev.gcalSource === "wstepna") return { bg: "#FFF8E1", bd: "#F59E0B", tx: "#92400E", dot: "#F59E0B" };
+  if (ev.gcalSource === "rezygnacje") return { bg: "#FEF2F2", bd: "#EF4444", tx: "#991B1B", dot: "#EF4444" };
+  if (ev.type === "WESELE" && ev.room?.includes("Diamentowa")) return TC_WESELE_DIAMENTOWA;
   return TC[ev.type] || TC.INNE;
 }
 function getRoomColor(roomStr: string | null | undefined): string {
@@ -1324,19 +1364,22 @@ function EventCard({
           background: tc.bg, color: tc.tx, border: `1px solid ${tc.bd}`,
           borderRadius: "3px", padding: "4px 10px", fontSize: "14px", fontWeight: 700,
           whiteSpace: "nowrap", flexShrink: 0,
-        }}>{ev.pop ? "Poprawiny" : TL[ev.type] ?? ev.type}</span>
+        }}>{ev.gcalSource === "wstepna" ? "Wstępna" : ev.gcalSource === "rezygnacje" ? "Rezygnacja" : ev.pop ? "Poprawiny" : TL[ev.type] ?? ev.type}</span>
         <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "16px" }}>{ev.client ?? "—"}</span>
-        {ev.assignedTo && <span style={{ fontSize: "14px", color: "#111827" }}>👤 {ev.assignedTo}</span>}
-        {ev.status === "DRAFT" && <span style={{ fontSize: "14px", color: "#f57c00", fontWeight: 600, flexShrink: 0 }}>Szkic</span>}
+        {ev.assignedTo && !ev.gcalSource && <span style={{ fontSize: "14px", color: "#111827" }}>👤 {ev.assignedTo}</span>}
+        {ev.status === "DRAFT" && !ev.gcalSource && <span style={{ fontSize: "14px", color: "#f57c00", fontWeight: 600, flexShrink: 0 }}>Szkic</span>}
+        {ev.gcalSource && <span style={{ fontSize: "12px", color: "#6b7280", flexShrink: 0 }}>GCal</span>}
       </div>
       <div style={{ fontSize: "16px", color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ev.room ?? ""}>{ev.room ?? "—"}</div>
       <div style={{ fontSize: "16px", color: "#111827" }}>{ev.guests ? `${ev.guests} os.` : "—"}</div>
       <div style={{ fontSize: "16px", color: "#111827" }}>{ev.tf || ev.tt ? `${ev.tf ?? "?"}–${ev.tt ?? "?"}` : "—"}</div>
       <div style={{ fontSize: "16px", color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontStyle: ev.notes ? "normal" : "italic" }} title={ev.notes ?? ""}>{ev.notes || "brak notatki"}</div>
       <div style={{ textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
-        <DepositChip ev={ev} onToggle={onDepositToggle} onOpen={onDepositOpen} />
+        {ev.gcalSource ? <span style={{ fontSize: "13px", color: "#6b7280" }}>—</span> : <DepositChip ev={ev} onToggle={onDepositToggle} onOpen={onDepositOpen} />}
       </div>
-      <div onClick={(e) => e.stopPropagation()}><PhoneBtn phone={ev.phone} client={ev.client} date={ev.date} compact /></div>
+      <div onClick={(e) => e.stopPropagation()}>
+        {ev.gcalSource ? <button onClick={(e) => { e.stopPropagation(); onOpenModal(ev.id); }} style={{ fontSize: "12px", color: "#1d4ed8", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>Otwórz w GCal</button> : <PhoneBtn phone={ev.phone} client={ev.client} date={ev.date} compact />}
+      </div>
       <span style={{ color: "#111827", fontSize: "18px", textAlign: "right", transition: "transform 0.15s", transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
       {expanded && (
         <div style={{ gridColumn: "1 / -1", marginTop: "8px", paddingTop: "8px", borderTop: "1px solid #3b82f6", display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -1618,7 +1661,7 @@ function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange, on
 
   const monthEvs = events.filter((e) => {
     const d = new Date(e.date);
-    return d.getFullYear() === year && d.getMonth() === month && e.status !== "CANCELLED";
+    return d.getFullYear() === year && d.getMonth() === month && (e.status !== "CANCELLED" || e.gcalSource);
   });
 
   const maxVisible = 4;
@@ -1759,7 +1802,7 @@ function CalendarMonthView({ events, month, year, onOpenModal, onMonthChange, on
 function TimelineView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal: (id: string) => void }) {
   const grouped = useMemo(() => {
     const d: Record<string, EventRecord[]> = {};
-    const future = events.filter((e) => e.status !== "CANCELLED" && daysTo(e.date) >= -7);
+    const future = events.filter((e) => (e.status !== "CANCELLED" || e.gcalSource) && daysTo(e.date) >= -7);
     future.forEach((ev) => {
       const key = ev.date;
       if (!d[key]) d[key] = [];
@@ -1834,7 +1877,7 @@ function HeatmapView({ events, month, year, onOpenModal, onMonthChange }: { even
 
   const monthEvs = events.filter((e) => {
     const d = new Date(e.date);
-    return d.getFullYear() === year && d.getMonth() === month && e.status !== "CANCELLED";
+    return d.getFullYear() === year && d.getMonth() === month && (e.status !== "CANCELLED" || e.gcalSource);
   });
 
   const byDayRoom: Record<string, EventRecord[]> = {};
@@ -1935,7 +1978,7 @@ function WeekView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal:
           const day = date.getDate();
           const dow = DPLS[date.getDay()];
           const isToday = date.toDateString() === TODAY.toDateString();
-          const dayEvs = events.filter((e) => e.date === dateStr && e.status !== "CANCELLED");
+          const dayEvs = events.filter((e) => e.date === dateStr && (e.status !== "CANCELLED" || e.gcalSource));
 
           return (
             <div key={dateStr} style={{ background: isToday ? "#fef2f2" : "white", border: `1px solid ${isToday ? "#fca5a5" : "#3b82f6"}`, borderRadius: "12px", padding: "10px", minHeight: "220px", display: "flex", flexDirection: "column" }}>
@@ -2008,7 +2051,7 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
   }, [offset]);
 
   const CW = containerWidth > 0 ? Math.max(34, Math.floor((containerWidth - LW - 20) / dInM)) : 34;
-  const monthEvs = events.filter((e) => { const d = new Date(e.date); return d.getFullYear() === year && d.getMonth() === month && e.status !== "CANCELLED"; }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const monthEvs = events.filter((e) => { const d = new Date(e.date); return d.getFullYear() === year && d.getMonth() === month && (e.status !== "CANCELLED" || e.gcalSource); }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   return (
     <div ref={containerRef} style={{ padding: "0 20px 48px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", flexWrap: "wrap" }}>
@@ -2336,6 +2379,7 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
 
 export function CentrumSprzedazy() {
   const [events, setEvents] = useState<EventRecord[]>([]);
+  const [gcalEvents, setGcalEvents] = useState<EventRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -2361,11 +2405,21 @@ export function CentrumSprzedazy() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/event-orders?all=1");
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || res.statusText || "Błąd pobierania");
+      const [ordersRes, gcalRes] = await Promise.all([
+        fetch("/api/event-orders?all=1"),
+        fetch("/api/google-calendar/external-events").catch(() => null),
+      ]);
+      const data = await ordersRes.json().catch(() => ({}));
+      if (!ordersRes.ok) throw new Error(data?.error || ordersRes.statusText || "Błąd pobierania");
       if (data.error) throw new Error(data.error);
       setEvents((Array.isArray(data) ? data : []).map(mapApiToEvent));
+
+      if (gcalRes?.ok) {
+        const gcalData = await gcalRes.json().catch(() => []);
+        setGcalEvents((Array.isArray(gcalData) ? gcalData : []).map(mapGCalToEventRecord));
+      } else {
+        setGcalEvents([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Błąd pobierania danych");
     } finally {
@@ -2463,7 +2517,17 @@ export function CentrumSprzedazy() {
     [events, patchEvent, fetchEvents]
   );
 
-  const openModal = useCallback((id: string) => setModalId(id), []);
+  const openModal = useCallback((id: string) => {
+    if (id.startsWith("gcal:")) {
+      const [, eventId, calId] = id.split(":");
+      if (eventId && calId) {
+        const eid = btoa(`${eventId} ${calId}`);
+        window.open(`https://calendar.google.com/calendar/event?eid=${eid}`, "_blank");
+      }
+      return;
+    }
+    setModalId(id);
+  }, []);
 
   const handleDepToggle = async (id: string) => {
     const ev = events.find((e) => e.id === id);
@@ -2507,11 +2571,22 @@ export function CentrumSprzedazy() {
       }
       return true;
     });
+    const gcalFiltered = gcalEvents.filter((e) => {
+      const d = daysTo(e.date);
+      if (!archive && d < -14) return false;
+      if (fStatus === "ACTIVE") return e.gcalSource === "wstepna";
+      if (fStatus === "CONFIRMED" || fStatus === "DONE") return false;
+      if (fStatus === "DRAFT") return e.gcalSource === "wstepna";
+      if (fStatus === "CANCELLED") return e.gcalSource === "rezygnacje";
+      if (search && e.client && !e.client.toLowerCase().includes(search.toLowerCase().trim())) return false;
+      return true;
+    });
+    list = [...list, ...gcalFiltered];
     if (sort === "date") list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     if (sort === "client") list.sort((a, b) => (a.client ?? "").localeCompare(b.client ?? "", "pl"));
     if (sort === "type") list.sort((a, b) => (a.type !== b.type ? a.type.localeCompare(b.type) : new Date(a.date).getTime() - new Date(b.date).getTime()));
     return list;
-  }, [events, search, fType, fStatus, archive, sort, specialFilter]);
+  }, [events, gcalEvents, search, fType, fStatus, archive, sort, specialFilter]);
 
   const stats = useMemo(() => {
     const f = events.filter((e) => daysTo(e.date) >= 0 && e.status !== "CANCELLED");
@@ -2530,7 +2605,7 @@ export function CentrumSprzedazy() {
     };
   }, [events]);
 
-  const weekEvs = useMemo(() => events.filter((e) => { const d = daysTo(e.date); return d >= 0 && d <= 7 && e.status !== "CANCELLED"; }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), [events]);
+  const weekEvs = useMemo(() => [...events, ...gcalEvents].filter((e) => { const d = daysTo(e.date); return d >= 0 && d <= 7 && (e.status !== "CANCELLED" || e.gcalSource); }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), [events, gcalEvents]);
 
   const typeCounts = useMemo(() => {
     const base = events.filter((e) => {
@@ -2723,7 +2798,7 @@ export function CentrumSprzedazy() {
       {tab === "os" && <TimelineView events={filtered} onOpenModal={openModal} />}
       {tab === "sale" && <HeatmapView events={filtered} month={ganttMonth} year={ganttYear} onOpenModal={openModal} onMonthChange={setGanttOffset} />}
       {tab === "tydzien" && <WeekView events={filtered} onOpenModal={openModal} />}
-      {tab === "gantt" && <GanttView events={events} onOpenModal={openModal} />}
+      {tab === "gantt" && <GanttView events={[...events, ...gcalEvents]} onOpenModal={openModal} />}
       {tab === "kosztorysy" && <KosztorysyView />}
       {tab === "pakiety" && <MenuPackagesView />}
       {modalId && <EventDetailModal evId={modalId} events={events} onClose={() => setModalId(null)} handlers={handlers} showToast={showToast} onOpenModal={openModal} onRefresh={fetchEvents} />}

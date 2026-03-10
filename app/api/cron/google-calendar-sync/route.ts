@@ -40,7 +40,8 @@ export async function GET(request: NextRequest) {
           syncToken: string;
           pageToken?: string;
           singleEvents?: boolean;
-        } = { calendarId: ch.calendarId, syncToken, singleEvents: true };
+          showDeleted?: boolean;
+        } = { calendarId: ch.calendarId, syncToken, singleEvents: true, showDeleted: true };
         if (nextPageToken) listParams.pageToken = nextPageToken;
 
         const res = await calendar.events.list(listParams);
@@ -55,7 +56,9 @@ export async function GET(request: NextRequest) {
 
         const items = res.data.items ?? [];
         for (const ev of items) {
-          if (!ev.id || (!ev.start?.date && !ev.start?.dateTime)) continue;
+          if (!ev.id) continue;
+          // Usunięte/anulowane mogą nie mieć start – nadal przetwarzamy (sync status CANCELLED)
+          if (ev.status !== "cancelled" && !ev.start?.date && !ev.start?.dateTime) continue;
           try {
             await processCalendarEvent(
               {
