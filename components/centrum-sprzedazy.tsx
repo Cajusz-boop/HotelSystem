@@ -1005,7 +1005,7 @@ function EventDetailModal({
                   const checked = autoChecked || manualChecked;
                   return (
                     <label key={item.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 0", borderBottom: "1px solid #f5f5f5", cursor: "pointer" }}>
-                      <input type="checkbox" checked={checked} disabled={!!autoChecked} onChange={() => { if (!autoChecked) handleChecklistToggle(ev.id, item.id, !manualChecked); }} />
+                      <input type="checkbox" checked={checked} disabled={!!autoChecked} onChange={() => { if (!autoChecked) handleChecklistToggle(item.id, !manualChecked); }} />
                       <span style={{ fontSize: "12px", color: checked ? "#2e7d32" : "#999", textDecoration: checked ? "line-through" : "none" }}>{item.label}</span>
                       {autoChecked && <span style={{ fontSize: "9px", color: "#bbb" }}>auto</span>}
                     </label>

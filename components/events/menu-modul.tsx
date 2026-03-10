@@ -167,7 +167,7 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
 
   const dostepne = useMemo(() => allPackages.filter((p) => p.typy.includes(ev.type)), [allPackages, ev.type]);
   const pakiet = useMemo(
-    () => allPackages.find((p) => p.code === pakietId || p.id === pakietId),
+    () => allPackages.find((p) => p.id === pakietId),
     [allPackages, pakietId]
   );
   const cena = useMemo(() => obliczCene(pakiet, doplaty, guestsOvr, ev.guests), [pakiet, doplaty, guestsOvr, ev.guests]);
