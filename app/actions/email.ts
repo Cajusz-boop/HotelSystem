@@ -19,11 +19,12 @@ function getTransporter() {
 
   const isRelay = host.includes("smtp-relay");
 
+  // IPv4 unika błędu 421 4.7.0 od Google (gsmtp) przy połączeniu z serwera VPS
   const smtpConfig: SMTPTransport.Options & { family?: number } = {
     host,
     port,
     secure: port === 465,
-    family: 6,
+    family: 4,
     auth: isRelay ? undefined : { user, pass },
   };
 
@@ -111,21 +112,38 @@ export async function sendInvoiceByEmail(data: {
   const from = process.env.SMTP_FROM || process.env.SMTP_USER;
   const filename = `${invoice.number.replace(/\//g, "_")}.pdf`;
 
+  const sendWithRetry = async (attempt = 1): Promise<void> => {
+    const maxAttempts = 2;
+    try {
+      const pdfBuffer = await generatePdfBuffer(pdfUrl);
+      await transporter.sendMail({
+        from,
+        to: data.recipientEmail,
+        subject: data.subject,
+        text: data.message,
+        attachments: [
+          {
+            filename,
+            content: pdfBuffer,
+            contentType: "application/pdf",
+          },
+        ],
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const isRetryable =
+        attempt < maxAttempts &&
+        (msg.includes("421") || msg.includes("Try again later"));
+      if (isRetryable) {
+        await new Promise((r) => setTimeout(r, 3000));
+        return sendWithRetry(attempt + 1);
+      }
+      throw e;
+    }
+  };
+
   try {
-    const pdfBuffer = await generatePdfBuffer(pdfUrl);
-    await transporter.sendMail({
-      from,
-      to: data.recipientEmail,
-      subject: data.subject,
-      text: data.message,
-      attachments: [
-        {
-          filename,
-          content: pdfBuffer,
-          contentType: "application/pdf",
-        },
-      ],
-    });
+    await sendWithRetry();
     return { success: true, data: { sent: true } };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Błąd wysyłki email";
@@ -164,21 +182,38 @@ export async function sendProformaByEmail(data: {
   const from = process.env.SMTP_FROM || process.env.SMTP_USER;
   const filename = `${proforma.number.replace(/\//g, "_")}.pdf`;
 
+  const sendWithRetry = async (attempt = 1): Promise<void> => {
+    const maxAttempts = 2;
+    try {
+      const pdfBuffer = await generatePdfBuffer(pdfUrl);
+      await transporter.sendMail({
+        from,
+        to: data.recipientEmail,
+        subject: data.subject,
+        text: data.message,
+        attachments: [
+          {
+            filename,
+            content: pdfBuffer,
+            contentType: "application/pdf",
+          },
+        ],
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const isRetryable =
+        attempt < maxAttempts &&
+        (msg.includes("421") || msg.includes("Try again later"));
+      if (isRetryable) {
+        await new Promise((r) => setTimeout(r, 3000));
+        return sendWithRetry(attempt + 1);
+      }
+      throw e;
+    }
+  };
+
   try {
-    const pdfBuffer = await generatePdfBuffer(pdfUrl);
-    await transporter.sendMail({
-      from,
-      to: data.recipientEmail,
-      subject: data.subject,
-      text: data.message,
-      attachments: [
-        {
-          filename,
-          content: pdfBuffer,
-          contentType: "application/pdf",
-        },
-      ],
-    });
+    await sendWithRetry();
     return { success: true, data: { sent: true } };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Błąd wysyłki email";
