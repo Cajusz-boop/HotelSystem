@@ -1,8 +1,10 @@
 "use server";
 
 import { Prisma } from "@prisma/client";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { chargeOrderToReservation } from "@/app/actions/finance";
+import { createAuditLog, getClientIp } from "@/lib/audit";
 import { revalidatePath } from "next/cache"; // eslint-disable-line @typescript-eslint/no-unused-vars
 
 /** Zwraca preferencje dietetyczne i alergeny gościa dla rezerwacji (do ostrzeżeń w gastronomii). */
@@ -386,6 +388,78 @@ export async function getRestaurantChargesForReservation(
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd odczytu obciążeń gastronomicznych",
+    };
+  }
+}
+
+/**
+ * Przenosi obciążenie gastronomiczne (transakcję) do innej rezerwacji.
+ * Używane gdy kelner nabije rachunek na zły pokój.
+ * Tylko transakcje F_B / RESTAURANT / GASTRONOMY / POSTING, status ACTIVE.
+ */
+export async function reassignGastronomyTransactionToReservation(
+  transactionId: string,
+  newReservationId: string
+): Promise<ActionResult> {
+  const headersList = await headers();
+  const ip = getClientIp(headersList);
+
+  if (!transactionId?.trim() || !newReservationId?.trim()) {
+    return { success: false, error: "Wymagane ID transakcji i rezerwacji docelowej" };
+  }
+
+  try {
+    const tx = await prisma.transaction.findUnique({
+      where: { id: transactionId.trim() },
+      include: {
+        reservation: {
+          include: { room: true, guest: true },
+        },
+      },
+    });
+    if (!tx) return { success: false, error: "Transakcja nie istnieje" };
+    if (tx.status === "VOIDED") return { success: false, error: "Nie można przenosić anulowanej transakcji" };
+    const isGastronomy =
+      tx.category === "F_B" ||
+      ["RESTAURANT", "GASTRONOMY", "POSTING"].includes(tx.type);
+    if (!isGastronomy) {
+      return { success: false, error: "Tylko obciążenia gastronomiczne można przenosić" };
+    }
+
+    const newRes = await prisma.reservation.findUnique({
+      where: { id: newReservationId.trim() },
+      include: { room: true, guest: true },
+    });
+    if (!newRes) return { success: false, error: "Rezerwacja docelowa nie istnieje" };
+    if (newRes.id === tx.reservationId) {
+      return { success: false, error: "Obciążenie jest już przypisane do tej rezerwacji" };
+    }
+
+    const oldReservationId = tx.reservationId;
+    const oldRoom = tx.reservation.room?.number ?? "—";
+    const newRoom = newRes.room?.number ?? "—";
+
+    await prisma.transaction.update({
+      where: { id: transactionId },
+      data: { reservationId: newReservationId.trim() },
+    });
+
+    await createAuditLog({
+      actionType: "UPDATE",
+      entityType: "Transaction",
+      entityId: transactionId,
+      oldValue: { reservationId: oldReservationId, room: oldRoom, amount: Number(tx.amount) },
+      newValue: { reservationId: newReservationId, room: newRoom, amount: Number(tx.amount) },
+      ipAddress: ip,
+    });
+
+    revalidatePath("/front-office");
+    revalidatePath("/finance");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd przenoszenia obciążenia",
     };
   }
 }

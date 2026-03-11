@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createReservation, updateReservation, updateReservationStatus, getCheckoutBalanceWarning, findGuestsForCheckIn, getReservationCompany, getReservationEditData, deleteReservation, type GuestCheckInSuggestion } from "@/app/actions/reservations";
-import { postRoomChargeOnCheckout, createVatInvoice, createProforma, printFiscalReceiptForReservation, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates, overrideRoomPrice, getConsolidatedFolioSummary } from "@/app/actions/finance";
+import { postRoomChargeOnCheckout, createVatInvoice, createSplitVatInvoices, createProforma, printFiscalReceiptForReservation, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates, overrideRoomPrice, getConsolidatedFolioSummary } from "@/app/actions/finance";
 import { lookupCompanyByNip, createConsolidatedVatInvoice } from "@/app/actions/companies";
 import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { getEffectivePriceForRoomOnDate, getRatePlanInfoForRoomDate } from "@/app/actions/rooms";
@@ -230,6 +230,11 @@ export function UnifiedReservationDialog({
   const [docAmountInvoice, setDocAmountInvoice] = useState("");
   const [docAmountReceipt, setDocAmountReceipt] = useState("");
   const [issueDocMenuOpen, setIssueDocMenuOpen] = useState(false);
+  const [splitInvoiceDialogOpen, setSplitInvoiceDialogOpen] = useState(false);
+  const [splitHotelAmount, setSplitHotelAmount] = useState("");
+  const [splitGastronomyAmount, setSplitGastronomyAmount] = useState("");
+  const [splitReceiptAmount, setSplitReceiptAmount] = useState("");
+  const [splitInvoiceNotes, setSplitInvoiceNotes] = useState("");
   const [paymentsDialogOpen, setPaymentsDialogOpen] = useState(false);
   const [paymentsList, setPaymentsList] = useState<Array<{ id: string; amount: number; type: string; createdAt: string }>>([]);
   const [dayRatesDialogOpen, setDayRatesDialogOpen] = useState(false);
@@ -795,14 +800,12 @@ export function UnifiedReservationDialog({
     }
     getTransactionsForReservation(docChoiceResId).then((r) => {
       if (r.success && r.data) {
-        const roomTotal = r.data
-          .filter((t) => t.type === "ROOM")
-          .reduce((s, t) => s + t.amount, 0);
         const totalCharges = r.data
           .filter((t) => CHARGE_TYPES.includes(t.type))
           .reduce((s, t) => s + t.amount, 0);
-        setDocRoomTotal(roomTotal);
-        setDocTotalAmount(Math.round(totalCharges * 100) / 100);
+        const rounded = Math.round(totalCharges * 100) / 100;
+        setDocRoomTotal(rounded);
+        setDocTotalAmount(rounded);
         setDocAmountOverride("");
         setDocAmountInvoice(totalCharges > 0 ? totalCharges.toFixed(2) : "");
         setDocAmountReceipt("");
@@ -1284,7 +1287,7 @@ export function UnifiedReservationDialog({
           </p>
           <div className="space-y-3 mt-2">
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Kwota noclegu na paragonie/fakturze [PLN]</label>
+              <label className="text-xs text-muted-foreground mb-1 block">Kwota na paragonie/fakturze [PLN]</label>
               <Input
                 type="number"
                 min={0}
@@ -1295,7 +1298,7 @@ export function UnifiedReservationDialog({
                 onChange={(e) => setDocAmountOverride(e.target.value)}
               />
               {docRoomTotal != null && (
-                <p className="text-[10px] text-muted-foreground mt-0.5">Aktualna suma noclegu: {docRoomTotal.toFixed(2)} PLN</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Aktualna kwota do zapłaty: {docRoomTotal.toFixed(2)} PLN</p>
               )}
             </div>
             <div className="rounded border bg-muted/30 p-2 space-y-2">
@@ -1371,6 +1374,11 @@ export function UnifiedReservationDialog({
                   </Button>
                 ) : null;
               })()}
+              {docChoiceResId && !docChoiceResIds.length && reservation?.companyId && (
+                <Button variant="outline" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => { setDocChoiceOpen(false); setSplitInvoiceDialogOpen(true); }}>
+                  📄 Dwie faktury (hotel + gastronomia)
+                </Button>
+              )}
               <Button variant="default" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => handleDocChoice("vat")}>
                 📄 Faktura VAT (PDF) — drukuj
               </Button>
@@ -1396,6 +1404,11 @@ export function UnifiedReservationDialog({
             <Button variant="default" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => handleIssueDoc("vat")}>
               📄 Faktura VAT
             </Button>
+            {!isConsolidated && reservation?.companyId && (
+              <Button variant="outline" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => { setIssueDocMenuOpen(false); setSplitInvoiceDialogOpen(true); }}>
+                📄 Dwie faktury (hotel + gastronomia)
+              </Button>
+            )}
             <Button variant="secondary" size="sm" className="h-8 text-xs justify-start" disabled={docIssuing} onClick={() => handleIssueDoc("posnet")}>
               🧾 Paragon
             </Button>
@@ -1404,6 +1417,96 @@ export function UnifiedReservationDialog({
             </Button>
             <Button variant="outline" size="sm" className="h-8 text-xs justify-start text-muted-foreground" onClick={() => handleIssueDoc("potwierdzenie")}>
               Potwierdzenie rezerwacji (w przygotowaniu)
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dwie faktury: hotel + gastronomia (+ opcjonalnie paragon) */}
+      <Dialog open={splitInvoiceDialogOpen} onOpenChange={(open) => {
+        setSplitInvoiceDialogOpen(open);
+        if (!open) { setSplitHotelAmount(""); setSplitGastronomyAmount(""); setSplitReceiptAmount(""); setSplitInvoiceNotes(""); }
+      }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Dwie faktury (hotel + gastronomia)</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Wystaw dwie faktury VAT i opcjonalnie paragon.
+          </p>
+          <div className="space-y-3 mt-2">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Kwota hotelowa [PLN]</label>
+              <Input type="number" min={0} step={0.01} placeholder="np. 500" value={splitHotelAmount} onChange={(e) => setSplitHotelAmount(e.target.value)} className="h-8" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Kwota gastronomiczna [PLN]</label>
+              <Input type="number" min={0} step={0.01} placeholder="np. 100" value={splitGastronomyAmount} onChange={(e) => setSplitGastronomyAmount(e.target.value)} className="h-8" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Kwota na paragon [PLN] (opcjonalnie)</label>
+              <Input type="number" min={0} step={0.01} placeholder="np. 9" value={splitReceiptAmount} onChange={(e) => setSplitReceiptAmount(e.target.value)} className="h-8" />
+            </div>
+            {(splitHotelAmount || splitGastronomyAmount || splitReceiptAmount) && (() => {
+              const h = parseFloat(splitHotelAmount) || 0;
+              const g = parseFloat(splitGastronomyAmount) || 0;
+              const r = parseFloat(splitReceiptAmount) || 0;
+              const sum = h + g + r;
+              return <p className="text-xs text-muted-foreground">Suma: {sum.toFixed(2)} PLN</p>;
+            })()}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Uwagi (opcjonalnie)</label>
+              <Textarea value={splitInvoiceNotes} onChange={(e) => setSplitInvoiceNotes(e.target.value)} placeholder="Uwagi na fakturach…" rows={2} className="text-sm" />
+            </div>
+            <Button
+              variant="default"
+              size="sm"
+              className="w-full"
+              disabled={docIssuing || !splitHotelAmount || !splitGastronomyAmount || (parseFloat(splitHotelAmount) || 0) <= 0 || (parseFloat(splitGastronomyAmount) || 0) <= 0 || ((parseFloat(splitReceiptAmount) || 0) < 0)}
+              onClick={async () => {
+                if (!reservation?.id) return;
+                const hotel = parseFloat(splitHotelAmount) || 0;
+                const gastronomy = parseFloat(splitGastronomyAmount) || 0;
+                const receiptAmt = parseFloat(splitReceiptAmount) || 0;
+                if (hotel <= 0 || gastronomy <= 0) return;
+                setDocIssuing(true);
+                try {
+                  const result = await createSplitVatInvoices(reservation.id, {
+                    hotelAmountGross: hotel,
+                    gastronomyAmountGross: gastronomy,
+                    notes: splitInvoiceNotes.trim() || undefined,
+                  });
+                  if (result.success && result.data) {
+                    let msg = `Faktury: ${result.data.hotelInvoice.number} (${result.data.hotelInvoice.amountGross.toFixed(2)} PLN) + ${result.data.gastronomyInvoice.number} (${result.data.gastronomyInvoice.amountGross.toFixed(2)} PLN)`;
+                    window.open(`/finance/invoice/${result.data.hotelInvoice.id}?autoPrint=1`, "_blank");
+                    window.open(`/finance/invoice/${result.data.gastronomyInvoice.id}?autoPrint=1`, "_blank");
+                    if (receiptAmt > 0) {
+                      const recResult = await printFiscalReceiptForReservation(reservation.id, "CASH", receiptAmt);
+                      if (recResult.success) {
+                        window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
+                        msg += `, paragon ${receiptAmt.toFixed(2)} PLN`;
+                        const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(reservation.id)}&amount=${receiptAmt}`;
+                        const copyWin = window.open(copyUrl, "_blank");
+                        if (copyWin) copyWin.addEventListener("load", () => setTimeout(() => copyWin.print(), 500));
+                      } else {
+                        toast.error(recResult.error ?? "Błąd paragonu");
+                      }
+                    }
+                    toast.success(msg);
+                    setSplitInvoiceDialogOpen(false);
+                    setSplitHotelAmount("");
+                    setSplitGastronomyAmount("");
+                    setSplitReceiptAmount("");
+                    setSplitInvoiceNotes("");
+                  } else {
+                    toast.error("error" in result ? result.error : "Błąd wystawiania faktur");
+                  }
+                } finally {
+                  setDocIssuing(false);
+                }
+              }}
+            >
+              {docIssuing ? "Wystawianie…" : splitReceiptAmount && parseFloat(splitReceiptAmount) > 0 ? "Wystaw 2 faktury + paragon" : "Wystaw obie faktury"}
             </Button>
           </div>
         </DialogContent>

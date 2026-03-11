@@ -35,6 +35,7 @@ import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { can } from "@/lib/permissions";
 import { getEffectivePricesBatch } from "@/app/actions/rooms";
 import { computeRateCodePricePerNight } from "@/lib/rate-code-utils";
+import { reservationDisplayAmount } from "@/lib/reservation-display-amount";
 import {
   VALID_PAYMENT_METHODS,
   type PaymentMethod,
@@ -4115,29 +4116,14 @@ export async function printFiscalReceiptForReservation(
       return { success: false, error: "Brak pozycji do wydrukowania na paragonie" };
     }
 
+    const RECEIPT_ITEM_NAME = "Usługa gastronomiczna";
     let items: Array<{ name: string; quantity: number; unitPrice: number; vatRate: number }>;
     if (amountOverride != null && Number.isFinite(amountOverride) && amountOverride > 0) {
       totalAmount = Math.round(amountOverride * 100) / 100;
-      // Używamy "Nocleg" zamiast "Usługa hotelowa" – POSNET błąd 2106 (towar zablokowany)
-      // pojawia się przy powtarzanej nazwie "Usługa hotelowa" w pamięci kasownika
-      items = [{ name: "Nocleg", quantity: 1, unitPrice: totalAmount, vatRate: 8 }];
+      items = [{ name: RECEIPT_ITEM_NAME, quantity: 1, unitPrice: totalAmount, vatRate: 8 }];
     } else {
-      const typeToName: Record<string, string> = {
-      ROOM: "Nocleg",
-      LOCAL_TAX: "Opłata miejscowa",
-      MINIBAR: "Minibar",
-      GASTRONOMY: "Gastronomia",
-      SPA: "Spa",
-      PARKING: "Parking",
-      RENTAL: "Wynajem",
-      PHONE: "Telefon",
-      LAUNDRY: "Pralnia",
-      TRANSPORT: "Transport",
-      ATTRACTION: "Atrakcje",
-      OTHER: "Inne",
-    };
       items = chargeTransactions.map((t) => ({
-        name: typeToName[t.type] ?? t.type,
+        name: RECEIPT_ITEM_NAME,
         quantity: 1,
         unitPrice: Number(t.amount),
         vatRate: 8,
@@ -4779,7 +4765,14 @@ export async function getTransactionsForReservation(
 export async function createVatInvoice(
   reservationId: string,
   marginMode?: boolean,
-  options?: { invoiceType?: "NORMAL" | "ADVANCE" | "FINAL"; advanceInvoiceId?: string; notes?: string; amountGrossOverride?: number }
+  options?: {
+    invoiceType?: "NORMAL" | "ADVANCE" | "FINAL";
+    advanceInvoiceId?: string;
+    notes?: string;
+    amountGrossOverride?: number;
+    /** Nadpisuje reservation.invoiceScope – użyj dla faktury hotel-only lub gastronomy-only */
+    invoiceScope?: "ALL" | "HOTEL_ONLY" | "GASTRONOMY_ONLY";
+  }
 ): Promise<
   ActionResult<{
     id: string;
@@ -4811,16 +4804,28 @@ export async function createVatInvoice(
         error: "Do wystawienia faktury VAT wymagany jest NIP nabywcy. Uzupełnij NIP w danych firmy przy rezerwacji.",
       };
     }
-    // Zapobieganie duplikatom: dla NORMAL nie twórz drugiej faktury, gdy już istnieje
+    // Zapobieganie duplikatom: dla NORMAL
+    // Zezwalamy na dwie faktury: HOTEL_ONLY + GASTRONOMY_ONLY (różne zakresy)
     if (invoiceType === "NORMAL") {
-      const existing = await prisma.invoice.findFirst({
+      const effectiveScope = (options?.invoiceScope ?? reservation.invoiceScope ?? "ALL") as string;
+      const existingInvoices = await prisma.invoice.findMany({
         where: { reservationId, invoiceType: "NORMAL" },
+        select: { number: true, invoiceScope: true },
       });
-      if (existing) {
-        return {
-          success: false,
-          error: `Rezerwacja ma już wystawioną fakturę VAT: ${existing.number}. Nie można wystawić drugiej faktury normalnej dla tej samej rezerwacji.`,
-        };
+      for (const ex of existingInvoices) {
+        const exScope = ex.invoiceScope ?? "ALL";
+        if (effectiveScope === "ALL" || exScope === "ALL") {
+          return {
+            success: false,
+            error: `Rezerwacja ma już wystawioną fakturę VAT: ${ex.number}. Nie można wystawić drugiej faktury dla tej samej rezerwacji.`,
+          };
+        }
+        if (exScope === effectiveScope) {
+          return {
+            success: false,
+            error: `Już istnieje faktura ${effectiveScope === "HOTEL_ONLY" ? "hotelowa" : "gastronomiczna"}: ${ex.number}.`,
+          };
+        }
       }
     }
     // Auto-naliczanie noclegu: jeśli brak transakcji ROOM, nalicz automatycznie
@@ -4840,11 +4845,11 @@ export async function createVatInvoice(
       }
     }
 
-    // Zakres faktury: ALL | HOTEL_ONLY | GASTRONOMY_ONLY
+    // Zakres faktury: ALL | HOTEL_ONLY | GASTRONOMY_ONLY (options.invoiceScope nadpisuje rezerwację)
     const GASTRONOMY_TYPES = ["GASTRONOMY", "RESTAURANT", "POSTING"];
     const HOTEL_TYPES = ["ROOM", "LOCAL_TAX", "MINIBAR", "SPA", "PARKING", "RENTAL", "PHONE", "LAUNDRY", "TRANSPORT", "ATTRACTION", "OTHER"];
     const chargeTypes = [...new Set([...HOTEL_TYPES, ...GASTRONOMY_TYPES])];
-    const invoiceScope = (reservation.invoiceScope ?? "ALL") as string;
+    const invoiceScope = (options?.invoiceScope ?? reservation.invoiceScope ?? "ALL") as string;
 
     let chargeTransactions = reservation.transactions.filter(
       (t) => chargeTypes.includes(t.type) && Number(t.amount) > 0 && (t.status === "ACTIVE" || t.status == null)
@@ -4870,12 +4875,11 @@ export async function createVatInvoice(
     const scopeDiscounts = Math.round(totalDiscounts * ratio * 100) / 100;
     const scopeDeposits = Math.round(totalDeposits * ratio * 100) / 100;
     let totalGross = Math.round((totalCharges - scopeDiscounts - scopeDeposits) * 100) / 100;
-    if (totalGross <= 0) return { success: false, error: "Suma do faktury (obciążenia minus zaliczki) musi być większa od zera. Sprawdź, czy pokój ma przypisaną cenę." };
-
     const amountGrossOverride = options?.amountGrossOverride;
     if (amountGrossOverride != null && Number.isFinite(amountGrossOverride) && amountGrossOverride > 0) {
       totalGross = Math.round(amountGrossOverride * 100) / 100;
     }
+    if (totalGross <= 0) return { success: false, error: "Suma do faktury (obciążenia minus zaliczki) musi być większa od zera. Sprawdź, czy pokój ma przypisaną cenę." };
 
     const configResult = await getCennikConfig();
     if (!configResult.success || !configResult.data) {
@@ -4968,6 +4972,55 @@ export async function createVatInvoice(
       error: e instanceof Error ? e.message : "Błąd wystawiania faktury VAT",
     };
   }
+}
+
+/**
+ * Wystawia dwie faktury VAT za jednym razem: hotelową + gastronomiczną.
+ * Użyj gdy klient potrzebuje osobnych faktur na usługę hotelową i gastronomiczną.
+ */
+export async function createSplitVatInvoices(
+  reservationId: string,
+  params: { hotelAmountGross: number; gastronomyAmountGross: number; notes?: string }
+): Promise<
+  ActionResult<{
+    hotelInvoice: { id: string; number: string; amountGross: number };
+    gastronomyInvoice: { id: string; number: string; amountGross: number };
+  }>
+> {
+  const { hotelAmountGross, gastronomyAmountGross, notes } = params;
+  if (!Number.isFinite(hotelAmountGross) || hotelAmountGross <= 0) {
+    return { success: false, error: "Kwota hotelowa musi być większa od zera" };
+  }
+  if (!Number.isFinite(gastronomyAmountGross) || gastronomyAmountGross <= 0) {
+    return { success: false, error: "Kwota gastronomiczna musi być większa od zera" };
+  }
+  const r1 = await createVatInvoice(reservationId, false, {
+    invoiceScope: "HOTEL_ONLY",
+    amountGrossOverride: Math.round(hotelAmountGross * 100) / 100,
+    notes: notes?.trim() || undefined,
+  });
+  if (!r1.success) return r1;
+  const r2 = await createVatInvoice(reservationId, false, {
+    invoiceScope: "GASTRONOMY_ONLY",
+    amountGrossOverride: Math.round(gastronomyAmountGross * 100) / 100,
+    notes: notes?.trim() || undefined,
+  });
+  if (!r2.success) return r2;
+  return {
+    success: true,
+    data: {
+      hotelInvoice: {
+        id: r1.data!.id,
+        number: r1.data!.number,
+        amountGross: r1.data!.amountGross,
+      },
+      gastronomyInvoice: {
+        id: r2.data!.id,
+        number: r2.data!.number,
+        amountGross: r2.data!.amountGross,
+      },
+    },
+  };
 }
 
 export type SalesInvoiceLineItem = {
@@ -13021,10 +13074,18 @@ export async function getConsolidatedFolioSummary(reservationIds: string[]): Pro
       Promise.all(reservationIds.map((id) => getFolioSummary(id))),
       prisma.reservation.findMany({
         where: { id: { in: reservationIds } },
-        select: { id: true, room: { select: { number: true } } },
+        select: {
+          id: true,
+          room: { select: { number: true } },
+          checkIn: true,
+          checkOut: true,
+          rateCodePrice: true,
+          transactions: { select: { amount: true, type: true } },
+        },
       }),
     ]);
     const roomByResId = new Map(reservations.map((r) => [r.id, r.room?.number]));
+    const resByResId = new Map(reservations.map((r) => [r.id, r]));
     const reservationSummaries: Array<{
       reservationId: string;
       totalCharges: number;
@@ -13035,19 +13096,35 @@ export async function getConsolidatedFolioSummary(reservationIds: string[]): Pro
     }> = [];
     let totalAmount = 0;
     for (let i = 0; i < summaries.length; i++) {
+      const resId = reservationIds[i];
       const s = summaries[i];
+      const res = resByResId.get(resId);
+      let bal = 0;
       if (s.success && s.data) {
-        const bal = s.data.balance ?? (s.data.totalCharges - s.data.totalDiscounts - s.data.totalPayments);
+        bal = s.data.balance ?? (s.data.totalCharges - s.data.totalDiscounts - s.data.totalPayments);
+      }
+      const displayAmount = res ? reservationDisplayAmount(res) : 0;
+      const amountToShow = Math.max(bal, displayAmount);
+      if (s.success && s.data) {
         reservationSummaries.push({
-          reservationId: reservationIds[i],
+          reservationId: resId,
           totalCharges: s.data.totalCharges,
           totalDiscounts: s.data.totalDiscounts,
           totalPayments: s.data.totalPayments,
-          balance: bal,
-          room: roomByResId.get(reservationIds[i]),
+          balance: Math.round(amountToShow * 100) / 100,
+          room: roomByResId.get(resId),
         });
-        totalAmount += bal;
+      } else {
+        reservationSummaries.push({
+          reservationId: resId,
+          totalCharges: 0,
+          totalDiscounts: 0,
+          totalPayments: 0,
+          balance: Math.round(amountToShow * 100) / 100,
+          room: roomByResId.get(resId),
+        });
       }
+      totalAmount += amountToShow;
     }
     return {
       success: true,

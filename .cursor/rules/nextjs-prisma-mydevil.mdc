@@ -106,10 +106,15 @@ binaryTargets = ["native", "freebsd14", "debian-openssl-3.0.x"]
 
 ## 7. SSH — klucze
 
-**Hetzner:** `~/.ssh/hetzner_key` (skonfigurowany w `~/.ssh/config` jako host `hetzner`)
+**Hetzner:** `~/.ssh/hetzner_key` (host `hetzner`) — 65.108.245.25, produkcja hotel
+**pos-karczma:** `~/.ssh/pos-karczma_key` (host `pos-karczma`) — ten sam serwer co Hetzner
 **MyDevil:** `~/.ssh/id_ed25519` (backup)
 
-Agent może łączyć się przez SSH bez pytania o hasło (do diagnostyki, logów, prisma db push).
+Agent **ma dostęp do SSH** (hetzner, pos-karczma). Używać przy diagnostyce produkcji — nie czekać na przypomnienie. Połączenie bez hasła.
+
+```
+ssh hetzner     # lub ssh pos-karczma — ten sam serwer
+```
 
 ## 8. Nginx na Hetzner
 

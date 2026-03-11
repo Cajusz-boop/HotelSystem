@@ -51,28 +51,14 @@ export async function GET(request: NextRequest) {
       return new NextResponse("Brak pozycji na paragonie", { status: 400 });
     }
 
-    const typeToName: Record<string, string> = {
-      ROOM: "Nocleg",
-      LOCAL_TAX: "Opłata miejscowa",
-      MINIBAR: "Minibar",
-      GASTRONOMY: "Gastronomia",
-      SPA: "Spa",
-      PARKING: "Parking",
-      RENTAL: "Wynajem",
-      PHONE: "Telefon",
-      LAUNDRY: "Pralnia",
-      TRANSPORT: "Transport",
-      ATTRACTION: "Atrakcje",
-      OTHER: "Inne",
-    };
-
+    const RECEIPT_ITEM_NAME = "Usługa gastronomiczna";
     let items: Array<{ name: string; quantity: number; unitPrice: number; vatRate: number }>;
     if (useOverride) {
       totalAmount = Math.round(amountOverride * 100) / 100;
-      items = [{ name: "Usługa hotelowa", quantity: 1, unitPrice: totalAmount, vatRate: 8 }];
+      items = [{ name: RECEIPT_ITEM_NAME, quantity: 1, unitPrice: totalAmount, vatRate: 8 }];
     } else {
       items = chargeTransactions.map((t: { type: string; amount: unknown }) => ({
-        name: typeToName[t.type] ?? t.type,
+        name: RECEIPT_ITEM_NAME,
         quantity: 1,
         unitPrice: Number(t.amount),
         vatRate: 8,

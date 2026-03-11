@@ -230,7 +230,7 @@ function mockDocumentNumbering() {
 describe("Fakturowanie – createVatInvoice", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(prisma.invoice.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.invoice.findMany).mockResolvedValue([]);
   });
 
   it("Błąd: brak rezerwacji", async () => {
@@ -308,12 +308,15 @@ describe("Fakturowanie – createVatInvoice", () => {
     const roomTx = makeRoomTransaction(235);
     const res = makeReservation({ transactions: [roomTx] });
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
-    vi.mocked(prisma.invoice.findFirst).mockResolvedValue({
-      id: "inv-1",
-      number: "FV/022/03/K",
-      reservationId: "res-1",
-      invoiceType: "NORMAL",
-    } as never);
+    vi.mocked(prisma.invoice.findMany).mockResolvedValue([
+      {
+        id: "inv-1",
+        number: "FV/022/03/K",
+        reservationId: "res-1",
+        invoiceType: "NORMAL",
+        invoiceScope: "ALL",
+      },
+    ] as never);
 
     const result = await createVatInvoice("res-1");
 
@@ -1109,7 +1112,7 @@ describe("Paragon fiskalny – printFiscalReceiptForReservation", () => {
       expect.objectContaining({
         totalAmount: 300,
         items: expect.arrayContaining([
-          expect.objectContaining({ name: "Nocleg", unitPrice: 300 }),
+          expect.objectContaining({ name: "Usługa gastronomiczna", unitPrice: 300 }),
         ]),
       })
     );
@@ -1128,7 +1131,7 @@ describe("Paragon fiskalny – printFiscalReceiptForReservation", () => {
         totalAmount: 100,
         items: [
           expect.objectContaining({
-            name: "Nocleg",
+            name: "Usługa gastronomiczna",
             quantity: 1,
             unitPrice: 100,
             vatRate: 8,
@@ -1151,7 +1154,7 @@ describe("Paragon fiskalny – printFiscalReceiptForReservation", () => {
         totalAmount: 100,
         items: [
           expect.objectContaining({
-            name: "Nocleg",
+            name: "Usługa gastronomiczna",
             quantity: 1,
             unitPrice: 100,
             vatRate: 8,

@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getRestaurantChargesForReservation } from "@/app/actions/gastronomy";
+import {
+  getRestaurantChargesForReservation,
+  reassignGastronomyTransactionToReservation,
+} from "@/app/actions/gastronomy";
+import { getActiveReservationsForCharge } from "@/app/actions/spa";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
@@ -11,6 +15,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 function InvoiceSingleLineCheckbox({
   checked,
@@ -47,30 +60,76 @@ interface MealsTabProps {
   onInvoiceScopeChange: (value: string) => void | Promise<void>;
 }
 
+type Charge = {
+  id: string;
+  amount: number;
+  description: string | null;
+  type: string;
+  createdAt: string;
+  receiptNumber?: string;
+  cashierName?: string;
+  posSystem?: string;
+  items: Array<{ name: string; quantity: number; unitPrice: number }>;
+};
+
+type ReservationForSelect = { id: string; guestName: string; roomNumber: string };
+
 export function MealsTab({ reservationId, invoiceSingleLine, onInvoiceSingleLineChange, invoiceScope, onInvoiceScopeChange }: MealsTabProps) {
-  const [charges, setCharges] = useState<
-    Array<{
-      id: string;
-      amount: number;
-      description: string | null;
-      type: string;
-      createdAt: string;
-      receiptNumber?: string;
-      cashierName?: string;
-      posSystem?: string;
-      items: Array<{ name: string; quantity: number; unitPrice: number }>;
-    }>
-  >([]);
+  const [charges, setCharges] = useState<Charge[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
+  const [chargeForReassign, setChargeForReassign] = useState<Charge | null>(null);
+  const [targetReservationId, setTargetReservationId] = useState("");
+  const [reservationsForSelect, setReservationsForSelect] = useState<ReservationForSelect[]>([]);
+  const [reassignSubmitting, setReassignSubmitting] = useState(false);
 
-  useEffect(() => {
+  const loadCharges = () => {
     setLoading(true);
     getRestaurantChargesForReservation(reservationId).then((res) => {
       if (res.success && res.data) setCharges(res.data);
       setLoading(false);
     });
+  };
+
+  useEffect(() => {
+    loadCharges();
   }, [reservationId]);
+
+  useEffect(() => {
+    if (reassignDialogOpen) {
+      getActiveReservationsForCharge().then((res) => {
+        if (res.success && res.data) {
+          setReservationsForSelect(
+            res.data
+              .filter((r) => r.id !== reservationId)
+              .map((r) => ({ id: r.id, guestName: r.guestName, roomNumber: r.roomNumber }))
+          );
+        }
+      });
+    }
+  }, [reassignDialogOpen, reservationId]);
+
+  const openReassignDialog = (charge: Charge) => {
+    setChargeForReassign(charge);
+    setTargetReservationId("");
+    setReassignDialogOpen(true);
+  };
+
+  const handleReassign = async () => {
+    if (!chargeForReassign || !targetReservationId) return;
+    setReassignSubmitting(true);
+    const r = await reassignGastronomyTransactionToReservation(chargeForReassign.id, targetReservationId);
+    setReassignSubmitting(false);
+    if (r.success) {
+      toast.success("Obciążenie przeniesione do wybranej rezerwacji");
+      setReassignDialogOpen(false);
+      setChargeForReassign(null);
+      loadCharges();
+    } else {
+      toast.error(r.error);
+    }
+  };
 
   const totalAmount = charges.reduce((s, c) => s + c.amount, 0);
 
@@ -218,18 +277,94 @@ export function MealsTab({ reservationId, invoiceSingleLine, onInvoiceSingleLine
                       ))}
                     </tbody>
                   </table>
+                  <div className="mt-2 pt-2 border-t border-border/50">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openReassignDialog(charge);
+                      }}
+                    >
+                      Przenieś do innego pokoju
+                    </Button>
+                  </div>
                 </div>
               )}
 
               {isExpanded && !hasItems && (
-                <div className="border-t bg-muted/5 px-3 py-2 text-xs text-muted-foreground">
-                  Brak szczegółowych pozycji – obciążenie kwotowe bez listy dań.
+                <div className="border-t bg-muted/5 px-3 py-2">
+                  <div className="text-xs text-muted-foreground mb-2">
+                    Brak szczegółowych pozycji – obciążenie kwotowe bez listy dań.
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openReassignDialog(charge);
+                    }}
+                  >
+                    Przenieś do innego pokoju
+                  </Button>
                 </div>
               )}
             </div>
           );
         })}
       </div>
+
+      <Dialog open={reassignDialogOpen} onOpenChange={setReassignDialogOpen}>
+        <DialogContent className="sm:max-w-md" onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>Przenieś obciążenie do innego pokoju</DialogTitle>
+          </DialogHeader>
+          {chargeForReassign && (
+            <div className="space-y-4">
+              <div className="rounded-md bg-muted p-3 text-sm">
+                <p>
+                  <strong>Kwota:</strong> {chargeForReassign.amount.toFixed(2)} PLN
+                </p>
+                {chargeForReassign.description && (
+                  <p>
+                    <strong>Opis:</strong> {chargeForReassign.description}
+                  </p>
+                )}
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Wybierz rezerwację docelową (pokój):</Label>
+                <Select value={targetReservationId} onValueChange={setTargetReservationId}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="— Wybierz pokój —" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {reservationsForSelect.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        Pokój {r.roomNumber} · {r.guestName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReassignDialogOpen(false)}>
+              Anuluj
+            </Button>
+            <Button
+              onClick={handleReassign}
+              disabled={!targetReservationId || reassignSubmitting}
+            >
+              {reassignSubmitting ? "Przenoszenie…" : "Przenieś"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

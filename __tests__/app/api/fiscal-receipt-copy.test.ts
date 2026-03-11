@@ -89,7 +89,7 @@ describe("GET /api/finance/fiscal-receipt-copy", () => {
     expect(html).toContain("KOPIA PARAGONU");
     expect(html).toContain("Paragon");
     expect(html).toContain("300.00");
-    expect(html).toContain("Nocleg");
+    expect(html).toContain("Usługa gastronomiczna");
     expect(html).toContain("Hotel Test");
     expect(html).toContain("Jan Kowalski");
   });
@@ -110,8 +110,7 @@ describe("GET /api/finance/fiscal-receipt-copy", () => {
     const html = await res.text();
     expect(html).toContain("KOPIA PARAGONU");
     expect(html).toContain("100.00");
-    expect(html).toContain("Usługa hotelowa");
-    expect(html).not.toContain("Nocleg"); // przy override jest jedna pozycja "Usługa hotelowa"
+    expect(html).toContain("Usługa gastronomiczna");
   });
 
   it("zwraca 200 gdy pusta rezerwacja ale podano amount (split)", async () => {
@@ -127,6 +126,6 @@ describe("GET /api/finance/fiscal-receipt-copy", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("50.00");
-    expect(html).toContain("Usługa hotelowa");
+    expect(html).toContain("Usługa gastronomiczna");
   });
 });
