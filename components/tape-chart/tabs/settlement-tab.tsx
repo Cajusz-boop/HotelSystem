@@ -463,6 +463,8 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   const [refundMethod, setRefundMethod] = useState<string>("CASH");
   const [collectDepositLoading, setCollectDepositLoading] = useState(false);
   const collectDepositInFlightRef = useRef(false);
+  /** Przy "Cena pokoju za dobę": pomijamy pierwsze uruchomienie efektu (mount), żeby nie nadpisać zapisanej ceny; przy zmianie liczby osób przeliczamy z cennika */
+  const roomRateSkipFirstRunRef = useRef(true);
   const [refundDepositLoading, setRefundDepositLoading] = useState(false);
   const [activeGuestDiscount, setActiveGuestDiscount] = useState<{ percentage: number; reason: string | null; dateTo: string } | null>(null);
   const [activeGuestDiscountLoading, setActiveGuestDiscountLoading] = useState(false);
@@ -509,6 +511,27 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
     if (computed == null) return;
     onFormChange({ rateCodePrice: String(computed) });
   }, [form.billingMode, form.rateCodeId, form.adults, form.children, rateCodes, onFormChange]);
+
+  // Tryb "room": przy zmianie liczby osób wstaw cenę z cennika (stawka + pax). Na mount NIE nadpisuj – żeby zapisana ręczna cena (np. 272) się nie znikała.
+  useEffect(() => {
+    if ((form.billingMode ?? "room") !== "room") return;
+    if (!form.rateCodeId) return;
+    const c = rateCodes.find((r) => r.id === form.rateCodeId);
+    if (!c) return;
+    if (roomRateSkipFirstRunRef.current) {
+      roomRateSkipFirstRunRef.current = false;
+      return;
+    }
+    const pax = Math.max(1, (parseInt(form.adults || "1", 10) || 1) + (parseInt(form.children || "0", 10) || 0));
+    const computed = computeRateCodePricePerNight(c, pax);
+    if (computed == null) return;
+    onFormChange({ rateCodePrice: String(computed) });
+  }, [form.billingMode, form.rateCodeId, form.adults, form.children, rateCodes, onFormChange]);
+
+  // Przy otwarciu innej rezerwacji zresetuj „pomiń pierwszy run”, żeby dla nowego rezerwacji znów nie nadpisać zapisanej ceny.
+  useEffect(() => {
+    roomRateSkipFirstRunRef.current = true;
+  }, [reservation?.id]);
 
   // Load edit-mode data
   useEffect(() => {
