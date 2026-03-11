@@ -53,6 +53,10 @@ interface ReservationBarWithMenuProps {
   onSplitClick?: (reservation: Reservation) => void;
   /** Opcjonalna paleta kolorów tła pasków (z ustawień obiektu) */
   statusBg?: Record<string, string>;
+  /** Opcjonalna paleta kolorów tła według statusu płatności (PAID, PARTIAL, UNPAID) */
+  paymentBg?: Record<string, string>;
+  /** Macierz kolorów kombinacji (status rezerwacji × status płatności) */
+  combinationColors?: Record<string, string>;
   /** Czy rezerwacja ma konflikt (nakłada się z inną) */
   hasConflict?: boolean;
   /** Czy check-in jest dziś – wizualne wyróżnienie */
@@ -100,6 +104,8 @@ export function ReservationBarWithMenu({
   onResize,
   onSplitClick,
   statusBg,
+  paymentBg,
+  combinationColors,
   hasConflict,
   isCheckInToday = false,
   onDuplicate,
@@ -489,6 +495,8 @@ export function ReservationBarWithMenu({
             pricePerNight={pricePerNight}
             totalAmount={totalAmount}
             statusBg={statusBg}
+            paymentBg={paymentBg}
+            combinationColors={combinationColors}
             hasConflict={hasConflict}
             isCheckInToday={isCheckInToday}
             barWidthPx={barWidthPx}

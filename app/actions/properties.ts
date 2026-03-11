@@ -82,6 +82,168 @@ export async function getPropertyReservationColors(
   }
 }
 
+/** Etykiety statusów rezerwacji (fallback w TapeChart gdy brak initialStatusLabels). */
+export async function getPropertyReservationLabels(
+  propertyId: string | null
+): Promise<ActionResult<Record<string, string> | null>> {
+  if (!propertyId) return { success: true, data: null };
+  try {
+    const p = await prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { reservationStatusLabels: true },
+    });
+    const raw = p?.reservationStatusLabels;
+    if (raw == null) return { success: true, data: null };
+    const obj = typeof raw === "object" && raw !== null ? (raw as Record<string, string>) : {};
+    return { success: true, data: Object.keys(obj).length ? obj : null };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd odczytu" };
+  }
+}
+
+/** Opisy statusów rezerwacji (fallback w TapeChart gdy brak initialStatusDescriptions). */
+export async function getPropertyReservationDescriptions(
+  propertyId: string | null
+): Promise<ActionResult<Record<string, string> | null>> {
+  if (!propertyId) return { success: true, data: null };
+  try {
+    const p = await prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { reservationStatusDescriptions: true },
+    });
+    const raw = p?.reservationStatusDescriptions;
+    if (raw == null) return { success: true, data: null };
+    const obj = typeof raw === "object" && raw !== null ? (raw as Record<string, string>) : {};
+    return { success: true, data: Object.keys(obj).length ? obj : null };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd odczytu" };
+  }
+}
+
+/** Zapisuje etykiety statusów rezerwacji. */
+export async function updatePropertyReservationLabels(
+  propertyId: string,
+  labels: Record<string, string>
+): Promise<ActionResult> {
+  try {
+    await prisma.property.update({
+      where: { id: propertyId },
+      data: {
+        reservationStatusLabels:
+          Object.keys(labels).length > 0 ? (labels as Prisma.InputJsonValue) : Prisma.JsonNull,
+      },
+    });
+    revalidatePath("/front-office");
+    revalidatePath("/mice/grafik");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd zapisu" };
+  }
+}
+
+/** Zapisuje opisy statusów rezerwacji. */
+export async function updatePropertyReservationDescriptions(
+  propertyId: string,
+  descriptions: Record<string, string>
+): Promise<ActionResult> {
+  try {
+    await prisma.property.update({
+      where: { id: propertyId },
+      data: {
+        reservationStatusDescriptions:
+          Object.keys(descriptions).length > 0 ? (descriptions as Prisma.InputJsonValue) : Prisma.JsonNull,
+      },
+    });
+    revalidatePath("/front-office");
+    revalidatePath("/mice/grafik");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd zapisu" };
+  }
+}
+
+/** Paleta kolorów statusów płatności (tło kart rezerwacji): PAID, PARTIAL, UNPAID. */
+export async function getPropertyPaymentColors(
+  propertyId: string | null
+): Promise<ActionResult<Record<string, string> | null>> {
+  if (!propertyId) return { success: true, data: null };
+  try {
+    const p = await prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { paymentStatusColors: true },
+    });
+    const raw = p?.paymentStatusColors;
+    if (raw == null) return { success: true, data: null };
+    const obj = typeof raw === "object" && raw !== null ? (raw as Record<string, string>) : {};
+    return { success: true, data: Object.keys(obj).length ? obj : null };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd odczytu" };
+  }
+}
+
+export type StatusCombinationColorMap = Partial<Record<string, string>>;
+
+/** Paleta kolorów macierzy (status rezerwacji × status płatności) dla obiektu. */
+export async function getPropertyCombinationColors(
+  propertyId: string | null
+): Promise<ActionResult<StatusCombinationColorMap | null>> {
+  if (!propertyId) return { success: true, data: null };
+  try {
+    const p = await prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { statusCombinationColors: true },
+    });
+    const raw = p?.statusCombinationColors;
+    if (raw == null) return { success: true, data: null };
+    const obj = typeof raw === "object" && raw !== null ? (raw as Record<string, string>) : {};
+    return { success: true, data: Object.keys(obj).length ? obj : null };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd odczytu" };
+  }
+}
+
+/** Zapisuje paletę kolorów macierzy kombinacji (status × płatność) dla obiektu. */
+export async function updatePropertyCombinationColors(
+  propertyId: string,
+  colors: StatusCombinationColorMap
+): Promise<ActionResult> {
+  try {
+    await prisma.property.update({
+      where: { id: propertyId },
+      data: {
+        statusCombinationColors:
+          Object.keys(colors).length > 0 ? (colors as Prisma.InputJsonValue) : Prisma.JsonNull,
+      },
+    });
+    revalidatePath("/front-office");
+    revalidatePath("/mice/grafik");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd zapisu" };
+  }
+}
+
+/** Zapisuje paletę kolorów statusów płatności dla obiektu. */
+export async function updatePropertyPaymentColors(
+  propertyId: string,
+  colors: Record<string, string>
+): Promise<ActionResult> {
+  try {
+    await prisma.property.update({
+      where: { id: propertyId },
+      data: {
+        paymentStatusColors:
+          Object.keys(colors).length > 0 ? (colors as Prisma.InputJsonValue) : Prisma.JsonNull,
+      },
+    });
+    revalidatePath("/front-office");
+    revalidatePath("/mice/grafik");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd zapisu" };
+  }
+}
+
 /** Zapisuje paletę kolorów statusów rezerwacji dla obiektu. */
 export async function updatePropertyReservationColors(
   propertyId: string,

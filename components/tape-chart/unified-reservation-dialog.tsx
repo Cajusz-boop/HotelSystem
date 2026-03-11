@@ -13,7 +13,22 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+
+const DOC_PAYMENT_LABELS: Record<string, string> = {
+  CASH: "Gotówka",
+  CARD: "Karta",
+  TRANSFER: "Przelew",
+  PREPAID: "Przedpłata",
+};
 import { createReservation, updateReservation, updateReservationStatus, getCheckoutBalanceWarning, findGuestsForCheckIn, getReservationCompany, getReservationEditData, deleteReservation, type GuestCheckInSuggestion } from "@/app/actions/reservations";
 import { postRoomChargeOnCheckout, createVatInvoice, createSplitVatInvoices, createProforma, printFiscalReceiptForReservation, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates, overrideRoomPrice, getConsolidatedFolioSummary } from "@/app/actions/finance";
 import { lookupCompanyByNip, createConsolidatedVatInvoice } from "@/app/actions/companies";
@@ -229,11 +244,13 @@ export function UnifiedReservationDialog({
   const [docTotalAmount, setDocTotalAmount] = useState<number | null>(null);
   const [docAmountInvoice, setDocAmountInvoice] = useState("");
   const [docAmountReceipt, setDocAmountReceipt] = useState("");
+  const [docPaymentMethod, setDocPaymentMethod] = useState<string>("CASH");
   const [issueDocMenuOpen, setIssueDocMenuOpen] = useState(false);
   const [splitInvoiceDialogOpen, setSplitInvoiceDialogOpen] = useState(false);
   const [splitHotelAmount, setSplitHotelAmount] = useState("");
   const [splitGastronomyAmount, setSplitGastronomyAmount] = useState("");
   const [splitReceiptAmount, setSplitReceiptAmount] = useState("");
+  const [splitReceiptPaymentMethod, setSplitReceiptPaymentMethod] = useState<string>("CASH");
   const [splitInvoiceNotes, setSplitInvoiceNotes] = useState("");
   const [paymentsDialogOpen, setPaymentsDialogOpen] = useState(false);
   const [paymentsList, setPaymentsList] = useState<Array<{ id: string; amount: number; type: string; createdAt: string }>>([]);
@@ -827,6 +844,7 @@ export function UnifiedReservationDialog({
       setDocAmountOverride("");
       setDocAmountInvoice("");
       setDocAmountReceipt("");
+      setDocPaymentMethod("CASH");
       setDocRoomTotal(null);
       setDocTotalAmount(null);
       onOpenChange(false);
@@ -892,7 +910,7 @@ export function UnifiedReservationDialog({
         }
       }
       if ((choice === "posnet" || (choice === "both" && amtRec > 0)) && docChoiceResId) {
-        const result = await printFiscalReceiptForReservation(docChoiceResId, "CASH", amtRec > 0 ? amtRec : undefined);
+        const result = await printFiscalReceiptForReservation(docChoiceResId, docPaymentMethod || "CASH", amtRec > 0 ? amtRec : undefined);
         if (result.success) {
           window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
           toast.success(result.data?.receiptNumber
@@ -918,11 +936,12 @@ export function UnifiedReservationDialog({
       setDocAmountOverride("");
       setDocAmountInvoice("");
       setDocAmountReceipt("");
+      setDocPaymentMethod("CASH");
       setDocRoomTotal(null);
       setDocTotalAmount(null);
       onOpenChange(false);
     }
-  }, [docChoiceResId, docChoiceResIds, primaryReservation, docAmountOverride, docAmountInvoice, docAmountReceipt, docTotalAmount, invoiceNotes, onOpenChange]);
+  }, [docChoiceResId, docChoiceResIds, primaryReservation, docAmountOverride, docAmountInvoice, docAmountReceipt, docTotalAmount, invoiceNotes, docPaymentMethod, onOpenChange]);
 
   const handleIssueDoc = useCallback(async (choice: "vat" | "posnet" | "proforma" | "potwierdzenie") => {
     if (choice === "potwierdzenie") {
@@ -1358,6 +1377,19 @@ export function UnifiedReservationDialog({
                 className="text-sm"
               />
             </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Forma zapłaty (paragon)</Label>
+              <Select value={docPaymentMethod} onValueChange={setDocPaymentMethod}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(DOC_PAYMENT_LABELS).map(([val, label]) => (
+                    <SelectItem key={val} value={val}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex flex-col gap-2">
               {docAmountInvoice && docAmountReceipt && (() => {
                 const inv = parseFloat(docAmountInvoice) || 0;
@@ -1425,7 +1457,7 @@ export function UnifiedReservationDialog({
       {/* Dwie faktury: hotel + gastronomia (+ opcjonalnie paragon) */}
       <Dialog open={splitInvoiceDialogOpen} onOpenChange={(open) => {
         setSplitInvoiceDialogOpen(open);
-        if (!open) { setSplitHotelAmount(""); setSplitGastronomyAmount(""); setSplitReceiptAmount(""); setSplitInvoiceNotes(""); }
+        if (!open) { setSplitHotelAmount(""); setSplitGastronomyAmount(""); setSplitReceiptAmount(""); setSplitReceiptPaymentMethod("CASH"); setSplitInvoiceNotes(""); }
       }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -1446,6 +1478,19 @@ export function UnifiedReservationDialog({
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Kwota na paragon [PLN] (opcjonalnie)</label>
               <Input type="number" min={0} step={0.01} placeholder="np. 9" value={splitReceiptAmount} onChange={(e) => setSplitReceiptAmount(e.target.value)} className="h-8" />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Forma zapłaty (paragon)</Label>
+              <Select value={splitReceiptPaymentMethod} onValueChange={setSplitReceiptPaymentMethod}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(DOC_PAYMENT_LABELS).map(([val, label]) => (
+                    <SelectItem key={val} value={val}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {(splitHotelAmount || splitGastronomyAmount || splitReceiptAmount) && (() => {
               const h = parseFloat(splitHotelAmount) || 0;
@@ -1481,11 +1526,11 @@ export function UnifiedReservationDialog({
                     window.open(`/finance/invoice/${result.data.hotelInvoice.id}?autoPrint=1`, "_blank");
                     window.open(`/finance/invoice/${result.data.gastronomyInvoice.id}?autoPrint=1`, "_blank");
                     if (receiptAmt > 0) {
-                      const recResult = await printFiscalReceiptForReservation(reservation.id, "CASH", receiptAmt);
+                      const recResult = await printFiscalReceiptForReservation(reservation.id, splitReceiptPaymentMethod || "CASH", receiptAmt);
                       if (recResult.success) {
                         window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
                         msg += `, paragon ${receiptAmt.toFixed(2)} PLN`;
-                        const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(reservation.id)}&amount=${receiptAmt}`;
+                        const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(reservation.id)}&amount=${receiptAmt}${recResult.data?.receiptNumber ? `&receiptNumber=${encodeURIComponent(recResult.data.receiptNumber)}` : ""}`;
                         const copyWin = window.open(copyUrl, "_blank");
                         if (copyWin) copyWin.addEventListener("load", () => setTimeout(() => copyWin.print(), 500));
                       } else {
@@ -1497,6 +1542,7 @@ export function UnifiedReservationDialog({
                     setSplitHotelAmount("");
                     setSplitGastronomyAmount("");
                     setSplitReceiptAmount("");
+                    setSplitReceiptPaymentMethod("CASH");
                     setSplitInvoiceNotes("");
                   } else {
                     toast.error("error" in result ? result.error : "Błąd wystawiania faktur");

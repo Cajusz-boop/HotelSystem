@@ -113,6 +113,26 @@ describe("GET /api/finance/fiscal-receipt-copy", () => {
     expect(html).toContain("Usługa gastronomiczna");
   });
 
+  it("wyświetla numer paragonu gdy przekazano receiptNumber", async () => {
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
+      id: "res-1",
+      transactions: [
+        { id: "tx-1", type: "ROOM", amount: 200, status: "ACTIVE" },
+      ],
+      guest: { name: "Jan Test" },
+    } as never);
+
+    const req = new NextRequest(
+      "https://test.example/api/finance/fiscal-receipt-copy?reservationId=res-1&receiptNumber=PAR-123"
+    );
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("Nr paragonu: PAR-123");
+    expect(html).toContain("Nr PAR-123");
+  });
+
   it("zwraca 200 gdy pusta rezerwacja ale podano amount (split)", async () => {
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       id: "res-1",

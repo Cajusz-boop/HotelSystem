@@ -99,6 +99,10 @@ interface ReservationBarProps {
   totalAmount?: number;
   /** Opcjonalna paleta kolorów tła (nadpisuje domyślną) */
   statusBg?: Record<string, string>;
+  /** Opcjonalna paleta kolorów tła według statusu płatności (PAID, PARTIAL, UNPAID) */
+  paymentBg?: Record<string, string>;
+  /** Macierz kolorów kombinacji (status rezerwacji × status płatności) */
+  combinationColors?: Record<string, string>;
   /** Czy rezerwacja ma konflikt (nakłada się z inną) */
   hasConflict?: boolean;
   /** Czy check-in jest dziś – wizualne wyróżnienie */
@@ -124,6 +128,8 @@ export function ReservationBar({
   pricePerNight,
   totalAmount,
   statusBg,
+  paymentBg,
+  combinationColors,
   hasConflict,
   isCheckInToday = false,
   barWidthPx,
@@ -191,13 +197,19 @@ export function ReservationBar({
             ? [shortName, nightsShort].filter(Boolean).join(" · ")
             : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ")
         : [shortName, nightsShort, priceShort].filter(Boolean).join(" · ");
-  // Cały pasek = tylko Opłacona / Częściowo opłacona / Nieopłacona (bez szarego)
+  // Cały pasek = hierarchia: macierz kombinacji > paymentBg > fallback
+  const paymentStatus = reservation.paymentStatus ?? "UNPAID";
+  const combinationKey = `${reservation.status}_${paymentStatus}`;
+  const FALLBACK_PAYMENT_BG: Record<string, string> = {
+    PAID: "rgb(20 184 166)",
+    PARTIAL: "rgb(234 179 8)",
+    UNPAID: "rgb(139 92 246)",
+  };
   const defaultPaymentBg =
-    reservation.paymentStatus === "PAID"
-      ? "rgb(20 184 166)"
-      : reservation.paymentStatus === "PARTIAL"
-        ? "rgb(234 179 8)"
-        : "rgb(139 92 246)"; // UNPAID lub brak statusu – traktuj jak Nieopłacona
+    combinationColors?.[combinationKey]
+    ?? paymentBg?.[paymentStatus]
+    ?? FALLBACK_PAYMENT_BG[paymentStatus]
+    ?? "rgb(139 92 246)";
   const bgColor = ensureOpaque(defaultPaymentBg);
   const bgGradient = `linear-gradient(to bottom, ${lightenColor(bgColor)} 0%, ${bgColor} 100%)`;
   const barShadow = "0 1px 3px rgba(0,0,0,0.1), inset 0 0 0 1px rgba(255,255,255,0.15)";

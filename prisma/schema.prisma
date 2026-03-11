@@ -55,6 +55,10 @@ model Property {
   name      String   // np. "Karczma Łabędź", "Hotel Central"
   code      String   @unique  // np. "LABEDZ", "CENTRAL" – krótki identyfikator
   reservationStatusColors Json?  // opcjonalna paleta kolorów tła pasków: { CONFIRMED: "#2563eb", ... }
+  paymentStatusColors Json?      // opcjonalna paleta kolorów płatności: { PAID: "rgb(...)", PARTIAL: "...", UNPAID: "..." }
+  statusCombinationColors Json?  // macierz kolorów: { "CONFIRMED_PAID": "#22c55e", "CHECKED_IN_UNPAID": "#ef4444", ... }
+  reservationStatusLabels Json?  // etykiety statusów: { CONFIRMED: "Potwierdzona", ... }
+  reservationStatusDescriptions Json? // opisy statusów: { CONFIRMED: "Opis...", ... }
   overbookingLimitPercent Int    @default(0)  // 0 = wyłączony, np. 10 = dozwolone 10% ponad dostępność (ostrzeżenie)
   localTaxPerPersonPerNight Decimal? @db.Decimal(10, 2)  // opłata miejscowa / klimatyczna PLN za osobę za noc; null/0 = wyłączone
   mealPrices Json?  // ceny posiłków PLN: { breakfast: 50, lunch: 80, dinner: 80 } – do obciążania za posiłki

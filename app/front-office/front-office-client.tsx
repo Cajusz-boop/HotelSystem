@@ -20,6 +20,9 @@ interface FrontOfficeInitialData {
   rooms: Room[];
   reservationGroups: ReservationGroupSummary[];
   reservationStatusColors?: Partial<Record<string, string>> | null;
+  reservationStatusLabels?: Partial<Record<string, string>> | null;
+  reservationStatusDescriptions?: Partial<Record<string, string>> | null;
+  statusCombinationColors?: Partial<Record<string, string>> | null;
   propertyId?: string | null;
   reservations: Reservation[];
   today?: string;
@@ -33,6 +36,9 @@ export function FrontOfficeClient({ initialData }: { initialData: FrontOfficeIni
     rooms: initialData?.rooms ?? [],
     reservationGroups: initialData?.reservationGroups ?? [],
     reservationStatusColors: initialData?.reservationStatusColors ?? null,
+    reservationStatusLabels: initialData?.reservationStatusLabels ?? null,
+    reservationStatusDescriptions: initialData?.reservationStatusDescriptions ?? null,
+    statusCombinationColors: initialData?.statusCombinationColors ?? null,
     propertyId: initialData?.propertyId ?? null,
     reservations: initialData?.reservations ?? [],
     today: initialData?.today ?? undefined,
@@ -72,6 +78,9 @@ export function FrontOfficeClient({ initialData }: { initialData: FrontOfficeIni
             }))
           : [],
         reservationStatusColors: full.reservationStatusColors ?? null,
+        reservationStatusLabels: full.reservationStatusLabels ?? null,
+        reservationStatusDescriptions: full.reservationStatusDescriptions ?? null,
+        statusCombinationColors: full.statusCombinationColors ?? null,
         propertyId: full.propertyId ?? null,
         reservations: Array.isArray(full.reservations) ? (full.reservations as Reservation[]) : [],
         today: prev.today ?? today,
@@ -111,6 +120,9 @@ export function FrontOfficeClient({ initialData }: { initialData: FrontOfficeIni
           rooms={rooms}
           reservationGroups={reservationGroups}
           initialStatusBg={data.reservationStatusColors ?? undefined}
+          initialStatusLabels={data.reservationStatusLabels ?? undefined}
+          initialStatusDescriptions={data.reservationStatusDescriptions ?? undefined}
+          initialCombinationColors={data.statusCombinationColors ?? undefined}
           initialPropertyId={data.propertyId ?? undefined}
           initialTodayStr={data.today}
           initialHighlightReservationId={reservationId}

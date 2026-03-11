@@ -22,7 +22,7 @@ async function FrontOfficeData() {
   future.setDate(future.getDate() + INITIAL_DAYS_VIEW);
   const dateToInitial = future.toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' });
 
-  let data: { reservations: Reservation[]; rooms: Room[]; reservationGroups: ReservationGroupSummary[]; reservationStatusColors?: Partial<Record<string, string>> | null; propertyId?: string | null; events?: Array<{ id: string; name: string; dateFrom: string; dateTo: string; color: string | null; description?: string | null }> };
+  let data: { reservations: Reservation[]; rooms: Room[]; reservationGroups: ReservationGroupSummary[]; reservationStatusColors?: Partial<Record<string, string>> | null; reservationStatusLabels?: Partial<Record<string, string>> | null; reservationStatusDescriptions?: Partial<Record<string, string>> | null; statusCombinationColors?: Partial<Record<string, string>> | null; propertyId?: string | null; events?: Array<{ id: string; name: string; dateFrom: string; dateTo: string; color: string | null; description?: string | null }> };
   try {
     const result = await getTapeChartData({ dateFrom: today, dateTo: dateToInitial });
     if (!result?.rooms || !result?.reservations) {
@@ -37,6 +37,9 @@ async function FrontOfficeData() {
         reservationCount: g.reservationCount,
       })),
       reservationStatusColors: result.reservationStatusColors ?? null,
+      reservationStatusLabels: result.reservationStatusLabels ?? null,
+      reservationStatusDescriptions: result.reservationStatusDescriptions ?? null,
+      statusCombinationColors: result.statusCombinationColors ?? null,
       propertyId: result.propertyId ?? null,
       events: result.events ?? [],
     };
@@ -58,6 +61,9 @@ async function FrontOfficeData() {
         rooms: data.rooms,
         reservationGroups: data.reservationGroups,
         reservationStatusColors: data.reservationStatusColors,
+        reservationStatusLabels: data.reservationStatusLabels,
+        reservationStatusDescriptions: data.reservationStatusDescriptions,
+        statusCombinationColors: data.statusCombinationColors ?? null,
         propertyId: data.propertyId,
         reservations: data.reservations,
         today,

@@ -3,7 +3,7 @@
 import { ReservationStatus } from "@prisma/client";
 import { computeRateCodePricePerNight } from "@/lib/rate-code-utils";
 import { prisma } from "@/lib/db";
-import { getEffectivePropertyId, getPropertyReservationColors } from "@/app/actions/properties";
+import { getEffectivePropertyId } from "@/app/actions/properties";
 export interface TapeChartReservation {
   id: string;
   guestName: string;
@@ -61,8 +61,14 @@ export interface TapeChartData {
   reservationGroups: { id: string; name?: string | null; reservationCount: number }[];
   /** Kolory statusów rezerwacji (CONFIRMED, CHECKED_IN itd.) – ładowane z obiektu */
   reservationStatusColors?: Partial<Record<string, string>> | null;
+  /** Etykiety statusów rezerwacji */
+  reservationStatusLabels?: Partial<Record<string, string>> | null;
+  /** Opisy statusów rezerwacji */
+  reservationStatusDescriptions?: Partial<Record<string, string>> | null;
   /** Id obiektu – do przekazania do TapeChart (unika dodatkowego wywołania getEffectivePropertyId) */
   propertyId?: string | null;
+  /** Macierz kolorów kombinacji (status rezerwacji × status płatności) */
+  statusCombinationColors?: Partial<Record<string, string>> | null;
   /** Wydarzenia specjalne w zakresie dat grafiku (nad siatką) */
   events?: TapeChartEvent[];
 }
@@ -392,8 +398,18 @@ async function fetchTapeChartDataUncached(
       )
     : null;
 
-  const [colorsRes, roomTypes, eventsRaw] = await Promise.all([
-    getPropertyReservationColors(propertyId),
+  const [propertyRes, roomTypes, eventsRaw] = await Promise.all([
+    propertyId
+      ? prisma.property.findUnique({
+          where: { id: propertyId },
+          select: {
+            reservationStatusColors: true,
+            reservationStatusLabels: true,
+            reservationStatusDescriptions: true,
+            statusCombinationColors: true,
+          },
+        })
+      : Promise.resolve(null),
     prisma.roomType.findMany({
       select: {
         name: true,
@@ -416,8 +432,22 @@ async function fetchTapeChartDataUncached(
       select: { id: true, title: true, startDate: true, endDate: true, color: true, description: true },
     }).catch(() => []),
   ]);
-  const reservationStatusColors = colorsRes.success && colorsRes.data && Object.keys(colorsRes.data).length > 0
-    ? colorsRes.data
+  const parseJsonRecord = (raw: unknown): Record<string, string> | null => {
+    if (raw == null) return null;
+    const obj = typeof raw === "object" && raw !== null ? (raw as Record<string, string>) : {};
+    return Object.keys(obj).length ? obj : null;
+  };
+  const reservationStatusColors = propertyRes?.reservationStatusColors
+    ? parseJsonRecord(propertyRes.reservationStatusColors)
+    : null;
+  const reservationStatusLabels = propertyRes?.reservationStatusLabels
+    ? parseJsonRecord(propertyRes.reservationStatusLabels)
+    : null;
+  const reservationStatusDescriptions = propertyRes?.reservationStatusDescriptions
+    ? parseJsonRecord(propertyRes.reservationStatusDescriptions)
+    : null;
+  const statusCombinationColors = propertyRes?.statusCombinationColors
+    ? parseJsonRecord(propertyRes.statusCombinationColors)
     : null;
   const typePriceMap = new Map<string, number>(
     roomTypes
@@ -477,6 +507,9 @@ async function fetchTapeChartDataUncached(
       reservationCount: g._count.reservations,
     })),
     reservationStatusColors,
+    reservationStatusLabels,
+    reservationStatusDescriptions,
+    statusCombinationColors,
   };
 }
 

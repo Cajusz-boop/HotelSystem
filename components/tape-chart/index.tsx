@@ -51,6 +51,8 @@ import {
   StickyNote,
   FileText,
   Receipt,
+  Pencil,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -67,8 +69,18 @@ import { useRoomsSync, broadcastRoomStatusChange } from "@/hooks/useRoomsSync";
 import {
   getEffectivePropertyId,
   getPropertyReservationColors,
+  getPropertyReservationLabels,
+  getPropertyReservationDescriptions,
+  getPropertyPaymentColors,
+  getPropertyCombinationColors,
+  updatePropertyReservationColors,
+  updatePropertyReservationLabels,
+  updatePropertyReservationDescriptions,
+  updatePropertyPaymentColors,
+  updatePropertyCombinationColors,
 } from "@/app/actions/properties";
 import type { Room, Reservation, ReservationGroupSummary, RoomStatus } from "@/lib/tape-chart-types";
+import type { PaymentStatus } from "@/lib/validations/schemas";
 import { RESERVATION_STATUS_BG, ROOM_STATUS_LABELS } from "@/lib/tape-chart-types";
 import { cn } from "@/lib/utils";
 import { TapeChartOverviewBar } from "./tape-chart-overview-bar";
@@ -465,6 +477,40 @@ const RESERVATION_STATUS_DESCRIPTIONS: Record<Reservation["status"], string> = {
   NO_SHOW: "Gość nie pojawił się w dniu przyjazdu. Rezerwacja zamknięta bez realizacji.",
 };
 
+/** Domyślne kolory statusów płatności (tło karty) – używane gdy brak ustawień obiektu */
+const PAYMENT_STATUS_BG: Record<PaymentStatus, string> = {
+  PAID: "rgb(20 184 166)",
+  PARTIAL: "rgb(234 179 8)",
+  UNPAID: "rgb(139 92 246)",
+};
+
+const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
+  PAID: "Opłacona",
+  PARTIAL: "Częściowo opłacona",
+  UNPAID: "Nieopłacona",
+};
+
+const RESERVATION_STATUSES = ["PENDING", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED", "NO_SHOW"] as const;
+const PAYMENT_STATUSES = ["PAID", "PARTIAL", "UNPAID"] as const;
+
+function toHex(color: string): string {
+  if (!color) return "#000000";
+  if (color.startsWith("#")) return color;
+  const matchComma = color.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
+  if (matchComma) {
+    return "#" + [matchComma[1], matchComma[2], matchComma[3]]
+      .map((n) => parseInt(n).toString(16).padStart(2, "0"))
+      .join("");
+  }
+  const matchSpace = color.match(/rgb\(\s*(\d+)\s+(\d+)\s+(\d+)\s*\)/);
+  if (matchSpace) {
+    return "#" + [matchSpace[1], matchSpace[2], matchSpace[3]]
+      .map((n) => parseInt(n).toString(16).padStart(2, "0"))
+      .join("");
+  }
+  return "#000000";
+}
+
 type ConditionalPointerSensorOptions = PointerSensorOptions & {
   requireShift?: boolean;
 };
@@ -487,6 +533,9 @@ export function TapeChart({
   rooms,
   initialHighlightReservationId,
   initialStatusBg,
+  initialStatusLabels,
+  initialStatusDescriptions,
+  initialCombinationColors,
   initialPropertyId,
   initialTodayStr,
   reservationGroups,
@@ -497,6 +546,12 @@ export function TapeChart({
   initialHighlightReservationId?: string;
   /** Kolory statusów z serwera – unika migania z niebieskiego na zielony przy ładowaniu */
   initialStatusBg?: Partial<Record<string, string>>;
+  /** Etykiety statusów z serwera (fallback: getPropertyReservationLabels gdy brak) */
+  initialStatusLabels?: Partial<Record<string, string>> | null;
+  /** Opisy statusów z serwera (fallback: getPropertyReservationDescriptions gdy brak) */
+  initialStatusDescriptions?: Partial<Record<string, string>> | null;
+  /** Macierz kolorów kombinacji (status × płatność) z serwera */
+  initialCombinationColors?: Partial<Record<string, string>>;
   /** Id obiektu z serwera – unika dodatkowego wywołania getEffectivePropertyId */
   initialPropertyId?: string | null;
   /** Data YYYY-MM-DD z SSR – unika błędu hydratacji (server vs client) */
@@ -583,6 +638,15 @@ export function TapeChart({
   const [splitDialogReservation, setSplitDialogReservation] = useState<Reservation | null>(null);
   const [statusColorsDialogOpen, setStatusColorsDialogOpen] = useState(false);
   const [legendDialogOpen, setLegendDialogOpen] = useState(false);
+  // --- legenda: tryb edycji ---
+  const [legendEditMode, setLegendEditMode] = useState(false);
+  const [editStatusColors, setEditStatusColors] = useState<Record<string, string>>({});
+  const [editStatusLabels, setEditStatusLabels] = useState<Record<string, string>>({});
+  const [editStatusDescriptions, setEditStatusDescriptions] = useState<Record<string, string>>({});
+  const [editPaymentColors, setEditPaymentColors] = useState<Record<string, string>>({});
+  const [editPaymentLabels, setEditPaymentLabels] = useState<Record<string, string>>({});
+  const [editCombinationColors, setEditCombinationColors] = useState<Record<string, string>>({});
+  const [legendSaving, setLegendSaving] = useState(false);
   const [salesInvoiceOpen, setSalesInvoiceOpen] = useState(false);
   const [vatRegisterOpen, setVatRegisterOpen] = useState(false);
   const router = useRouter();
@@ -590,6 +654,18 @@ export function TapeChart({
   const [statusBg, setStatusBg] = useState<Record<string, string> | null>(
     initialStatusBg && Object.keys(initialStatusBg).length > 0
       ? (Object.fromEntries(Object.entries(initialStatusBg).filter(([, v]) => typeof v === "string")) as Record<string, string>)
+      : null
+  );
+  const [statusLabels, setStatusLabels] = useState<Record<string, string> | null>(
+    initialStatusLabels && Object.keys(initialStatusLabels).length > 0 ? (initialStatusLabels as Record<string, string>) : null
+  );
+  const [statusDescriptions, setStatusDescriptions] = useState<Record<string, string> | null>(
+    initialStatusDescriptions && Object.keys(initialStatusDescriptions).length > 0 ? (initialStatusDescriptions as Record<string, string>) : null
+  );
+  const [paymentBg, setPaymentBg] = useState<Record<string, string> | null>(null);
+  const [combinationColors, setCombinationColors] = useState<Record<string, string> | null>(
+    initialCombinationColors && Object.keys(initialCombinationColors).length > 0
+      ? (initialCombinationColors as Record<string, string>)
       : null
   );
   const [statusTab, setStatusTab] = useState<"statuses" | "roomStatus" | "custom" | "sources" | "prices">("statuses");
@@ -625,6 +701,120 @@ export function TapeChart({
       setStatusBg(initialStatusBg as Record<string, string>);
     }
   }, [initialStatusBg]);
+  useEffect(() => {
+    if (initialStatusLabels && Object.keys(initialStatusLabels).length > 0) {
+      setStatusLabels(initialStatusLabels as Record<string, string>);
+    }
+  }, [initialStatusLabels]);
+  useEffect(() => {
+    if (initialStatusDescriptions && Object.keys(initialStatusDescriptions).length > 0) {
+      setStatusDescriptions(initialStatusDescriptions as Record<string, string>);
+    }
+  }, [initialStatusDescriptions]);
+  useEffect(() => {
+    if (initialCombinationColors && Object.keys(initialCombinationColors).length > 0) {
+      setCombinationColors(initialCombinationColors as Record<string, string>);
+    }
+  }, [initialCombinationColors]);
+  useEffect(() => {
+    if (!propertyId || (statusLabels != null && statusDescriptions != null)) return;
+    if (!statusLabels) {
+      getPropertyReservationLabels(propertyId).then((res) => {
+        if (res?.success && res?.data && Object.keys(res.data).length > 0)
+          setStatusLabels(res.data as Record<string, string>);
+      });
+    }
+    if (!statusDescriptions) {
+      getPropertyReservationDescriptions(propertyId).then((res) => {
+        if (res?.success && res?.data && Object.keys(res.data).length > 0)
+          setStatusDescriptions(res.data as Record<string, string>);
+      });
+    }
+  }, [propertyId, statusLabels, statusDescriptions]);
+  useEffect(() => {
+    if (!propertyId) return;
+    getPropertyPaymentColors(propertyId).then((res) => {
+      if (res?.success && res?.data && Object.keys(res.data).length > 0)
+        setPaymentBg(res.data as Record<string, string>);
+    });
+  }, [propertyId]);
+  useEffect(() => {
+    if (!combinationColors && propertyId) {
+      getPropertyCombinationColors(propertyId).then((res) => {
+        if (res?.success && res?.data && Object.keys(res.data).length > 0)
+          setCombinationColors(res.data as Record<string, string>);
+      });
+    }
+  }, [propertyId, combinationColors]);
+
+  async function handleSavePaymentColors() {
+    if (!propertyId) {
+      toast.error("Brak wybranego obiektu");
+      return;
+    }
+    setLegendSaving(true);
+    try {
+      const result = await updatePropertyPaymentColors(propertyId, editPaymentColors);
+      if (result.success) {
+        setPaymentBg(editPaymentColors);
+        toast.success("Kolory płatności zostały zapisane");
+      } else {
+        toast.error("Błąd zapisu kolorów płatności");
+      }
+    } catch {
+      toast.error("Błąd zapisu kolorów płatności");
+    } finally {
+      setLegendSaving(false);
+    }
+  }
+
+  async function handleSaveCombinationColors() {
+    if (!propertyId) {
+      toast.error("Brak wybranego obiektu");
+      return;
+    }
+    setLegendSaving(true);
+    try {
+      const result = await updatePropertyCombinationColors(propertyId, editCombinationColors);
+      if (result.success) {
+        setCombinationColors(editCombinationColors);
+        toast.success("Kombinacje kolorów zapisane");
+      } else {
+        toast.error("Błąd zapisu kombinacji");
+      }
+    } catch {
+      toast.error("Błąd zapisu kombinacji");
+    } finally {
+      setLegendSaving(false);
+    }
+  }
+
+  async function handleSaveStatusColors() {
+    if (!propertyId) {
+      toast.error("Brak wybranego obiektu");
+      return;
+    }
+    setLegendSaving(true);
+    try {
+      const [colorsResult, labelsResult, descriptionsResult] = await Promise.all([
+        updatePropertyReservationColors(propertyId, editStatusColors),
+        updatePropertyReservationLabels(propertyId, editStatusLabels),
+        updatePropertyReservationDescriptions(propertyId, editStatusDescriptions),
+      ]);
+      if (colorsResult.success && labelsResult.success && descriptionsResult.success) {
+        setStatusBg(editStatusColors);
+        setStatusLabels(editStatusLabels);
+        setStatusDescriptions(editStatusDescriptions);
+        toast.success("Kolory, etykiety i opisy statusów zostały zapisane");
+      } else {
+        toast.error("Błąd zapisu statusów");
+      }
+    } catch {
+      toast.error("Błąd zapisu statusów");
+    } finally {
+      setLegendSaving(false);
+    }
+  }
 
   const statusTabOptions = [
     { id: "statuses", label: "Statusy rezerwacji" },
@@ -1105,12 +1295,53 @@ export function TapeChart({
     () =>
       (Object.keys(RESERVATION_STATUS_BG) as Array<Reservation["status"]>).map((status) => ({
         status,
-        label: RESERVATION_STATUS_LABELS[status],
-        description: RESERVATION_STATUS_DESCRIPTIONS[status],
+        label: statusLabels?.[status] ?? RESERVATION_STATUS_LABELS[status],
+        description: statusDescriptions?.[status] ?? RESERVATION_STATUS_DESCRIPTIONS[status],
         color: RESERVATION_STATUS_BG[status],
       })),
-    []
+    [statusLabels, statusDescriptions]
   );
+
+  // Inicjalizacja stanów edycji legendy przy otwarciu dialogu
+  useEffect(() => {
+    if (!legendDialogOpen) {
+      setLegendEditMode(false);
+      return;
+    }
+    const sColors: Record<string, string> = {};
+    const sLabels: Record<string, string> = {};
+    const sDescriptions: Record<string, string> = {};
+    statusLegendItems.forEach(({ status, label, description, color }) => {
+      console.log("[status color]", status, "statusBg:", statusBg?.[status], "fallback color:", color);
+      sColors[status] = toHex((statusBg && statusBg[status]) ? statusBg[status] : color);
+      sLabels[status] = label;
+      sDescriptions[status] = description;
+    });
+    setEditStatusColors(sColors);
+    setEditStatusLabels(sLabels);
+    setEditStatusDescriptions(sDescriptions);
+    const pColors: Record<string, string> = {};
+    const pLabels: Record<string, string> = {};
+    (Object.keys(PAYMENT_STATUS_BG) as PaymentStatus[]).forEach((key) => {
+      console.log("[payment color]", key, "paymentBg:", paymentBg?.[key], "fallback:", PAYMENT_STATUS_BG[key]);
+      pColors[key] = toHex((paymentBg && paymentBg[key]) ? paymentBg[key] : PAYMENT_STATUS_BG[key]);
+      pLabels[key] = PAYMENT_STATUS_LABELS[key];
+    });
+    setEditPaymentColors(pColors);
+    setEditPaymentLabels(pLabels);
+    const cColors: Record<string, string> = {};
+    RESERVATION_STATUSES.forEach((status) => {
+      PAYMENT_STATUSES.forEach((payment) => {
+        const key = `${status}_${payment}`;
+        cColors[key] = toHex(
+          combinationColors?.[key]
+          ?? paymentBg?.[payment]
+          ?? (PAYMENT_STATUS_BG as Record<string, string>)[payment]
+        );
+      });
+    });
+    setEditCombinationColors(cColors);
+  }, [legendDialogOpen, statusLegendItems, statusBg, paymentBg, combinationColors]);
 
   // Wskaźnik zajętości (occupancy %)
   const occupancyStats = useMemo(() => {
@@ -2894,6 +3125,8 @@ export function TapeChart({
                               onResize={handleResize}
                               onSplitClick={(r) => setSplitDialogReservation(r)}
                               statusBg={effectiveStatusBg}
+                              paymentBg={paymentBg ?? undefined}
+                              combinationColors={combinationColors ?? undefined}
                               hasConflict={conflictingReservationIds.has(reservation.id)}
                               isCheckInToday={reservation.checkIn === todayStr && reservation.status === "CONFIRMED"}
                               barWidthPx={barWidthPx}
@@ -3388,59 +3621,207 @@ export function TapeChart({
         onSaved={setStatusBg}
       />
       <Dialog open={legendDialogOpen} onOpenChange={setLegendDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader className="flex flex-row items-center justify-between">
             <DialogTitle>Legenda statusów rezerwacji</DialogTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLegendEditMode((v) => !v)}
+              className="gap-1"
+            >
+              {legendEditMode ? (
+                <>
+                  <Check className="h-4 w-4" /> Gotowe
+                </>
+              ) : (
+                <>
+                  <Pencil className="h-4 w-4" /> Edytuj
+                </>
+              )}
+            </Button>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-xs font-medium text-muted-foreground mb-2">Tło karty – status płatności</p>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-5 w-10 flex-shrink-0 rounded border border-border" style={{ backgroundColor: "rgb(20 184 166)" }} aria-hidden />
-                <span className="text-sm">Opłacona</span>
+            {legendEditMode ? (
+              <div className="space-y-2">
+                {(Object.keys(PAYMENT_STATUS_BG) as PaymentStatus[]).map((key) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={toHex(editPaymentColors[key] ?? "")}
+                      onChange={(e) =>
+                        setEditPaymentColors((prev) => ({ ...prev, [key]: e.target.value }))
+                      }
+                      className="h-8 w-8 cursor-pointer rounded border"
+                    />
+                    <input
+                      type="text"
+                      value={editPaymentLabels[key] ?? ""}
+                      onChange={(e) =>
+                        setEditPaymentLabels((prev) => ({ ...prev, [key]: e.target.value }))
+                      }
+                      className="flex-1 rounded border px-2 py-1 text-sm"
+                    />
+                  </div>
+                ))}
+                <Button
+                  size="sm"
+                  disabled={legendSaving}
+                  onClick={handleSavePaymentColors}
+                  className="mt-2 w-full"
+                >
+                  {legendSaving ? "Zapisywanie..." : "Zapisz kolory płatności"}
+                </Button>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-5 w-10 flex-shrink-0 rounded border border-border" style={{ backgroundColor: "rgb(234 179 8)" }} aria-hidden />
-                <span className="text-sm">Częściowo opłacona</span>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-5 w-10 flex-shrink-0 rounded border border-border" style={{ backgroundColor: (paymentBg?.PAID ?? PAYMENT_STATUS_BG.PAID) }} aria-hidden />
+                  <span className="text-sm">{PAYMENT_STATUS_LABELS.PAID}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-5 w-10 flex-shrink-0 rounded border border-border" style={{ backgroundColor: (paymentBg?.PARTIAL ?? PAYMENT_STATUS_BG.PARTIAL) }} aria-hidden />
+                  <span className="text-sm">{PAYMENT_STATUS_LABELS.PARTIAL}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-5 w-10 flex-shrink-0 rounded border border-border" style={{ backgroundColor: (paymentBg?.UNPAID ?? PAYMENT_STATUS_BG.UNPAID) }} aria-hidden />
+                  <span className="text-sm">{PAYMENT_STATUS_LABELS.UNPAID}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-5 w-10 flex-shrink-0 rounded border border-border" style={{ backgroundColor: "rgb(139 92 246)" }} aria-hidden />
-                <span className="text-sm">Nieopłacona</span>
-              </div>
-            </div>
+            )}
             <div className="border-t pt-4 mt-4">
               <p className="text-xs font-medium text-muted-foreground mb-2">Pasek z lewej – status rezerwacji</p>
-              <div className="space-y-2">
-                {statusLegendItems.map((item) => {
-                  const color = statusBg?.[item.status] ?? item.color;
-                  return (
-                    <div key={item.status} className="flex items-start gap-3">
-                      <span
-                        className="mt-0.5 inline-block h-4 w-1 flex-shrink-0 rounded-full"
-                        style={{ backgroundColor: color }}
-                        aria-hidden
-                      />
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-sm font-medium">{item.label}</span>
-                        <span className="text-xs text-muted-foreground">{item.description}</span>
+              {legendEditMode ? (
+                <div className="space-y-3">
+                  {Object.keys(editStatusColors).map((status) => (
+                    <div key={status} className="space-y-1 rounded border p-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={toHex(editStatusColors[status] ?? "")}
+                          onChange={(e) =>
+                            setEditStatusColors((prev) => ({ ...prev, [status]: e.target.value }))
+                          }
+                          className="h-8 w-8 cursor-pointer rounded border"
+                        />
+                        <input
+                          type="text"
+                          value={editStatusLabels[status] ?? ""}
+                          onChange={(e) =>
+                            setEditStatusLabels((prev) => ({ ...prev, [status]: e.target.value }))
+                          }
+                          className="flex-1 rounded border px-2 py-1 text-sm font-medium"
+                        />
                       </div>
-                    </div>
-                  );
-                })}
-                <p className="text-xs font-medium text-muted-foreground mb-2 mt-4">Ikona na pasku</p>
-                <div className="flex items-center gap-2">
-                  <StickyNote className="h-4 w-4 text-muted-foreground" aria-hidden />
-                  <span className="text-sm">Ma uwagi</span>
-                </div>
-                <p className="text-xs font-medium text-muted-foreground mb-2 mt-4">Status pokoju (ikony przy liście)</p>
-                <div className="flex flex-wrap gap-2">
-                  {(Object.keys(ROOM_STATUS_LABELS) as RoomStatus[]).map((status) => (
-                    <div key={status} className="flex items-center gap-1.5">
-                      <RoomStatusIcon status={status} showLabel={false} compact />
-                      <span className="text-xs">{ROOM_STATUS_LABELS[status]}</span>
+                      <textarea
+                        value={editStatusDescriptions[status] ?? ""}
+                        onChange={(e) =>
+                          setEditStatusDescriptions((prev) => ({ ...prev, [status]: e.target.value }))
+                        }
+                        rows={2}
+                        className="w-full rounded border px-2 py-1 text-sm text-muted-foreground"
+                      />
                     </div>
                   ))}
+                  <Button
+                    size="sm"
+                    disabled={legendSaving}
+                    onClick={handleSaveStatusColors}
+                    className="mt-2 w-full"
+                  >
+                    {legendSaving ? "Zapisywanie..." : "Zapisz kolory statusów"}
+                  </Button>
                 </div>
+              ) : (
+                <div className="space-y-2">
+                  {statusLegendItems.map((item) => {
+                    const color = statusBg?.[item.status] ?? item.color;
+                    return (
+                      <div key={item.status} className="flex items-start gap-3">
+                        <span
+                          className="mt-0.5 inline-block h-4 w-1 flex-shrink-0 rounded-full"
+                          style={{ backgroundColor: color }}
+                          aria-hidden
+                        />
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-medium">{item.label}</span>
+                          <span className="text-xs text-muted-foreground">{item.description}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {legendEditMode && (
+                <div className="border-t pt-4 mt-4">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Kombinacje statusów</p>
+                  <p className="text-xs text-muted-foreground mb-2">Tło karty – status rezerwacji × status płatności</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="text-left py-1 pr-2 font-medium" />
+                          {PAYMENT_STATUSES.map((p) => (
+                            <th key={p} className="px-1 py-1 text-center font-medium">
+                              {PAYMENT_STATUS_LABELS[p]}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {RESERVATION_STATUSES.map((status) => (
+                          <tr key={status}>
+                            <td className="py-1 pr-2 text-muted-foreground">
+                              {RESERVATION_STATUS_LABELS[status]}
+                            </td>
+                            {PAYMENT_STATUSES.map((payment) => {
+                              const key = `${status}_${payment}`;
+                              return (
+                                <td key={payment} className="px-1 py-1">
+                                  <input
+                                    type="color"
+                                    value={toHex(editCombinationColors[key] ?? "#cccccc")}
+                                    onChange={(e) =>
+                                      setEditCombinationColors((prev) => ({
+                                        ...prev,
+                                        [key]: e.target.value,
+                                      }))
+                                    }
+                                    className="h-8 w-8 cursor-pointer rounded border"
+                                    title={`${RESERVATION_STATUS_LABELS[status]} + ${PAYMENT_STATUS_LABELS[payment]}`}
+                                  />
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <Button
+                    size="sm"
+                    disabled={legendSaving}
+                    onClick={handleSaveCombinationColors}
+                    className="mt-2 w-full"
+                  >
+                    {legendSaving ? "Zapisywanie..." : "Zapisz kombinacje"}
+                  </Button>
+                </div>
+              )}
+              <p className="text-xs font-medium text-muted-foreground mb-2 mt-4">Ikona na pasku</p>
+              <div className="flex items-center gap-2">
+                <StickyNote className="h-4 w-4 text-muted-foreground" aria-hidden />
+                <span className="text-sm">Ma uwagi</span>
+              </div>
+              <p className="text-xs font-medium text-muted-foreground mb-2 mt-4">Status pokoju (ikony przy liście)</p>
+              <div className="flex flex-wrap gap-2">
+                {(Object.keys(ROOM_STATUS_LABELS) as RoomStatus[]).map((status) => (
+                  <div key={status} className="flex items-center gap-1.5">
+                    <RoomStatusIcon status={status} showLabel={false} compact />
+                    <span className="text-xs">{ROOM_STATUS_LABELS[status]}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

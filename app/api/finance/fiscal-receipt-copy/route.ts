@@ -13,14 +13,16 @@ function escapeHtml(s: string): string {
 }
 
 /**
- * GET /api/finance/fiscal-receipt-copy?reservationId=xxx&amount=100
+ * GET /api/finance/fiscal-receipt-copy?reservationId=xxx&amount=100&receiptNumber=PAR-123
  * Zwraca kopię paragonu fiskalnego w HTML (do druku – recepcja).
  * amount – opcjonalnie, dla splita (kwota na paragonie).
+ * receiptNumber – numer paragonu z kasy fiskalnej (np. PAR-123), aby kopia miała taką samą numerację.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const reservationId = searchParams.get("reservationId")?.trim();
   const amountParam = searchParams.get("amount");
+  const receiptNumber = searchParams.get("receiptNumber")?.trim() || null;
 
   if (!reservationId) {
     return new NextResponse("Brak reservationId", { status: 400 });
@@ -121,9 +123,9 @@ export async function GET(request: NextRequest) {
 <body>
   <div class="copy-label">KOPIA PARAGONU — do archiwum recepcji</div>
   ${headerLines.map((l) => `<div class="header">${escapeHtml(l)}</div>`).join("")}
-  <h1>Paragon</h1>
+  <h1>Paragon${receiptNumber ? ` · Nr ${escapeHtml(receiptNumber)}` : ""}</h1>
   <p style="font-size: 11px; margin: 0 0 0.5rem;">Data: ${escapeHtml(issuedAt)} · Gość: ${escapeHtml(guestName)}</p>
-  <p style="font-size: 11px; margin: 0 0 0.75rem;">Rezerwacja: ${escapeHtml(reservationId.slice(0, 8))}</p>
+  <p style="font-size: 11px; margin: 0 0 0.75rem;">Rezerwacja: ${escapeHtml(reservationId.slice(0, 8))}${receiptNumber ? ` · Nr paragonu: ${escapeHtml(receiptNumber)}` : ""}</p>
   <table>
     <thead>
       <tr>

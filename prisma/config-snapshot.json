@@ -1,5 +1,5 @@
 {
-  "_exportedAt": "2026-03-07T20:38:50.178Z",
+  "_exportedAt": "2026-03-11T10:54:35.911Z",
   "_description": "Snapshot konfiguracji bazy. Generowany przez: npm run db:config:export",
   "hotelConfig": {
     "id": "default",
@@ -21,18 +21,19 @@
     "seasons": null,
     "cancellationPolicyTemplates": null,
     "authDisabled": false,
+    "sessionSettings": null,
     "maxVoidHours": null,
     "bankAccount": null,
     "bankName": null,
     "bookingNotificationEmail": null,
-    "updatedAt": "2026-03-07T20:38:44.987Z"
+    "updatedAt": "2026-03-10T15:08:17.973Z"
   },
   "cennikConfig": {
     "id": "default",
     "currency": "PLN",
     "vatPercent": "8",
     "pricesAreNetto": false,
-    "updatedAt": "2026-03-07T18:46:37.504Z"
+    "updatedAt": "2026-03-10T11:25:42.562Z"
   },
   "property": {
     "name": "Karczma ?ab?d?",
@@ -59,7 +60,7 @@
       "description": "Korekta faktury",
       "exampleNumber": "KOR/2026/0001",
       "createdAt": "2026-02-17T09:02:36.046Z",
-      "updatedAt": "2026-03-07T18:46:37.530Z"
+      "updatedAt": "2026-03-10T11:25:42.588Z"
     },
     {
       "id": "cmlqdklvy0006jsvzqcvnb11h",
@@ -75,7 +76,7 @@
       "description": "Faktura zbiorcza",
       "exampleNumber": "FVZ/2026/0001",
       "createdAt": "2026-02-17T09:02:36.236Z",
-      "updatedAt": "2026-03-07T18:46:37.540Z"
+      "updatedAt": "2026-03-10T11:25:42.598Z"
     },
     {
       "id": "cmlqdklwc0007jsvz6wn3bo94",
@@ -91,7 +92,7 @@
       "description": "Rachunek (nie-VAT)",
       "exampleNumber": "R/2026/0001",
       "createdAt": "2026-02-17T09:02:36.250Z",
-      "updatedAt": "2026-03-07T18:46:37.550Z"
+      "updatedAt": "2026-03-10T11:25:42.606Z"
     },
     {
       "id": "cmlqdklx50008jsvzj8hlu16w",
@@ -107,7 +108,7 @@
       "description": "Nota ksi?gowa",
       "exampleNumber": "NK/2026/0001",
       "createdAt": "2026-02-17T09:02:36.279Z",
-      "updatedAt": "2026-03-07T18:46:37.560Z"
+      "updatedAt": "2026-03-10T11:25:42.614Z"
     },
     {
       "id": "cmlqdklxu0009jsvz8xjm2tcp",
@@ -123,7 +124,7 @@
       "description": "Proforma",
       "exampleNumber": "PRO/2026/0001",
       "createdAt": "2026-02-17T09:02:36.303Z",
-      "updatedAt": "2026-03-07T18:46:37.570Z"
+      "updatedAt": "2026-03-10T11:25:42.621Z"
     },
     {
       "id": "cmls1qicj0009aj2vsvq95yjx",
@@ -139,7 +140,7 @@
       "description": "Faktura VAT",
       "exampleNumber": "FV/2026/0001",
       "createdAt": "2026-02-18T13:06:48.546Z",
-      "updatedAt": "2026-03-07T18:46:37.580Z"
+      "updatedAt": "2026-03-10T11:25:42.629Z"
     }
   ],
   "invoiceTemplates": [
@@ -179,7 +180,7 @@
       "showDiscount": false,
       "defaultUnit": "szt.",
       "createdAt": "2026-02-17T12:32:08.246Z",
-      "updatedAt": "2026-03-07T18:46:37.592Z"
+      "updatedAt": "2026-03-10T11:25:42.637Z"
     }
   ],
   "documentTemplates": [
@@ -212,7 +213,7 @@
       "showSignatureField": true,
       "showVehicleField": true,
       "createdAt": "2026-02-19T08:58:23.161Z",
-      "updatedAt": "2026-03-07T18:46:37.605Z"
+      "updatedAt": "2026-03-10T11:25:42.649Z"
     },
     {
       "id": "cmlusd9po00074q2v9kj9mu34",
@@ -243,7 +244,7 @@
       "showSignatureField": true,
       "showVehicleField": false,
       "createdAt": "2026-02-20T11:07:52.809Z",
-      "updatedAt": "2026-03-07T18:46:37.618Z"
+      "updatedAt": "2026-03-10T11:25:42.660Z"
     }
   ],
   "fiscalReceiptTemplate": [
@@ -266,7 +267,7 @@
       "includeStayDates": false,
       "roomNumberFormat": "pok. {roomNumber}",
       "createdAt": "2026-02-17T12:32:01.341Z",
-      "updatedAt": "2026-03-07T18:46:37.629Z"
+      "updatedAt": "2026-03-10T11:25:42.666Z"
     }
   ],
   "emailTemplates": [],
@@ -275,7 +276,7 @@
       "id": "cmlgd4cf80000135k1fwu39t6",
       "name": "Queen",
       "description": null,
-      "basePrice": "300",
+      "basePrice": "0",
       "sortOrder": 0,
       "visibleInStats": true,
       "maxOccupancy": null,
@@ -284,13 +285,13 @@
       "translations": null,
       "rateCodeId": null,
       "createdAt": "2026-02-10T08:52:15.716Z",
-      "updatedAt": "2026-03-07T18:46:37.641Z"
+      "updatedAt": "2026-03-11T10:51:20.330Z"
     },
     {
       "id": "cmlgd4cfc0001135kwiyhlma3",
       "name": "Twin",
       "description": null,
-      "basePrice": "300",
+      "basePrice": "0",
       "sortOrder": 0,
       "visibleInStats": true,
       "maxOccupancy": null,
@@ -299,13 +300,13 @@
       "translations": null,
       "rateCodeId": null,
       "createdAt": "2026-02-10T08:52:15.721Z",
-      "updatedAt": "2026-03-07T18:46:37.649Z"
+      "updatedAt": "2026-03-11T10:51:26.659Z"
     },
     {
       "id": "cmlgd4cfi0002135ks42epdl7",
       "name": "Suite",
       "description": null,
-      "basePrice": "300",
+      "basePrice": "0",
       "sortOrder": 0,
       "visibleInStats": true,
       "maxOccupancy": null,
@@ -314,13 +315,13 @@
       "translations": null,
       "rateCodeId": null,
       "createdAt": "2026-02-10T08:52:15.727Z",
-      "updatedAt": "2026-03-07T18:46:37.658Z"
+      "updatedAt": "2026-03-11T10:51:23.648Z"
     },
     {
       "id": "cmlp2od3z0000kgvz80hqopxy",
       "name": "Standard",
       "description": null,
-      "basePrice": "300",
+      "basePrice": "0",
       "sortOrder": 0,
       "visibleInStats": true,
       "maxOccupancy": null,
@@ -329,13 +330,13 @@
       "translations": null,
       "rateCodeId": null,
       "createdAt": "2026-02-16T11:09:49.534Z",
-      "updatedAt": "2026-03-07T18:46:37.666Z"
+      "updatedAt": "2026-03-11T10:51:16.651Z"
     },
     {
       "id": "cmlpdj95y0000v0vz6c1o87ei",
       "name": "Comfort",
       "description": null,
-      "basePrice": "300",
+      "basePrice": "0",
       "sortOrder": 2,
       "visibleInStats": true,
       "maxOccupancy": null,
@@ -344,13 +345,13 @@
       "translations": null,
       "rateCodeId": null,
       "createdAt": "2026-02-16T16:13:46.901Z",
-      "updatedAt": "2026-03-07T18:46:37.673Z"
+      "updatedAt": "2026-03-11T10:51:29.950Z"
     },
     {
       "id": "cmlpdj9700001v0vz0bt25805",
       "name": "COMFORT - z widokiem na jezioro",
       "description": null,
-      "basePrice": "300",
+      "basePrice": "0",
       "sortOrder": 3,
       "visibleInStats": true,
       "maxOccupancy": null,
@@ -359,13 +360,13 @@
       "translations": null,
       "rateCodeId": null,
       "createdAt": "2026-02-16T16:13:46.942Z",
-      "updatedAt": "2026-03-07T18:46:37.681Z"
+      "updatedAt": "2026-03-11T10:51:32.751Z"
     },
     {
       "id": "cmlpdj9850002v0vzmt3w8lgx",
       "name": "SIELSKI- z widokiem na jezioro",
       "description": null,
-      "basePrice": "300",
+      "basePrice": "0",
       "sortOrder": 4,
       "visibleInStats": true,
       "maxOccupancy": null,
@@ -374,13 +375,13 @@
       "translations": null,
       "rateCodeId": null,
       "createdAt": "2026-02-16T16:13:46.982Z",
-      "updatedAt": "2026-03-07T18:46:37.689Z"
+      "updatedAt": "2026-03-11T10:51:35.810Z"
     },
     {
       "id": "cmlpdj9950003v0vzxdjmghzl",
       "name": "Biuro",
       "description": null,
-      "basePrice": "300",
+      "basePrice": "0",
       "sortOrder": 7,
       "visibleInStats": true,
       "maxOccupancy": null,
@@ -389,13 +390,13 @@
       "translations": null,
       "rateCodeId": null,
       "createdAt": "2026-02-16T16:13:47.019Z",
-      "updatedAt": "2026-03-07T18:46:37.696Z"
+      "updatedAt": "2026-03-11T10:51:38.707Z"
     },
     {
       "id": "cmlpdj9a60004v0vzu9y1jg7n",
       "name": "SIELSKI",
       "description": null,
-      "basePrice": "300",
+      "basePrice": "0",
       "sortOrder": 8,
       "visibleInStats": true,
       "maxOccupancy": null,
@@ -404,13 +405,13 @@
       "translations": null,
       "rateCodeId": null,
       "createdAt": "2026-02-16T16:13:47.056Z",
-      "updatedAt": "2026-03-07T18:46:37.704Z"
+      "updatedAt": "2026-03-11T10:50:44.529Z"
     },
     {
       "id": "cmlpdj9b80005v0vzos6joo6c",
       "name": "COMFORT -5 os z widokiem na jezioro",
       "description": null,
-      "basePrice": "300",
+      "basePrice": "0",
       "sortOrder": 9,
       "visibleInStats": true,
       "maxOccupancy": null,
@@ -419,7 +420,7 @@
       "translations": null,
       "rateCodeId": null,
       "createdAt": "2026-02-16T16:13:47.094Z",
-      "updatedAt": "2026-03-07T18:46:37.710Z"
+      "updatedAt": "2026-03-11T10:50:40.420Z"
     },
     {
       "id": "cmluytah30000mcapnax6wv17",
@@ -434,7 +435,7 @@
       "translations": null,
       "rateCodeId": null,
       "createdAt": "2026-02-20T14:08:17.981Z",
-      "updatedAt": "2026-03-07T18:46:37.718Z"
+      "updatedAt": "2026-03-10T11:25:42.751Z"
     },
     {
       "id": "cmluytaht0001mcapoczrrrna",
@@ -449,7 +450,7 @@
       "translations": null,
       "rateCodeId": null,
       "createdAt": "2026-02-20T14:08:18.011Z",
-      "updatedAt": "2026-03-07T18:46:37.725Z"
+      "updatedAt": "2026-03-11T10:41:29.850Z"
     },
     {
       "id": "cmluytaiy0002mcapb855xnyk",
@@ -464,7 +465,7 @@
       "translations": null,
       "rateCodeId": null,
       "createdAt": "2026-02-20T14:08:18.045Z",
-      "updatedAt": "2026-03-07T18:46:37.731Z"
+      "updatedAt": "2026-03-10T11:25:42.765Z"
     },
     {
       "id": "cmluytaji0003mcapw3ttpglt",
@@ -479,12 +480,97 @@
       "translations": null,
       "rateCodeId": null,
       "createdAt": "2026-02-20T14:08:18.074Z",
-      "updatedAt": "2026-03-07T18:46:37.742Z"
+      "updatedAt": "2026-03-10T11:25:42.775Z"
     }
   ],
-  "rateCode": [],
+  "rateCode": [
+    {
+      "id": "cmmlwnxvv000n0cvz948r2wd9",
+      "code": "COMF.BEZ",
+      "name": "Comfort bez widoku",
+      "price": null,
+      "basePrice": "195",
+      "pricePerPerson": "50",
+      "createdAt": "2026-03-11T10:37:55.915Z",
+      "updatedAt": "2026-03-11T10:37:55.915Z"
+    },
+    {
+      "id": "cmmlwok15000o0cvz5fp7qamn",
+      "code": "COMF.WID",
+      "name": "Comfort z widokiem",
+      "price": null,
+      "basePrice": "50",
+      "pricePerPerson": "205",
+      "createdAt": "2026-03-11T10:38:24.616Z",
+      "updatedAt": "2026-03-11T10:38:24.616Z"
+    },
+    {
+      "id": "cmmlwp8un000p0cvzy9ozqljp",
+      "code": "SIEL.BEZ",
+      "name": "Sielska bez widoku",
+      "price": null,
+      "basePrice": "195",
+      "pricePerPerson": "50",
+      "createdAt": "2026-03-11T10:38:56.783Z",
+      "updatedAt": "2026-03-11T10:38:56.783Z"
+    },
+    {
+      "id": "cmmlwpqs5000q0cvzhvdzv8a9",
+      "code": "SIEL.WID",
+      "name": "SIEL.WID",
+      "price": null,
+      "basePrice": "205",
+      "pricePerPerson": "50",
+      "createdAt": "2026-03-11T10:39:20.021Z",
+      "updatedAt": "2026-03-11T10:39:20.021Z"
+    },
+    {
+      "id": "cmmlwq9w2000r0cvz9p223r5l",
+      "code": "STAŁY",
+      "name": "Gość Stały",
+      "price": null,
+      "basePrice": "185",
+      "pricePerPerson": "50",
+      "createdAt": "2026-03-11T10:39:44.785Z",
+      "updatedAt": "2026-03-11T10:39:44.785Z"
+    }
+  ],
   "surchargeTypes": [],
-  "packages": [],
+  "packages": [
+    {
+      "id": "cmmhnh0c8000478vzto4mzz5r",
+      "code": "EVENT_STANDARD",
+      "name": "Pakiet Standard",
+      "description": null,
+      "totalPrice": null,
+      "propertyId": null,
+      "isActive": true,
+      "createdAt": "2026-03-08T11:09:31.254Z",
+      "updatedAt": "2026-03-10T10:10:52.980Z"
+    },
+    {
+      "id": "cmmhnh0cd000578vzdoi0zv5g",
+      "code": "EVENT_PREMIUM",
+      "name": "Pakiet Premium",
+      "description": null,
+      "totalPrice": null,
+      "propertyId": null,
+      "isActive": true,
+      "createdAt": "2026-03-08T11:09:31.260Z",
+      "updatedAt": "2026-03-10T10:10:52.986Z"
+    },
+    {
+      "id": "cmmhnh0cj000678vzexqngz67",
+      "code": "EVENT_DELUXE",
+      "name": "Pakiet Deluxe",
+      "description": null,
+      "totalPrice": null,
+      "propertyId": null,
+      "isActive": true,
+      "createdAt": "2026-03-08T11:09:31.266Z",
+      "updatedAt": "2026-03-10T10:10:52.993Z"
+    }
+  ],
   "derivedRateRules": [],
   "minibarItems": [
     {
@@ -493,7 +579,7 @@
       "price": "12",
       "unit": "szt",
       "createdAt": "2026-03-04T09:14:23.200Z",
-      "updatedAt": "2026-03-07T18:46:37.748Z"
+      "updatedAt": "2026-03-10T11:25:42.780Z"
     },
     {
       "id": "cmmbtmpuk000sf8vz6hpy056s",
@@ -501,7 +587,7 @@
       "price": "15",
       "unit": "szt",
       "createdAt": "2026-03-04T09:15:18.233Z",
-      "updatedAt": "2026-03-07T18:46:37.754Z"
+      "updatedAt": "2026-03-10T11:25:42.786Z"
     }
   ],
   "permissions": [
@@ -511,7 +597,7 @@
       "name": "reservation.create",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.761Z"
+      "updatedAt": "2026-03-10T11:25:42.792Z"
     },
     {
       "id": "5bb1ba3d-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -519,7 +605,7 @@
       "name": "reservation.edit",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.769Z"
+      "updatedAt": "2026-03-10T11:25:42.798Z"
     },
     {
       "id": "5bb1bc2b-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -527,7 +613,7 @@
       "name": "reservation.cancel",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.776Z"
+      "updatedAt": "2026-03-10T11:25:42.803Z"
     },
     {
       "id": "5bb1bd93-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -535,7 +621,7 @@
       "name": "reservation.check_in",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.783Z"
+      "updatedAt": "2026-03-10T11:25:42.809Z"
     },
     {
       "id": "5bb1bf11-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -543,7 +629,7 @@
       "name": "reservation.check_out",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.788Z"
+      "updatedAt": "2026-03-10T11:25:42.813Z"
     },
     {
       "id": "5bb1c065-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -551,7 +637,7 @@
       "name": "finance.view",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.794Z"
+      "updatedAt": "2026-03-10T11:25:42.818Z"
     },
     {
       "id": "5bb1c22b-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -559,7 +645,7 @@
       "name": "finance.post",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.798Z"
+      "updatedAt": "2026-03-10T11:25:42.825Z"
     },
     {
       "id": "5bb1c3f8-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -567,7 +653,7 @@
       "name": "finance.void",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.804Z"
+      "updatedAt": "2026-03-10T11:25:42.833Z"
     },
     {
       "id": "5bb1c55c-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -575,7 +661,7 @@
       "name": "finance.refund",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.810Z"
+      "updatedAt": "2026-03-10T11:25:42.840Z"
     },
     {
       "id": "5bb1c69f-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -583,7 +669,7 @@
       "name": "rates.view",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.816Z"
+      "updatedAt": "2026-03-10T11:25:42.847Z"
     },
     {
       "id": "5bb1c7df-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -591,7 +677,7 @@
       "name": "rates.edit",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.821Z"
+      "updatedAt": "2026-03-10T11:25:42.852Z"
     },
     {
       "id": "5bb1c945-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -599,7 +685,7 @@
       "name": "reports.view",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.827Z"
+      "updatedAt": "2026-03-10T11:25:42.857Z"
     },
     {
       "id": "5bb1ca93-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -607,7 +693,7 @@
       "name": "reports.export",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.833Z"
+      "updatedAt": "2026-03-10T11:25:42.863Z"
     },
     {
       "id": "5bb1cbdd-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -615,7 +701,7 @@
       "name": "reports.management",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.839Z"
+      "updatedAt": "2026-03-10T11:25:42.867Z"
     },
     {
       "id": "5bb1cd25-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -623,7 +709,7 @@
       "name": "reports.kpi",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.845Z"
+      "updatedAt": "2026-03-10T11:25:42.871Z"
     },
     {
       "id": "5bb1ce96-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -631,7 +717,7 @@
       "name": "reports.meals",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.850Z"
+      "updatedAt": "2026-03-10T11:25:42.877Z"
     },
     {
       "id": "5bb1d025-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -639,7 +725,7 @@
       "name": "reports.official",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.856Z"
+      "updatedAt": "2026-03-10T11:25:42.881Z"
     },
     {
       "id": "5bb1d18a-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -647,7 +733,7 @@
       "name": "housekeeping.view",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.862Z"
+      "updatedAt": "2026-03-10T11:25:42.888Z"
     },
     {
       "id": "5bb1d32b-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -655,7 +741,7 @@
       "name": "housekeeping.update_status",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.867Z"
+      "updatedAt": "2026-03-10T11:25:42.894Z"
     },
     {
       "id": "5bb1d4c2-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -663,7 +749,7 @@
       "name": "admin.users",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.873Z"
+      "updatedAt": "2026-03-10T11:25:42.898Z"
     },
     {
       "id": "5bb1d699-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -671,7 +757,7 @@
       "name": "admin.settings",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.878Z"
+      "updatedAt": "2026-03-10T11:25:42.902Z"
     },
     {
       "id": "5bb1d86e-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -679,7 +765,7 @@
       "name": "owner.portal",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.884Z"
+      "updatedAt": "2026-03-10T11:25:42.907Z"
     },
     {
       "id": "5bb1d9c7-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -687,7 +773,7 @@
       "name": "module.dashboard",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.889Z"
+      "updatedAt": "2026-03-10T11:25:42.912Z"
     },
     {
       "id": "5bb1db3a-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -695,7 +781,7 @@
       "name": "module.front_office",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.894Z"
+      "updatedAt": "2026-03-10T11:25:42.917Z"
     },
     {
       "id": "5bb1dc96-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -703,7 +789,7 @@
       "name": "module.check_in",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.899Z"
+      "updatedAt": "2026-03-10T11:25:42.921Z"
     },
     {
       "id": "5bb1ddeb-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -711,7 +797,7 @@
       "name": "module.guests",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.907Z"
+      "updatedAt": "2026-03-10T11:25:42.926Z"
     },
     {
       "id": "5bb1df2d-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -719,7 +805,7 @@
       "name": "module.companies",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.914Z"
+      "updatedAt": "2026-03-10T11:25:42.930Z"
     },
     {
       "id": "5bb1e0f2-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -727,7 +813,7 @@
       "name": "module.travel_agents",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.920Z"
+      "updatedAt": "2026-03-10T11:25:42.934Z"
     },
     {
       "id": "5bb1e2ba-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -735,7 +821,7 @@
       "name": "module.rooms",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.925Z"
+      "updatedAt": "2026-03-10T11:25:42.939Z"
     },
     {
       "id": "5bb1e40a-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -743,7 +829,7 @@
       "name": "module.rates",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.929Z"
+      "updatedAt": "2026-03-10T11:25:42.946Z"
     },
     {
       "id": "5bb1e551-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -751,7 +837,7 @@
       "name": "module.housekeeping",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.934Z"
+      "updatedAt": "2026-03-10T11:25:42.951Z"
     },
     {
       "id": "5bb1e69a-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -759,7 +845,7 @@
       "name": "module.finance",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.939Z"
+      "updatedAt": "2026-03-10T11:25:42.955Z"
     },
     {
       "id": "5bb1e7e8-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -767,7 +853,7 @@
       "name": "module.reports",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.944Z"
+      "updatedAt": "2026-03-10T11:25:42.961Z"
     },
     {
       "id": "5bb1e92e-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -775,7 +861,7 @@
       "name": "module.channel_manager",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.949Z"
+      "updatedAt": "2026-03-10T11:25:42.965Z"
     },
     {
       "id": "5bb1ea7e-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -783,7 +869,7 @@
       "name": "module.parking",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.954Z"
+      "updatedAt": "2026-03-10T11:25:42.970Z"
     },
     {
       "id": "5bb1ebca-0d9b-11f1-9f3f-3cecef0f5b38",
@@ -791,7 +877,7 @@
       "name": "module.mice",
       "description": null,
       "createdAt": "2026-02-19T15:00:33.465Z",
-      "updatedAt": "2026-03-07T18:46:37.959Z"
+      "updatedAt": "2026-03-10T11:25:42.976Z"
     }
   ],
   "rolePermissions": [
