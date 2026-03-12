@@ -40,6 +40,7 @@ async function main() {
       code: property.code,
       reservationStatusColors: property.reservationStatusColors,
       paymentStatusColors: property.paymentStatusColors,
+      statusCombinationColors: property.statusCombinationColors,
       reservationStatusLabels: property.reservationStatusLabels,
       reservationStatusDescriptions: property.reservationStatusDescriptions,
       overbookingLimitPercent: property.overbookingLimitPercent,

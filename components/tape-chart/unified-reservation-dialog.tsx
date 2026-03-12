@@ -30,7 +30,7 @@ const DOC_PAYMENT_LABELS: Record<string, string> = {
   PREPAID: "Przedpłata",
 };
 import { createReservation, updateReservation, updateReservationStatus, getCheckoutBalanceWarning, findGuestsForCheckIn, getReservationCompany, getReservationEditData, deleteReservation, type GuestCheckInSuggestion } from "@/app/actions/reservations";
-import { postRoomChargeOnCheckout, createVatInvoice, createSplitVatInvoices, createProforma, printFiscalReceiptForReservation, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates, overrideRoomPrice, getConsolidatedFolioSummary } from "@/app/actions/finance";
+import { postRoomChargeOnCheckout, createVatInvoice, createSplitVatInvoices, createProforma, printFiscalReceiptForReservation, printFiscalReceiptForReservations, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates, overrideRoomPrice, getConsolidatedFolioSummary } from "@/app/actions/finance";
 import { lookupCompanyByNip, createConsolidatedVatInvoice } from "@/app/actions/companies";
 import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { getEffectivePriceForRoomOnDate, getRatePlanInfoForRoomDate } from "@/app/actions/rooms";
@@ -131,7 +131,9 @@ interface UnifiedReservationDialogProps {
 }
 
 function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr + "T12:00:00Z");
+  if (!dateStr || typeof dateStr !== "string") return "";
+  const d = new Date(dateStr.trim() + "T12:00:00Z");
+  if (Number.isNaN(d.getTime())) return dateStr;
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
@@ -247,6 +249,16 @@ export function UnifiedReservationDialog({
   const [docPaymentMethod, setDocPaymentMethod] = useState<string>("CASH");
   const [issueDocMenuOpen, setIssueDocMenuOpen] = useState(false);
   const [splitInvoiceDialogOpen, setSplitInvoiceDialogOpen] = useState(false);
+  const [additionalInvoiceDialogOpen, setAdditionalInvoiceDialogOpen] = useState(false);
+  const [additionalInvoiceData, setAdditionalInvoiceData] = useState<{
+    resId: string;
+    scope: "HOTEL_ONLY" | "GASTRONOMY_ONLY";
+    existingNumber: string;
+    notes: string;
+    suggestedAmount: number | null;
+  } | null>(null);
+  const [additionalInvoiceAmount, setAdditionalInvoiceAmount] = useState("");
+  const [additionalInvoiceIssuing, setAdditionalInvoiceIssuing] = useState(false);
   const [splitHotelAmount, setSplitHotelAmount] = useState("");
   const [splitGastronomyAmount, setSplitGastronomyAmount] = useState("");
   const [splitReceiptAmount, setSplitReceiptAmount] = useState("");
@@ -903,29 +915,65 @@ export function UnifiedReservationDialog({
             toast.success(`Faktura VAT ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);
             window.open(`/finance/invoice/${result.data.id}?autoPrint=1`, "_blank");
           } else {
-            toast.error("error" in result ? result.error : "Błąd wystawiania faktury");
+            const err = "error" in result ? result.error : "Błąd wystawiania faktury";
+            const hotelMatch = /Już istnieje faktura hotelowa: (.+?)(?:\.|$)/.exec(err);
+            const gastronomyMatch = /Już istnieje faktura gastronomiczna: (.+?)(?:\.|$)/.exec(err);
+            const match = hotelMatch ?? gastronomyMatch;
+            if (match) {
+              const scope: "HOTEL_ONLY" | "GASTRONOMY_ONLY" = hotelMatch ? "HOTEL_ONLY" : "GASTRONOMY_ONLY";
+              const scopeLabel = scope === "HOTEL_ONLY" ? "hotelowa" : "gastronomiczna";
+              setAdditionalInvoiceData({
+                resId: docChoiceResId,
+                scope,
+                existingNumber: match[1].trim(),
+                notes: invoiceNotes.trim() || "",
+                suggestedAmount: docTotalAmount ?? null,
+              });
+              setAdditionalInvoiceAmount(docTotalAmount != null && docTotalAmount > 0 ? docTotalAmount.toFixed(2) : "");
+              setAdditionalInvoiceDialogOpen(true);
+            } else {
+              toast.error(err);
+            }
             setDocIssuing(false);
             return;
           }
         }
       }
-      if ((choice === "posnet" || (choice === "both" && amtRec > 0)) && docChoiceResId) {
-        const result = await printFiscalReceiptForReservation(docChoiceResId, docPaymentMethod || "CASH", amtRec > 0 ? amtRec : undefined);
-        if (result.success) {
-          window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
-          toast.success(result.data?.receiptNumber
-            ? `Paragon wydrukowany: ${result.data.receiptNumber}`
-            : "Paragon wysłany do kasy fiskalnej (POSNET)");
-          // Kopia paragonu do wydruku (recepcja)
-          const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(docChoiceResId)}${amtRec > 0 ? `&amount=${amtRec}` : ""}`;
-          const copyWindow = window.open(copyUrl, "_blank");
-          if (copyWindow) {
-            copyWindow.addEventListener("load", () => {
-              setTimeout(() => copyWindow.print(), 500);
-            });
+      if (choice === "posnet" || (choice === "both" && amtRec > 0)) {
+        if (docChoiceResId) {
+          const result = await printFiscalReceiptForReservation(docChoiceResId, docPaymentMethod || "CASH", amtRec > 0 ? amtRec : undefined);
+          if (result.success) {
+            window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
+            toast.success(result.data?.receiptNumber
+              ? `Paragon wydrukowany: ${result.data.receiptNumber}`
+              : "Paragon wysłany do kasy fiskalnej (POSNET)");
+            const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(docChoiceResId)}${amtRec > 0 ? `&amount=${amtRec}` : ""}`;
+            const copyWindow = window.open(copyUrl, "_blank");
+            if (copyWindow) {
+              copyWindow.addEventListener("load", () => {
+                setTimeout(() => copyWindow.print(), 500);
+              });
+            }
+          } else {
+            toast.error("error" in result ? result.error : "Błąd druku paragonu");
           }
-        } else {
-          toast.error("error" in result ? result.error : "Błąd druku paragonu");
+        } else if (docChoiceResIds.length > 0) {
+          const result = await printFiscalReceiptForReservations(docChoiceResIds, docPaymentMethod || "CASH", amtRec > 0 ? amtRec : undefined);
+          if (result.success) {
+            window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
+            toast.success(result.data?.receiptNumber
+              ? `Paragon wydrukowany: ${result.data.receiptNumber}`
+              : "Paragon wysłany do kasy fiskalnej (POSNET)");
+            const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(docChoiceResIds[0])}${amtRec > 0 ? `&amount=${amtRec}` : ""}`;
+            const copyWindow = window.open(copyUrl, "_blank");
+            if (copyWindow) {
+              copyWindow.addEventListener("load", () => {
+                setTimeout(() => copyWindow.print(), 500);
+              });
+            }
+          } else {
+            toast.error("error" in result ? result.error : "Błąd druku paragonu");
+          }
         }
       }
     } finally {
@@ -1555,6 +1603,81 @@ export function UnifiedReservationDialog({
               {docIssuing ? "Wystawianie…" : splitReceiptAmount && parseFloat(splitReceiptAmount) > 0 ? "Wystaw 2 faktury + paragon" : "Wystaw obie faktury"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dodatkowa faktura tego samego zakresu (np. dla kolejnego gościa) */}
+      <Dialog open={additionalInvoiceDialogOpen} onOpenChange={(open) => {
+        setAdditionalInvoiceDialogOpen(open);
+        if (!open) {
+          setAdditionalInvoiceData(null);
+          setAdditionalInvoiceAmount("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Dodatkowa faktura</DialogTitle>
+          </DialogHeader>
+          {additionalInvoiceData && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Faktura {additionalInvoiceData.scope === "HOTEL_ONLY" ? "hotelowa" : "gastronomiczna"} już istnieje (nr {additionalInvoiceData.existingNumber}). Czy chcesz wystawić dodatkową fakturę dla kolejnego gościa?
+              </p>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Kwota dodatkowej faktury [PLN]</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  placeholder={additionalInvoiceData.suggestedAmount != null && additionalInvoiceData.suggestedAmount > 0 ? additionalInvoiceData.suggestedAmount.toFixed(2) : "np. 190"}
+                  className="h-8"
+                  value={additionalInvoiceAmount}
+                  onChange={(e) => setAdditionalInvoiceAmount(e.target.value)}
+                />
+                {additionalInvoiceData.suggestedAmount != null && additionalInvoiceData.suggestedAmount > 0 && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Sugerowana kwota (suma z transakcji): {additionalInvoiceData.suggestedAmount.toFixed(2)} PLN</p>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" size="sm" onClick={() => setAdditionalInvoiceDialogOpen(false)}>Anuluj</Button>
+                <Button
+                  size="sm"
+                  disabled={additionalInvoiceIssuing || !additionalInvoiceAmount || (parseFloat(additionalInvoiceAmount) || 0) <= 0}
+                  onClick={async () => {
+                    if (!additionalInvoiceData) return;
+                    const amt = Math.round(parseFloat(additionalInvoiceAmount) * 100) / 100;
+                    if (amt <= 0) return;
+                    setAdditionalInvoiceIssuing(true);
+                    try {
+                      const result = await createVatInvoice(additionalInvoiceData.resId, undefined, {
+                        invoiceScope: additionalInvoiceData.scope,
+                        allowMultipleSameScope: true,
+                        amountGrossOverride: amt,
+                        notes: additionalInvoiceData.notes || undefined,
+                      });
+                      if (result.success && result.data) {
+                        toast.success(`Faktura VAT ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);
+                        window.open(`/finance/invoice/${result.data.id}?autoPrint=1`, "_blank");
+                        setAdditionalInvoiceDialogOpen(false);
+                        setAdditionalInvoiceData(null);
+                        setAdditionalInvoiceAmount("");
+                        setDocChoiceOpen(false);
+                        setDocChoiceResIds([]);
+                        setDocChoiceResId(null);
+                        onOpenChange(false);
+                      } else {
+                        toast.error("error" in result ? result.error : "Błąd wystawiania faktury");
+                      }
+                    } finally {
+                      setAdditionalInvoiceIssuing(false);
+                    }
+                  }}
+                >
+                  {additionalInvoiceIssuing ? "Wystawianie…" : "Wystaw dodatkową fakturę"}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

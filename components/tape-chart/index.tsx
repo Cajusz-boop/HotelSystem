@@ -775,6 +775,7 @@ export function TapeChart({
     }
     setLegendSaving(true);
     try {
+      console.log("[save combination] propertyId:", propertyId, "colors:", editCombinationColors);
       const result = await updatePropertyCombinationColors(propertyId, editCombinationColors);
       if (result.success) {
         setCombinationColors(editCombinationColors);

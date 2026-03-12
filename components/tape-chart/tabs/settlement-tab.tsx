@@ -363,23 +363,24 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   onPaymentRecorded,
 }, ref) {
   const isEdit = mode === "edit";
+  const safeRooms = rooms ?? [];
   const [localTaxLoading, setLocalTaxLoading] = useState(false);
   const priceInputRef = useRef<HTMLInputElement>(null);
   const [addChargeDialogOpen, setAddChargeDialogOpen] = useState(false);
   useImperativeHandle(ref, () => ({ openAddCharge: () => setAddChargeDialogOpen(true) }), []);
-  const roomBeds = rooms.find((r) => r.number === form.room)?.beds ?? 1;
+  const roomBeds = safeRooms.find((r) => r.number === form.room)?.beds ?? 1;
   const nights = computeNights(form.checkIn, form.checkOut);
 
-  const roomTypes = useMemo(() => [...new Set(rooms.map((r) => r.type).filter(Boolean))] as string[], [rooms]);
+  const roomTypes = useMemo(() => [...new Set(safeRooms.map((r) => r.type).filter(Boolean))] as string[], [safeRooms]);
   const filteredRoomsByType = useMemo(
-    () => (form.roomType ? rooms.filter((r) => r.type === form.roomType) : rooms),
-    [rooms, form.roomType]
+    () => (form.roomType ? safeRooms.filter((r) => r.type === form.roomType) : safeRooms),
+    [safeRooms, form.roomType]
   );
 
   /** Gdy brak kodów stawek – pokaż ceny wg typu pokoju z listy pokoi */
   const fallbackPricesFromRooms = useMemo(() => {
     const seen = new Set<string>();
-    return rooms
+    return safeRooms
       .filter((r): r is typeof r & { price: number } => r.price != null && r.price > 0)
       .reduce<Array<{ key: string; label: string; price: number }>>((acc, r) => {
         const key = (r.type ?? r.number) + "-" + r.price;
@@ -393,7 +394,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
         return acc;
       }, [])
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [rooms]);
+  }, [safeRooms]);
   const dateError = form.checkIn && form.checkOut && nights <= 0;
   const priceFromForm = form.rateCodePrice.trim() ? parseFloat(form.rateCodePrice) : null;
   const paxForRate = Math.max(1, (parseInt(form.adults || "1", 10) || 1) + (parseInt(form.children || "0", 10) || 0));
@@ -403,7 +404,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
     : null;
   const priceFromRate = effectivePricePerNight
     ?? priceFromRateCode
-    ?? rooms.find((r) => r.number === form.room)?.price;
+    ?? safeRooms.find((r) => r.number === form.room)?.price;
   const pricePerNight = (priceFromForm != null && !Number.isNaN(priceFromForm) && priceFromForm > 0)
     ? priceFromForm
     : priceFromRate;
@@ -443,6 +444,8 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   const [voucherLoading, setVoucherLoading] = useState(false);
   const [advanceLoading, setAdvanceLoading] = useState(false);
   const [folioItemsByNumber, setFolioItemsByNumber] = useState<Record<number, Array<{ id: string; type: string; description: string | null; amount: number; status: string }>>>({});
+  const [paymentItems, setPaymentItems] = useState<Array<{ id: string; amount: number; paymentMethod: string | null; description: string | null; postedAt: Date }>>([]);
+  const [loadingPaymentItems, setLoadingPaymentItems] = useState(false);
   const [loadingItemsFolio, setLoadingItemsFolio] = useState<number | null>(null);
   const [transferLoadingId, setTransferLoadingId] = useState<string | null>(null);
   const [discountFolioNumber, setDiscountFolioNumber] = useState<number | null>(null);
@@ -476,8 +479,8 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
 
   // Auto-ustaw kod stawki przy wyborze pokoju (tylko create) – gdy typ pokoju ma domyślny kod
   useEffect(() => {
-    if (isEdit || !form.room || !rooms.length) return;
-    const room = rooms.find((r) => r.number === form.room);
+    if (isEdit || !form.room || !safeRooms.length) return;
+    const room = safeRooms.find((r) => r.number === form.room);
     if (!room?.defaultRateCodeId || !room.defaultRateCode) return;
     if (form.rateCodeId === room.defaultRateCodeId) return; // już ustawiony
     const rc = room.defaultRateCode;
@@ -497,7 +500,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
       rateCodeId: room.defaultRateCodeId,
       rateCodePrice: computed != null ? String(computed) : "",
     });
-  }, [form.room, rooms]);
+  }, [form.room, safeRooms]);
 
   // Aktualizuj rateCodePrice przy zmianie liczby osób – TYLKO gdy billingMode="person" (cena za osobo-dobę).
   // W trybie "room" (cena pokoju za dobę) użytkownik może ręcznie wpisać cenę – nie nadpisuj!
@@ -577,7 +580,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   }, [isEdit, reservation?.id]);
 
   useEffect(() => {
-    if (!isEdit || !reservation?.id) { setFolioSummaries([]); setPaymentsByMethod([]); setReservationGuests([]); return; }
+    if (!isEdit || !reservation?.id) { setFolioSummaries([]); setPaymentsByMethod([]); setReservationGuests([]); setPaymentItems([]); return; }
     getFolioSummary(reservation.id).then((r) => {
       if (r.success && r.data?.folios) {
         setFolioSummaries(parseFolios(r.data.folios));
@@ -602,6 +605,27 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
     } else setCompanyOptions([]);
   }, [companySearchQuery]);
 
+  const loadPaymentItems = useCallback(async () => {
+    if (!reservation?.id) return;
+    setLoadingPaymentItems(true);
+    const result = await getFolioItems({ reservationId: reservation.id, includeVoided: false });
+    setLoadingPaymentItems(false);
+    if (result.success && result.data?.items) {
+      const payments = result.data.items
+        .filter((it: { type: string }) => it.type === "PAYMENT")
+        .map((it: { id: string; amount: number; paymentMethod: string | null; description: string | null; postedAt: Date }) => ({
+          id: it.id,
+          amount: it.amount,
+          paymentMethod: it.paymentMethod,
+          description: it.description,
+          postedAt: it.postedAt,
+        }));
+      setPaymentItems(payments);
+    } else {
+      setPaymentItems([]);
+    }
+  }, [reservation?.id]);
+
   const refreshFolios = useCallback(async () => {
     if (!reservation?.id) return;
     const r = await getFolioSummary(reservation.id);
@@ -609,7 +633,8 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
       setFolioSummaries(parseFolios(r.data.folios));
       setPaymentsByMethod(r.data.paymentsByMethod ?? []);
     }
-  }, [reservation?.id]);
+    loadPaymentItems();
+  }, [reservation?.id, loadPaymentItems]);
 
   const loadFolioItems = useCallback(async (folioNum: number) => {
     if (!reservation?.id) return;
@@ -627,6 +652,10 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
       setFolioItemsByNumber((prev) => ({ ...prev, [folioNum]: [] }));
     }
   }, [reservation?.id]);
+
+  useEffect(() => {
+    if (isEdit && reservation?.id) loadPaymentItems();
+  }, [isEdit, reservation?.id, loadPaymentItems]);
 
   const renderSuggestionsDropdown = (forField: "name" | "email" | "phone") => {
     if (!suggestionsOpen || guestSuggestions.length === 0 || suggestionsField !== forField) return null;
@@ -690,7 +719,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
     const effectivePaid = form.paidAmountOverride.trim() ? (parseFloat(form.paidAmountOverride) || totalPaid) : totalPaid;
     const pozostalo = naliczono - effectivePaid;
     const sectionHeader = "text-xs font-medium uppercase tracking-wider text-gray-500 border-b border-gray-100 pb-1.5 mb-2";
-    const _selectedRoomData = rooms.find((r) => r.number === form.room);
+    const _selectedRoomData = safeRooms.find((r) => r.number === form.room);
     const filteredRooms = filteredRoomsByType;
     return (
       <div className="space-y-6">
@@ -705,7 +734,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
               onChange={(e) => {
                 const t = e.target.value;
                 onFormChange({ roomType: t });
-                const byType = t ? rooms.filter((r) => r.type === t) : rooms;
+                const byType = t ? safeRooms.filter((r) => r.type === t) : safeRooms;
                 const keepRoom = byType.some((r) => r.number === form.room);
                 if (!keepRoom && byType.length > 0) onFormChange({ room: byType[0].number });
                 else if (!keepRoom) onFormChange({ room: "" });
@@ -725,7 +754,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
                 value={form.room}
                 onChange={(e) => {
                   const num = e.target.value;
-                  onFormChange({ room: num, roomType: rooms.find((r) => r.number === num)?.type ?? form.roomType });
+                  onFormChange({ room: num, roomType: safeRooms.find((r) => r.number === num)?.type ?? form.roomType });
                 }}
                 required
                 className={selectClass}
@@ -1091,6 +1120,25 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
               ))}
             </div>
           )}
+          {isEdit && reservation?.id && paymentItems.length > 0 && (
+            <div className="pl-2 mt-1 space-y-0.5 border-t pt-1">
+              <span className="text-[10px] font-medium text-muted-foreground">Lista wpłat</span>
+              {loadingPaymentItems ? (
+                <p className="text-[10px] text-muted-foreground">Ładowanie…</p>
+              ) : (
+                paymentItems.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between gap-2 text-[10px]">
+                    <span className="tabular-nums">{p.amount.toFixed(2)} PLN</span>
+                    <span className="text-muted-foreground">{PAYMENT_METHOD_LABELS[p.paymentMethod ?? ""] ?? p.paymentMethod ?? "—"}</span>
+                    <span className="text-muted-foreground shrink-0">{p.postedAt ? new Date(p.postedAt).toLocaleString("pl-PL", { dateStyle: "short", timeStyle: "short" }) : ""}</span>
+                    <Button type="button" variant="ghost" size="sm" className="h-5 w-5 p-0 text-destructive hover:text-destructive" title="Usuń wpłatę" onClick={() => { setVoidItemId(p.id); setVoidItemReason(""); }}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
           <div className="flex justify-between font-bold border-t pt-1 mt-1"><span>Saldo</span><span className="tabular-nums">{pozostalo >= 0 ? `${pozostalo.toFixed(2)} PLN` : `(${Math.abs(pozostalo).toFixed(2)}) PLN`}</span></div>
           {folioSummaries.length > 1 && (
             <div className="mt-2 pt-2 border-t border-border/50 space-y-0.5">
@@ -1324,6 +1372,25 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
                   <span className="tabular-nums">{amount.toFixed(2)} PLN</span>
                 </div>
               ))}
+            </div>
+          )}
+          {isEdit && reservation?.id && paymentItems.length > 0 && (
+            <div className="pl-2 mt-1 space-y-0.5 border-t pt-1">
+              <span className="text-[10px] font-medium text-muted-foreground">Lista wpłat</span>
+              {loadingPaymentItems ? (
+                <p className="text-[10px] text-muted-foreground">Ładowanie…</p>
+              ) : (
+                paymentItems.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between gap-2 text-[10px]">
+                    <span className="tabular-nums">{p.amount.toFixed(2)} PLN</span>
+                    <span className="text-muted-foreground">{PAYMENT_METHOD_LABELS[p.paymentMethod ?? ""] ?? p.paymentMethod ?? "—"}</span>
+                    <span className="text-muted-foreground shrink-0">{p.postedAt ? new Date(p.postedAt).toLocaleString("pl-PL", { dateStyle: "short", timeStyle: "short" }) : ""}</span>
+                    <Button type="button" variant="ghost" size="sm" className="h-5 w-5 p-0 text-destructive hover:text-destructive" title="Usuń wpłatę" onClick={() => { setVoidItemId(p.id); setVoidItemReason(""); }}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))
+              )}
             </div>
           )}
           <div className="border-t pt-1 mt-1" />
@@ -1840,10 +1907,10 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
 
         <div className="grid grid-cols-[80px_1fr] items-center gap-x-2 gap-y-1">
           <Label className="text-xs text-right text-muted-foreground">🚪 Pokój</Label>
-          {rooms.length > 0 ? (
+          {safeRooms.length > 0 ? (
             <select id="uni-room" data-testid="create-reservation-room" value={form.room} onChange={(e) => onFormChange({ room: e.target.value })} required className={selectClass}>
               <option value="">— wybierz —</option>
-              {rooms.map((r) => <option key={r.number} value={r.number}>{r.number}{r.type ? ` · ${r.type}` : ""}</option>)}
+              {safeRooms.map((r) => <option key={r.number} value={r.number}>{r.number}{r.type ? ` · ${r.type}` : ""}</option>)}
             </select>
           ) : (
             <Input id="uni-room" className={inputCompact} value={form.room} onChange={(e) => onFormChange({ room: e.target.value })} placeholder="Nr pokoju" required />
@@ -2696,9 +2763,10 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
                     toast.success("Pozycja usunięta z folio");
                     setVoidItemId(null);
                     setVoidItemReason("");
-                    refreshFolios();
+                    await refreshFolios();
                     if (reservation?.id) {
                       Object.keys(folioItemsByNumber).forEach((fn) => loadFolioItems(parseInt(fn, 10)));
+                      onPaymentRecorded?.(reservation.id);
                     }
                   } else {
                     toast.error("error" in result ? result.error : "Błąd usuwania pozycji");

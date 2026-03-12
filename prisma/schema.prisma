@@ -84,6 +84,8 @@ model Property {
   serviceRates       ServiceRate[]
   ageGroupConfigs    AgeGroupConfig[]
   seasons            Season[]
+
+  @@map("PropertyNew")
 }
 
 /** Rozliczenia z właścicielami – historia dokumentów rozliczenia. */

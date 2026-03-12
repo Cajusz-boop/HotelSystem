@@ -4166,6 +4166,103 @@ export async function printFiscalReceiptForReservation(
   }
 }
 
+/** Druk paragonu fiskalnego dla wielu rezerwacji (zbiorcza) – sumuje transakcje w jeden paragon. */
+export async function printFiscalReceiptForReservations(
+  reservationIds: string[],
+  paymentType: string = "CASH",
+  amountOverride?: number
+): Promise<ActionResult<{ receiptNumber?: string }>> {
+  if (!reservationIds?.length) {
+    return { success: false, error: "Brak rezerwacji do paragonu" };
+  }
+  try {
+    const chargeTypes = ["ROOM", "LOCAL_TAX", "MINIBAR", "GASTRONOMY", "SPA", "PARKING", "RENTAL", "PHONE", "LAUNDRY", "TRANSPORT", "ATTRACTION", "OTHER"];
+    const allTransactions: Array<{ amount: number }> = [];
+
+    for (const reservationId of reservationIds) {
+      let reservation = await prisma.reservation.findUnique({
+        where: { id: reservationId },
+        include: { transactions: true },
+      });
+      if (!reservation) {
+        return { success: false, error: `Rezerwacja ${reservationId} nie istnieje` };
+      }
+      const hasRoomCharge = reservation.transactions.some(
+        (t) => t.type === "ROOM" && Number(t.amount) > 0 && (t.status === "ACTIVE" || t.status == null)
+      );
+      if (!hasRoomCharge) {
+        const roomChargeResult = await postRoomChargeOnCheckout(reservationId);
+        if (roomChargeResult.success && roomChargeResult.data && !roomChargeResult.data.skipped) {
+          const updated = await prisma.reservation.findUnique({
+            where: { id: reservationId },
+            include: { transactions: true },
+          });
+          if (updated) reservation = updated;
+        }
+      }
+      const chargeTransactions = reservation.transactions.filter(
+        (t) => chargeTypes.includes(t.type) && Number(t.amount) > 0 && (t.status === "ACTIVE" || t.status == null)
+      );
+      allTransactions.push(...chargeTransactions.map((t) => ({ amount: Number(t.amount) })));
+    }
+
+    let totalAmount = allTransactions.reduce((s, t) => s + t.amount, 0);
+
+    if (totalAmount <= 0 && (amountOverride == null || amountOverride <= 0)) {
+      return { success: false, error: "Brak pozycji do wydrukowania na paragonie" };
+    }
+
+    const RECEIPT_ITEM_NAME = "Usługa gastronomiczna";
+    let items: Array<{ name: string; quantity: number; unitPrice: number; vatRate: number }>;
+    if (amountOverride != null && Number.isFinite(amountOverride) && amountOverride > 0) {
+      totalAmount = Math.round(amountOverride * 100) / 100;
+      items = [{ name: RECEIPT_ITEM_NAME, quantity: 1, unitPrice: totalAmount, vatRate: 8 }];
+    } else {
+      totalAmount = Math.round(totalAmount * 100) / 100;
+      items = allTransactions.map((t) => ({
+        name: RECEIPT_ITEM_NAME,
+        quantity: 1,
+        unitPrice: t.amount,
+        vatRate: 8,
+      }));
+    }
+
+    const templateResult = await getFiscalReceiptTemplate();
+    const headerLines: string[] = [];
+    const footerLines: string[] = [];
+    if (templateResult.success && templateResult.data) {
+      const t = templateResult.data;
+      if (t.headerLine1) headerLines.push(t.headerLine1);
+      if (t.headerLine2) headerLines.push(t.headerLine2);
+      if (t.headerLine3) headerLines.push(t.headerLine3);
+      if (t.footerLine1) footerLines.push(t.footerLine1);
+      if (t.footerLine2) footerLines.push(t.footerLine2);
+      if (t.footerLine3) footerLines.push(t.footerLine3);
+    }
+
+    const receiptRequest = {
+      transactionId: `RECEIPT-CONSOLIDATED-${Date.now()}`,
+      reservationId: reservationIds[0],
+      items,
+      totalAmount,
+      paymentType,
+      headerLines: headerLines.length > 0 ? headerLines : undefined,
+      footerLines: footerLines.length > 0 ? footerLines : undefined,
+    };
+
+    const result = await printFiscalReceipt(receiptRequest);
+    if (!result.success) {
+      return { success: false, error: result.error ?? "Błąd druku paragonu" };
+    }
+    return { success: true, data: { receiptNumber: result.receiptNumber } };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd druku paragonu",
+    };
+  }
+}
+
 /** Druk paragonu fiskalnego dla faktury zbiorczej (jedna pozycja). */
 export async function printFiscalReceiptForConsolidatedInvoice(
   invoiceId: string,
@@ -4772,6 +4869,8 @@ export async function createVatInvoice(
     amountGrossOverride?: number;
     /** Nadpisuje reservation.invoiceScope – użyj dla faktury hotel-only lub gastronomy-only */
     invoiceScope?: "ALL" | "HOTEL_ONLY" | "GASTRONOMY_ONLY";
+    /** Zezwala na kolejną fakturę tego samego zakresu (HOTEL_ONLY/GASTRONOMY_ONLY) – wymaga amountGrossOverride */
+    allowMultipleSameScope?: boolean;
   }
 ): Promise<
   ActionResult<{
@@ -4820,10 +4919,19 @@ export async function createVatInvoice(
             error: `Rezerwacja ma już wystawioną fakturę VAT: ${ex.number}. Nie można wystawić drugiej faktury dla tej samej rezerwacji.`,
           };
         }
-        if (exScope === effectiveScope) {
+        if (exScope === effectiveScope && !options?.allowMultipleSameScope) {
           return {
             success: false,
             error: `Już istnieje faktura ${effectiveScope === "HOTEL_ONLY" ? "hotelowa" : "gastronomiczna"}: ${ex.number}.`,
+          };
+        }
+      }
+      if (options?.allowMultipleSameScope) {
+        const amt = options?.amountGrossOverride;
+        if (amt == null || !Number.isFinite(amt) || amt <= 0) {
+          return {
+            success: false,
+            error: "Przy wystawianiu kolejnej faktury tego samego zakresu wymagane jest podanie kwoty.",
           };
         }
       }
