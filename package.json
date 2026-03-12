@@ -51,6 +51,7 @@
     "test:reception-flow": "npx tsx scripts/test-full-reception-flow.ts",
     "db:push:staging": "dotenv -e .env.staging -- prisma db push",
     "db:migrate:staging": "dotenv -e .env.staging -- prisma migrate deploy",
+    "training:screens": "npx tsx scripts/training-screenshots.ts",
     "gcal:preview": "npx tsx scripts/preview-gcal-events.ts",
     "gcal:import": "npx tsx scripts/import-gcal-events.ts"
   },

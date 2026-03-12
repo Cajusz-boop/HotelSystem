@@ -74,19 +74,21 @@ async function main() {
   const adminEmail = "admin@hotel.local";
   const adminPassword = "admin123";
   const passwordHash = await bcrypt.hash(adminPassword, 10);
+  const pinHash = await bcrypt.hash("1234", 10);
   const now = new Date();
   await prisma.user.upsert({
     where: { email: adminEmail },
-    update: { passwordHash, name: "Administrator", role: "MANAGER", passwordChangedAt: now },
+    update: { passwordHash, pin: pinHash, name: "Administrator", role: "MANAGER", passwordChangedAt: now },
     create: {
       email: adminEmail,
       name: "Administrator",
       passwordHash,
+      pin: pinHash,
       role: "MANAGER",
       passwordChangedAt: now,
     },
   });
-  console.log(`✔ Admin user ready: ${adminEmail} / ${adminPassword}`);
+  console.log(`✔ Admin user ready: ${adminEmail} / ${adminPassword} (PIN: 1234)`);
 
   const rooms: Array<{
     number: string;

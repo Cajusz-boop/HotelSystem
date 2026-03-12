@@ -32,6 +32,7 @@ import {
   Presentation,
   Calculator,
   Crown,
+  GraduationCap,
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
@@ -361,6 +362,15 @@ export const features: DashboardFeature[] = [
     description: "Obłożenie, przychody, rozliczenia — widok dla właściciela obiektu",
     category: "Dla Właściciela",
     icon: Crown,
+    guestStage: null,
+  },
+  {
+    id: "training",
+    href: "/training",
+    label: "Tryb demo szkoleniowy",
+    description: "Utwórz przykładowe dane do szkoleń i screenshotów",
+    category: "Narzędzia",
+    icon: GraduationCap,
     guestStage: null,
   },
   {

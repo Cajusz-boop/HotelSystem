@@ -1302,6 +1302,40 @@ export function TapeChart({
     [statusLabels, statusDescriptions]
   );
 
+  const footerLegendItems = useMemo(() => {
+    if (!combinationColors || Object.keys(combinationColors).length === 0) {
+      return [
+        { color: paymentBg?.["PAID"] ?? "rgb(20 184 166)", label: "Opłacona" },
+        { color: paymentBg?.["PARTIAL"] ?? "rgb(234 179 8)", label: "Częściowo opłacona" },
+        { color: paymentBg?.["UNPAID"] ?? "rgb(139 92 246)", label: "Nieopłacona" },
+      ];
+    }
+    const RESERVATION_STATUS_LABELS_MAP: Record<string, string> = {
+      PENDING: "Oczekuje",
+      CONFIRMED: "Potwierdzona",
+      CHECKED_IN: "Zameldowany",
+      CHECKED_OUT: "Wymeldowany",
+      CANCELLED: "Anulowana",
+      NO_SHOW: "Nie przyjechał",
+    };
+    const PAYMENT_STATUS_LABELS_MAP: Record<string, string> = {
+      PAID: "opłacona",
+      PARTIAL: "częściowo",
+      UNPAID: "nieopłacona",
+    };
+    const colorMap = new Map<string, string[]>();
+    Object.entries(combinationColors).forEach(([key, color]) => {
+      const [resStatus, payStatus] = key.split("_");
+      const label = `${RESERVATION_STATUS_LABELS_MAP[resStatus] ?? resStatus} · ${PAYMENT_STATUS_LABELS_MAP[payStatus] ?? payStatus}`;
+      if (!colorMap.has(color)) colorMap.set(color, []);
+      colorMap.get(color)!.push(label);
+    });
+    return Array.from(colorMap.entries()).map(([color, labels]) => ({
+      color,
+      label: labels.length <= 2 ? labels.join(", ") : labels[0] + ` +${labels.length - 1}`,
+    }));
+  }, [combinationColors, paymentBg]);
+
   // Inicjalizacja stanów edycji legendy przy otwarciu dialogu
   useEffect(() => {
     if (!legendDialogOpen) {
@@ -3316,18 +3350,17 @@ export function TapeChart({
             <div className="flex flex-wrap items-center gap-4 text-sm">
               {statusTab === "statuses" && (
                 <>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-block h-3 w-6 rounded-sm border border-border bg-[rgb(20_184_166)]" aria-hidden title="Opłacona" />
-                    <span className="text-xs">Opłacona</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-block h-3 w-6 rounded-sm border border-border bg-[rgb(234_179_8)]" aria-hidden title="Częściowo opłacona" />
-                    <span className="text-xs">Częściowo opłacona</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-block h-3 w-6 rounded-sm border border-border bg-[rgb(139_92_246)]" aria-hidden title="Nieopłacona" />
-                    <span className="text-xs">Nieopłacona</span>
-                  </div>
+                  {footerLegendItems.map((item, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span
+                        className="inline-block h-3 w-6 rounded-sm border border-border"
+                        style={{ backgroundColor: item.color }}
+                        aria-hidden
+                        title={item.label}
+                      />
+                      <span className="text-xs">{item.label}</span>
+                    </div>
+                  ))}
                   <span className="mx-1 h-4 w-px bg-border" aria-hidden />
                   <span className="text-[10px] text-muted-foreground mr-1">Pasek z lewej:</span>
                   {statusLegendItems.map((item) => (

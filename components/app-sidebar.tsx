@@ -238,6 +238,7 @@ const navSections: NavSection[] = [
         ],
       },
       { href: "/owner", labelKey: "sidebar.ownerPortal", icon: LogIn, permission: "owner.portal" },
+      { href: "/training", label: "Tryb demo szkoleniowy", icon: BookOpen },
       { href: "/pomoc", labelKey: "sidebar.help", icon: HelpCircle },
     ],
   },
