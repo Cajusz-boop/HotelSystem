@@ -209,15 +209,126 @@ export async function updateFormFieldsConfig(data: FormFieldsConfig): Promise<
 
 // --- Konfiguracja pól formularza imprez (typ imprezy → widoczność pól) ---
 const DEFAULT_EVENT_TYPE_FIELDS_CONFIG: Record<string, Record<string, boolean>> = {
-  WESELE:    { showChurch: true,  showBrideOrchestra: true,  showAfterparty: true,  showTortNapoje: true,  showPoprawiny: true,  showZespol: true,  showDekoracje: true,  showFacebook: true  },
-  KOMUNIA:   { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true,  showPoprawiny: false, showZespol: true,  showDekoracje: true,  showFacebook: true  },
-  CHRZCINY:  { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true,  showPoprawiny: false, showZespol: false, showDekoracje: true,  showFacebook: true  },
-  URODZINY:  { showChurch: false, showBrideOrchestra: false, showAfterparty: true,  showTortNapoje: true,  showPoprawiny: false, showZespol: true,  showDekoracje: true,  showFacebook: true  },
-  STYPA:     { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: false, showPoprawiny: false, showZespol: false, showDekoracje: false, showFacebook: false },
-  FIRMOWA:   { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true,  showPoprawiny: false, showZespol: true,  showDekoracje: false, showFacebook: false },
-  SYLWESTER: { showChurch: false, showBrideOrchestra: false, showAfterparty: true,  showTortNapoje: true,  showPoprawiny: false, showZespol: true,  showDekoracje: true,  showFacebook: true  },
-  INNE:      { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true,  showPoprawiny: false, showZespol: true,  showDekoracje: true,  showFacebook: true  },
+  WESELE: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: true, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: true, adultsCount: true,
+    children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
+    cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
+    drinksArrival: true, drinksStorage: true, champagneStorage: true, firstBottlesBy: true, alcoholAtTeamTable: true,
+    cakesSwedishTable: true, fruitsSwedishTable: true, ownFlowers: true, ownVases: true,
+    placeCards: true, placeCardsLayout: true, decorationColor: true, tableLayout: true,
+    brideGroomTable: true, orchestraTable: true, breadWelcomeBy: true, extraAttractions: true,
+    specialRequests: true, facebookConsent: true, ownNapkins: true, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: true, afterpartyTimeFrom: true, afterpartyTimeTo: true,
+    afterpartyGuests: true, afterpartyMenu: true, afterpartyMusic: true, notes: true,
+  },
+  KOMUNIA: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
+    children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
+    cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
+    drinksArrival: true, drinksStorage: true, champagneStorage: true, firstBottlesBy: true, alcoholAtTeamTable: true,
+    cakesSwedishTable: true, fruitsSwedishTable: true, ownFlowers: true, ownVases: true,
+    placeCards: true, placeCardsLayout: true, decorationColor: true, tableLayout: true,
+    brideGroomTable: false, orchestraTable: false, breadWelcomeBy: true, extraAttractions: true,
+    specialRequests: true, facebookConsent: true, ownNapkins: true, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: false, afterpartyTimeFrom: false, afterpartyTimeTo: false,
+    afterpartyGuests: false, afterpartyMenu: false, afterpartyMusic: false, notes: true,
+  },
+  CHRZCINY: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
+    children03: true, children47: true, orchestraCount: false, cameramanCount: false, photographerCount: false,
+    cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
+    drinksArrival: true, drinksStorage: true, champagneStorage: false, firstBottlesBy: false, alcoholAtTeamTable: false,
+    cakesSwedishTable: true, fruitsSwedishTable: true, ownFlowers: true, ownVases: true,
+    placeCards: false, placeCardsLayout: false, decorationColor: false, tableLayout: true,
+    brideGroomTable: false, orchestraTable: false, breadWelcomeBy: true, extraAttractions: true,
+    specialRequests: true, facebookConsent: true, ownNapkins: false, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: false, afterpartyTimeFrom: false, afterpartyTimeTo: false,
+    afterpartyGuests: false, afterpartyMenu: false, afterpartyMusic: false, notes: true,
+  },
+  URODZINY: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
+    children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
+    cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
+    drinksArrival: true, drinksStorage: true, champagneStorage: true, firstBottlesBy: true, alcoholAtTeamTable: true,
+    cakesSwedishTable: true, fruitsSwedishTable: true, ownFlowers: true, ownVases: true,
+    placeCards: true, placeCardsLayout: true, decorationColor: true, tableLayout: true,
+    brideGroomTable: false, orchestraTable: false, breadWelcomeBy: true, extraAttractions: true,
+    specialRequests: true, facebookConsent: true, ownNapkins: true, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: true, afterpartyTimeFrom: true, afterpartyTimeTo: true,
+    afterpartyGuests: true, afterpartyMenu: true, afterpartyMusic: true, notes: true,
+  },
+  STYPA: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
+    children03: false, children47: false, orchestraCount: false, cameramanCount: false, photographerCount: false,
+    cakesAndDesserts: false, cakeOrderedAt: false, cakeArrivalTime: false, cakeServedAt: false,
+    drinksArrival: false, drinksStorage: false, champagneStorage: false, firstBottlesBy: false, alcoholAtTeamTable: false,
+    cakesSwedishTable: false, fruitsSwedishTable: false, ownFlowers: false, ownVases: false,
+    placeCards: false, placeCardsLayout: false, decorationColor: false, tableLayout: true,
+    brideGroomTable: false, orchestraTable: false, breadWelcomeBy: false, extraAttractions: false,
+    specialRequests: true, facebookConsent: false, ownNapkins: false, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: false, afterpartyTimeFrom: false, afterpartyTimeTo: false,
+    afterpartyGuests: false, afterpartyMenu: false, afterpartyMusic: false, notes: true,
+  },
+  FIRMOWA: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
+    children03: false, children47: false, orchestraCount: true, cameramanCount: true, photographerCount: true,
+    cakesAndDesserts: true, cakeOrderedAt: false, cakeArrivalTime: false, cakeServedAt: false,
+    drinksArrival: true, drinksStorage: true, champagneStorage: false, firstBottlesBy: false, alcoholAtTeamTable: true,
+    cakesSwedishTable: true, fruitsSwedishTable: true, ownFlowers: false, ownVases: false,
+    placeCards: false, placeCardsLayout: false, decorationColor: false, tableLayout: true,
+    brideGroomTable: false, orchestraTable: false, breadWelcomeBy: false, extraAttractions: true,
+    specialRequests: true, facebookConsent: false, ownNapkins: false, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: false, afterpartyTimeFrom: false, afterpartyTimeTo: false,
+    afterpartyGuests: false, afterpartyMenu: false, afterpartyMusic: false, notes: true,
+  },
+  SYLWESTER: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
+    children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
+    cakesAndDesserts: true, cakeOrderedAt: false, cakeArrivalTime: false, cakeServedAt: false,
+    drinksArrival: true, drinksStorage: true, champagneStorage: true, firstBottlesBy: true, alcoholAtTeamTable: true,
+    cakesSwedishTable: true, fruitsSwedishTable: true, ownFlowers: true, ownVases: true,
+    placeCards: true, placeCardsLayout: true, decorationColor: true, tableLayout: true,
+    brideGroomTable: false, orchestraTable: false, breadWelcomeBy: true, extraAttractions: true,
+    specialRequests: true, facebookConsent: true, ownNapkins: true, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: true, afterpartyTimeFrom: true, afterpartyTimeTo: true,
+    afterpartyGuests: true, afterpartyMenu: true, afterpartyMusic: true, notes: true,
+  },
+  INNE: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
+    children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
+    cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
+    drinksArrival: true, drinksStorage: true, champagneStorage: true, firstBottlesBy: true, alcoholAtTeamTable: true,
+    cakesSwedishTable: true, fruitsSwedishTable: true, ownFlowers: true, ownVases: true,
+    placeCards: true, placeCardsLayout: true, decorationColor: true, tableLayout: true,
+    brideGroomTable: false, orchestraTable: false, breadWelcomeBy: true, extraAttractions: true,
+    specialRequests: true, facebookConsent: true, ownNapkins: true, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: false, afterpartyTimeFrom: false, afterpartyTimeTo: false,
+    afterpartyGuests: false, afterpartyMenu: false, afterpartyMusic: false, notes: true,
+  },
 };
+
+const NEW_FORMAT_KEYS = ["clientName", "eventDate", "roomName"];
+function isNewFormatConfig(cfg: Record<string, unknown> | null): boolean {
+  if (!cfg || typeof cfg !== "object") return false;
+  const keys = Object.keys(cfg);
+  return keys.length > 0 && NEW_FORMAT_KEYS.some((k) => k in cfg);
+}
 
 /** Odczyt konfiguracji pól dla typów imprez – bez wymagania admin (używane w formularzach). */
 export async function getEventTypeFieldsConfig(): Promise<{
@@ -227,8 +338,12 @@ export async function getEventTypeFieldsConfig(): Promise<{
 }> {
   try {
     const config = await prisma.hotelConfig.findUnique({ where: { id: "default" } });
-    if (config?.eventTypeFieldsConfig) {
-      return { success: true, data: config.eventTypeFieldsConfig as Record<string, Record<string, boolean>> };
+    const raw = config?.eventTypeFieldsConfig as Record<string, Record<string, boolean>> | null | undefined;
+    if (raw && typeof raw === "object") {
+      const first = Object.values(raw)[0];
+      if (isNewFormatConfig(first)) {
+        return { success: true, data: raw };
+      }
     }
     return { success: true, data: DEFAULT_EVENT_TYPE_FIELDS_CONFIG };
   } catch (error) {

@@ -14,27 +14,120 @@ const EVENT_TYPES = [
   { value: "INNE", label: "Inne" },
 ] as const;
 
-const EVENT_TYPE_FIELDS_CONFIG: Record<
-  string,
-  {
-    showChurch: boolean;
-    showBrideOrchestra: boolean;
-    showAfterparty: boolean;
-    showTortNapoje: boolean;
-    showPoprawiny: boolean;
-    showZespol: boolean;
-    showDekoracje: boolean;
-    showFacebook: boolean;
-  }
-> = {
-  WESELE: { showChurch: true, showBrideOrchestra: true, showAfterparty: true, showTortNapoje: true, showPoprawiny: true, showZespol: true, showDekoracje: true, showFacebook: true },
-  KOMUNIA: { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true, showPoprawiny: false, showZespol: true, showDekoracje: true, showFacebook: true },
-  CHRZCINY: { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true, showPoprawiny: false, showZespol: false, showDekoracje: true, showFacebook: true },
-  URODZINY: { showChurch: false, showBrideOrchestra: false, showAfterparty: true, showTortNapoje: true, showPoprawiny: false, showZespol: true, showDekoracje: true, showFacebook: true },
-  STYPA: { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: false, showPoprawiny: false, showZespol: false, showDekoracje: false, showFacebook: false },
-  FIRMOWA: { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true, showPoprawiny: false, showZespol: true, showDekoracje: false, showFacebook: false },
-  SYLWESTER: { showChurch: false, showBrideOrchestra: false, showAfterparty: true, showTortNapoje: true, showPoprawiny: false, showZespol: true, showDekoracje: true, showFacebook: true },
-  INNE: { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true, showPoprawiny: false, showZespol: true, showDekoracje: true, showFacebook: true },
+/** Fallback – używany gdy eventTypeFieldsConfig nie jest przekazany. */
+const EVENT_TYPE_FIELDS_CONFIG: Record<string, Record<string, boolean>> = {
+  WESELE: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: true, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: true, adultsCount: true,
+    children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
+    cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
+    drinksArrival: true, drinksStorage: true, champagneStorage: true, firstBottlesBy: true, alcoholAtTeamTable: true,
+    cakesSwedishTable: true, fruitsSwedishTable: true, ownFlowers: true, ownVases: true,
+    placeCards: true, placeCardsLayout: true, decorationColor: true, tableLayout: true,
+    brideGroomTable: true, orchestraTable: true, breadWelcomeBy: true, extraAttractions: true,
+    specialRequests: true, facebookConsent: true, ownNapkins: true, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: true, afterpartyTimeFrom: true, afterpartyTimeTo: true,
+    afterpartyGuests: true, afterpartyMenu: true, afterpartyMusic: true, notes: true,
+  },
+  KOMUNIA: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
+    children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
+    cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
+    drinksArrival: true, drinksStorage: true, champagneStorage: true, firstBottlesBy: true, alcoholAtTeamTable: true,
+    cakesSwedishTable: true, fruitsSwedishTable: true, ownFlowers: true, ownVases: true,
+    placeCards: true, placeCardsLayout: true, decorationColor: true, tableLayout: true,
+    brideGroomTable: false, orchestraTable: false, breadWelcomeBy: true, extraAttractions: true,
+    specialRequests: true, facebookConsent: true, ownNapkins: true, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: false, afterpartyTimeFrom: false, afterpartyTimeTo: false,
+    afterpartyGuests: false, afterpartyMenu: false, afterpartyMusic: false, notes: true,
+  },
+  CHRZCINY: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
+    children03: true, children47: true, orchestraCount: false, cameramanCount: false, photographerCount: false,
+    cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
+    drinksArrival: true, drinksStorage: true, champagneStorage: false, firstBottlesBy: false, alcoholAtTeamTable: false,
+    cakesSwedishTable: true, fruitsSwedishTable: true, ownFlowers: true, ownVases: true,
+    placeCards: false, placeCardsLayout: false, decorationColor: false, tableLayout: true,
+    brideGroomTable: false, orchestraTable: false, breadWelcomeBy: true, extraAttractions: true,
+    specialRequests: true, facebookConsent: true, ownNapkins: false, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: false, afterpartyTimeFrom: false, afterpartyTimeTo: false,
+    afterpartyGuests: false, afterpartyMenu: false, afterpartyMusic: false, notes: true,
+  },
+  URODZINY: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
+    children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
+    cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
+    drinksArrival: true, drinksStorage: true, champagneStorage: true, firstBottlesBy: true, alcoholAtTeamTable: true,
+    cakesSwedishTable: true, fruitsSwedishTable: true, ownFlowers: true, ownVases: true,
+    placeCards: true, placeCardsLayout: true, decorationColor: true, tableLayout: true,
+    brideGroomTable: false, orchestraTable: false, breadWelcomeBy: true, extraAttractions: true,
+    specialRequests: true, facebookConsent: true, ownNapkins: true, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: true, afterpartyTimeFrom: true, afterpartyTimeTo: true,
+    afterpartyGuests: true, afterpartyMenu: true, afterpartyMusic: true, notes: true,
+  },
+  STYPA: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
+    children03: false, children47: false, orchestraCount: false, cameramanCount: false, photographerCount: false,
+    cakesAndDesserts: false, cakeOrderedAt: false, cakeArrivalTime: false, cakeServedAt: false,
+    drinksArrival: false, drinksStorage: false, champagneStorage: false, firstBottlesBy: false, alcoholAtTeamTable: false,
+    cakesSwedishTable: false, fruitsSwedishTable: false, ownFlowers: false, ownVases: false,
+    placeCards: false, placeCardsLayout: false, decorationColor: false, tableLayout: true,
+    brideGroomTable: false, orchestraTable: false, breadWelcomeBy: false, extraAttractions: false,
+    specialRequests: true, facebookConsent: false, ownNapkins: false, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: false, afterpartyTimeFrom: false, afterpartyTimeTo: false,
+    afterpartyGuests: false, afterpartyMenu: false, afterpartyMusic: false, notes: true,
+  },
+  FIRMOWA: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
+    children03: false, children47: false, orchestraCount: true, cameramanCount: true, photographerCount: true,
+    cakesAndDesserts: true, cakeOrderedAt: false, cakeArrivalTime: false, cakeServedAt: false,
+    drinksArrival: true, drinksStorage: true, champagneStorage: false, firstBottlesBy: false, alcoholAtTeamTable: true,
+    cakesSwedishTable: true, fruitsSwedishTable: true, ownFlowers: false, ownVases: false,
+    placeCards: false, placeCardsLayout: false, decorationColor: false, tableLayout: true,
+    brideGroomTable: false, orchestraTable: false, breadWelcomeBy: false, extraAttractions: true,
+    specialRequests: true, facebookConsent: false, ownNapkins: false, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: false, afterpartyTimeFrom: false, afterpartyTimeTo: false,
+    afterpartyGuests: false, afterpartyMenu: false, afterpartyMusic: false, notes: true,
+  },
+  SYLWESTER: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
+    children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
+    cakesAndDesserts: true, cakeOrderedAt: false, cakeArrivalTime: false, cakeServedAt: false,
+    drinksArrival: true, drinksStorage: true, champagneStorage: true, firstBottlesBy: true, alcoholAtTeamTable: true,
+    cakesSwedishTable: true, fruitsSwedishTable: true, ownFlowers: true, ownVases: true,
+    placeCards: true, placeCardsLayout: true, decorationColor: true, tableLayout: true,
+    brideGroomTable: false, orchestraTable: false, breadWelcomeBy: true, extraAttractions: true,
+    specialRequests: true, facebookConsent: true, ownNapkins: true, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: true, afterpartyTimeFrom: true, afterpartyTimeTo: true,
+    afterpartyGuests: true, afterpartyMenu: true, afterpartyMusic: true, notes: true,
+  },
+  INNE: {
+    clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
+    children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
+    cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
+    drinksArrival: true, drinksStorage: true, champagneStorage: true, firstBottlesBy: true, alcoholAtTeamTable: true,
+    cakesSwedishTable: true, fruitsSwedishTable: true, ownFlowers: true, ownVases: true,
+    placeCards: true, placeCardsLayout: true, decorationColor: true, tableLayout: true,
+    brideGroomTable: false, orchestraTable: false, breadWelcomeBy: true, extraAttractions: true,
+    specialRequests: true, facebookConsent: true, ownNapkins: true, dutyPerson: true,
+    assignedTo: true, afterpartyEnabled: false, afterpartyTimeFrom: false, afterpartyTimeTo: false,
+    afterpartyGuests: false, afterpartyMenu: false, afterpartyMusic: false, notes: true,
+  },
 };
 
 const ROOMS_DATA = [
@@ -313,15 +406,9 @@ export function EventFormTabs({
   evForMenu?: { type: string; client?: string | null; date: string; guests?: number | null };
   eventTypeFieldsConfig?: Record<string, Record<string, boolean>>;
 }) {
-  const cfg = (eventTypeFieldsConfig?.[form.eventType] ?? EVENT_TYPE_FIELDS_CONFIG[form.eventType] ?? EVENT_TYPE_FIELDS_CONFIG["INNE"]);
-  const showChurch = cfg.showChurch;
-  const showBrideOrchestra = cfg.showBrideOrchestra;
-  const showAfterparty = cfg.showAfterparty;
-  const hideTortNapoje = !cfg.showTortNapoje;
-  const showPoprawiny = cfg.showPoprawiny;
-  const showZespol = cfg.showZespol;
-  const showDekoracje = cfg.showDekoracje;
-  const showFacebook = cfg.showFacebook;
+  const cfg = eventTypeFieldsConfig?.[form.eventType] ?? EVENT_TYPE_FIELDS_CONFIG[form.eventType] ?? EVENT_TYPE_FIELDS_CONFIG["INNE"];
+  const isVisible = (pole: string): boolean =>
+    cfg?.[pole] ?? true;
 
   const totalGuests = useMemo(() => {
     const a = form.adultsCount === "" ? 0 : Number(form.adultsCount) || 0;
@@ -368,7 +455,7 @@ export function EventFormTabs({
         </div>
         <Field label="Imię i nazwisko klienta" value={form.clientName} onChange={(v) => update("clientName", v)} placeholder="np. Jan Kowalski" />
         <Field label="Telefon" value={form.clientPhone} onChange={(v) => update("clientPhone", v)} placeholder="np. 500 123 456" type="tel" />
-        <Field label="Email klienta" value={form.clientEmail} onChange={(v) => update("clientEmail", v)} placeholder="np. jan@kowalski.pl" type="email" />
+        {isVisible("clientEmail") && <Field label="Email klienta" value={form.clientEmail} onChange={(v) => update("clientEmail", v)} placeholder="np. jan@kowalski.pl" type="email" />}
         <Field label="Data imprezy" value={form.eventDate} onChange={(v) => update("eventDate", v)} type="date" />
         <div style={{ marginBottom: "16px" }}>
           <label style={labelStyle}>Sale (można wybrać kilka)</label>
@@ -397,7 +484,7 @@ export function EventFormTabs({
             })}
           </div>
         </div>
-        {showPoprawiny && (
+        {isVisible("addPoprawiny") && (
           <>
             <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px", fontSize: "12px", color: "#666", cursor: "pointer" }}>
               <input
@@ -431,8 +518,9 @@ export function EventFormTabs({
             )}
           </>
         )}
-        <Field label="Zadatek (zł)" value={form.depositAmount} onChange={(v) => update("depositAmount", v)} placeholder="np. 1500,50" />
-        <Field label="Termin płatności zadatku" value={form.depositDueDate} onChange={(v) => update("depositDueDate", v)} type="date" />
+        {isVisible("depositAmount") && <Field label="Zadatek (zł)" value={form.depositAmount} onChange={(v) => update("depositAmount", v)} placeholder="np. 1500,50" />}
+        {isVisible("depositDueDate") && <Field label="Termin płatności zadatku" value={form.depositDueDate} onChange={(v) => update("depositDueDate", v)} type="date" />}
+        {isVisible("depositPaid") && (
         <div style={{ display: "flex", gap: "8px", marginTop: "12px", marginBottom: "16px" }}>
           <button
             type="button"
@@ -467,6 +555,7 @@ export function EventFormTabs({
             ❌ Niezapłacony
           </button>
         </div>
+        )}
       </div>
     );
   }
@@ -477,12 +566,12 @@ export function EventFormTabs({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "16px" }}>
           <TimeSelect label="Godzina rozpoczęcia" value={form.timeStart} onChange={(v) => update("timeStart", v)} />
           <TimeSelect label="Godzina zakończenia" value={form.timeEnd} onChange={(v) => update("timeEnd", v)} />
-          {showChurch && <TimeSelect label="Godzina kościoła" value={form.churchTime} onChange={(v) => update("churchTime", v)} />}
+          {isVisible("churchTime") && <TimeSelect label="Godzina kościoła" value={form.churchTime} onChange={(v) => update("churchTime", v)} />}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "12px", marginBottom: "16px" }}>
           <NumField label="Dorośli" value={form.adultsCount} onChange={(v) => update("adultsCount", v)} />
-          <NumField label="Dzieci 0–3" value={form.children03} onChange={(v) => update("children03", v)} />
-          <NumField label="Dzieci 4–7" value={form.children47} onChange={(v) => update("children47", v)} />
+          {isVisible("children03") && <NumField label="Dzieci 0–3" value={form.children03} onChange={(v) => update("children03", v)} />}
+          {isVisible("children47") && <NumField label="Dzieci 4–7" value={form.children47} onChange={(v) => update("children47", v)} />}
           <div style={{ marginBottom: "12px" }}>
             <label style={labelStyle}>Łącznie</label>
             <div style={{ padding: "8px 12px", fontSize: "14px", fontWeight: 700, color: "#1e1e1e" }}>
@@ -507,11 +596,11 @@ export function EventFormTabs({
             </div>
           );
         })()}
-        {showZespol && (
+        {(isVisible("orchestraCount") || isVisible("cameramanCount") || isVisible("photographerCount")) && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginTop: "16px" }}>
-            <NumField label="Orkiestra/DJ (os.)" value={form.orchestraCount} onChange={(v) => update("orchestraCount", v)} />
-            <NumField label="Kamerzysta" value={form.cameramanCount} onChange={(v) => update("cameramanCount", v)} />
-            <NumField label="Fotograf" value={form.photographerCount} onChange={(v) => update("photographerCount", v)} />
+            {isVisible("orchestraCount") && <NumField label="Orkiestra/DJ (os.)" value={form.orchestraCount} onChange={(v) => update("orchestraCount", v)} />}
+            {isVisible("cameramanCount") && <NumField label="Kamerzysta" value={form.cameramanCount} onChange={(v) => update("cameramanCount", v)} />}
+            {isVisible("photographerCount") && <NumField label="Fotograf" value={form.photographerCount} onChange={(v) => update("photographerCount", v)} />}
           </div>
         )}
       </div>
@@ -526,32 +615,40 @@ export function EventFormTabs({
             <MenuTab ev={evForMenu} savedMenu={menuData as { pakietId?: string | null; wybory?: Record<string, string[]>; doplaty?: Record<string, boolean>; dopWybory?: Record<string, string[]>; notatka?: string } | null} onSave={onMenuSave} />
           </div>
         )}
-        <div>
-          <label style={labelStyle}>Torty i desery</label>
-          <textarea
-            value={form.cakesAndDesserts}
-            onChange={(e) => update("cakesAndDesserts", e.target.value)}
-            rows={3}
-            placeholder="Opis tortów i deserów…"
-            style={{ ...inputStyle, resize: "vertical", minHeight: "60px" }}
-          />
-        </div>
-        {!hideTortNapoje && (
+        {isVisible("cakesAndDesserts") && (
+          <div>
+            <label style={labelStyle}>Torty i desery</label>
+            <textarea
+              value={form.cakesAndDesserts}
+              onChange={(e) => update("cakesAndDesserts", e.target.value)}
+              rows={3}
+              placeholder="Opis tortów i deserów…"
+              style={{ ...inputStyle, resize: "vertical", minHeight: "60px" }}
+            />
+          </div>
+        )}
+        {(isVisible("cakeOrderedAt") || isVisible("cakeArrivalTime") || isVisible("cakeServedAt") || isVisible("drinksArrival") || isVisible("drinksStorage") || isVisible("champagneStorage") || isVisible("firstBottlesBy") || isVisible("alcoholAtTeamTable")) && (
           <>
             <div style={{ marginTop: "20px", marginBottom: "12px", fontSize: "11px", fontWeight: 700, color: "#888", borderTop: "1px solid #eee", paddingTop: "16px" }}>
               ─── Tort i napoje ───
             </div>
-            <Field label="Tort – gdzie zamówiony" value={form.cakeOrderedAt} onChange={(v) => update("cakeOrderedAt", v)} placeholder="np. Cukiernia X" />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-              <TimeSelect label="Przyjazd tortu" value={form.cakeArrivalTime} onChange={(v) => update("cakeArrivalTime", v)} />
-              <TimeSelect label="Podanie tortu" value={form.cakeServedAt} onChange={(v) => update("cakeServedAt", v)} />
-            </div>
-            <div style={{ marginTop: "12px", marginBottom: "8px", fontSize: "11px", fontWeight: 700, color: "#888" }}>Napoje</div>
-            <Field label="Dostarczenie napojów" value={form.drinksArrival} onChange={(v) => update("drinksArrival", v)} />
-            <Field label="Przechowywanie napojów" value={form.drinksStorage} onChange={(v) => update("drinksStorage", v)} />
-            <Field label="Przechowywanie szampana" value={form.champagneStorage} onChange={(v) => update("champagneStorage", v)} />
-            <Field label="Pierwsze butelki serwuje" value={form.firstBottlesBy} onChange={(v) => update("firstBottlesBy", v)} />
-            <YesNoButton label="Napoje na stole zespołu" value={form.alcoholAtTeamTable} onChange={(v) => update("alcoholAtTeamTable", v)} />
+            {isVisible("cakeOrderedAt") && <Field label="Tort – gdzie zamówiony" value={form.cakeOrderedAt} onChange={(v) => update("cakeOrderedAt", v)} placeholder="np. Cukiernia X" />}
+            {(isVisible("cakeArrivalTime") || isVisible("cakeServedAt")) && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                {isVisible("cakeArrivalTime") && <TimeSelect label="Przyjazd tortu" value={form.cakeArrivalTime} onChange={(v) => update("cakeArrivalTime", v)} />}
+                {isVisible("cakeServedAt") && <TimeSelect label="Podanie tortu" value={form.cakeServedAt} onChange={(v) => update("cakeServedAt", v)} />}
+              </div>
+            )}
+            {(isVisible("drinksArrival") || isVisible("drinksStorage") || isVisible("champagneStorage") || isVisible("firstBottlesBy") || isVisible("alcoholAtTeamTable")) && (
+              <>
+                <div style={{ marginTop: "12px", marginBottom: "8px", fontSize: "11px", fontWeight: 700, color: "#888" }}>Napoje</div>
+                {isVisible("drinksArrival") && <Field label="Dostarczenie napojów" value={form.drinksArrival} onChange={(v) => update("drinksArrival", v)} />}
+                {isVisible("drinksStorage") && <Field label="Przechowywanie napojów" value={form.drinksStorage} onChange={(v) => update("drinksStorage", v)} />}
+                {isVisible("champagneStorage") && <Field label="Przechowywanie szampana" value={form.champagneStorage} onChange={(v) => update("champagneStorage", v)} />}
+                {isVisible("firstBottlesBy") && <Field label="Pierwsze butelki serwuje" value={form.firstBottlesBy} onChange={(v) => update("firstBottlesBy", v)} />}
+                {isVisible("alcoholAtTeamTable") && <YesNoButton label="Napoje na stole zespołu" value={form.alcoholAtTeamTable} onChange={(v) => update("alcoholAtTeamTable", v)} />}
+              </>
+            )}
           </>
         )}
       </div>
@@ -563,67 +660,73 @@ export function EventFormTabs({
       <div style={{ padding: "16px 20px" }}>
         <div style={{ marginBottom: "12px", fontSize: "11px", fontWeight: 700, color: "#888" }}>─── Dekoracje i układ ───</div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 20px", marginBottom: "16px" }}>
-          <YesNoButton label="Ciasta — stół szwedzki" value={form.cakesSwedishTable} onChange={(v) => update("cakesSwedishTable", v)} />
-          <YesNoButton label="Owoce — stół szwedzki" value={form.fruitsSwedishTable} onChange={(v) => update("fruitsSwedishTable", v)} />
-          {showDekoracje && (
-            <>
-              <YesNoButton label="Własne kwiaty" value={form.ownFlowers} onChange={(v) => update("ownFlowers", v)} />
-              <YesNoButton label="Własne wazony" value={form.ownVases} onChange={(v) => update("ownVases", v)} />
-              <YesNoButton label="Winietki" value={form.placeCards} onChange={(v) => update("placeCards", v)} />
-            </>
-          )}
+          {isVisible("cakesSwedishTable") && <YesNoButton label="Ciasta — stół szwedzki" value={form.cakesSwedishTable} onChange={(v) => update("cakesSwedishTable", v)} />}
+          {isVisible("fruitsSwedishTable") && <YesNoButton label="Owoce — stół szwedzki" value={form.fruitsSwedishTable} onChange={(v) => update("fruitsSwedishTable", v)} />}
+          {isVisible("ownFlowers") && <YesNoButton label="Własne kwiaty" value={form.ownFlowers} onChange={(v) => update("ownFlowers", v)} />}
+          {isVisible("ownVases") && <YesNoButton label="Własne wazony" value={form.ownVases} onChange={(v) => update("ownVases", v)} />}
+          {isVisible("placeCards") && <YesNoButton label="Winietki" value={form.placeCards} onChange={(v) => update("placeCards", v)} />}
         </div>
-        {showDekoracje && form.placeCards && <Field label="Układ winietek" value={form.placeCardsLayout} onChange={(v) => update("placeCardsLayout", v)} />}
-        {showDekoracje && <Field label="Kolor przewodni dekoracji" value={form.decorationColor} onChange={(v) => update("decorationColor", v)} />}
-        <div>
-          <label style={labelStyle}>Układ stołów</label>
-          <textarea value={form.tableLayout} onChange={(e) => update("tableLayout", e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
-        </div>
-        {showBrideOrchestra && (
-          <>
-            <Field label="Stół Pary Młodej" value={form.brideGroomTable} onChange={(v) => update("brideGroomTable", v)} />
-            <Field label="Stół orkiestry" value={form.orchestraTable} onChange={(v) => update("orchestraTable", v)} />
-          </>
+        {isVisible("placeCardsLayout") && form.placeCards && <Field label="Układ winietek" value={form.placeCardsLayout} onChange={(v) => update("placeCardsLayout", v)} />}
+        {isVisible("decorationColor") && <Field label="Kolor przewodni dekoracji" value={form.decorationColor} onChange={(v) => update("decorationColor", v)} />}
+        {isVisible("tableLayout") && (
+          <div>
+            <label style={labelStyle}>Układ stołów</label>
+            <textarea value={form.tableLayout} onChange={(e) => update("tableLayout", e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
+          </div>
         )}
-        <Field label="Powitanie chlebem — kto?" value={form.breadWelcomeBy} onChange={(v) => update("breadWelcomeBy", v)} />
+        {isVisible("brideGroomTable") && <Field label="Stół Pary Młodej" value={form.brideGroomTable} onChange={(v) => update("brideGroomTable", v)} />}
+        {isVisible("orchestraTable") && <Field label="Stół orkiestry" value={form.orchestraTable} onChange={(v) => update("orchestraTable", v)} />}
+        {isVisible("breadWelcomeBy") && <Field label="Powitanie chlebem — kto?" value={form.breadWelcomeBy} onChange={(v) => update("breadWelcomeBy", v)} />}
 
         <div style={{ marginTop: "20px", marginBottom: "12px", fontSize: "11px", fontWeight: 700, color: "#888" }}>─── Dodatkowe ───</div>
-        <div>
-          <label style={labelStyle}>Dodatkowe atrakcje</label>
-          <textarea value={form.extraAttractions} onChange={(e) => update("extraAttractions", e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
-        </div>
-        <div>
-          <label style={labelStyle}>Specjalne życzenia</label>
-          <textarea value={form.specialRequests} onChange={(e) => update("specialRequests", e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
-        </div>
-        {showFacebook && <YesNoButton label="Zgoda na Facebook" value={form.facebookConsent} onChange={(v) => update("facebookConsent", v)} />}
-        <YesNoButton label="Własne serwetki" value={form.ownNapkins} onChange={(v) => update("ownNapkins", v)} />
-        <Field label="Osoba dyżurna" value={form.dutyPerson} onChange={(v) => update("dutyPerson", v)} />
-        <Field label="Opiekun imprezy" value={form.assignedTo} onChange={(v) => update("assignedTo", v)} placeholder="np. Marta Kowalska" />
+        {isVisible("extraAttractions") && (
+          <div>
+            <label style={labelStyle}>Dodatkowe atrakcje</label>
+            <textarea value={form.extraAttractions} onChange={(e) => update("extraAttractions", e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
+          </div>
+        )}
+        {isVisible("specialRequests") && (
+          <div>
+            <label style={labelStyle}>Specjalne życzenia</label>
+            <textarea value={form.specialRequests} onChange={(e) => update("specialRequests", e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
+          </div>
+        )}
+        {isVisible("facebookConsent") && <YesNoButton label="Zgoda na Facebook" value={form.facebookConsent} onChange={(v) => update("facebookConsent", v)} />}
+        {isVisible("ownNapkins") && <YesNoButton label="Własne serwetki" value={form.ownNapkins} onChange={(v) => update("ownNapkins", v)} />}
+        {isVisible("dutyPerson") && <Field label="Osoba dyżurna" value={form.dutyPerson} onChange={(v) => update("dutyPerson", v)} />}
+        {isVisible("assignedTo") && <Field label="Opiekun imprezy" value={form.assignedTo} onChange={(v) => update("assignedTo", v)} placeholder="np. Marta Kowalska" />}
 
-        {showAfterparty && (
+        {isVisible("afterpartyEnabled") && (
           <>
             <div style={{ marginTop: "20px", marginBottom: "12px", fontSize: "11px", fontWeight: 700, color: "#888" }}>─── Afterparty ───</div>
             <YesNoButton label="Afterparty" value={form.afterpartyEnabled} onChange={(v) => update("afterpartyEnabled", v)} />
             {form.afterpartyEnabled && (
               <>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  <TimeSelect label="Od" value={form.afterpartyTimeFrom} onChange={(v) => update("afterpartyTimeFrom", v)} />
-                  <TimeSelect label="Do" value={form.afterpartyTimeTo} onChange={(v) => update("afterpartyTimeTo", v)} />
-                </div>
-                <NumField label="Liczba gości afterparty" value={form.afterpartyGuests} onChange={(v) => update("afterpartyGuests", v)} />
-                <div>
-                  <label style={labelStyle}>Menu afterparty</label>
-                  <textarea value={form.afterpartyMenu} onChange={(e) => update("afterpartyMenu", e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
-                </div>
-                <Field label="Muzyka afterparty" value={form.afterpartyMusic} onChange={(v) => update("afterpartyMusic", v)} />
+                {(isVisible("afterpartyTimeFrom") || isVisible("afterpartyTimeTo")) && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                    {isVisible("afterpartyTimeFrom") && <TimeSelect label="Od" value={form.afterpartyTimeFrom} onChange={(v) => update("afterpartyTimeFrom", v)} />}
+                    {isVisible("afterpartyTimeTo") && <TimeSelect label="Do" value={form.afterpartyTimeTo} onChange={(v) => update("afterpartyTimeTo", v)} />}
+                  </div>
+                )}
+                {isVisible("afterpartyGuests") && <NumField label="Liczba gości afterparty" value={form.afterpartyGuests} onChange={(v) => update("afterpartyGuests", v)} />}
+                {isVisible("afterpartyMenu") && (
+                  <div>
+                    <label style={labelStyle}>Menu afterparty</label>
+                    <textarea value={form.afterpartyMenu} onChange={(e) => update("afterpartyMenu", e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
+                  </div>
+                )}
+                {isVisible("afterpartyMusic") && <Field label="Muzyka afterparty" value={form.afterpartyMusic} onChange={(v) => update("afterpartyMusic", v)} />}
               </>
             )}
           </>
         )}
 
-        <div style={{ marginTop: "20px", marginBottom: "12px", fontSize: "11px", fontWeight: 700, color: "#888" }}>─── Notatki ───</div>
-        <textarea value={form.notes} onChange={(e) => update("notes", e.target.value)} rows={4} placeholder="Dodatkowe informacje..." style={{ ...inputStyle, resize: "vertical" }} />
+        {isVisible("notes") && (
+          <>
+            <div style={{ marginTop: "20px", marginBottom: "12px", fontSize: "11px", fontWeight: 700, color: "#888" }}>─── Notatki ───</div>
+            <textarea value={form.notes} onChange={(e) => update("notes", e.target.value)} rows={4} placeholder="Dodatkowe informacje..." style={{ ...inputStyle, resize: "vertical" }} />
+          </>
+        )}
       </div>
     );
   }
