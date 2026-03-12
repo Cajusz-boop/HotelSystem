@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { createAuditLog } from "@/lib/audit";
-import { createChecklistDoc, createMenuDoc } from "@/lib/googleDocs";
+import { createChecklistDoc, createMenuDoc, type EventOrderForChecklist } from "@/lib/googleDocs";
 import { createCalendarEvent } from "@/lib/googleCalendarEvents";
 import { getCalendarIdForEventOrder } from "@/lib/calendarMapping";
 
@@ -256,10 +256,10 @@ export async function POST(req: Request) {
 
       try {
         const [mainChecklist, mainMenu, popChecklist, popMenu] = await Promise.all([
-          createChecklistDoc(event),
-          createMenuDoc({ ...event, packageName, packageId: event.packageId, cakesAndDesserts: event.cakesAndDesserts }),
-          createChecklistDoc(poprawinyEvent),
-          createMenuDoc({ ...poprawinyEvent, packageName: null, packageId: null, cakesAndDesserts: null }),
+          createChecklistDoc(event as EventOrderForChecklist),
+          createMenuDoc({ ...event, packageName, packageId: event.packageId, cakesAndDesserts: event.cakesAndDesserts } as EventOrderForChecklist & { packageId?: string | null; packageName?: string | null; cakesAndDesserts?: string | null }),
+          createChecklistDoc(poprawinyEvent as EventOrderForChecklist),
+          createMenuDoc({ ...poprawinyEvent, packageName: null, packageId: null, cakesAndDesserts: null } as EventOrderForChecklist & { packageId?: string | null; packageName?: string | null; cakesAndDesserts?: string | null }),
         ]);
 
         const mainResults = await syncEventToGoogle(
@@ -329,13 +329,13 @@ export async function POST(req: Request) {
         packageName = pkg?.name ?? null;
       }
       const [checklist, menu] = await Promise.all([
-        createChecklistDoc(event),
+        createChecklistDoc(event as EventOrderForChecklist),
         createMenuDoc({
           ...event,
           packageName,
           packageId: event.packageId,
           cakesAndDesserts: event.cakesAndDesserts,
-        }),
+        } as EventOrderForChecklist & { packageId?: string | null; packageName?: string | null; cakesAndDesserts?: string | null }),
       ]);
 
       const results = await syncEventToGoogle(

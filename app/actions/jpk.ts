@@ -86,7 +86,7 @@ export async function exportJpk(
       const date = i.issuedAt.toISOString().slice(0, 10);
       lines.push("    <Wiersz>");
       lines.push(`      <Data>${date}</Data>`);
-      lines.push(`      <KontrahentNIP>${escape(i.buyerNip)}</KontrahentNIP>`);
+      lines.push(`      <KontrahentNIP>${escape(i.buyerNip ?? "")}</KontrahentNIP>`);
       lines.push(`      <KontrahentNazwa>${escape(i.buyerName)}</KontrahentNazwa>`);
       lines.push(`      <Kwota>${Number(i.amountGross).toFixed(2)}</Kwota>`);
       lines.push(`      <NumerFV>${escape(i.number)}</NumerFV>`);

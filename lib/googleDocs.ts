@@ -79,7 +79,8 @@ async function buildMenuLines(
   if (!menu?.pakietId) {
     lines.push("Pakiet: — do wyboru —", "");
   } else {
-    let pakiet: Awaited<ReturnType<typeof prisma.menuPackage.findFirst>> = null;
+    type PakietWithRelations = { name?: string; sections?: Array<{ code: string; label: string; type: string; dishes: string[]; choiceLimit?: number }>; surcharges?: Array<{ code: string; label: string }> } | null;
+    let pakiet: PakietWithRelations = null;
     try {
       pakiet = await prisma.menuPackage.findFirst({
         where: { code: menu.pakietId },
@@ -87,7 +88,7 @@ async function buildMenuLines(
           sections: { orderBy: { sortOrder: "asc" } },
           surcharges: { orderBy: { sortOrder: "asc" } },
         },
-      });
+      }) as PakietWithRelations;
     } catch (err) {
       console.warn("Nie udało się pobrać definicji pakietu do dokumentu:", err);
     }

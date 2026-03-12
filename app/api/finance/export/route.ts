@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       amountVat: Number(i.amountVat),
       amountGross: Number(i.amountGross),
       vatRate: Number(i.vatRate),
-      buyerNip: i.buyerNip,
+      buyerNip: i.buyerNip ?? "",
       buyerName: i.buyerName,
       buyerAddress: i.buyerAddress,
       buyerPostalCode: i.buyerPostalCode,

@@ -1700,7 +1700,7 @@ export async function getConsolidatedInvoiceById(
         amountGross: invoice.amountGross.toNumber(),
         vatRate: invoice.vatRate.toNumber(),
         buyerName: invoice.buyerName,
-        buyerNip: invoice.buyerNip,
+        buyerNip: invoice.buyerNip ?? "",
         buyerAddress: invoice.buyerAddress,
         buyerPostalCode: invoice.buyerPostalCode,
         buyerCity: invoice.buyerCity,

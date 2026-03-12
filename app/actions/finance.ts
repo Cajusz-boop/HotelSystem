@@ -5196,7 +5196,8 @@ export async function createSalesInvoice(
       buyerPostalCode = (buyer.postalCode ?? "").trim() || null;
       buyerCity = (buyer.city ?? "").trim() || null;
     } else {
-      const nipValidation = validateNipOrVat((buyer.nip ?? "").trim());
+      const nipStr = "nip" in buyer ? (buyer.nip ?? "") : "";
+      const nipValidation = validateNipOrVat(nipStr.trim());
       if (!nipValidation.ok) return { success: false, error: nipValidation.error };
       buyerNip = nipValidation.normalized;
       buyerName = (buyer.name ?? "").trim();
@@ -6407,7 +6408,7 @@ export async function getInvoicePreviewData(
           buyerAddress: invoice.buyerAddress,
           buyerPostalCode: invoice.buyerPostalCode,
           buyerCity: invoice.buyerCity,
-          buyerNip: invoice.buyerNip,
+          buyerNip: invoice.buyerNip ?? "",
           receiverName: invoice.receiverName,
           receiverAddress: invoice.receiverAddress,
           receiverPostalCode: invoice.receiverPostalCode,
@@ -6434,9 +6435,9 @@ export async function getInvoicePreviewData(
         finalVat,
         finalGross,
         buyerName: invoice.buyerName,
-        buyerAddress: invoice.buyerAddress,
+        buyerAddress: invoice.        buyerAddress,
         buyerPostalCity,
-        buyerNip: invoice.buyerNip,
+        buyerNip: invoice.buyerNip ?? "",
         issueDate,
         deliveryDate,
         placeOfIssue,
@@ -6582,7 +6583,7 @@ export async function getInvoiceById(
         amountVat: Number(invoice.amountVat),
         amountGross: Number(invoice.amountGross),
         vatRate: Number(invoice.vatRate),
-        buyerNip: invoice.buyerNip,
+        buyerNip: invoice.buyerNip ?? "",
         buyerName: invoice.buyerName,
         buyerAddress: invoice.buyerAddress,
         buyerPostalCode: invoice.buyerPostalCode,

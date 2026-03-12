@@ -6,7 +6,7 @@ function subDays(d: Date, n: number): Date {
   out.setDate(out.getDate() - n);
   return out;
 }
-import { createChecklistDoc, createMenuDoc } from "@/lib/googleDocs";
+import { createChecklistDoc, createMenuDoc, type EventOrderForChecklist } from "@/lib/googleDocs";
 import { createCalendarEvent } from "@/lib/googleCalendarEvents";
 import { getCalendarIdForEventOrder } from "@/lib/calendarMapping";
 import { resolvePackageName } from "@/lib/menuPackageName";
@@ -34,13 +34,13 @@ export async function GET() {
           packageName = await resolvePackageName(event.packageId);
         }
         const [checklist, menu] = await Promise.all([
-          createChecklistDoc(event),
+          createChecklistDoc(event as EventOrderForChecklist),
           createMenuDoc({
             ...event,
             packageName,
             packageId: event.packageId,
             cakesAndDesserts: event.cakesAndDesserts,
-          }),
+          } as EventOrderForChecklist & { packageId?: string | null; packageName?: string | null; cakesAndDesserts?: string | null }),
         ]);
         const depAmount = event.depositAmount != null ? (typeof event.depositAmount === "object" && event.depositAmount !== null && "toNumber" in event.depositAmount ? (event.depositAmount as { toNumber: () => number }).toNumber() : Number(event.depositAmount)) : null;
         const calendarEventId = await createCalendarEvent(
