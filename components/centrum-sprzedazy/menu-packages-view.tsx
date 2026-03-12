@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { DishAutocomplete } from "./dish-autocomplete";
 import { DishesView } from "./dishes-view";
+import { EventTypeFieldsConfig } from "./event-type-fields-config";
 
 type MenuPackageSection = {
   id?: string;
@@ -59,8 +60,12 @@ function parseDishes(text: string): string[] {
     .filter(Boolean);
 }
 
-export function MenuPackagesView() {
-  const [subTab, setSubTab] = useState<"pakiety" | "slownik">("pakiety");
+export function MenuPackagesView({
+  onEventTypeFieldsConfigChange,
+}: {
+  onEventTypeFieldsConfigChange?: (config: Record<string, Record<string, boolean>>) => void;
+} = {}) {
+  const [subTab, setSubTab] = useState<"pakiety" | "slownik" | "formularze">("pakiety");
   const [packages, setPackages] = useState<ApiPackage[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ApiPackage | null>(null);
@@ -322,9 +327,16 @@ export function MenuPackagesView() {
         <button onClick={() => setSubTab("slownik")} style={{ padding: "8px 16px", border: "none", background: subTab === "slownik" ? "#3b82f6" : "transparent", color: subTab === "slownik" ? "white" : "#6b7280", borderRadius: "8px", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}>
           Słownik dań
         </button>
+        <button onClick={() => setSubTab("formularze")} style={{ padding: "8px 16px", border: "none", background: subTab === "formularze" ? "#3b82f6" : "transparent", color: subTab === "formularze" ? "white" : "#6b7280", borderRadius: "8px", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}>
+          Typy formularzy
+        </button>
       </div>
 
       {subTab === "slownik" && <DishesView />}
+
+      {subTab === "formularze" && (
+        <EventTypeFieldsConfig onConfigChange={onEventTypeFieldsConfigChange} />
+      )}
 
       {subTab === "pakiety" && (
         <>

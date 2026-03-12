@@ -207,6 +207,58 @@ export async function updateFormFieldsConfig(data: FormFieldsConfig): Promise<
   return { success: true };
 }
 
+// --- Konfiguracja pól formularza imprez (typ imprezy → widoczność pól) ---
+const DEFAULT_EVENT_TYPE_FIELDS_CONFIG: Record<string, Record<string, boolean>> = {
+  WESELE:    { showChurch: true,  showBrideOrchestra: true,  showAfterparty: true,  showTortNapoje: true,  showPoprawiny: true,  showZespol: true,  showDekoracje: true,  showFacebook: true  },
+  KOMUNIA:   { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true,  showPoprawiny: false, showZespol: true,  showDekoracje: true,  showFacebook: true  },
+  CHRZCINY:  { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true,  showPoprawiny: false, showZespol: false, showDekoracje: true,  showFacebook: true  },
+  URODZINY:  { showChurch: false, showBrideOrchestra: false, showAfterparty: true,  showTortNapoje: true,  showPoprawiny: false, showZespol: true,  showDekoracje: true,  showFacebook: true  },
+  STYPA:     { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: false, showPoprawiny: false, showZespol: false, showDekoracje: false, showFacebook: false },
+  FIRMOWA:   { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true,  showPoprawiny: false, showZespol: true,  showDekoracje: false, showFacebook: false },
+  SYLWESTER: { showChurch: false, showBrideOrchestra: false, showAfterparty: true,  showTortNapoje: true,  showPoprawiny: false, showZespol: true,  showDekoracje: true,  showFacebook: true  },
+  INNE:      { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true,  showPoprawiny: false, showZespol: true,  showDekoracje: true,  showFacebook: true  },
+};
+
+/** Odczyt konfiguracji pól dla typów imprez – bez wymagania admin (używane w formularzach). */
+export async function getEventTypeFieldsConfig(): Promise<{
+  success: boolean;
+  data?: Record<string, Record<string, boolean>>;
+  error?: string;
+}> {
+  try {
+    const config = await prisma.hotelConfig.findUnique({ where: { id: "default" } });
+    if (config?.eventTypeFieldsConfig) {
+      return { success: true, data: config.eventTypeFieldsConfig as Record<string, Record<string, boolean>> };
+    }
+    return { success: true, data: DEFAULT_EVENT_TYPE_FIELDS_CONFIG };
+  } catch (error) {
+    console.error("getEventTypeFieldsConfig error:", error);
+    return { success: false, error: "Błąd pobierania konfiguracji" };
+  }
+}
+
+export async function updateEventTypeFieldsConfig(
+  config: Record<string, Record<string, boolean>>
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession();
+  if (!session) return { success: false, error: "Zaloguj się" };
+  const allowed = await can(session.role, "admin.settings");
+  if (!allowed) return { success: false, error: "Brak uprawnień" };
+
+  try {
+    await prisma.hotelConfig.upsert({
+      where: { id: "default" },
+      update: { eventTypeFieldsConfig: config },
+      create: { id: "default", name: "", eventTypeFieldsConfig: config },
+    });
+    autoExportConfigSnapshot();
+    return { success: true };
+  } catch (error) {
+    console.error("updateEventTypeFieldsConfig error:", error);
+    return { success: false, error: "Błąd zapisu konfiguracji" };
+  }
+}
+
 // --- Przełączanie wymogu logowania (AUTH_DISABLED) ---
 
 export async function toggleAuthDisabled(disabled: boolean): Promise<

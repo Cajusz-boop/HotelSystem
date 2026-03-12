@@ -303,6 +303,7 @@ export function EventFormTabs({
   menuData,
   onMenuSave,
   evForMenu,
+  eventTypeFieldsConfig,
 }: {
   tab: "dane" | "goscie" | "menu" | "szczegoly";
   form: EventFormTabState;
@@ -310,8 +311,9 @@ export function EventFormTabs({
   menuData?: Record<string, unknown> | null;
   onMenuSave?: (d: Record<string, unknown>) => void;
   evForMenu?: { type: string; client?: string | null; date: string; guests?: number | null };
+  eventTypeFieldsConfig?: Record<string, Record<string, boolean>>;
 }) {
-  const cfg = EVENT_TYPE_FIELDS_CONFIG[form.eventType] ?? EVENT_TYPE_FIELDS_CONFIG["INNE"];
+  const cfg = (eventTypeFieldsConfig?.[form.eventType] ?? EVENT_TYPE_FIELDS_CONFIG[form.eventType] ?? EVENT_TYPE_FIELDS_CONFIG["INNE"]);
   const showChurch = cfg.showChurch;
   const showBrideOrchestra = cfg.showBrideOrchestra;
   const showAfterparty = cfg.showAfterparty;

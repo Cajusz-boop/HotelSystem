@@ -1713,6 +1713,7 @@ model HotelConfig {
   bankAccount    String?  @db.VarChar(50)  // numer konta bankowego
   bankName       String?  @db.VarChar(200)  // nazwa banku
   bookingNotificationEmail String?  @db.VarChar(254)  // e-mail do powiadomień o rezerwacjach
+  eventTypeFieldsConfig    Json?    // konfiguracja widoczności pól dla typów imprez: { WESELE: { showChurch: true, ... }, ... }
   updatedAt      DateTime @updatedAt
 }
 

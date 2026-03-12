@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { MenuTab } from "@/components/events/menu-modul";
 import { EventFormTabs, EMPTY_EVENT_FORM, type EventFormTabState } from "@/components/events/event-form-tabs";
 import { MenuPackagesView } from "@/components/centrum-sprzedazy/menu-packages-view";
+import { getEventTypeFieldsConfig } from "@/app/actions/hotel-config";
 
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
@@ -786,12 +787,14 @@ function CreateEventModal({
   onClose,
   onCreated,
   showToast,
+  eventTypeFieldsConfig,
 }: {
   open: boolean;
   initialDate: string;
   onClose: () => void;
   onCreated: (created: Record<string, unknown>) => void;
   showToast: (msg: string) => void;
+  eventTypeFieldsConfig?: Record<string, Record<string, boolean>>;
 }) {
   const [tab, setTab] = useState<"dane" | "goscie" | "menu" | "szczegoly">("dane");
   const [saving, setSaving] = useState(false);
@@ -868,7 +871,7 @@ function CreateEventModal({
           ))}
         </div>
         <div style={{ flex: 1, overflowY: "auto" }}>
-          <EventFormTabs tab={tab} form={form} update={updateForm} menuData={menuData} onMenuSave={(d) => { setMenuData(d); showToast("Menu zapisane"); }} evForMenu={evForMenu} />
+          <EventFormTabs tab={tab} form={form} update={updateForm} menuData={menuData} onMenuSave={(d) => { setMenuData(d); showToast("Menu zapisane"); }} evForMenu={evForMenu} eventTypeFieldsConfig={eventTypeFieldsConfig} />
         </div>
         <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e5e5", display: "flex", gap: "8px", justifyContent: "flex-end", flexShrink: 0 }}>
           <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "10px 24px", fontSize: "15px", fontWeight: 600, color: "#111827", cursor: "pointer" }}>Anuluj</button>
@@ -887,6 +890,7 @@ function EventDetailModal({
   showToast,
   onOpenModal,
   onRefresh,
+  eventTypeFieldsConfig,
 }: {
   evId: string;
   events: EventRecord[];
@@ -895,6 +899,7 @@ function EventDetailModal({
   showToast: (msg: string, type?: string) => void;
   onOpenModal?: (id: string) => void;
   onRefresh?: () => void;
+  eventTypeFieldsConfig?: Record<string, Record<string, boolean>>;
 }) {
   const ev = events.find((e) => e.id === evId);
   const [editMode, setEditMode] = useState(false);
@@ -1064,6 +1069,7 @@ function EventDetailModal({
                 menuData={editMenuData ?? ev.menu ?? null}
                 onMenuSave={(d) => { setEditMenuData(d); handlers.updateMenu(evId, d).then(() => { showToast("Menu zapisane"); onRefresh?.(); }); }}
                 evForMenu={{ type: editForm.eventType, client: editForm.clientName, date: editForm.eventDate || ev.date, guests: (editForm.adultsCount === "" ? 0 : Number(editForm.adultsCount) || 0) + (editForm.children03 === "" ? 0 : Number(editForm.children03) || 0) + (editForm.children47 === "" ? 0 : Number(editForm.children47) || 0) || null }}
+                eventTypeFieldsConfig={eventTypeFieldsConfig}
               />
             ) : zakladka === "szczegoly" ? (
             <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -2398,6 +2404,7 @@ export function CentrumSprzedazy() {
   const [depId, setDepId] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createDate, setCreateDate] = useState("");
+  const [eventTypeFieldsConfig, setEventTypeFieldsConfig] = useState<Record<string, Record<string, boolean>> | undefined>(undefined);
   const searchRef = useRef<HTMLInputElement>(null);
   const { toasts, show: showToast } = useToast();
 
@@ -2430,6 +2437,14 @@ export function CentrumSprzedazy() {
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
+
+  useEffect(() => {
+    getEventTypeFieldsConfig().then(result => {
+      if (result.success && result.data) {
+        setEventTypeFieldsConfig(result.data);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     try {
@@ -2800,13 +2815,14 @@ export function CentrumSprzedazy() {
       {tab === "tydzien" && <WeekView events={filtered} onOpenModal={openModal} />}
       {tab === "gantt" && <GanttView events={[...events, ...gcalEvents]} onOpenModal={openModal} />}
       {tab === "kosztorysy" && <KosztorysyView />}
-      {tab === "pakiety" && <MenuPackagesView />}
-      {modalId && <EventDetailModal evId={modalId} events={events} onClose={() => setModalId(null)} handlers={handlers} showToast={showToast} onOpenModal={openModal} onRefresh={fetchEvents} />}
+      {tab === "pakiety" && <MenuPackagesView onEventTypeFieldsConfigChange={(newConfig) => setEventTypeFieldsConfig(newConfig)} />}
+      {modalId && <EventDetailModal evId={modalId} events={events} onClose={() => setModalId(null)} handlers={handlers} showToast={showToast} onOpenModal={openModal} onRefresh={fetchEvents} eventTypeFieldsConfig={eventTypeFieldsConfig} />}
       {createModalOpen && (
         <CreateEventModal
           open={createModalOpen}
           initialDate={createDate}
           onClose={() => setCreateModalOpen(false)}
+          eventTypeFieldsConfig={eventTypeFieldsConfig}
           onCreated={(created) => {
             const mapped = mapApiToEvent(created);
             setEvents((prev) => [...prev, mapped]);
