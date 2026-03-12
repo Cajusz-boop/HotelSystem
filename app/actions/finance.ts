@@ -5141,7 +5141,8 @@ export type SalesInvoiceLineItem = {
 
 export type SalesInvoiceBuyer =
   | { companyId: string }
-  | { nip: string; name: string; address?: string; postalCode?: string; city?: string };
+  | { nip: string; name: string; address?: string; postalCode?: string; city?: string }
+  | { individual: true; name: string; address?: string; postalCode?: string; city?: string };
 
 /**
  * Wystawia fakturę VAT na produkty/usługi (stypy, vouchery, wynajem sal itp.) – bez rezerwacji.
@@ -5156,16 +5157,11 @@ export async function createSalesInvoice(
     sourceType?: "MANUAL" | "EVENT" | "VOUCHER";
     sourceId?: string;
     asProforma?: boolean;
+    printReceipt?: boolean; // czy drukować paragon fiskalny
   }
 ): Promise<
-  ActionResult<{
-    id: string;
-    number: string;
-    amountNet: number;
-    amountVat: number;
-    amountGross: number;
-    issuedAt: string;
-  }>
+  | { success: true; data: { id: string; number: string; amountNet: number; amountVat: number; amountGross: number; issuedAt: string }; receiptError?: string }
+  | { success: false; error: string }
 > {
   if (!lineItems || lineItems.length === 0) {
     return { success: false, error: "Dodaj co najmniej jedną pozycję do faktury." };
@@ -5177,7 +5173,7 @@ export async function createSalesInvoice(
   }
 
   try {
-    let buyerNip: string;
+    let buyerNip: string | null;
     let buyerName: string;
     let buyerAddress: string | null = null;
     let buyerPostalCode: string | null = null;
@@ -5192,6 +5188,13 @@ export async function createSalesInvoice(
       buyerAddress = company.address ?? null;
       buyerPostalCode = company.postalCode ?? null;
       buyerCity = company.city ?? null;
+    } else if ("individual" in buyer && buyer.individual) {
+      buyerNip = null; // osoba fizyczna – brak NIP
+      buyerName = (buyer.name ?? "").trim();
+      if (!buyerName) return { success: false, error: "Podaj imię i nazwisko nabywcy." };
+      buyerAddress = (buyer.address ?? "").trim() || null;
+      buyerPostalCode = (buyer.postalCode ?? "").trim() || null;
+      buyerCity = (buyer.city ?? "").trim() || null;
     } else {
       const nipValidation = validateNipOrVat((buyer.nip ?? "").trim());
       if (!nipValidation.ok) return { success: false, error: nipValidation.error };
@@ -5305,6 +5308,43 @@ export async function createSalesInvoice(
     revalidatePath("/finance");
     revalidatePath("/reports");
     revalidatePath("/faktury");
+
+    let receiptError: string | undefined;
+    if (!options?.asProforma && options?.printReceipt === true) {
+      const fiscalItems = items.map((li) => ({
+        name: li.description,
+        quantity: li.quantity,
+        unitPrice: li.unitPrice,
+        vatRate: li.vatRate,
+      }));
+      const templateResult = await getFiscalReceiptTemplate();
+      const footerLines: string[] = [];
+      if (templateResult.success && templateResult.data) {
+        const t = templateResult.data;
+        if (t.footerLine1) footerLines.push(t.footerLine1);
+        if (t.footerLine2) footerLines.push(t.footerLine2);
+        if (t.footerLine3) footerLines.push(t.footerLine3);
+      }
+      footerLines.push(`Dokument wystawiony do faktury nr ${invoice.number}`);
+
+      const pm = options?.paymentMethod ?? "TRANSFER";
+      const paymentType = pm === "CASH" ? "CASH" : pm === "CARD" || pm === "BLIK" ? "CARD" : "TRANSFER";
+
+      const receiptRequest = {
+        transactionId: `SALES-RECEIPT-${invoice.id}-${Date.now()}`,
+        reservationId: `SALES-${invoice.id}`,
+        items: fiscalItems,
+        totalAmount: Number(totalGross),
+        paymentType,
+        footerLines: footerLines.length > 0 ? footerLines : undefined,
+      };
+
+      const fiscalResult = await printFiscalReceipt(receiptRequest);
+      if (!fiscalResult.success) {
+        receiptError = fiscalResult.error;
+      }
+    }
+
     return {
       success: true,
       data: {
@@ -5315,6 +5355,7 @@ export async function createSalesInvoice(
         amountGross: Number(invoice.amountGross),
         issuedAt: invoice.issuedAt.toISOString(),
       },
+      receiptError,
     };
   } catch (e) {
     return {

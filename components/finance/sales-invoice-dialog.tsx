@@ -24,7 +24,7 @@ import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { toast } from "sonner";
 import { Plus, Trash2, ChevronDown, Search } from "lucide-react";
 
-type BuyerMode = "company" | "manual";
+type BuyerMode = "company" | "manual" | "individual";
 
 interface CompanyOption {
   id: string;
@@ -64,6 +64,7 @@ export function SalesInvoiceDialog({
   const [paymentMethod, setPaymentMethod] = useState("TRANSFER");
   const [paymentDays, setPaymentDays] = useState(14);
   const [notes, setNotes] = useState("");
+  const [printReceiptChecked, setPrintReceiptChecked] = useState(true);
   const [loading, setLoading] = useState(false);
   const [nipLoading, setNipLoading] = useState(false);
 
@@ -177,13 +178,40 @@ export function SalesInvoiceDialog({
       return;
     }
 
-    let buyer: { companyId: string } | { nip: string; name: string; address?: string; postalCode?: string; city?: string };
+    let buyer:
+      | { companyId: string }
+      | { nip: string; name: string; address?: string; postalCode?: string; city?: string }
+      | { individual: true; name: string; address?: string; postalCode?: string; city?: string };
     if (buyerMode === "company") {
       if (!companyId) {
         toast.error("Wybierz firmę z listy.");
         return;
       }
       buyer = { companyId };
+    } else if (buyerMode === "individual") {
+      if (!buyerName.trim()) {
+        toast.error("Podaj imię i nazwisko nabywcy.");
+        return;
+      }
+      if (!buyerAddress.trim()) {
+        toast.error("Podaj ulicę i numer.");
+        return;
+      }
+      if (!buyerPostalCode.trim()) {
+        toast.error("Podaj kod pocztowy.");
+        return;
+      }
+      if (!buyerCity.trim()) {
+        toast.error("Podaj miasto.");
+        return;
+      }
+      buyer = {
+        individual: true,
+        name: buyerName.trim(),
+        address: buyerAddress.trim(),
+        postalCode: buyerPostalCode.trim(),
+        city: buyerCity.trim(),
+      };
     } else {
       const nipValidation = validateNipOrVat(nip.trim());
       if (!nipValidation.ok) {
@@ -205,17 +233,26 @@ export function SalesInvoiceDialog({
 
     const effectivePaymentDays = ["CARD", "BLIK", "CASH"].includes(paymentMethod) ? 0 : paymentDays;
 
+    const opts = {
+      paymentMethod,
+      paymentDays: effectivePaymentDays,
+      notes: notes.trim() || undefined,
+      asProforma,
+      ...(buyerMode === "individual" ? { printReceipt: printReceiptChecked } : {}),
+    };
+
     setLoading(true);
     try {
-      const result = await createSalesInvoice(buyer, filtered, {
-        paymentMethod,
-        paymentDays: effectivePaymentDays,
-        notes: notes.trim() || undefined,
-        asProforma,
-      });
+      const result = await createSalesInvoice(buyer, filtered, opts);
       if (result.success && result.data) {
-        const label = asProforma ? "Proforma" : "Faktura";
-        toast.success(`${label} ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);
+        if (result.receiptError) {
+          toast.warning(`Faktura wystawiona, ale błąd druku paragonu: ${result.receiptError}`);
+        } else if (buyerMode === "individual" && printReceiptChecked) {
+          toast.success("Faktura wystawiona, paragon wysłany do drukarki");
+        } else {
+          const label = asProforma ? "Proforma" : "Faktura";
+          toast.success(`${label} ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);
+        }
         onOpenChange(false);
         onSuccess?.();
         if (typeof window !== "undefined") {
@@ -243,6 +280,7 @@ export function SalesInvoiceDialog({
     setPaymentMethod("TRANSFER");
     setPaymentDays(14);
     setNotes("");
+    setPrintReceiptChecked(true);
   };
 
   return (
@@ -279,6 +317,15 @@ export function SalesInvoiceDialog({
                   className="rounded"
                 />
                 Wprowadź ręcznie
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  checked={buyerMode === "individual"}
+                  onChange={() => setBuyerMode("individual")}
+                  className="rounded"
+                />
+                Faktura imienna (osoba fizyczna)
               </label>
             </div>
             {buyerMode === "company" ? (
@@ -333,6 +380,54 @@ export function SalesInvoiceDialog({
                     )}
                   </div>
                 )}
+              </div>
+            ) : buyerMode === "individual" ? (
+              <div className="grid gap-2 sm:grid-cols-2 space-y-2">
+                <div className="sm:col-span-2">
+                  <Label htmlFor="buyerName">Imię i nazwisko *</Label>
+                  <Input
+                    id="buyerName"
+                    value={buyerName}
+                    onChange={(e) => setBuyerName(e.target.value)}
+                    placeholder="Imię i nazwisko"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <Label htmlFor="buyerAddress">Ulica i numer *</Label>
+                  <Input
+                    id="buyerAddress"
+                    value={buyerAddress}
+                    onChange={(e) => setBuyerAddress(e.target.value)}
+                    placeholder="Ulica, numer"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="buyerPostalCode">Kod pocztowy *</Label>
+                  <Input
+                    id="buyerPostalCode"
+                    value={buyerPostalCode}
+                    onChange={(e) => setBuyerPostalCode(e.target.value)}
+                    placeholder="00-000"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="buyerCity">Miasto *</Label>
+                  <Input
+                    id="buyerCity"
+                    value={buyerCity}
+                    onChange={(e) => setBuyerCity(e.target.value)}
+                    placeholder="Miasto"
+                  />
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer sm:col-span-2 mt-2">
+                  <input
+                    type="checkbox"
+                    checked={printReceiptChecked}
+                    onChange={(e) => setPrintReceiptChecked(e.target.checked)}
+                    className="rounded"
+                  />
+                  Drukuj paragon fiskalny
+                </label>
               </div>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">

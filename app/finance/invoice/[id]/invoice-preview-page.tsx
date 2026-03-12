@@ -138,7 +138,7 @@ export function InvoicePreviewPage({ id, autoPrint }: InvoicePreviewPageProps) {
         setIssueDate(d.issueDate ? parseDdMmYyyyToYyyyMmDd(d.issueDate) : "");
         setDeliveryDate(d.deliveryDate ? parseDdMmYyyyToYyyyMmDd(d.deliveryDate) : "");
         setBuyerName(d.buyerName);
-        setBuyerNip(d.buyerNip);
+        setBuyerNip(d.buyerNip ?? "");
         setBuyerAddress(d.buyerAddress ?? "");
         setBuyerPostalCode(d.invoice.buyerPostalCode ?? "");
         setBuyerCity(d.invoice.buyerCity ?? "");

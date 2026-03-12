@@ -61,13 +61,22 @@ const fmtZl = (n: number | null | undefined) => (n != null ? n.toLocaleString("p
 const fmtDate = (d: string | Date) => new Date(d).toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric" });
 
 type EvType = { type: string; client?: string | null; date: string; guests?: number | null };
-type SavedMenu = { pakietId?: string | null; wybory?: Record<string, string[]>; doplaty?: Record<string, boolean>; dopWybory?: Record<string, string[]>; notatka?: string } | null;
+type SavedMenu = {
+  pakietId?: string | null;
+  wybory?: Record<string, string[]>;
+  doplaty?: Record<string, boolean>;
+  dopWybory?: Record<string, string[]>;
+  notatka?: string;
+  zamienniki?: Record<string, string>; // klucz: oryginalna nazwa dania, wartość: nazwa zamiennika
+  dodatkiDan?: Record<string, { nazwa: string; cena: number }[]>; // klucz: sectionId, wartość: lista dodanych dań z ceną
+} | null;
 
 function obliczCene(
   pakiet: LegacyPackage | undefined,
   doplaty: Record<string, boolean>,
   guestsOverride: number | null,
-  evGuests: number | null | undefined
+  evGuests: number | null | undefined,
+  dodatkiDan?: Record<string, { nazwa: string; cena: number }[]>
 ) {
   if (!pakiet) return { base: 0, dop: 0, perOsoba: 0, total: null, staleDop: 0 };
   const g = guestsOverride ?? evGuests ?? 0;
@@ -78,6 +87,7 @@ function obliczCene(
     if (d.stala) staleDop += d.stala;
     else dop += d.cena ?? 0;
   });
+  Object.values(dodatkiDan ?? {}).flat().forEach((d) => { dop += d.cena; });
   const perOsoba = base + dop;
   const total = g > 0 ? perOsoba * g + staleDop : null;
   return { base, dop, perOsoba, total, staleDop, gosc: g };
@@ -102,14 +112,26 @@ function generatePrintHTML(
   dopWybory: Record<string, string[]>,
   notatka: string,
   ev: EvType,
-  cena: ReturnType<typeof obliczCene>
+  cena: ReturnType<typeof obliczCene>,
+  zamienniki?: Record<string, string>,
+  dodatkiDan?: Record<string, { nazwa: string; cena: number }[]>
 ) {
+  const zam = zamienniki ?? {};
+  const dod = dodatkiDan ?? {};
   const sekcjeHTML = pakiet.sekcje.map((s: { typ: string; id: string; label: string; dania: string[] }) => {
     const lista = s.typ === "fixed" ? s.dania : (wybory[s.id] || []);
     if (!lista.length) return "";
-    const items = lista.map((d: string) => `<li>${d}</li>`).join("");
+    const items = lista.map((d: string) => {
+      const display = zam[d] ? `${zam[d]} <small style="color:#64748b">(zam. za: ${d})</small>` : d;
+      return `<li>${display}</li>`;
+    }).join("");
     return `<div class="sekcja"><div class="sekcja-label">${s.label.replace(/ \(.*\)/, "").toUpperCase()}</div><ul>${items}</ul></div>`;
   }).join("");
+  const wszystkieDodatki = Object.entries(dod).flatMap(([sekId, dania]) => {
+    const sek = pakiet.sekcje.find((x) => x.id === sekId);
+    return dania.map((d: { nazwa: string; cena: number }) => `<li style="color:#92400e">+ ${d.nazwa} (${sek?.label ?? sekId}) +${d.cena} zł/os</li>`);
+  });
+  const dodatkiHTML = wszystkieDodatki.length > 0 ? `<div class="sekcja"><div class="sekcja-label">DODATKOWE DANIA</div><ul>${wszystkieDodatki.join("")}</ul></div>` : "";
   const wybrDoplaty = (pakiet.doplaty || []).filter((d: { id: string }) => doplaty[d.id]);
   const doplatyHTML = wybrDoplaty.length
     ? `<div class="sekcja"><div class="sekcja-label">DOPŁATY</div><ul>${wybrDoplaty.map((d: { label: string; stala?: number; cena?: number; wybor?: boolean; id: string }) => {
@@ -121,7 +143,7 @@ function generatePrintHTML(
   const notatkaHTML = notatka ? `<div class="notatka">📝 ${notatka}</div>` : "";
   const cenaHTML = `<div class="cena-box"><div class="cena-wiersz"><span>Pakiet</span><span>${pakiet.cena} zł/os</span></div>${cena.dop > 0 ? `<div class="cena-wiersz"><span>Dopłaty</span><span>+${cena.dop} zł/os</span></div>` : ""}${cena.dop > 0 ? `<div class="cena-wiersz bold"><span>Łącznie na osobę</span><span>${cena.perOsoba} zł/os</span></div>` : ""}${(cena.gosc ?? 0) > 0 ? `<div class="cena-wiersz"><span>Gości</span><span>${cena.gosc ?? 0}</span></div>` : ""}${cena.staleDop > 0 ? `<div class="cena-wiersz"><span>Dopłaty ryczałtowe</span><span>+${fmtZl(cena.staleDop)}</span></div>` : ""}${cena.total != null ? `<div class="cena-total">RAZEM: ${fmtZl(cena.total)}</div>` : ""}</div>`;
   const regulaminHTML = pakiet.regulamin?.length ? `<div class="regulamin"><strong>Regulamin:</strong><br/>${pakiet.regulamin.map((r: string) => `• ${r}`).join("<br/>")}</div>` : "";
-  return `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>Menu — ${ev.client}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Georgia,serif;padding:32px;color:#1e293b;max-width:720px;margin:0 auto}h1{font-size:22px;font-weight:bold;margin-bottom:4px}.subtitle{font-size:13px;color:#64748b;margin-bottom:24px}.sekcja{margin-bottom:16px}.sekcja-label{font-size:10px;font-weight:bold;color:#94a3b8;letter-spacing:2px;margin-bottom:5px;border-bottom:1px solid #e2e8f0;padding-bottom:3px}ul{padding-left:18px}li{font-size:13px;line-height:1.9}.notatka{background:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:10px 14px;margin:16px 0;font-size:12px;color:#92400e}.cena-box{background:#f0fdf4;border:2px solid #86efac;border-radius:8px;padding:14px 18px;margin:20px 0}.cena-wiersz{display:flex;justify-content:space-between;font-size:13px;line-height:2}.cena-wiersz.bold{font-weight:bold;border-top:1px dashed #d1fae5;padding-top:4px}.cena-total{font-size:20px;font-weight:bold;color:#166534;border-top:2px solid #86efac;padding-top:10px;margin-top:6px}.regulamin{font-size:11px;color:#64748b;line-height:1.9;border-top:1px solid #e2e8f0;padding-top:14px;margin-top:14px}.footer{font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:10px;margin-top:20px}@media print{body{padding:16px}}</style></head><body><h1>${pakiet.nazwa} — ${pakiet.cena} zł/os</h1><div class="subtitle">${ev.client} · ${fmtDate(ev.date)}${ev.guests ? ` · ${ev.guests} osób` : ""}</div>${sekcjeHTML}${doplatyHTML}${notatkaHTML}${cenaHTML}${regulaminHTML}<div class="footer">Karczma Łabędź · Marta Aker: 721 434 939, 604 070 908</div></body></html>`;
+  return `<!DOCTYPE html><html lang="pl"><head><meta charset="utf-8"><title>Menu — ${ev.client}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Georgia,serif;padding:32px;color:#1e293b;max-width:720px;margin:0 auto}h1{font-size:22px;font-weight:bold;margin-bottom:4px}.subtitle{font-size:13px;color:#64748b;margin-bottom:24px}.sekcja{margin-bottom:16px}.sekcja-label{font-size:10px;font-weight:bold;color:#94a3b8;letter-spacing:2px;margin-bottom:5px;border-bottom:1px solid #e2e8f0;padding-bottom:3px}ul{padding-left:18px}li{font-size:13px;line-height:1.9}.notatka{background:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:10px 14px;margin:16px 0;font-size:12px;color:#92400e}.cena-box{background:#f0fdf4;border:2px solid #86efac;border-radius:8px;padding:14px 18px;margin:20px 0}.cena-wiersz{display:flex;justify-content:space-between;font-size:13px;line-height:2}.cena-wiersz.bold{font-weight:bold;border-top:1px dashed #d1fae5;padding-top:4px}.cena-total{font-size:20px;font-weight:bold;color:#166534;border-top:2px solid #86efac;padding-top:10px;margin-top:6px}.regulamin{font-size:11px;color:#64748b;line-height:1.9;border-top:1px solid #e2e8f0;padding-top:14px;margin-top:14px}.footer{font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:10px;margin-top:20px}@media print{body{padding:16px}}</style></head><body><h1>${pakiet.nazwa} — ${pakiet.cena} zł/os</h1><div class="subtitle">${ev.client} · ${fmtDate(ev.date)}${ev.guests ? ` · ${ev.guests} osób` : ""}</div>${sekcjeHTML}${dodatkiHTML}${doplatyHTML}${notatkaHTML}${cenaHTML}${regulaminHTML}<div class="footer">Karczma Łabędź · Marta Aker: 721 434 939, 604 070 908</div></body></html>`;
 }
 
 export interface MenuEv {
@@ -144,6 +166,16 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
   const [confirmReset, setConfirmReset] = useState<string | null>(null);
   const [allPackages, setAllPackages] = useState<LegacyPackage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [zamienniki, setZamienniki] = useState<Record<string, string>>(savedMenu?.zamienniki ?? {});
+  const [modalZamiennik, setModalZamiennik] = useState<{ sekcjaLabel: string; oryginalDanie: string } | null>(null);
+  const [dostepneDania, setDostepneDania] = useState<{ id: string; name: string; category: string | null }[]>([]);
+  const [szukajDania, setSzukajDania] = useState("");
+  const [aktywnaSekcja, setAktywnaSekcja] = useState<string | null>(null);
+  const [isNarrow, setIsNarrow] = useState(false);
+  const [dodatkiDan, setDodatkiDan] = useState<Record<string, { nazwa: string; cena: number }[]>>(savedMenu?.dodatkiDan ?? {});
+  const [modalDodajDanie, setModalDodajDanie] = useState<{ sekcjaId: string; sekcjaLabel: string } | null>(null);
+  const [dostepneDaniaModal, setDostepneDaniaModal] = useState<{ id: string; name: string; defaultPrice: number; category: string | null }[]>([]);
+  const [szukajDodatkowe, setSzukajDodatkowe] = useState("");
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
@@ -163,14 +195,30 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
     setDoplaty(savedMenu.doplaty ?? {});
     setDopWybory(savedMenu.dopWybory ?? {});
     setNotatka(savedMenu.notatka ?? "");
+    setZamienniki(savedMenu.zamienniki ?? {});
+    setDodatkiDan(savedMenu.dodatkiDan ?? {});
   }, [savedMenu]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(max-width: 700px)");
+    const handler = () => setIsNarrow(mql.matches);
+    handler();
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
 
   const dostepne = useMemo(() => allPackages.filter((p) => p.typy.includes(ev.type)), [allPackages, ev.type]);
   const pakiet = useMemo(
     () => allPackages.find((p) => p.id === pakietId),
     [allPackages, pakietId]
   );
-  const cena = useMemo(() => obliczCene(pakiet, doplaty, guestsOvr, ev.guests), [pakiet, doplaty, guestsOvr, ev.guests]);
+  useEffect(() => {
+    if (pakiet?.sekcje?.[0]) {
+      setAktywnaSekcja(pakiet.sekcje[0].id);
+    }
+  }, [pakiet?.id]);
+  const cena = useMemo(() => obliczCene(pakiet, doplaty, guestsOvr, ev.guests, dodatkiDan), [pakiet, doplaty, guestsOvr, ev.guests, dodatkiDan]);
   const statusWyb = useMemo(() => statusWyborow(pakiet, wybory), [pakiet, wybory]);
 
   const toggleWybor = useCallback((sekcjaId: string, danie: string, limit: number) => {
@@ -193,6 +241,76 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
   }, []);
   const clearSekcja = useCallback((sekcjaId: string) => setWybory((prev) => ({ ...prev, [sekcjaId]: [] })), []);
 
+  const otworzModalZamiennik = useCallback(async (sekcjaLabel: string, oryginalDanie: string) => {
+    setModalZamiennik({ sekcjaLabel, oryginalDanie });
+    setSzukajDania("");
+    const url = `/api/dishes?category=${encodeURIComponent(sekcjaLabel)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const dania = Array.isArray(data) ? data : (data?.dishes ?? []);
+    console.log("otworzModalZamiennik:", { sekcjaLabel, oryginalDanie, url, daniaCount: dania.length, dania });
+    if (dania.length === 0) {
+      const resAll = await fetch("/api/dishes");
+      const dataAll = await resAll.json();
+      const allDania = Array.isArray(dataAll) ? dataAll : (dataAll?.dishes ?? []);
+      setDostepneDania(allDania);
+    } else {
+      setDostepneDania(dania);
+    }
+  }, []);
+
+  const wybierzZamiennik = useCallback((nazwaDania: string) => {
+    if (!modalZamiennik) return;
+    setZamienniki((prev) => {
+      const next = { ...prev, [modalZamiennik.oryginalDanie]: nazwaDania };
+      console.log("ZAMIENNIKI:", next);
+      return next;
+    });
+    setModalZamiennik(null);
+  }, [modalZamiennik]);
+
+  const usunZamiennik = useCallback((oryginalDanie: string) => {
+    setZamienniki((prev) => {
+      const next = { ...prev };
+      delete next[oryginalDanie];
+      return next;
+    });
+  }, []);
+
+  const otworzModalDodajDanie = useCallback(async (sekcjaId: string, sekcjaLabel: string) => {
+    setModalDodajDanie({ sekcjaId, sekcjaLabel });
+    setSzukajDodatkowe("");
+    const res = await fetch(`/api/dishes?category=${encodeURIComponent(sekcjaLabel)}`);
+    const data = await res.json();
+    const dania = Array.isArray(data) ? data : (data?.dishes ?? []);
+    if (dania.length === 0) {
+      const resAll = await fetch("/api/dishes");
+      const dataAll = await resAll.json();
+      setDostepneDaniaModal(Array.isArray(dataAll) ? dataAll : (dataAll?.dishes ?? []));
+    } else {
+      setDostepneDaniaModal(dania);
+    }
+  }, []);
+
+  const dodajDanie = useCallback((nazwa: string, cena: number) => {
+    if (!modalDodajDanie) return;
+    setDodatkiDan((prev) => ({
+      ...prev,
+      [modalDodajDanie.sekcjaId]: [
+        ...(prev[modalDodajDanie.sekcjaId] ?? []),
+        { nazwa, cena },
+      ],
+    }));
+    setModalDodajDanie(null);
+  }, [modalDodajDanie]);
+
+  const usunDodatkoweDanie = useCallback((sekcjaId: string, index: number) => {
+    setDodatkiDan((prev) => ({
+      ...prev,
+      [sekcjaId]: (prev[sekcjaId] ?? []).filter((_, i) => i !== index),
+    }));
+  }, []);
+
   const handlePakietClick = (id: string) => {
     if (id === pakietId) return;
     const hasWybory = Object.values(wybory).some((v) => v.length > 0);
@@ -201,29 +319,23 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
   };
 
   const doChangePakiet = (id: string) => {
-    setPakietId(id); setWybory({}); setDoplaty({}); setDopWybory({});
+    setPakietId(id); setWybory({}); setDoplaty({}); setDopWybory({}); setZamienniki({}); setDodatkiDan({});
     setConfirmReset(null); setWalidError(null);
   };
 
   const handleSave = () => {
     if (!pakiet) { setWalidError("Wybierz pakiet menu przed zapisaniem."); return; }
-    const brakujace = statusWyb.todo.map((s) => {
-      const curr = (wybory[s.id] || []).length;
-      return `${s.label.replace(/ \(.*\)/, "")} (${curr}/${s.limit})`;
-    });
-    if (brakujace.length) {
-      setWalidError("Uzupełnij wybory: " + brakujace.join(", "));
-      return;
-    }
     setWalidError(null);
-    onSave?.({ pakietId, wybory, doplaty, dopWybory, notatka });
+    const payload = { pakietId, wybory, doplaty, dopWybory, notatka, zamienniki, dodatkiDan };
+    console.log("PAYLOAD:", JSON.stringify(payload));
+    onSave?.(payload);
     setZapisano(true);
     setTimeout(() => setZapisano(false), 2500);
   };
 
   const handlePrint = () => {
     if (!pakiet) return;
-    const html = generatePrintHTML(pakiet, wybory, doplaty, dopWybory, notatka, ev, cena);
+    const html = generatePrintHTML(pakiet, wybory, doplaty, dopWybory, notatka, ev, cena, zamienniki, dodatkiDan);
     const iframe = iframeRef.current;
     if (!iframe) return;
     const doc = iframe.contentDocument || iframe.contentWindow!.document;
@@ -279,13 +391,38 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
             <>
               <div style={{ fontSize: "18px", fontWeight: 700, color: "#1e1e1e", marginBottom: "2px" }}>{pakiet.nazwa} — {pakiet.cena} zł/os</div>
               <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "20px" }}>{ev.client} · {fmtDate(ev.date)}{effGuests ? ` · ${effGuests} osób` : ""}</div>
-              {pakiet.sekcje.map((s: { id: string; typ: string; label: string; dania: string[] }) => {
+              {pakiet.sekcje.map((s: { id: string; typ: string; label: string; dania: string[]; limit?: number }) => {
                 const lista = s.typ === "fixed" ? s.dania : (wybory[s.id] || []);
+                const lim = s.typ === "wybor" && "limit" in s ? (s.limit ?? s.dania.length) : 0;
+                const podgladInfo = s.typ === "fixed"
+                  ? (() => { const l = s.dania.length; return `${l} ${l === 1 ? "danie" : l < 5 ? "dania" : "dań"}`; })()
+                  : `Wybrano ${lista.length} z ${lim || s.dania.length}`;
+                const podgladKolor = s.typ === "fixed" ? "#6b7280" : (lista.length === (lim || s.dania.length) ? "#065f46" : "#6b7280");
                 if (!lista.length) return <div key={s.id} style={{ marginBottom: "10px", opacity: 0.4 }}><div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "3px" }}>{s.label.replace(/ \(.*\)/, "").toUpperCase()} — BRAK WYBORU</div></div>;
                 return (
                   <div key={s.id} style={{ marginBottom: "14px" }}>
-                    <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "5px", borderBottom: "1px solid #f1f5f9", paddingBottom: "3px" }}>{s.label.replace(/ \(.*\)/, "").toUpperCase()}{s.typ === "fixed" ? <span style={{ marginLeft: "6px", color: "#22c55e", fontSize: "9px" }}>✓ W CENIE</span> : null}</div>
-                    <ul style={{ margin: 0, paddingLeft: "16px" }}>{lista.map((d: string) => <li key={d} style={{ lineHeight: 1.9, color: "#0f172a" }}>{d}</li>)}</ul>
+                    <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px", marginBottom: "5px", borderBottom: "1px solid #f1f5f9", paddingBottom: "3px", display: "flex", alignItems: "center", flexWrap: "wrap" }}>
+                      {s.label.replace(/ \(.*\)/, "").toUpperCase()}
+                      <span style={{ fontSize: "11px", color: podgladKolor, fontWeight: 400, marginLeft: "8px" }}>{podgladInfo}</span>
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: "16px" }}>
+                      {lista.map((d: string) => {
+                        const display = zamienniki[d] ?? d;
+                        const isZamiennik = !!zamienniki[d];
+                        return (
+                          <li key={d} style={{ lineHeight: 1.9, color: isZamiennik ? "#065f46" : "#0f172a" }} title={isZamiennik ? `zamiennik za: ${d}` : undefined}>
+                            {isZamiennik ? `${display} (zam. za: ${d})` : display}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {(dodatkiDan[s.id] ?? []).length > 0 && (
+                      <div style={{ marginTop: "6px", paddingLeft: "16px" }}>
+                        {(dodatkiDan[s.id] ?? []).map((d, i) => (
+                          <div key={i} style={{ fontSize: "12px", color: "#92400e", lineHeight: 1.8 }}>+ {d.nazwa} (+{d.cena} zł/os)</div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -337,37 +474,192 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
             )}
           </div>
           {pakiet && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "12px" }}>
-              <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px" }}>SKŁAD MENU</div>
-              {pakiet.sekcje.map((sek) => {
-                const limit = "limit" in sek ? (sek.limit as number) : 0;
-                const wybrane = wybory[sek.id] || [];
-                const pelne = sek.typ === "wybor" && wybrane.length === limit;
-                const empty = sek.typ === "wybor" && wybrane.length === 0;
-                return (
-                  <div key={sek.id} style={{ background: "#f8fafc", border: `1px solid ${pelne ? "#86efac" : empty ? "#e2e8f0" : "#fde68a"}`, borderRadius: "8px", padding: "12px 14px", transition: "border-color 0.15s" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
-                      <div style={{ fontSize: "12px", fontWeight: 600, color: "#111827", flex: 1 }}>{sek.typ === "fixed" ? <span style={{ color: "#22c55e", marginRight: "5px" }}>✓</span> : <span style={{ color: pelne ? "#22c55e" : empty ? "#64748b" : "#d97706", marginRight: "5px" }}>{pelne ? "●" : empty ? "○" : "◐"}</span>}{sek.label.replace(/ \(.*\)/, "")}{sek.typ === "fixed" ? <span style={{ marginLeft: "6px", fontSize: "10px", color: "#64748b", fontWeight: 600 }}>— w cenie</span> : null}</div>
-                      {sek.typ === "wybor" && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <span style={{ background: pelne ? "#f0fdf4" : empty ? "white" : "#fefce8", color: pelne ? "#166534" : empty ? "#64748b" : "#92400e", border: `1px solid ${pelne ? "#86efac" : empty ? "#e2e8f0" : "#fde68a"}`, borderRadius: "4px", padding: "2px 8px", fontSize: "11px", fontWeight: 600 }}>{pelne ? "✓ " : ""}{wybrane.length}/{limit}</span>
-                          {wybrane.length > 0 && <button onClick={() => clearSekcja(sek.id)} title="Wyczyść sekcję" style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", fontSize: "11px", padding: "2px 4px", fontWeight: 600 }}>✕</button>}
+            isNarrow ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "12px" }}>
+                <div style={{ fontSize: "10px", fontWeight: 900, color: "#111827", letterSpacing: "2px" }}>SKŁAD MENU</div>
+                {pakiet.sekcje.map((sek) => {
+                  const limit = "limit" in sek ? (sek.limit as number) : 0;
+                  const wybrane = wybory[sek.id] || [];
+                  const pelne = sek.typ === "wybor" && wybrane.length >= limit;
+                  const empty = sek.typ === "wybor" && wybrane.length === 0;
+                  const sekcjaInfo = sek.typ === "fixed"
+                    ? (() => { const l = sek.dania.length; return `${l} ${l === 1 ? "danie" : l < 5 ? "dania" : "dań"}`; })()
+                    : `${sek.dania.length} ${sek.dania.length === 1 ? "danie" : sek.dania.length < 5 ? "dania" : "dań"} w zestawie`;
+                  const sekcjaKolor = sek.typ === "fixed" ? "#6b7280" : (wybrane.length === (limit || sek.dania.length) ? "#065f46" : "#6b7280");
+                  return (
+                    <div key={sek.id} style={{ background: "#f8fafc", border: `1px solid ${sek.typ === "wybor" ? "#e2e8f0" : pelne ? "#86efac" : empty ? "#e2e8f0" : "#fde68a"}`, borderRadius: "8px", padding: "12px 14px", transition: "border-color 0.15s" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
+                        <div style={{ fontSize: "12px", fontWeight: 600, color: "#111827", flex: 1, display: "flex", alignItems: "center", flexWrap: "wrap" }}>
+                          {sek.typ === "fixed" ? <span style={{ color: "#22c55e", marginRight: "5px" }}>✓</span> : <span style={{ color: sekcjaKolor, marginRight: "5px" }}>●</span>}
+                          {sek.label.replace(/ \(.*\)/, "")}
+                          <span style={{ fontSize: "11px", color: sekcjaKolor, fontWeight: 400, marginLeft: "8px" }}>{sekcjaInfo}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
+                        {sek.dania.map((d: string) => {
+                          if (sek.typ === "fixed") {
+                            const zamiennik = zamienniki[d];
+                            return (
+                              <span key={d} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                                <span style={{ background: zamiennik ? "#fef3c7" : "#f1f5f9", color: zamiennik ? "#92400e" : "#374151", borderRadius: "4px", padding: "3px 9px", fontSize: "12px", textDecoration: zamiennik ? "line-through" : "none", opacity: zamiennik ? 0.6 : 1 }}>{d}</span>
+                                {zamiennik && <span style={{ background: "#d1fae5", color: "#065f46", borderRadius: "4px", padding: "3px 9px", fontSize: "12px", fontWeight: 500 }}>✓ {zamiennik}</span>}
+                                <button type="button" onClick={() => zamiennik ? usunZamiennik(d) : otworzModalZamiennik(sek.label, d)} title={zamiennik ? "Usuń zamiennik" : "Zmień danie"} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "12px", color: "#6b7280", padding: "2px 4px" }}>{zamiennik ? "✕" : "✎"}</button>
+                              </span>
+                            );
+                          }
+                          return <span key={d} style={{ background: "#fafafa", border: "2px solid #e5e7eb", borderRadius: "8px", padding: "8px 12px", fontSize: "12px", color: "#111827", fontWeight: 400 }}>{d}</span>;
+                        })}
+                      </div>
+                      {(dodatkiDan[sek.id] ?? []).length > 0 && (
+                        <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px dashed #e5e7eb" }}>
+                          <div style={{ fontSize: "11px", fontWeight: 700, color: "#92400e", marginBottom: "6px", letterSpacing: "0.05em" }}>DODATKOWO WYBRANE</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                            {(dodatkiDan[sek.id] ?? []).map((d, i) => (
+                              <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderRadius: "6px", border: "2px solid #f59e0b", background: "#fffbeb" }}>
+                                <span style={{ fontSize: "12px", fontWeight: 500, color: "#111827" }}>+ {d.nazwa}</span>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <span style={{ fontSize: "11px", fontWeight: 600, color: "#92400e" }}>+{d.cena} zł/os</span>
+                                  <button onClick={() => usunDodatkoweDanie(sek.id, i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: "13px", padding: "2px 4px" }}>✕</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
+                      <button
+                        onClick={() => otworzModalDodajDanie(sek.id, sek.label)}
+                        style={{ marginTop: "10px", width: "100%", padding: "8px 10px", border: "2px dashed #e5e7eb", borderRadius: "6px", background: "transparent", cursor: "pointer", fontSize: "12px", color: "#6b7280", fontWeight: 500 }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#3b82f6"; e.currentTarget.style.color = "#3b82f6"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.color = "#6b7280"; }}
+                      >
+                        + Dodaj danie do sekcji
+                      </button>
                     </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
-                      {sek.dania.map((d: string) => {
-                        if (sek.typ === "fixed") return <span key={d} style={{ background: "#f1f5f9", color: "#374151", borderRadius: "4px", padding: "3px 9px", fontSize: "12px" }}>{d}</span>;
-                        const sel = wybrane.includes(d);
-                        const zablok = !sel && pelne;
-                        return <button key={d} onClick={() => toggleWybor(sek.id, d, limit)} style={{ background: sel ? "#3b82f6" : zablok ? "#f8fafc" : "white", border: `1px solid ${sel ? "#3b82f6" : zablok ? "#f1f5f9" : "#e2e8f0"}`, borderRadius: "4px", padding: "4px 10px", cursor: zablok ? "not-allowed" : "pointer", fontSize: "12px", fontWeight: sel ? 600 : 400, color: sel ? "white" : zablok ? "#cbd5e1" : "#374151", transition: "border-color 0.1s" }}>{sel ? "✓ " : ""}{d}</button>;
-                      })}
-                    </div>
-                    {pelne && sek.typ === "wybor" && <div style={{ marginTop: "7px", fontSize: "11px", color: "#166534", fontWeight: 600 }}>✓ Wybrano {limit} z {sek.dania.length} — odznacz danie aby zmienić</div>}
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
+            ) : (
+            <div style={{ border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden", marginBottom: "12px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", minHeight: "420px" }}>
+                <div style={{ borderRight: "1px solid #e5e7eb", overflowY: "auto", background: "#f9fafb" }}>
+                  <div style={{ padding: "10px 12px", fontSize: "10px", fontWeight: 700, color: "#9ca3af", letterSpacing: "0.05em", textTransform: "uppercase", borderBottom: "1px solid #e5e7eb" }}>SKŁAD MENU</div>
+                  {pakiet.sekcje.map((sek) => {
+                    const limit = "limit" in sek ? (sek.limit as number) : 0;
+                    const wybrane = wybory[sek.id] || [];
+                    const pelne = sek.typ === "wybor" && wybrane.length >= limit;
+                    const aktywna = aktywnaSekcja === sek.id;
+                    const liczbaZamiennikow = sek.typ === "fixed" ? sek.dania.filter((d) => zamienniki[d]).length : 0;
+                    let badgeBg = "#f1f5f9", badgeColor = "#64748b", badgeText = "";
+                    if (sek.typ === "fixed") {
+                      badgeText = liczbaZamiennikow > 0 ? `${liczbaZamiennikow} zm.` : `${sek.dania.length}`;
+                      if (liczbaZamiennikow > 0) { badgeBg = "#fef3c7"; badgeColor = "#92400e"; }
+                    } else {
+                      badgeText = `${wybrane.length}/${limit}`;
+                      if (pelne) { badgeBg = "#d1fae5"; badgeColor = "#065f46"; }
+                      else if (wybrane.length > 0) { badgeBg = "#fef3c7"; badgeColor = "#92400e"; }
+                    }
+                    return (
+                      <div
+                        key={sek.id}
+                        onClick={() => setAktywnaSekcja(sek.id)}
+                        style={{ padding: "11px 14px", cursor: "pointer", background: aktywna ? "#eff6ff" : "transparent", borderLeft: `3px solid ${aktywna ? "#3b82f6" : "transparent"}`, borderBottom: "1px solid #f3f4f6", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px" }}
+                      >
+                        <span style={{ fontSize: "13px", fontWeight: aktywna ? 600 : 400, color: "#111827", lineHeight: 1.3 }}>{sek.label.replace(/ \(.*\)/, "")}</span>
+                        <span style={{ fontSize: "11px", padding: "2px 7px", borderRadius: "999px", background: badgeBg, color: badgeColor, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0 }}>{badgeText}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ overflowY: "auto", padding: "20px", maxHeight: "420px" }}>
+                  {(() => {
+                    const sek = pakiet.sekcje.find((s) => s.id === aktywnaSekcja);
+                    console.log("SEKCJA:", sek?.id, sek?.typ, JSON.stringify(sek?.dania));
+                    if (!sek) return <div style={{ color: "#9ca3af", fontSize: "13px" }}>Wybierz sekcję z lewej</div>;
+                    const limit = "limit" in sek ? (sek.limit as number) : 0;
+                    const wybrane = wybory[sek.id] || [];
+                    const pelne = sek.typ === "wybor" && wybrane.length >= limit;
+                    return (
+                      <>
+                        <div style={{ marginBottom: "16px", paddingBottom: "12px", borderBottom: "1px solid #f3f4f6" }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#111827" }}>{sek.label.replace(/ \(.*\)/, "")}</h3>
+                          </div>
+                          <p style={{ margin: "5px 0 0", fontSize: "12px", color: "#6b7280" }}>
+                            {sek.typ === "fixed"
+                              ? `${sek.dania.length} ${sek.dania.length === 1 ? "danie" : sek.dania.length < 5 ? "dania" : "dań"} w zestawie — kliknij ✎ aby zmienić danie`
+                              : `${sek.dania.length} ${sek.dania.length === 1 ? "danie" : sek.dania.length < 5 ? "dania" : "dań"} w zestawie`}
+                          </p>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                          {sek.dania.map((d: string) => {
+                            if (sek.typ === "fixed") {
+                              const zamiennik = zamienniki[d];
+                              return (
+                                <div key={d} style={{ padding: "14px 16px", borderRadius: "8px", border: `2px solid ${zamiennik ? "#f59e0b" : "#e5e7eb"}`, background: zamiennik ? "#fffbeb" : "#fafafa", display: "flex", flexDirection: "column", gap: "6px" }}>
+                                  <span style={{ fontSize: "13px", color: zamiennik ? "#9ca3af" : "#111827", textDecoration: zamiennik ? "line-through" : "none", fontWeight: 500, lineHeight: 1.3 }}>{d}</span>
+                                  {zamiennik && <span style={{ fontSize: "13px", fontWeight: 600, color: "#065f46", lineHeight: 1.3 }}>✓ {zamiennik}</span>}
+                                  <button onClick={() => zamiennik ? usunZamiennik(d) : otworzModalZamiennik(sek.label, d)} style={{ alignSelf: "flex-start", fontSize: "11px", padding: "3px 10px", borderRadius: "5px", cursor: "pointer", border: "1px solid #d1d5db", background: "#fff", color: "#374151", marginTop: "2px" }}>
+                                    {zamiennik ? "✕ Usuń zamiennik" : "✎ Zmień danie"}
+                                  </button>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div
+                                key={d}
+                                style={{
+                                  padding: "14px 16px",
+                                  borderRadius: "8px",
+                                  border: "2px solid #e5e7eb",
+                                  background: "#fafafa",
+                                  display: "flex",
+                                  alignItems: "flex-start",
+                                  gap: "10px",
+                                }}
+                              >
+                                <span style={{
+                                  fontSize: "13px",
+                                  fontWeight: 400,
+                                  color: "#111827",
+                                  lineHeight: 1.4,
+                                }}>
+                                  {d}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {(dodatkiDan[sek.id] ?? []).length > 0 && (
+                          <div style={{ marginTop: "14px", paddingTop: "12px", borderTop: "1px dashed #e5e7eb" }}>
+                            <div style={{ fontSize: "11px", fontWeight: 700, color: "#92400e", marginBottom: "8px", letterSpacing: "0.05em" }}>DODATKOWO WYBRANE</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                              {(dodatkiDan[sek.id] ?? []).map((d, i) => (
+                                <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: "8px", border: "2px solid #f59e0b", background: "#fffbeb" }}>
+                                  <span style={{ fontSize: "13px", fontWeight: 500, color: "#111827" }}>+ {d.nazwa}</span>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                    <span style={{ fontSize: "12px", fontWeight: 600, color: "#92400e" }}>+{d.cena} zł/os</span>
+                                    <button onClick={() => usunDodatkoweDanie(sek.id, i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: "14px", padding: "2px 4px" }}>✕</button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <button
+                          onClick={() => otworzModalDodajDanie(sek.id, sek.label)}
+                          style={{ marginTop: "12px", width: "100%", padding: "10px", border: "2px dashed #e5e7eb", borderRadius: "8px", background: "transparent", cursor: "pointer", fontSize: "13px", color: "#6b7280", fontWeight: 500 }}
+                          onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#3b82f6"; e.currentTarget.style.color = "#3b82f6"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.color = "#6b7280"; }}
+                        >
+                          + Dodaj danie do sekcji
+                        </button>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
             </div>
+            )
           )}
           {pakiet && (pakiet.doplaty || []).length > 0 && (
             <div style={{ marginBottom: "12px" }}>
@@ -403,6 +695,17 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
               <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px" }}><span style={{ color: "#374151" }}>{pakiet.nazwa}</span><span style={{ fontWeight: 600 }}>{pakiet.cena} zł/os</span></div>
                 {(pakiet.doplaty || []).filter((d) => doplaty[d.id] && !d.stala && (d.cena ?? 0) > 0).map((d) => <div key={d.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#64748b" }}><span>+ {d.label}</span><span style={{ fontWeight: 600 }}>+{(d.cena ?? 0)} zł/os</span></div>)}
+                {Object.entries(dodatkiDan).flatMap(([sekcjaId, dania]) =>
+                  dania.map((d, i) => {
+                    const sek = pakiet.sekcje.find((s) => s.id === sekcjaId);
+                    return (
+                      <div key={`${sekcjaId}-${i}`} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#92400e" }}>
+                        <span>+ {d.nazwa} ({sek?.label ?? sekcjaId})</span>
+                        <span style={{ fontWeight: 600 }}>+{d.cena} zł/os</span>
+                      </div>
+                    );
+                  })
+                )}
                 {cena.dop > 0 && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: 600, borderTop: "1px dashed #e2e8f0", paddingTop: "4px", marginTop: "2px", color: "#111827" }}><span>Łącznie na osobę</span><span>{cena.perOsoba} zł</span></div>}
                 {effGuests != null && effGuests > 0 ? <>{(pakiet.doplaty || []).filter((d) => doplaty[d.id] && d.stala).map((d) => <div key={d.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#64748b" }}><span>+ {d.label} (ryczałt)</span><span style={{ fontWeight: 600 }}>+{fmtZl(d.stala ?? 0)}</span></div>)}<div style={{ display: "flex", justifyContent: "space-between", fontSize: "18px", fontWeight: 700, color: "#111827", borderTop: "1px solid #e2e8f0", paddingTop: "10px", marginTop: "6px" }}><span>RAZEM</span><span>{fmtZl(cena.total)}</span></div></> : <div style={{ color: "#64748b", fontSize: "12px", fontStyle: "italic", borderTop: "1px solid #e2e8f0", paddingTop: "8px", marginTop: "4px" }}>Zmień liczbę gości powyżej aby zobaczyć łączną kwotę</div>}
               </div>
@@ -419,6 +722,98 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
               <button onClick={() => setConfirmReset(null)} style={{ flex: 1, background: "white", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "10px", cursor: "pointer", fontSize: "13px", fontWeight: 600, color: "#374151" }}>Zostań</button>
               <button onClick={() => doChangePakiet(confirmReset)} style={{ flex: 1, background: "#ef4444", color: "white", border: "none", borderRadius: "4px", padding: "10px", cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>Tak, zmień</button>
             </div>
+          </div>
+        </div>
+      )}
+      {modalZamiennik && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
+          zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{
+            background: "#fff", borderRadius: "8px", padding: "24px",
+            width: "420px", maxHeight: "500px", display: "flex", flexDirection: "column", gap: "12px",
+          }}>
+            <div style={{ fontWeight: 600, fontSize: "15px" }}>
+              Zamiennik za: <em>{modalZamiennik.oryginalDanie}</em>
+            </div>
+            <input
+              autoFocus
+              placeholder="Szukaj dania..."
+              value={szukajDania}
+              onChange={(e) => setSzukajDania(e.target.value)}
+              style={{ border: "1px solid #d1d5db", borderRadius: "6px", padding: "8px 12px", fontSize: "14px" }}
+            />
+            <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "4px", minHeight: 0 }}>
+              {dostepneDania
+                .filter((d) => d.name.toLowerCase().includes(szukajDania.toLowerCase()))
+                .map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => wybierzZamiennik(d.name)}
+                    style={{
+                      textAlign: "left", padding: "8px 12px", border: "1px solid #e5e7eb",
+                      borderRadius: "6px", background: "#fff", cursor: "pointer", fontSize: "13px",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f0fdf4")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                  >
+                    {d.name}
+                    {d.category && <span style={{ color: "#9ca3af", fontSize: "11px", marginLeft: "8px" }}>{d.category}</span>}
+                  </button>
+                ))}
+              {dostepneDania.filter((d) => d.name.toLowerCase().includes(szukajDania.toLowerCase())).length === 0 && (
+                <div style={{ color: "#9ca3af", textAlign: "center", padding: "16px" }}>Brak wyników</div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setModalZamiennik(null)}
+              style={{ alignSelf: "flex-end", padding: "6px 16px", border: "1px solid #d1d5db", borderRadius: "6px", cursor: "pointer" }}
+            >
+              Anuluj
+            </button>
+          </div>
+        </div>
+      )}
+      {modalDodajDanie && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ background: "#fff", borderRadius: "8px", padding: "24px", width: "420px", maxHeight: "520px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div style={{ fontWeight: 700, fontSize: "15px" }}>Dodaj danie do: <em>{modalDodajDanie.sekcjaLabel}</em></div>
+            <input
+              autoFocus
+              placeholder="Szukaj dania..."
+              value={szukajDodatkowe}
+              onChange={(e) => setSzukajDodatkowe(e.target.value)}
+              style={{ border: "1px solid #d1d5db", borderRadius: "6px", padding: "8px 12px", fontSize: "14px" }}
+            />
+            <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "4px", minHeight: 0 }}>
+              {dostepneDaniaModal
+                .filter((d) => d.name.toLowerCase().includes(szukajDodatkowe.toLowerCase()))
+                .map((d) => {
+                  const cena = typeof d.defaultPrice === "number" ? d.defaultPrice : (d.defaultPrice as { toNumber?: () => number })?.toNumber?.() ?? 0;
+                  return (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => dodajDanie(d.name, cena)}
+                      style={{ textAlign: "left", padding: "10px 12px", border: "1px solid #e5e7eb", borderRadius: "6px", background: "#fff", cursor: "pointer", fontSize: "13px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "#fffbeb")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "#fff")}
+                    >
+                      <span>{d.name}</span>
+                      <span style={{ fontSize: "12px", fontWeight: 600, color: "#92400e", marginLeft: "12px", flexShrink: 0 }}>+{cena} zł/os</span>
+                    </button>
+                  );
+                })}
+              {dostepneDaniaModal.filter((d) => d.name.toLowerCase().includes(szukajDodatkowe.toLowerCase())).length === 0 && (
+                <div style={{ color: "#9ca3af", textAlign: "center", padding: "16px" }}>Brak wyników</div>
+              )}
+            </div>
+            <button onClick={() => setModalDodajDanie(null)} style={{ alignSelf: "flex-end", padding: "6px 16px", border: "1px solid #d1d5db", borderRadius: "6px", cursor: "pointer" }}>
+              Anuluj
+            </button>
           </div>
         </div>
       )}

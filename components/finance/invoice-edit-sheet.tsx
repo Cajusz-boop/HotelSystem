@@ -491,7 +491,7 @@ export function InvoiceEditSheet({
                   <span className="font-medium text-foreground">{invoiceDetail.amountGross.toFixed(2)} PLN</span>
                 </p>
                 <p>
-                  Nabywca: {invoiceDetail.buyerName} ({invoiceDetail.buyerNip})
+                  Nabywca: {invoiceDetail.buyerName}{invoiceDetail.buyerNip ? ` (${invoiceDetail.buyerNip})` : ""}
                 </p>
                 {invoiceDetail.deliveryDate && (
                   <p>Data wykonania usługi: {new Date(invoiceDetail.deliveryDate).toLocaleDateString("pl-PL")}</p>

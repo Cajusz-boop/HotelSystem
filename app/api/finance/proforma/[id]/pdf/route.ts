@@ -273,7 +273,24 @@ async function generateProformaHtml(id: string, variant: string | null): Promise
     return cells;
   });
 
-  const vatSummary = [{ rate: vatRate, net, vat, gross }];
+  // Podsumowanie VAT – agreguj po pozycjach (tak jak widok ekranowy)
+  const byVat: Record<string, { net: number; vat: number; gross: number }> = {};
+  for (const li of lineItems) {
+    const k = li.vatRate === 0 ? "zw." : String(li.vatRate);
+    if (!byVat[k]) byVat[k] = { net: 0, vat: 0, gross: 0 };
+    byVat[k].net += li.netAmount;
+    byVat[k].vat += li.vatAmount;
+    byVat[k].gross += li.grossAmount;
+  }
+  let vatSummary = Object.entries(byVat).map(([rate, vals]) => ({
+    rate: rate === "zw." ? 0 : Number(rate),
+    net: Math.round(vals.net * 100) / 100,
+    vat: Math.round(vals.vat * 100) / 100,
+    gross: Math.round(vals.gross * 100) / 100,
+  }));
+  if (vatSummary.length === 0) {
+    vatSummary = [{ rate: vatRate, net, vat, gross }];
+  }
 
   const datesTopHtml = `${placeOfIssue ? `<p class="mb-0"><strong>Miejsce wystawienia:</strong> ${escapeHtml(placeOfIssue)}</p>` : ""}
       <p class="mb-0"><strong>Data dostawy/wykonania usługi:</strong> ${escapeHtml(deliveryDate)}</p>

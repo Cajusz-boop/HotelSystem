@@ -14,6 +14,29 @@ const EVENT_TYPES = [
   { value: "INNE", label: "Inne" },
 ] as const;
 
+const EVENT_TYPE_FIELDS_CONFIG: Record<
+  string,
+  {
+    showChurch: boolean;
+    showBrideOrchestra: boolean;
+    showAfterparty: boolean;
+    showTortNapoje: boolean;
+    showPoprawiny: boolean;
+    showZespol: boolean;
+    showDekoracje: boolean;
+    showFacebook: boolean;
+  }
+> = {
+  WESELE: { showChurch: true, showBrideOrchestra: true, showAfterparty: true, showTortNapoje: true, showPoprawiny: true, showZespol: true, showDekoracje: true, showFacebook: true },
+  KOMUNIA: { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true, showPoprawiny: false, showZespol: true, showDekoracje: true, showFacebook: true },
+  CHRZCINY: { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true, showPoprawiny: false, showZespol: false, showDekoracje: true, showFacebook: true },
+  URODZINY: { showChurch: false, showBrideOrchestra: false, showAfterparty: true, showTortNapoje: true, showPoprawiny: false, showZespol: true, showDekoracje: true, showFacebook: true },
+  STYPA: { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: false, showPoprawiny: false, showZespol: false, showDekoracje: false, showFacebook: false },
+  FIRMOWA: { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true, showPoprawiny: false, showZespol: true, showDekoracje: false, showFacebook: false },
+  SYLWESTER: { showChurch: false, showBrideOrchestra: false, showAfterparty: true, showTortNapoje: true, showPoprawiny: false, showZespol: true, showDekoracje: true, showFacebook: true },
+  INNE: { showChurch: false, showBrideOrchestra: false, showAfterparty: false, showTortNapoje: true, showPoprawiny: false, showZespol: true, showDekoracje: true, showFacebook: true },
+};
+
 const ROOMS_DATA = [
   { name: "Sala Złota", capacity: 120 },
   { name: "Sala Diamentowa", capacity: 80 },
@@ -37,14 +60,14 @@ const TIME_OPTIONS = (() => {
 
 const inputStyle = {
   width: "100%",
-  padding: "8px 12px",
+  padding: "10px 14px",
   border: "1px solid #ddd",
   borderRadius: "4px",
-  fontSize: "13px",
+  fontSize: "15px",
   outline: "none" as const,
   fontFamily: "inherit",
 };
-const labelStyle = { fontSize: "11px", fontWeight: 700, color: "#888", textTransform: "uppercase" as const, display: "block" as const, marginBottom: "4px" };
+const labelStyle = { fontSize: "13px", fontWeight: 700, color: "#888", textTransform: "uppercase" as const, display: "block" as const, marginBottom: "6px" };
 
 function TimeSelect({
   value,
@@ -288,11 +311,15 @@ export function EventFormTabs({
   onMenuSave?: (d: Record<string, unknown>) => void;
   evForMenu?: { type: string; client?: string | null; date: string; guests?: number | null };
 }) {
-  const showChurch = form.eventType === "WESELE";
-  const showBrideOrchestra = form.eventType === "WESELE";
-  const showAfterparty = form.eventType === "WESELE" || form.eventType === "URODZINY";
-  const hideTortNapoje = form.eventType === "STYPA";
-  const showPoprawiny = form.eventType === "WESELE";
+  const cfg = EVENT_TYPE_FIELDS_CONFIG[form.eventType] ?? EVENT_TYPE_FIELDS_CONFIG["INNE"];
+  const showChurch = cfg.showChurch;
+  const showBrideOrchestra = cfg.showBrideOrchestra;
+  const showAfterparty = cfg.showAfterparty;
+  const hideTortNapoje = !cfg.showTortNapoje;
+  const showPoprawiny = cfg.showPoprawiny;
+  const showZespol = cfg.showZespol;
+  const showDekoracje = cfg.showDekoracje;
+  const showFacebook = cfg.showFacebook;
 
   const totalGuests = useMemo(() => {
     const a = form.adultsCount === "" ? 0 : Number(form.adultsCount) || 0;
@@ -321,13 +348,13 @@ export function EventFormTabs({
                   type="button"
                   onClick={() => update("eventType", t.value)}
                   style={{
-                    padding: "6px 14px",
+                    padding: "8px 18px",
                     borderRadius: "4px",
                     cursor: "pointer",
                     border: `1px solid ${active ? "#1e1e1e" : "#ddd"}`,
                     background: active ? "#1e1e1e" : "white",
                     color: active ? "white" : "#666",
-                    fontSize: "12px",
+                    fontSize: "15px",
                     fontWeight: 600,
                   }}
                 >
@@ -352,13 +379,13 @@ export function EventFormTabs({
                   type="button"
                   onClick={() => toggleRoom(r)}
                   style={{
-                    padding: "6px 12px",
+                    padding: "8px 16px",
                     borderRadius: "4px",
                     cursor: "pointer",
                     border: `1px solid ${active ? "#1e1e1e" : "#ddd"}`,
                     background: active ? "#1e1e1e" : "white",
                     color: active ? "white" : "#666",
-                    fontSize: "12px",
+                    fontSize: "15px",
                     fontWeight: 600,
                   }}
                 >
@@ -478,11 +505,13 @@ export function EventFormTabs({
             </div>
           );
         })()}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginTop: "16px" }}>
-          <NumField label="Orkiestra/DJ (os.)" value={form.orchestraCount} onChange={(v) => update("orchestraCount", v)} />
-          <NumField label="Kamerzysta" value={form.cameramanCount} onChange={(v) => update("cameramanCount", v)} />
-          <NumField label="Fotograf" value={form.photographerCount} onChange={(v) => update("photographerCount", v)} />
-        </div>
+        {showZespol && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginTop: "16px" }}>
+            <NumField label="Orkiestra/DJ (os.)" value={form.orchestraCount} onChange={(v) => update("orchestraCount", v)} />
+            <NumField label="Kamerzysta" value={form.cameramanCount} onChange={(v) => update("cameramanCount", v)} />
+            <NumField label="Fotograf" value={form.photographerCount} onChange={(v) => update("photographerCount", v)} />
+          </div>
+        )}
       </div>
     );
   }
@@ -534,12 +563,16 @@ export function EventFormTabs({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 20px", marginBottom: "16px" }}>
           <YesNoButton label="Ciasta — stół szwedzki" value={form.cakesSwedishTable} onChange={(v) => update("cakesSwedishTable", v)} />
           <YesNoButton label="Owoce — stół szwedzki" value={form.fruitsSwedishTable} onChange={(v) => update("fruitsSwedishTable", v)} />
-          <YesNoButton label="Własne kwiaty" value={form.ownFlowers} onChange={(v) => update("ownFlowers", v)} />
-          <YesNoButton label="Własne wazony" value={form.ownVases} onChange={(v) => update("ownVases", v)} />
-          <YesNoButton label="Winietki" value={form.placeCards} onChange={(v) => update("placeCards", v)} />
+          {showDekoracje && (
+            <>
+              <YesNoButton label="Własne kwiaty" value={form.ownFlowers} onChange={(v) => update("ownFlowers", v)} />
+              <YesNoButton label="Własne wazony" value={form.ownVases} onChange={(v) => update("ownVases", v)} />
+              <YesNoButton label="Winietki" value={form.placeCards} onChange={(v) => update("placeCards", v)} />
+            </>
+          )}
         </div>
-        {form.placeCards && <Field label="Układ winietek" value={form.placeCardsLayout} onChange={(v) => update("placeCardsLayout", v)} />}
-        <Field label="Kolor przewodni dekoracji" value={form.decorationColor} onChange={(v) => update("decorationColor", v)} />
+        {showDekoracje && form.placeCards && <Field label="Układ winietek" value={form.placeCardsLayout} onChange={(v) => update("placeCardsLayout", v)} />}
+        {showDekoracje && <Field label="Kolor przewodni dekoracji" value={form.decorationColor} onChange={(v) => update("decorationColor", v)} />}
         <div>
           <label style={labelStyle}>Układ stołów</label>
           <textarea value={form.tableLayout} onChange={(e) => update("tableLayout", e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
@@ -561,7 +594,7 @@ export function EventFormTabs({
           <label style={labelStyle}>Specjalne życzenia</label>
           <textarea value={form.specialRequests} onChange={(e) => update("specialRequests", e.target.value)} rows={2} style={{ ...inputStyle, resize: "vertical" }} />
         </div>
-        <YesNoButton label="Zgoda na Facebook" value={form.facebookConsent} onChange={(v) => update("facebookConsent", v)} />
+        {showFacebook && <YesNoButton label="Zgoda na Facebook" value={form.facebookConsent} onChange={(v) => update("facebookConsent", v)} />}
         <YesNoButton label="Własne serwetki" value={form.ownNapkins} onChange={(v) => update("ownNapkins", v)} />
         <Field label="Osoba dyżurna" value={form.dutyPerson} onChange={(v) => update("dutyPerson", v)} />
         <Field label="Opiekun imprezy" value={form.assignedTo} onChange={(v) => update("assignedTo", v)} placeholder="np. Marta Kowalska" />

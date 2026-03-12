@@ -4,6 +4,7 @@
  */
 import { google } from "googleapis";
 import { getGoogleAuth } from "@/lib/google-auth";
+import { prisma } from "@/lib/db";
 
 export type EventOrderForChecklist = {
   eventType?: string | null;
@@ -49,7 +50,126 @@ export type EventOrderForChecklist = {
   afterpartyTimeTo?: string | null;
   afterpartyGuests?: number | null;
   afterpartyMusic?: string | null;
+  menu?: {
+    pakietId?: string | null;
+    wybory?: Record<string, string[]>;
+    doplaty?: Record<string, boolean>;
+    dopWybory?: Record<string, string[]>;
+    notatka?: string;
+    zamienniki?: Record<string, string>;
+    dodatkiDan?: Record<string, { nazwa: string; cena: number }[]>;
+  } | null;
+  packageName?: string | null;
+  cakesAndDesserts?: string | null;
 };
+
+async function buildMenuLines(
+  event: EventOrderForChecklist & { packageName?: string | null; cakesAndDesserts?: string | null }
+): Promise<string[]> {
+  const menu = event.menu;
+  const lines: string[] = [];
+
+  lines.push("OFERTA MENU", "");
+  lines.push(`Klient: ${event.clientName ?? ""}`);
+  lines.push(`Data: ${event.eventDate ? new Date(event.eventDate).toLocaleDateString("pl-PL") : ""}`);
+  lines.push(`Sala: ${event.roomName ?? ""}`);
+  lines.push(`Liczba osób: ${event.guestCount ?? ""}`);
+  lines.push("");
+
+  if (!menu?.pakietId) {
+    lines.push("Pakiet: — do wyboru —", "");
+  } else {
+    let pakiet: Awaited<ReturnType<typeof prisma.menuPackage.findFirst>> = null;
+    try {
+      pakiet = await prisma.menuPackage.findFirst({
+        where: { code: menu.pakietId },
+        include: {
+          sections: { orderBy: { sortOrder: "asc" } },
+          surcharges: { orderBy: { sortOrder: "asc" } },
+        },
+      });
+    } catch (err) {
+      console.warn("Nie udało się pobrać definicji pakietu do dokumentu:", err);
+    }
+
+    const packageDisplayName = pakiet?.name ?? event.packageName ?? menu.pakietId;
+    lines.push(`Pakiet: ${packageDisplayName}`, "");
+
+    if (pakiet) {
+      const sekcje = pakiet.sections as Array<{ code: string; label: string; type: string; dishes: string[]; choiceLimit?: number }>;
+
+      for (const sek of sekcje) {
+          const limit = sek.choiceLimit;
+          const labelInfo =
+            sek.type === "wybor" && limit
+              ? `${sek.label.replace(/ \(.*\)/, "")} (${limit} do wyboru):`
+              : `${sek.label.replace(/ \(.*\)/, "")}:`;
+
+          lines.push(labelInfo);
+
+          if (sek.type === "fixed") {
+            const dishes = Array.isArray(sek.dishes) ? sek.dishes : [];
+            for (const danie of dishes) {
+              const zamiennik = menu.zamienniki?.[danie];
+              if (zamiennik) {
+                lines.push(`${zamiennik} (zamiennik za: ${danie})`);
+              } else {
+                lines.push(danie);
+              }
+            }
+          } else {
+            const wybrane = menu.wybory?.[sek.code] ?? [];
+            if (wybrane.length > 0) {
+              for (const d of wybrane) {
+                const orig = Object.entries(menu.zamienniki ?? {}).find(([, z]) => z === d)?.[0];
+                lines.push(orig ? `${d} (zamiennik za: ${orig})` : d);
+              }
+            } else {
+              lines.push("— nie wybrano —");
+            }
+          }
+          lines.push("");
+        }
+
+        const dodatkiDanMenu = (menu as { dodatkiDan?: Record<string, { nazwa: string; cena: number }[]> }).dodatkiDan ?? {};
+        const wszystkieDodatki = Object.entries(dodatkiDanMenu).flatMap(([sekcjaCode, dania]) => {
+          const sek = sekcje.find((s: { code: string }) => s.code === sekcjaCode);
+          return dania.map((d: { nazwa: string; cena: number }) =>
+            `• ${d.nazwa} (${sek?.label ?? sekcjaCode}) +${d.cena} zł/os`
+          );
+        });
+        if (wszystkieDodatki.length > 0) {
+          lines.push("Dodatkowe dania:");
+          wszystkieDodatki.forEach((l) => lines.push(l));
+          lines.push("");
+        }
+
+        const wybraneDoplatyCodes = Object.entries(menu.doplaty ?? {})
+          .filter(([, v]) => v)
+          .map(([k]) => k);
+        if (wybraneDoplatyCodes.length > 0) {
+          const surcharges = pakiet.surcharges as Array<{ code: string; label: string }>;
+          const codeToLabel = new Map(surcharges.map((s) => [s.code, s.label]));
+          lines.push("Dopłaty:");
+          wybraneDoplatyCodes.forEach((code) => {
+            const label = codeToLabel.get(code) ?? code;
+            const dopWyb = menu.dopWybory?.[code];
+            lines.push(dopWyb?.length ? `• ${label} (${dopWyb.join(", ")})` : `• ${label}`);
+          });
+          lines.push("");
+        }
+    }
+
+    if (menu.notatka) {
+      lines.push("Notatka:", menu.notatka, "");
+    }
+  }
+
+  lines.push("Torty i desery:");
+  lines.push(event.cakesAndDesserts ?? "—");
+
+  return lines;
+}
 
 function buildChecklistRows(event: EventOrderForChecklist): [string, string][] {
   const fmtDate = (d: Date | null | undefined) =>
@@ -98,6 +218,40 @@ function buildChecklistRows(event: EventOrderForChecklist): [string, string][] {
     ["Afterparty – do", event.afterpartyTimeTo ?? ""],
     ["Afterparty – goście", String(event.afterpartyGuests ?? "")],
     ["Afterparty – muzyka", event.afterpartyMusic ?? ""],
+    ["", ""],
+    ["PAKIET MENU", event.menu?.pakietId ? (event.packageName ?? event.menu.pakietId) : "— nie wybrano —"],
+    ...(event.menu?.zamienniki && Object.keys(event.menu.zamienniki).length > 0
+      ? [["ZAMIENNIKI", Object.entries(event.menu.zamienniki).map(([orig, zam]) => `${zam} zamiast ${orig}`).join(", ")]] as [string, string][]
+      : []),
+    [
+      "WYBRANE DANIA",
+      (() => {
+        const wybrane = Object.values(event.menu?.wybory ?? {}).flat();
+        const zam = event.menu?.zamienniki ?? {};
+        return wybrane
+          .map((d) => {
+            const orig = Object.entries(zam).find(([, z]) => z === d)?.[0];
+            return orig ? `${d} zamiast ${orig}` : d;
+          })
+          .join(", ") || "—";
+      })(),
+    ],
+    [
+      "DODATKOWE DANIA",
+      (() => {
+        const dodatki = (event.menu as { dodatkiDan?: Record<string, { nazwa: string; cena: number }[]> })?.dodatkiDan ?? {};
+        const lista = Object.values(dodatki).flat();
+        return lista.map((d) => `${d.nazwa} (+${d.cena} zł/os)`).join(", ") || "—";
+      })(),
+    ],
+    [
+      "DOPŁATY",
+      Object.entries(event.menu?.doplaty ?? {})
+        .filter(([, v]) => v)
+        .map(([k]) => k)
+        .join(", ") || "—",
+    ],
+    ["NOTATKA MENU", event.menu?.notatka ?? "—"],
   ];
 }
 
@@ -155,7 +309,7 @@ export async function createChecklistDoc(
   };
 }
 
-/** Tworzy dokument "Oferta menu" – placeholder lub z danymi pakietu. */
+/** Tworzy dokument "Oferta menu" – z pełnym składem pakietu i wyborów. */
 export async function createMenuDoc(
   event: EventOrderForChecklist & { packageId?: string | null; packageName?: string | null; cakesAndDesserts?: string | null }
 ): Promise<{ docId: string; docUrl: string }> {
@@ -181,16 +335,7 @@ export async function createMenuDoc(
     }
   }
 
-  const lines: string[] = [
-    "OFERTA MENU",
-    "",
-    `Klient: ${event.clientName ?? ""}`,
-    `Data: ${event.eventDate ? new Date(event.eventDate).toLocaleDateString("pl-PL") : ""}`,
-    `Pakiet: ${event.packageName ?? event.packageId ?? "— do wyboru —"}`,
-    "",
-    "Torty i desery:",
-    event.cakesAndDesserts ?? "—",
-  ];
+  const lines = await buildMenuLines(event);
   const text = lines.join("\n") + "\n";
 
   await docs.documents.batchUpdate({
@@ -204,6 +349,35 @@ export async function createMenuDoc(
     docId,
     docUrl: `https://docs.google.com/document/d/${docId}/edit`,
   };
+}
+
+/** Aktualizuje dokument "Oferta menu" – czyści zawartość i generuje od nowa. */
+export async function updateMenuDoc(
+  docId: string,
+  event: EventOrderForChecklist & { packageName?: string | null; cakesAndDesserts?: string | null }
+): Promise<void> {
+  const auth = getGoogleAuth();
+  const docs = google.docs({ version: "v1", auth });
+
+  const doc = await docs.documents.get({ documentId: docId });
+  const content = doc.data.body?.content;
+  if (!content || content.length === 0) return;
+  const lastEl = content[content.length - 1];
+  const endIndex = (lastEl?.endIndex ?? 2) - 1;
+  if (endIndex <= 1) return;
+
+  const lines = await buildMenuLines(event);
+  const text = lines.join("\n") + "\n";
+
+  await docs.documents.batchUpdate({
+    documentId: docId,
+    requestBody: {
+      requests: [
+        { deleteContentRange: { range: { startIndex: 1, endIndex } } },
+        { insertText: { location: { index: 1 }, text } },
+      ],
+    },
+  });
 }
 
 export async function updateChecklistDoc(

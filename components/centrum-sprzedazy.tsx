@@ -871,8 +871,8 @@ function CreateEventModal({
           <EventFormTabs tab={tab} form={form} update={updateForm} menuData={menuData} onMenuSave={(d) => { setMenuData(d); showToast("Menu zapisane"); }} evForMenu={evForMenu} />
         </div>
         <div style={{ padding: "12px 20px", borderTop: "1px solid #e5e5e5", display: "flex", gap: "8px", justifyContent: "flex-end", flexShrink: 0 }}>
-          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "8px 16px", fontSize: "12px", fontWeight: 600, color: "#111827", cursor: "pointer" }}>Anuluj</button>
-          <button onClick={handleSave} disabled={saving} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "8px 20px", fontSize: "12px", fontWeight: 600, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>{saving ? "Zapisuję..." : "Zapisz imprezę"}</button>
+          <button onClick={onClose} style={{ background: "white", border: "1px solid #ddd", borderRadius: "4px", padding: "10px 24px", fontSize: "15px", fontWeight: 600, color: "#111827", cursor: "pointer" }}>Anuluj</button>
+          <button onClick={handleSave} disabled={saving} style={{ background: "#1e1e1e", color: "white", border: "none", borderRadius: "4px", padding: "10px 24px", fontSize: "15px", fontWeight: 600, cursor: "pointer", opacity: saving ? 0.6 : 1 }}>{saving ? "Zapisuję..." : "Zapisz imprezę"}</button>
         </div>
       </div>
     </div>
@@ -997,7 +997,7 @@ function EventDetailModal({
   return (
     <>
       <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 500, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "60px" }}>
-        <div ref={ref} style={{ background: "white", borderRadius: "8px", width: "100%", maxWidth: "560px", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 4px 24px rgba(0,0,0,0.12)", overflowY: "auto", border: "1px solid #e2e8f0" }}>
+        <div ref={ref} style={{ background: "white", borderRadius: "8px", width: "100%", maxWidth: "920px", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 4px 24px rgba(0,0,0,0.12)", overflowY: "auto", border: "1px solid #e2e8f0" }}>
           <div style={{ padding: "16px 20px", borderBottom: "1px solid #e2e8f0", flexShrink: 0 }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
               <div style={{ flex: 1, minWidth: 0 }}>

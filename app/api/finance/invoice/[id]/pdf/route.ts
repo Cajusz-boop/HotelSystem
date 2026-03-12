@@ -370,7 +370,7 @@ async function generateInvoiceHtml(
     ...(invoice.buyerPostalCode || invoice.buyerCity
       ? [[invoice.buyerPostalCode, invoice.buyerCity].filter(Boolean).join(" ")]
       : []),
-    `NIP: ${invoice.buyerNip}`,
+    ...(invoice.buyerNip ? [`NIP: ${invoice.buyerNip}`] : []),
   ].filter(Boolean);
   const buyerHtml = buyerLines.map((l) => `<p class="mb-0">${escapeHtml(l)}</p>`).join("");
 
@@ -442,8 +442,24 @@ async function generateInvoiceHtml(
     return cells;
   });
 
-  // Podsumowanie VAT
-  const vatSummary = [{ rate: vatRate, net: finalNet, vat: finalVat, gross: finalGross }];
+  // Podsumowanie VAT – agreguj po pozycjach (tak jak widok ekranowy)
+  const byVat: Record<string, { net: number; vat: number; gross: number }> = {};
+  for (const li of lineItems) {
+    const k = li.vatRate === 0 ? "zw." : String(li.vatRate);
+    if (!byVat[k]) byVat[k] = { net: 0, vat: 0, gross: 0 };
+    byVat[k].net += li.netAmount;
+    byVat[k].vat += li.vatAmount;
+    byVat[k].gross += li.grossAmount;
+  }
+  let vatSummary = Object.entries(byVat).map(([rate, vals]) => ({
+    rate: rate === "zw." ? 0 : Number(rate),
+    net: Math.round(vals.net * 100) / 100,
+    vat: Math.round(vals.vat * 100) / 100,
+    gross: Math.round(vals.gross * 100) / 100,
+  }));
+  if (vatSummary.length === 0) {
+    vatSummary = [{ rate: vatRate, net: finalNet, vat: finalVat, gross: finalGross }];
+  }
 
   const headerHtml = template.headerText
     ? `<div class="header-text">${escapeHtml(template.headerText).replace(/\n/g, "<br>")}</div>`

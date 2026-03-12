@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { createAuditLog } from "@/lib/audit";
-import { updateChecklistDoc } from "@/lib/googleDocs";
+import { updateChecklistDoc, updateMenuDoc } from "@/lib/googleDocs";
 import {
   updateCalendarEvent,
   cancelCalendarEvent,
@@ -315,7 +315,15 @@ export async function PUT(
 
     await Promise.all([
       event.checklistDocId
-        ? updateChecklistDoc(event.checklistDocId, event)
+        ? updateChecklistDoc(event.checklistDocId, { ...event, packageName: packageName ?? undefined })
+        : Promise.resolve(),
+      event.menuDocId
+        ? updateMenuDoc(event.menuDocId, {
+            ...event,
+            menu: (event.menu ?? null) as { pakietId?: string | null; wybory?: Record<string, string[]>; doplaty?: Record<string, boolean>; dopWybory?: Record<string, string[]>; notatka?: string; zamienniki?: Record<string, string> } | null,
+            packageName: packageName ?? undefined,
+            cakesAndDesserts: event.cakesAndDesserts ?? undefined,
+          })
         : Promise.resolve(),
       event.googleCalendarEventId && event.googleCalendarCalId
         ? (() => {

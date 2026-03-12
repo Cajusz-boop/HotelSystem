@@ -138,7 +138,7 @@ export function ProformaPreviewPage({ id }: ProformaPreviewPageProps) {
         setIssueDate(d.issueDate ? parseDdMmYyyyToYyyyMmDd(d.issueDate) : "");
         setDeliveryDate(d.deliveryDate ? parseDdMmYyyyToYyyyMmDd(d.deliveryDate) : "");
         setBuyerName(d.buyerName);
-        setBuyerNip(d.buyerNip);
+        setBuyerNip(d.buyerNip ?? "");
         setBuyerAddress(d.buyerAddress ?? "");
         setBuyerPostalCode(d.buyerPostalCode ?? "");
         setBuyerCity(d.buyerCity ?? "");
