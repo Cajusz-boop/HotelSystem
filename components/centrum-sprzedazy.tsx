@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { MenuTab } from "@/components/events/menu-modul";
 import { EventFormTabs, EMPTY_EVENT_FORM, type EventFormTabState } from "@/components/events/event-form-tabs";
 import { MenuPackagesView } from "@/components/centrum-sprzedazy/menu-packages-view";
+import { KosztorysFormEmbedded } from "@/components/centrum-sprzedazy/KosztorysFormEmbedded";
 import { getEventTypeFieldsConfig } from "@/app/actions/hotel-config";
 
 const TODAY = new Date();
@@ -909,7 +910,7 @@ function EventDetailModal({
   const [noteText, setNoteText] = useState("");
   const [showDep, setShowDep] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
-  const [zakladka, setZakladka] = useState<"dane" | "goscie" | "menu" | "szczegoly" | "zadania">("dane");
+  const [zakladka, setZakladka] = useState<"dane" | "goscie" | "menu" | "szczegoly" | "kosztorys" | "zadania">("dane");
   const [editMenuData, setEditMenuData] = useState<Record<string, unknown> | null>(null);
   const [availableQuotes, setAvailableQuotes] = useState<{ id: string; name: string }[]>([]);
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
@@ -1038,8 +1039,8 @@ function EventDetailModal({
           </div>
           <div style={{ display: "flex", borderBottom: "1px solid #e2e8f0", marginLeft: "20px", marginRight: "20px", gap: "0" }}>
             {(editMode
-              ? ([["dane", "Dane"], ["goscie", "Goście i czas"], ["menu", "Menu i tort"], ["szczegoly", "Szczegóły"], ["zadania", "Zadania"]] as const)
-              : ([["szczegoly", "Szczegóły"], ["menu", "Menu"], ["zadania", "Zadania"]] as const)
+              ? ([["dane", "Dane"], ["goscie", "Goście i czas"], ["menu", "Menu i tort"], ["szczegoly", "Szczegóły"], ["kosztorys", "Kosztorys"], ["zadania", "Zadania"]] as const)
+              : ([["szczegoly", "Szczegóły"], ["menu", "Menu"], ["kosztorys", "Kosztorys"], ["zadania", "Zadania"]] as const)
             ).map(([t, label]) => (
               <button
                 key={t}
@@ -1079,6 +1080,16 @@ function EventDetailModal({
                   {CHECKLIST_ITEMS.filter((i) => (i.auto ? i.auto(ev) : false) || ev.checklist?.[i.id]).length}/{CHECKLIST_ITEMS.length} gotowe
                 </div>
               </div>
+            ) : zakladka === "kosztorys" ? (
+              <KosztorysFormEmbedded
+                eventId={ev.id}
+                quoteId={ev.quoteId}
+                eventDisplay={{ client: ev.client, date: ev.date, type: ev.type }}
+                availableQuotes={availableQuotes}
+                defaultName={`${ev.client ?? "Klient"} — ${TL[ev.type] ?? "Impreza"} ${fmtDate(ev.date)}`}
+                onSaved={() => onRefresh?.()}
+                showToast={showToast}
+              />
             ) : editMode ? (
               <EventFormTabs
                 tab={zakladka}
@@ -1165,84 +1176,6 @@ function EventDetailModal({
               )}
             </div>
             </>
-            {ev.quoteId ? (
-              <div style={{ background: "#eff6ff", border: "1px solid #3b82f6", borderRadius: "8px", padding: "10px 14px", display: "flex", alignItems: "center", gap: "10px" }}>
-                <span style={{ fontSize: "18px" }}>💰</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: "12px", fontWeight: 900, color: "#1e40af", letterSpacing: "1px" }}>KOSZTORYS</div>
-                  <div style={{ fontSize: "15px", fontWeight: 600, color: "#1e40af" }}>Powiązany kosztorys</div>
-                </div>
-                <button onClick={() => window.open(`/mice/kosztorysy`, "_blank")} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "4px", padding: "7px 14px", cursor: "pointer", fontSize: "14px", fontWeight: 600 }}>Otwórz kosztorys</button>
-              </div>
-            ) : (
-              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "10px 14px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const res = await fetch("/api/mice/kosztorysy", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            name: `${ev.client ?? "Klient"} — ${TL[ev.type] ?? "Impreza"} ${fmtDate(ev.date)}`,
-                          }),
-                        });
-                        if (!res.ok) throw new Error("Błąd tworzenia");
-                        const quote = await res.json();
-                        console.log("[DEBUG quoteId]", quote.id, quote);
-                        const patchRes = await fetch(`/api/event-orders/${ev.id}`, {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ quoteId: quote.id }),
-                        });
-                        const patchData = await patchRes.json();
-                        console.log("[DEBUG patch result]", patchRes.status, patchData);
-                        onRefresh?.();
-                        showToast("Kosztorys utworzony");
-                      } catch {
-                        showToast("Błąd tworzenia kosztorysu", "err");
-                      }
-                    }}
-                    style={{ background: "white", border: "1px solid #3b82f6", borderRadius: "4px", padding: "7px 14px", fontSize: "14px", fontWeight: 600, color: "#1e40af", cursor: "pointer" }}
-                  >Utwórz kosztorys</button>
-                </div>
-                {availableQuotes.length > 0 && (
-                  <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", borderTop: "1px solid #e2e8f0", paddingTop: "10px" }}>
-                    <span style={{ fontSize: "13px", color: "#64748b", fontWeight: 500 }}>Powiąż istniejący:</span>
-                    <select
-                      value={selectedQuoteId}
-                      onChange={(e) => setSelectedQuoteId(e.target.value)}
-                      style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "4px", fontSize: "14px", minWidth: "200px" }}
-                    >
-                      <option value="">— wybierz kosztorys —</option>
-                      {availableQuotes.map((q) => (
-                        <option key={q.id} value={q.id}>{q.name}</option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={async () => {
-                        if (!selectedQuoteId) return;
-                        try {
-                          const patchRes = await fetch(`/api/event-orders/${ev.id}`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ quoteId: selectedQuoteId }),
-                          });
-                          if (!patchRes.ok) throw new Error("Błąd powiązania");
-                          onRefresh?.();
-                          showToast("Kosztorys powiązany");
-                          setSelectedQuoteId("");
-                        } catch {
-                          showToast("Błąd powiązania kosztorysu", "err");
-                        }
-                      }}
-                      disabled={!selectedQuoteId}
-                      style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "4px", padding: "7px 14px", fontSize: "14px", fontWeight: 600, cursor: selectedQuoteId ? "pointer" : "not-allowed", opacity: selectedQuoteId ? 1 : 0.6 }}
-                    >Powiąż</button>
-                  </div>
-                )}
-              </div>
-            )}
             {(() => {
               const hasLink = ev.googleCalendarEventId && ev.googleCalendarCalId;
               const hasError = !!ev.googleCalendarError;
