@@ -14,8 +14,10 @@ try {
   }
 } catch {}
 
+const isTraining = (process.env.NEXT_PUBLIC_APP_URL ?? "").includes("/training");
 const nextConfig = {
   output: "standalone",
+  ...(isTraining && { basePath: "/training" }),
   optimizeFonts: false, // unikamy błędów cssnano/browserslist przy optymalizacji Google Fonts (MODULE_NOT_FOUND)
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
