@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateInvoiceHtml, generatePdfFromHtml } from "@/lib/invoice-html";
 
+export const dynamic = "force-dynamic";
+
 const PDF_GENERATION_TIMEOUT_MS = Number(process.env.INVOICE_PDF_TIMEOUT_MS) || 30_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
@@ -45,6 +47,7 @@ export async function GET(
         headers: {
           "Content-Type": "application/pdf",
           "Content-Disposition": `inline; filename="faktura-vat-${id.trim().replace(/\//g, "-")}.pdf"`,
+          "Cache-Control": "no-store, no-cache, must-revalidate",
         },
       });
     }
@@ -54,6 +57,7 @@ export async function GET(
       headers: {
         "Content-Type": "text/html; charset=utf-8",
         "Content-Disposition": `inline; filename="faktura-vat-${id.trim().replace(/\//g, "-")}.html"`,
+        "Cache-Control": "no-store, no-cache, must-revalidate",
       },
     });
   } catch (e) {

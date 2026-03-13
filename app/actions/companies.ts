@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { lookupCompanyByNip as lookupFromWL } from "@/lib/nip-lookup";
@@ -1404,6 +1405,7 @@ export async function createConsolidatedInvoiceFromReservationIds(data: {
   vatRate?: number;
   paymentTermDays?: number;
   notes?: string | null;
+  paymentMethod?: string | null;
 }): Promise<
   ActionResult<{
     invoiceId: string;
@@ -1411,7 +1413,7 @@ export async function createConsolidatedInvoiceFromReservationIds(data: {
     skippedReservationIds: string[];
   }>
 > {
-  const { reservationIds, companyId, vatRate = 8, paymentTermDays, notes } = data;
+  const { reservationIds, companyId, vatRate = 8, paymentTermDays, notes, paymentMethod } = data;
   if (reservationIds.length === 0) {
     return { success: false, error: "Wybierz co najmniej jedną rezerwację" };
   }
@@ -1422,6 +1424,7 @@ export async function createConsolidatedInvoiceFromReservationIds(data: {
     vatRate,
     paymentTermDays,
     notes,
+    paymentMethod: paymentMethod ?? undefined,
   });
 
   if (!result.success) return result;
@@ -1445,11 +1448,13 @@ export async function createConsolidatedVatInvoice(data: {
   companyId: string;
   notes?: string | null;
   amountGrossOverride?: number;
+  paymentMethod?: string | null;
 }): Promise<ActionResult<{ invoiceId: string }>> {
   const result = await createConsolidatedInvoiceFromReservationIds({
     reservationIds: data.reservationIds,
     companyId: data.companyId,
     notes: data.notes ?? undefined,
+    paymentMethod: data.paymentMethod ?? undefined,
   });
   if (!result.success) return result;
   return { success: true, data: { invoiceId: result.data!.invoiceId } };
@@ -1465,9 +1470,10 @@ export async function createConsolidatedInvoice(data: {
   vatRate?: number;
   paymentTermDays?: number;
   notes?: string | null;
+  paymentMethod?: string | null;
 }): Promise<ActionResult<{ invoiceId: string; invoiceNumber: string }>> {
   try {
-    const { companyId, reservationIds, vatRate = 8, paymentTermDays, notes } = data;
+    const { companyId, reservationIds, vatRate = 8, paymentTermDays, notes, paymentMethod } = data;
 
     // Walidacja
     if (reservationIds.length === 0) {
@@ -1582,6 +1588,7 @@ export async function createConsolidatedInvoice(data: {
           paymentDueDate: dueDate,
           paymentDays: termDays,
           paymentBreakdown: Prisma.JsonNull,
+          paymentMethod: paymentMethod ?? "TRANSFER",
           notes: notes ?? null,
           consolidatedStatus: "ISSUED",
           lineItems: {
@@ -1759,6 +1766,7 @@ export async function updateConsolidatedInvoice(data: {
   vatRate?: number;
   notes?: string | null;
   paymentBreakdown?: Array<{ type: string; amount: number }> | null;
+  paymentMethod?: string | null;
 }): Promise<ActionResult<void>> {
   try {
     const inv = await prisma.invoice.findUnique({
@@ -1783,7 +1791,13 @@ export async function updateConsolidatedInvoice(data: {
     if (data.buyerPostalCode !== undefined) updateData.buyerPostalCode = data.buyerPostalCode?.trim() || null;
     if (data.buyerCity !== undefined) updateData.buyerCity = data.buyerCity?.trim() || null;
     if (data.notes !== undefined) updateData.notes = data.notes?.trim() || null;
-    if (data.paymentBreakdown !== undefined) updateData.paymentBreakdown = data.paymentBreakdown;
+    if (data.paymentBreakdown !== undefined) {
+      updateData.paymentBreakdown =
+        data.paymentBreakdown === null
+          ? Prisma.JsonNull
+          : (data.paymentBreakdown as Prisma.InputJsonValue);
+    }
+    if (data.paymentMethod !== undefined) updateData.paymentMethod = data.paymentMethod;
 
     if (data.amountGross !== undefined && data.vatRate !== undefined) {
       const gross = Math.round(data.amountGross * 100) / 100;
@@ -1837,6 +1851,8 @@ export async function updateConsolidatedInvoice(data: {
       where: { id: data.id },
       data: updateData as object,
     });
+    revalidatePath("/finance");
+    revalidatePath("/kontrahenci");
     return { success: true, data: undefined };
   } catch (e) {
     return {

@@ -55,10 +55,16 @@ export async function GET() {
     const paymentMethodNames: Record<string, string> = {
       CASH: "Gotówka",
       TRANSFER: "Przelew",
+      PRZELEW: "Przelew",
+      GOTÓWKA: "Gotówka",
+      GOTOWKA: "Gotówka",
+      KARTA: "Karta płatnicza",
       CARD: "Karta płatnicza",
       BLIK: "BLIK",
       VOUCHER: "Voucher",
       PREPAID: "Przedpłata",
+      PRZEDPŁATA: "Przedpłata",
+      SPLIT: "Płatność mieszana",
       OTHER: "Inna",
     };
     const paymentMethod = paymentMethodNames[rawPaymentMethod.toUpperCase()] || rawPaymentMethod;

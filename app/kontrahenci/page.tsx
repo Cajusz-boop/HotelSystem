@@ -1056,7 +1056,13 @@ function CompaniesSection() {
   const handleDocVatPdf = async (amountOverride: number | null, notes: string, paymentType: string) => {
     if (!docDialogInvoice) return;
     const gross = amountOverride != null && amountOverride > 0 ? amountOverride : docDialogInvoice.amountGross;
-    await updateConsolidatedInvoice({ id: docDialogInvoice.id, paymentBreakdown: [{ type: paymentType, amount: gross }], notes: notes.trim() || undefined });
+    await updateConsolidatedInvoice({
+      id: docDialogInvoice.id,
+      paymentBreakdown: [{ type: paymentType, amount: gross }],
+      paymentMethod: paymentType,
+      notes: notes.trim() || undefined,
+    });
+    await new Promise((r) => setTimeout(r, 200));
     const params = new URLSearchParams();
     params.set("format", "pdf");
     if (amountOverride != null && amountOverride > 0) {
@@ -1074,7 +1080,13 @@ function CompaniesSection() {
   const handleDocBoth = async (amountInvoice: number, amountReceipt: number, notes: string, paymentType: string) => {
     if (!docDialogInvoice) return;
     const gross = docDialogInvoice.amountGross;
-    await updateConsolidatedInvoice({ id: docDialogInvoice.id, paymentBreakdown: [{ type: paymentType, amount: gross }], notes: notes.trim() || undefined });
+    await updateConsolidatedInvoice({
+      id: docDialogInvoice.id,
+      paymentBreakdown: [{ type: paymentType, amount: gross }],
+      paymentMethod: paymentType,
+      notes: notes.trim() || undefined,
+    });
+    await new Promise((r) => setTimeout(r, 200));
     const params = new URLSearchParams();
     params.set("format", "pdf");
     if (amountInvoice > 0) {

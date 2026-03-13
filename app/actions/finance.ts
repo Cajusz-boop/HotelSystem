@@ -4867,6 +4867,8 @@ export async function createVatInvoice(
     advanceInvoiceId?: string;
     notes?: string;
     amountGrossOverride?: number;
+    /** Metoda płatności wybrana w dialogu (np. CASH, TRANSFER). Ma pierwszeństwo przed detekcją z transakcji. */
+    paymentMethod?: string | null;
     /** Nadpisuje reservation.invoiceScope – użyj dla faktury hotel-only lub gastronomy-only */
     invoiceScope?: "ALL" | "HOTEL_ONLY" | "GASTRONOMY_ONLY";
     /** Zezwala na kolejną fakturę tego samego zakresu (HOTEL_ONLY/GASTRONOMY_ONLY) – wymaga amountGrossOverride */
@@ -5034,7 +5036,7 @@ export async function createVatInvoice(
       for (const pt of paymentTransactions) {
         if (pt.paymentMethod) {
           const m = pt.paymentMethod.toUpperCase();
-          methodCounts.set(m, (methodCounts.get(m) || 0) + Number(pt.amount));
+          methodCounts.set(m, (methodCounts.get(m) || 0) + Math.abs(Number(pt.amount)));
         }
       }
       if (methodCounts.size > 0) {
@@ -5065,7 +5067,7 @@ export async function createVatInvoice(
         buyerPostalCode: buyerCompany.postalCode ?? null,
         buyerCity: buyerCompany.city ?? null,
         notes: options?.notes?.trim() || null,
-        paymentMethod: invoicePaymentMethod,
+        paymentMethod: options?.paymentMethod ?? invoicePaymentMethod,
         customFieldValues: paidAmountDisplay != null ? ({ paidAmountDisplay } as object) : undefined,
         deliveryDate: reservation.checkOut ? new Date(reservation.checkOut) : undefined,
       },
@@ -5421,7 +5423,7 @@ export async function createAdvanceInvoice(
       for (const pt of paymentTransactions) {
         if (pt.paymentMethod) {
           const m = pt.paymentMethod.toUpperCase();
-          methodCounts.set(m, (methodCounts.get(m) || 0) + Number(pt.amount));
+          methodCounts.set(m, (methodCounts.get(m) || 0) + Math.abs(Number(pt.amount)));
         }
       }
       if (methodCounts.size > 0) {
@@ -5534,7 +5536,7 @@ export async function createFinalInvoiceFromAdvance(
       for (const pt of paymentTransactions) {
         if (pt.paymentMethod) {
           const m = pt.paymentMethod.toUpperCase();
-          methodCounts.set(m, (methodCounts.get(m) || 0) + Number(pt.amount));
+          methodCounts.set(m, (methodCounts.get(m) || 0) + Math.abs(Number(pt.amount)));
         }
       }
       if (methodCounts.size > 0) {
@@ -6077,10 +6079,15 @@ const HOTEL_NAME_FINANCE = process.env.HOTEL_NAME ?? "Hotel";
 const PAYMENT_METHOD_NAMES: Record<string, string> = {
   CASH: "Gotówka",
   TRANSFER: "Przelew",
+  PRZELEW: "Przelew",
+  GOTÓWKA: "Gotówka",
+  GOTOWKA: "Gotówka",
+  KARTA: "Karta płatnicza",
   CARD: "Karta płatnicza",
   BLIK: "BLIK",
   VOUCHER: "Voucher",
   PREPAID: "Przedpłata",
+  PRZEDPŁATA: "Przedpłata",
   SPLIT: "Płatność mieszana",
   OTHER: "Inna",
 };
@@ -6233,7 +6240,7 @@ export async function getInvoicePreviewData(
         for (const pt of paymentTransactions) {
           if (pt.paymentMethod) {
             const m = pt.paymentMethod.toUpperCase();
-            methodCounts.set(m, (methodCounts.get(m) || 0) + Number(pt.amount));
+            methodCounts.set(m, (methodCounts.get(m) || 0) + Math.abs(Number(pt.amount)));
           }
         }
         if (methodCounts.size > 0) {
@@ -6459,7 +6466,7 @@ export async function getInvoicePreviewData(
         finalVat,
         finalGross,
         buyerName: invoice.buyerName,
-        buyerAddress: invoice.        buyerAddress,
+        buyerAddress: invoice.buyerAddress,
         buyerPostalCity,
         buyerNip: invoice.buyerNip ?? "",
         issueDate,

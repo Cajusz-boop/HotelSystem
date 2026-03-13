@@ -919,6 +919,7 @@ export function UnifiedReservationDialog({
             reservationIds: docChoiceResIds,
             companyId: primaryReservation.companyId,
             notes: invoiceNotes.trim() || undefined,
+            paymentMethod: docPaymentMethod || "CASH",
           });
           if (result.success && result.data) {
             toast.success("Faktura zbiorcza VAT wystawiona");
@@ -932,6 +933,7 @@ export function UnifiedReservationDialog({
           const result = await createVatInvoice(docChoiceResId, undefined, {
             notes: invoiceNotes.trim() || undefined,
             amountGrossOverride: amtInv > 0 ? amtInv : undefined,
+            paymentMethod: docPaymentMethod || "CASH",
           });
           if (result.success && result.data) {
             toast.success(`Faktura VAT ${result.data.number} – ${result.data.amountGross.toFixed(2)} PLN`);

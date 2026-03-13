@@ -49,7 +49,7 @@ export async function GET(
         for (const pt of paymentTransactions) {
           if (pt.paymentMethod) {
             const m = pt.paymentMethod.toUpperCase();
-            methodCounts.set(m, (methodCounts.get(m) || 0) + Number(pt.amount));
+            methodCounts.set(m, (methodCounts.get(m) || 0) + Math.abs(Number(pt.amount)));
           }
         }
         if (methodCounts.size > 0) {
@@ -146,10 +146,16 @@ export async function GET(
     const paymentMethodNames: Record<string, string> = {
       CASH: "Gotówka",
       TRANSFER: "Przelew",
+      PRZELEW: "Przelew",
+      GOTÓWKA: "Gotówka",
+      GOTOWKA: "Gotówka",
+      KARTA: "Karta płatnicza",
       CARD: "Karta płatnicza",
       BLIK: "BLIK",
       VOUCHER: "Voucher",
       PREPAID: "Przedpłata",
+      PRZEDPŁATA: "Przedpłata",
+      SPLIT: "Płatność mieszana",
       OTHER: "Inna",
     };
     const rawPaymentMethod = receipt.paymentMethod || detectedPaymentMethod;
