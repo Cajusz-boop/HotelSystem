@@ -507,7 +507,29 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
                               </span>
                             );
                           }
-                          return <span key={d} style={{ background: "#fafafa", border: "2px solid #e5e7eb", borderRadius: "8px", padding: "8px 12px", fontSize: "12px", color: "#111827", fontWeight: 400 }}>{d}</span>;
+                          const sel = wybrane.includes(d);
+                          const peln = !sel && wybrane.length >= limit;
+                          return (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => toggleWybor(sek.id, d, limit)}
+                              disabled={peln}
+                              style={{
+                                background: sel ? "#3b82f6" : peln ? "#f8fafc" : "#fafafa",
+                                border: `2px solid ${sel ? "#3b82f6" : peln ? "#e2e8f0" : "#e5e7eb"}`,
+                                borderRadius: "8px",
+                                padding: "8px 12px",
+                                fontSize: "12px",
+                                color: sel ? "white" : peln ? "#cbd5e1" : "#111827",
+                                fontWeight: sel ? 600 : 400,
+                                cursor: peln ? "not-allowed" : "pointer",
+                                textAlign: "left",
+                              }}
+                            >
+                              {sel ? "✓ " : ""}{d}
+                            </button>
+                          );
                         })}
                       </div>
                       {(dodatkiDan[sek.id] ?? []).length > 0 && (
@@ -604,28 +626,36 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
                                 </div>
                               );
                             }
+                            const sel = wybrane.includes(d);
+                            const peln = !sel && wybrane.length >= limit;
                             return (
-                              <div
+                              <button
                                 key={d}
+                                type="button"
+                                onClick={() => toggleWybor(sek.id, d, limit)}
+                                disabled={peln}
                                 style={{
                                   padding: "14px 16px",
                                   borderRadius: "8px",
-                                  border: "2px solid #e5e7eb",
-                                  background: "#fafafa",
+                                  border: `2px solid ${sel ? "#3b82f6" : peln ? "#e2e8f0" : "#e5e7eb"}`,
+                                  background: sel ? "#3b82f6" : peln ? "#f8fafc" : "#fafafa",
                                   display: "flex",
                                   alignItems: "flex-start",
                                   gap: "10px",
+                                  cursor: peln ? "not-allowed" : "pointer",
+                                  textAlign: "left",
+                                  width: "100%",
                                 }}
                               >
                                 <span style={{
                                   fontSize: "13px",
-                                  fontWeight: 400,
-                                  color: "#111827",
+                                  fontWeight: sel ? 600 : 400,
+                                  color: sel ? "white" : peln ? "#cbd5e1" : "#111827",
                                   lineHeight: 1.4,
                                 }}>
-                                  {d}
+                                  {sel ? "✓ " : ""}{d}
                                 </span>
-                              </div>
+                              </button>
                             );
                           })}
                         </div>
