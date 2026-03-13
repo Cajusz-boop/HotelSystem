@@ -1739,13 +1739,19 @@ model ScheduledReport {
 
 // MICE – oferty grupowe / kosztorysy
 model GroupQuote {
-  id          String    @id @default(cuid())
-  name        String    // np. "Konferencja Q1 2026"
-  validUntil  DateTime? @db.Date
-  totalAmount Decimal?  @db.Decimal(12, 2)
-  items       Json?     // pozycje kosztorysu: [{ name, quantity, unitPrice, amount }]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  name          String    // np. "Konferencja Q1 2026"
+  validUntil    DateTime? @db.Date
+  totalAmount   Decimal?  @db.Decimal(12, 2)
+  items         Json?     // pozycje: [{ name, unit, quantity, unitPriceNet, vatRate, netAmount, vatAmount, grossAmount }]
+  // Dane sprzedawcy / nagłówek
+  clientName    String?
+  clientNip     String?
+  eventDate     DateTime? @db.Date
+  depositAmount Decimal?  @db.Decimal(12, 2)
+  notes         String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 // MICE – zlecenia realizacji (imprezy, bankiety, wesela) – rozbudowany formularz imprezy

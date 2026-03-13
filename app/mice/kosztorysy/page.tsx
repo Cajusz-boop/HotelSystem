@@ -14,7 +14,12 @@ export default async function KosztorysyPage() {
     name: q.name,
     validUntil: q.validUntil ? q.validUntil.toISOString().slice(0, 10) : null,
     totalAmount: q.totalAmount != null ? Number(q.totalAmount) : null,
-    items: q.items as { name: string; quantity: number; unitPrice: number; amount: number }[] | null,
+    items: q.items as Array<Record<string, unknown>> | null,
+    clientName: q.clientName ?? null,
+    clientNip: q.clientNip ?? null,
+    eventDate: q.eventDate ? q.eventDate.toISOString().slice(0, 10) : null,
+    depositAmount: q.depositAmount != null ? Number(q.depositAmount) : null,
+    notes: q.notes ?? null,
   }));
   return (
     <div className="p-8">

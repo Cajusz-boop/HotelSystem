@@ -2,23 +2,31 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import {
+  type GroupQuoteItem,
+  recalcGroupQuoteItem,
+} from "@/lib/mice-quote-utils";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
   | { success: false; error: string };
 
-export interface GroupQuoteItem {
-  name: string;
-  quantity: number;
-  unitPrice: number;
-  amount: number;
+export type { GroupQuoteItem };
+
+export interface GroupQuoteMeta {
+  clientName?: string | null;
+  clientNip?: string | null;
+  eventDate?: string | null; // YYYY-MM-DD
+  depositAmount?: number | null;
+  notes?: string | null;
 }
 
 /** Tworzy kosztorys grupowy (MICE). */
 export async function createGroupQuote(
   name: string,
   validUntil: string | null,
-  items: GroupQuoteItem[] | null
+  items: GroupQuoteItem[] | null,
+  meta?: GroupQuoteMeta | null
 ): Promise<ActionResult<{ id: string }>> {
   try {
     const trimmedName = name?.trim();
@@ -26,9 +34,13 @@ export async function createGroupQuote(
       return { success: false, error: "Nazwa kosztorysu jest wymagana" };
     }
 
+    const normalizedItems =
+      items && items.length > 0
+        ? items.map((it) => recalcGroupQuoteItem(it as Partial<GroupQuoteItem>))
+        : null;
     let totalAmount: number | null = null;
-    if (items && items.length > 0) {
-      totalAmount = items.reduce((sum, it) => sum + (it.amount ?? it.quantity * it.unitPrice), 0);
+    if (normalizedItems && normalizedItems.length > 0) {
+      totalAmount = normalizedItems.reduce((sum, it) => sum + it.grossAmount, 0);
     }
 
     const created = await prisma.groupQuote.create({
@@ -36,7 +48,12 @@ export async function createGroupQuote(
         name: trimmedName,
         validUntil: validUntil ? new Date(validUntil + "T12:00:00Z") : null,
         totalAmount: totalAmount != null ? totalAmount : null,
-        items: (items && items.length > 0 ? items : Prisma.JsonNull) as unknown as Prisma.InputJsonValue,
+        items: (normalizedItems && normalizedItems.length > 0 ? normalizedItems : Prisma.JsonNull) as unknown as Prisma.InputJsonValue,
+        clientName: meta?.clientName?.trim() || null,
+        clientNip: meta?.clientNip?.trim() || null,
+        eventDate: meta?.eventDate ? new Date(meta.eventDate + "T12:00:00Z") : null,
+        depositAmount: meta?.depositAmount != null ? meta.depositAmount : null,
+        notes: meta?.notes?.trim() || null,
       },
     });
 
@@ -54,7 +71,8 @@ export async function updateGroupQuote(
   id: string,
   name: string,
   validUntil: string | null,
-  items: GroupQuoteItem[] | null
+  items: GroupQuoteItem[] | null,
+  meta?: GroupQuoteMeta | null
 ): Promise<ActionResult> {
   try {
     const trimmedName = name?.trim();
@@ -62,9 +80,13 @@ export async function updateGroupQuote(
       return { success: false, error: "Nazwa kosztorysu jest wymagana" };
     }
 
+    const normalizedItems =
+      items && items.length > 0
+        ? items.map((it) => recalcGroupQuoteItem(it as Partial<GroupQuoteItem>))
+        : null;
     let totalAmount: number | null = null;
-    if (items && items.length > 0) {
-      totalAmount = items.reduce((sum, it) => sum + (it.amount ?? it.quantity * it.unitPrice), 0);
+    if (normalizedItems && normalizedItems.length > 0) {
+      totalAmount = normalizedItems.reduce((sum, it) => sum + it.grossAmount, 0);
     }
 
     await prisma.groupQuote.update({
@@ -73,7 +95,12 @@ export async function updateGroupQuote(
         name: trimmedName,
         validUntil: validUntil ? new Date(validUntil + "T12:00:00Z") : null,
         totalAmount: totalAmount != null ? totalAmount : null,
-        items: (items && items.length > 0 ? items : Prisma.JsonNull) as unknown as Prisma.InputJsonValue,
+        items: (normalizedItems && normalizedItems.length > 0 ? normalizedItems : Prisma.JsonNull) as unknown as Prisma.InputJsonValue,
+        clientName: meta?.clientName?.trim() || null,
+        clientNip: meta?.clientNip?.trim() || null,
+        eventDate: meta?.eventDate ? new Date(meta.eventDate + "T12:00:00Z") : null,
+        depositAmount: meta?.depositAmount != null ? meta.depositAmount : null,
+        notes: meta?.notes?.trim() || null,
       },
     });
 
