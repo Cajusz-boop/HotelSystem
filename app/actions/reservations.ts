@@ -433,23 +433,27 @@ export async function findGuestsForCheckIn(
 ): Promise<ActionResult<GuestCheckInSuggestion[]>> {
   try {
     const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      return { success: true, data: [] };
-    }
-    const digitsOnly = trimmed.replace(/\D/g, "");
-    const hasDigits = digitsOnly.length >= 2;
+    if (trimmed.length < 2) return { success: true, data: [] };
 
-    const conditions: Prisma.GuestWhereInput[] = [
-      { name: { contains: trimmed } },
-      { email: { contains: trimmed } },
-      { phone: { contains: trimmed } },
-    ];
-    if (hasDigits) {
-      conditions.push({ phone: { contains: digitsOnly } });
-    }
+    // Rozbij zapytanie na osobne słowa (np. "Jan Kow" → ["Jan", "Kow"])
+    const words = trimmed.split(/\s+/).filter(w => w.length > 0);
+
+    // Każde słowo musi pasować do imienia LUB emaila LUB telefonu
+    const wordConditions: Prisma.GuestWhereInput[] = words.map(word => ({
+      OR: [
+        { name: { contains: word } },
+        { email: { contains: word } },
+        { phone: { contains: word } },
+      ]
+    }));
 
     const guests = await prisma.guest.findMany({
-      where: { OR: conditions, isBlacklisted: false },
+      where: {
+        AND: [
+          ...wordConditions,
+          { isBlacklisted: false },
+        ]
+      },
       take: 8,
       select: {
         id: true,
