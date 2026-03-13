@@ -12,6 +12,9 @@ const API_IP_WHITELIST = (process.env.API_IP_WHITELIST ?? "")
   .map((s) => s.trim())
   .filter(Boolean);
 
+// basePath dla instancji treningowej (/training) — pathname w request zawiera basePath
+const BASE_PATH = process.env.NEXT_BASE_PATH ?? (process.env.NEXT_PUBLIC_APP_URL?.includes("/training") ? "/training" : "");
+
 interface SessionJWTPayload extends JWTPayload {
   userId: string;
   email: string;
@@ -114,16 +117,21 @@ async function isAuthDisabled(request: NextRequest): Promise<boolean> {
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  // pathname zawiera basePath (np. /training/login) — normalizujemy do ścieżki wewnętrznej
+  const pathWithoutBase = BASE_PATH && path.startsWith(BASE_PATH) ? path.slice(BASE_PATH.length) || "/" : path;
+
+  const loginPath = `${BASE_PATH}/login`;
+  const changePasswordPath = `${BASE_PATH}/change-password`;
 
   // Nie sprawdzaj auth-disabled dla samego endpointu is-disabled (unikanie pętli)
-  const isAuthCheckRoute = path === "/api/auth/is-disabled";
+  const isAuthCheckRoute = pathWithoutBase === "/api/auth/is-disabled";
   const authDisabled = isAuthCheckRoute ? false : await isAuthDisabled(request);
 
-  if (path.startsWith("/api/")) {
-    if (path === "/api/health" || isAuthCheckRoute || path === "/api/auth/check-active") return NextResponse.next();
+  if (pathWithoutBase.startsWith("/api/")) {
+    if (pathWithoutBase === "/api/health" || isAuthCheckRoute || pathWithoutBase === "/api/auth/check-active") return NextResponse.next();
 
     // OAuth callback routes – muszą być dostępne z zewnątrz (redirect z Google)
-    if (path.startsWith("/api/auth/staff/google") || path.startsWith("/api/auth/guest/google")) {
+    if (pathWithoutBase.startsWith("/api/auth/staff/google") || pathWithoutBase.startsWith("/api/auth/guest/google")) {
       return NextResponse.next();
     }
 
@@ -139,8 +147,8 @@ export async function middleware(request: NextRequest) {
   // Gdy logowanie wyłączone — przepuść wszystkie strony bez sprawdzania sesji
   if (authDisabled) {
     // Jeśli użytkownik wchodzi na /login — przekieruj na dashboard (nie ma sensu logować się w trybie demo)
-    if (path === "/login") {
-      return NextResponse.redirect(new URL("/", request.url));
+    if (pathWithoutBase === "/login") {
+      return NextResponse.redirect(new URL(BASE_PATH || "/", request.url));
     }
     return NextResponse.next();
   }
@@ -155,13 +163,13 @@ export async function middleware(request: NextRequest) {
     "/sprzatanie",
   ];
   const isPublic = publicPaths.some(
-    (p) => path === p || path.startsWith(p + "/")
+    (p) => pathWithoutBase === p || pathWithoutBase.startsWith(p + "/")
   );
 
   const token = request.cookies.get(COOKIE_NAME)?.value;
   if (!token) {
     if (isPublic) return NextResponse.next();
-    return NextResponse.redirect(new URL("/login", request.url));
+    return NextResponse.redirect(new URL(loginPath, request.url));
   }
 
   let response = NextResponse.next();
@@ -174,7 +182,7 @@ export async function middleware(request: NextRequest) {
     // NAPRAWA 2: Sprawdzenie isActive
     // Szybkie sprawdzenie z JWT payload
     if (payload.isActive === false) {
-      response = NextResponse.redirect(new URL("/login?reason=inactive", request.url));
+      response = NextResponse.redirect(new URL(`${loginPath}?reason=inactive`, request.url));
       response.cookies.delete(COOKIE_NAME);
       response.cookies.delete(LAST_ACTIVITY_COOKIE);
       return response;
@@ -184,7 +192,7 @@ export async function middleware(request: NextRequest) {
     if (payload.userId) {
       const isActive = await checkUserActive(payload.userId, origin);
       if (!isActive) {
-        response = NextResponse.redirect(new URL("/login?reason=inactive", request.url));
+        response = NextResponse.redirect(new URL(`${loginPath}?reason=inactive`, request.url));
         response.cookies.delete(COOKIE_NAME);
         response.cookies.delete(LAST_ACTIVITY_COOKIE);
         return response;
@@ -193,8 +201,8 @@ export async function middleware(request: NextRequest) {
 
     // Sprawdź czy hasło wygasło
     if (payload.passwordExpired === true) {
-      if (path !== "/change-password" && !path.startsWith("/change-password/")) {
-        return NextResponse.redirect(new URL("/change-password", request.url));
+      if (pathWithoutBase !== "/change-password" && !pathWithoutBase.startsWith("/change-password/")) {
+        return NextResponse.redirect(new URL(changePasswordPath, request.url));
       }
     }
 
@@ -207,7 +215,7 @@ export async function middleware(request: NextRequest) {
     if (hasValidActivity && now - lastTs > idleMs) {
       response.cookies.set(COOKIE_NAME, "", { path: "/", maxAge: 0 });
       response.cookies.set(LAST_ACTIVITY_COOKIE, "", { path: "/", maxAge: 0 });
-      return NextResponse.redirect(new URL("/login?timeout=1", request.url));
+      return NextResponse.redirect(new URL(`${loginPath}?timeout=1`, request.url));
     }
 
     response.cookies.set(LAST_ACTIVITY_COOKIE, String(now), {
@@ -219,7 +227,7 @@ export async function middleware(request: NextRequest) {
     });
   } catch {
     // Token nieprawidłowy, wygasły lub sfabrykowany → redirect na /login
-    response = NextResponse.redirect(new URL("/login", request.url));
+    response = NextResponse.redirect(new URL(loginPath, request.url));
     response.cookies.delete(COOKIE_NAME);
     response.cookies.delete(LAST_ACTIVITY_COOKIE);
     return response;
@@ -228,6 +236,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Uruchamiaj dla stron i API – pomijaj statyczne zasoby (_next, favicon, obrazy, fonty, CSS/JS)
-  matcher: ["/((?!_next|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|css|js|woff2?|ttf|eot|ico)).*)"],
+  // Uruchamiaj dla stron i API – pomijaj statyczne zasoby, login i api/auth (z basePath: /training/login nie trafia w matcher)
+  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|login|training/login|api/auth|.*\\.(?:svg|png|jpg|jpeg|gif|webp|css|js|woff2?|ttf|eot|ico)).*)"],
 };

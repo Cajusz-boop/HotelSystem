@@ -54,3 +54,20 @@ jobs:
             fi
             pm2 start hotel-pms
             sleep 10 && curl -f http://127.0.0.1:3000/api/health || exit 1
+
+  deploy-training:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy training to Hetzner
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            cd /home/lukasz/hotel-training
+            git pull origin main
+            npm ci
+            npm run build
+            pm2 reload hotel-training
