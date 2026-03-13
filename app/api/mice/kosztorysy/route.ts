@@ -8,16 +8,20 @@ export async function POST(req: Request) {
     const validUntil = body.validUntil && typeof body.validUntil === "string" ? new Date(body.validUntil) : null;
     const rawItems = Array.isArray(body.items) ? body.items : null;
     const items = rawItems && rawItems.length > 0
-      ? rawItems.map((it: { name?: string; quantity?: number; unitPrice?: number; amount?: number }) => ({
+      ? rawItems.map((it: Record<string, unknown>) => ({
           name: String(it.name ?? ""),
+          unit: String(it.unit ?? "szt"),
           quantity: Number(it.quantity ?? 1),
-          unitPrice: Number(it.unitPrice ?? 0),
-          amount: Number(it.amount ?? (Number(it.quantity ?? 1) * Number(it.unitPrice ?? 0))),
+          unitPriceNet: Number(it.unitPriceNet ?? it.unitPrice ?? 0),
+          vatRate: Number(it.vatRate ?? 8),
+          netAmount: Number(it.netAmount ?? 0),
+          vatAmount: Number(it.vatAmount ?? 0),
+          grossAmount: Number(it.grossAmount ?? it.amount ?? 0),
         }))
       : null;
     let totalAmount: number | null = null;
     if (items && items.length > 0) {
-      totalAmount = items.reduce((s: number, it: { amount?: number; quantity?: number; unitPrice?: number }) => s + (Number(it.amount) || Number(it.quantity) * Number(it.unitPrice)), 0);
+      totalAmount = items.reduce((s, it) => s + it.grossAmount, 0);
     }
     const quote = await prisma.groupQuote.create({
       data: { name, validUntil, items: items as object, totalAmount: totalAmount != null ? totalAmount : null },

@@ -65,9 +65,18 @@ jobs:
           host: ${{ secrets.HETZNER_HOST }}
           username: ${{ secrets.HETZNER_USER }}
           key: ${{ secrets.HETZNER_SSH_KEY }}
+          timeout: 300s
           script: |
-            cd /home/lukasz/hotel-training
-            git pull origin main
-            npm ci
-            npm run build
-            pm2 reload hotel-training
+            set -e
+            TRAINING_DIR="/var/www/hotel-training"
+            # Sync z głównego deployu (git fetch nie działa na serwerze)
+            rsync -a --delete --exclude=node_modules --exclude=.next --exclude=.git /var/www/hotel/ "$TRAINING_DIR/"
+            cd "$TRAINING_DIR"
+            rm -rf .next
+            npm ci --production=false
+            npx prisma@6 generate
+            NODE_OPTIONS=--max-old-space-size=2048 npm run build
+            pm2 restart hotel-training || pm2 start /var/www/hotel/ecosystem.training.config.js
+            pm2 save
+            sleep 5
+            curl -f http://127.0.0.1:3012/training || echo "WARNING: training health check failed"
