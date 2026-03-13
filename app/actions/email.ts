@@ -4,6 +4,7 @@ import nodemailer from "nodemailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import puppeteer from "puppeteer";
 import { prisma } from "@/lib/db";
+import { generateInvoiceHtml, generatePdfFromHtml } from "@/lib/invoice-html";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
@@ -101,21 +102,18 @@ export async function sendInvoiceByEmail(data: {
     return { success: false, error: "Faktura nie istnieje" };
   }
 
-  const baseUrl = getBaseUrl();
-  const params = new URLSearchParams();
-  if (data.amountOverride != null && Number.isFinite(data.amountOverride)) {
-    params.set("amountOverride", String(data.amountOverride));
-  }
-  params.set("variant", "original"); // tylko oryginał w załączniku (nie kopia)
-  const pdfUrl = `${baseUrl}/api/finance/invoice/${data.invoiceId}/pdf?${params.toString()}`;
-
   const from = process.env.SMTP_FROM || process.env.SMTP_USER;
   const filename = `${invoice.number.replace(/\//g, "_")}.pdf`;
 
   const sendWithRetry = async (attempt = 1): Promise<void> => {
     const maxAttempts = 2;
     try {
-      const pdfBuffer = await generatePdfBuffer(pdfUrl);
+      const html = await generateInvoiceHtml(
+        data.invoiceId,
+        data.amountOverride ?? null,
+        "original"
+      );
+      const pdfBuffer = await generatePdfFromHtml(html);
       await transporter.sendMail({
         from,
         to: data.recipientEmail,

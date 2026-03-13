@@ -1057,9 +1057,12 @@ function CompaniesSection() {
     if (!docDialogInvoice) return;
     const gross = amountOverride != null && amountOverride > 0 ? amountOverride : docDialogInvoice.amountGross;
     await updateConsolidatedInvoice({ id: docDialogInvoice.id, paymentBreakdown: [{ type: paymentType, amount: gross }], notes: notes.trim() || undefined });
-    const baseUrl = `/api/finance/consolidated-invoice/${docDialogInvoice.id}/pdf`;
-    const url = amountOverride != null && amountOverride > 0 ? `${baseUrl}?amountOverride=${encodeURIComponent(amountOverride.toFixed(2))}` : baseUrl;
-    window.open(url, "_blank", "noopener,noreferrer");
+    const params = new URLSearchParams();
+    params.set("format", "pdf");
+    if (amountOverride != null && amountOverride > 0) {
+      params.set("amountOverride", amountOverride.toFixed(2));
+    }
+    window.open(`/api/finance/invoice/${docDialogInvoice.id}/pdf?${params.toString()}`, "_blank", "noopener,noreferrer");
   };
 
   const handleDocPosnetReceipt = async (amount: number, _notes: string, paymentType: string) => {
@@ -1072,8 +1075,12 @@ function CompaniesSection() {
     if (!docDialogInvoice) return;
     const gross = docDialogInvoice.amountGross;
     await updateConsolidatedInvoice({ id: docDialogInvoice.id, paymentBreakdown: [{ type: paymentType, amount: gross }], notes: notes.trim() || undefined });
-    const pdfUrl = amountInvoice > 0 ? `/api/finance/consolidated-invoice/${docDialogInvoice.id}/pdf?amountOverride=${encodeURIComponent(amountInvoice.toFixed(2))}` : `/api/finance/consolidated-invoice/${docDialogInvoice.id}/pdf`;
-    window.open(pdfUrl, "_blank", "noopener,noreferrer");
+    const params = new URLSearchParams();
+    params.set("format", "pdf");
+    if (amountInvoice > 0) {
+      params.set("amountOverride", amountInvoice.toFixed(2));
+    }
+    window.open(`/api/finance/invoice/${docDialogInvoice.id}/pdf?${params.toString()}`, "_blank", "noopener,noreferrer");
     const res = await printFiscalReceiptForConsolidatedInvoice(docDialogInvoice.id, amountReceipt, paymentType);
     if (!res.success) setError(res.error ?? "Błąd druku paragonu");
   };

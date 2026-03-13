@@ -462,10 +462,10 @@ export function InvoicePreviewPage({ id, autoPrint }: InvoicePreviewPageProps) {
   }, [autoPrint, loading, data, handlePrint]);
 
   const handlePdf = () => {
-    let url = `/api/finance/invoice/${id}/pdf`;
+    let url = `/api/finance/invoice/${id}/pdf?format=pdf`;
     const override = data?.amountOverride;
     if (override != null && Number.isFinite(override)) {
-      url += `?amountOverride=${encodeURIComponent(override)}`;
+      url += `&amountOverride=${encodeURIComponent(override)}`;
     }
     saveAndThen(() => window.open(url, "_blank", "noopener,noreferrer"));
   };
