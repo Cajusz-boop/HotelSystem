@@ -1294,12 +1294,20 @@ export function TapeChart({
 
   const statusLegendItems = useMemo(
     () =>
-      (Object.keys(RESERVATION_STATUS_BG) as Array<Reservation["status"]>).map((status) => ({
-        status,
-        label: statusLabels?.[status] ?? RESERVATION_STATUS_LABELS[status],
-        description: statusDescriptions?.[status] ?? RESERVATION_STATUS_DESCRIPTIONS[status],
-        color: RESERVATION_STATUS_BG[status],
-      })),
+      (Object.keys(RESERVATION_STATUS_BG) as Array<Reservation["status"]>).map((status) => {
+        const dbLabel = statusLabels?.[status];
+        const isLabelRawOrEnglish =
+          dbLabel &&
+          (dbLabel === status ||
+            dbLabel === status.replace(/_/g, "-") ||
+            /^(CHECKED\s*[-]?\s*IN|CHECKED\s*[-]?\s*OUT|NO\s*[-]?\s*SHOW|CONFIRMED|CANCELLED|PENDING)$/i.test(dbLabel));
+        return {
+          status,
+          label: dbLabel && !isLabelRawOrEnglish ? dbLabel : RESERVATION_STATUS_LABELS[status],
+          description: statusDescriptions?.[status] ?? RESERVATION_STATUS_DESCRIPTIONS[status],
+          color: RESERVATION_STATUS_BG[status],
+        };
+      }),
     [statusLabels, statusDescriptions]
   );
 
@@ -1324,10 +1332,21 @@ export function TapeChart({
       PARTIAL: "częściowo",
       UNPAID: "nieopłacona",
     };
+    const PAYMENT_KEYS = ["PAID", "PARTIAL", "UNPAID"] as const;
     const colorMap = new Map<string, string[]>();
     Object.entries(combinationColors).forEach(([key, color]) => {
-      const [resStatus, payStatus] = key.split("_");
-      const label = `${RESERVATION_STATUS_LABELS_MAP[resStatus] ?? resStatus} · ${PAYMENT_STATUS_LABELS_MAP[payStatus] ?? payStatus}`;
+      const parts = key.split("_");
+      const payStatus = parts[parts.length - 1];
+      const resStatus =
+        PAYMENT_KEYS.includes(payStatus as (typeof PAYMENT_KEYS)[number])
+          ? parts.slice(0, -1).join("_")
+          : key;
+      const resLabel = RESERVATION_STATUS_LABELS_MAP[resStatus] ?? resStatus;
+      const payLabel = PAYMENT_STATUS_LABELS_MAP[payStatus] ?? payStatus;
+      const label =
+        PAYMENT_KEYS.includes(payStatus as (typeof PAYMENT_KEYS)[number])
+          ? `${resLabel} · ${payLabel}`
+          : resLabel;
       if (!colorMap.has(color)) colorMap.set(color, []);
       colorMap.get(color)!.push(label);
     });

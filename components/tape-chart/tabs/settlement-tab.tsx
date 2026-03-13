@@ -47,7 +47,7 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "CHECKED_IN", label: "Zameldowany" },
   { value: "CHECKED_OUT", label: "Wymeldowany" },
   { value: "CANCELLED", label: "Anulowana" },
-  { value: "NO_SHOW", label: "No-show" },
+  { value: "NO_SHOW", label: "Nie przyjechał" },
 ];
 
 /** Statusy dostępne w zależności od etapu rezerwacji (KWHotel). */

@@ -33,7 +33,7 @@ function extractFloor(roomNumber: string): string {
 
 const ROOM_STATUS_LABELS: Record<string, string> = {
   CLEAN: "Czysty",
-  DIRTY: "Brudny",
+  DIRTY: "Do sprzątania",
   OOO: "Wyłączony",
   INSPECTION: "Do sprawdzenia",
   INSPECTED: "Sprawdzony",

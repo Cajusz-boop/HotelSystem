@@ -24,7 +24,7 @@ const STATUS_OPTIONS: { value: Reservation["status"]; label: string }[] = [
   { value: "CHECKED_IN", label: "Zameldowany" },
   { value: "CHECKED_OUT", label: "Wymeldowany" },
   { value: "CANCELLED", label: "Anulowana" },
-  { value: "NO_SHOW", label: "No-show" },
+  { value: "NO_SHOW", label: "Nie przyjechał" },
 ];
 
 interface GroupReservationRow {

@@ -36,7 +36,7 @@ const STATUS_LABELS: Record<ReservationStatus, string> = {
   CHECKED_IN: "Zameldowany",
   CHECKED_OUT: "Wymeldowany",
   CANCELLED: "Anulowana",
-  NO_SHOW: "No-show",
+  NO_SHOW: "Nie przyjechał",
 };
 
 function rgbToHex(rgb: string): string {

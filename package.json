@@ -47,6 +47,7 @@
     "db:config:export": "npx tsx prisma/config-export.ts",
     "db:config:import": "npx tsx prisma/config-import.ts",
     "db:pull": "powershell -ExecutionPolicy Bypass -File ./scripts/pull-db-from-production.ps1",
+    "db:legend:sync": "powershell -ExecutionPolicy Bypass -File ./scripts/sync-legend-from-production.ps1",
     "db:restore": "powershell -ExecutionPolicy Bypass -File ./scripts/restore-prod-dump.ps1",
     "db:cleanup:e2e": "npx tsx scripts/cleanup-e2e-data.ts",
     "test:reception-flow": "npx tsx scripts/test-full-reception-flow.ts",

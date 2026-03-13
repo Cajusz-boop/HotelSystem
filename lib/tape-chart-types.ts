@@ -100,9 +100,9 @@ export const RESERVATION_STATUS_BG: Record<ReservationStatus, string> = {
 
 /** Ikony Lucide dla statusów pokoju */
 export const ROOM_STATUS_LABELS: Record<RoomStatus, string> = {
-  CLEAN: "CLEAN",
-  DIRTY: "DIRTY",
-  OOO: "OOO",
+  CLEAN: "Czysty",
+  DIRTY: "Do sprzątania",
+  OOO: "Wyłączony",
   INSPECTION: "Do sprawdzenia",
   INSPECTED: "Sprawdzony",
   CHECKOUT_PENDING: "Oczekuje wymeldowania",

@@ -44,6 +44,10 @@ bistro-sync/.env
 # Manager agent state (manager.py)
 .manager_state.txt
 
+# Sync legend temp files
+scripts/.legend-from-prod.json
+scripts/.legend-query.sql
+
 # Python / scripts state
 __pycache__
 .batch_*

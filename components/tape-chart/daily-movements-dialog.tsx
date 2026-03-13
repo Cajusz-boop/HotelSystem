@@ -25,7 +25,7 @@ const STATUS_LABELS: Record<string, string> = {
   CHECKED_IN: "Zameldowany",
   CHECKED_OUT: "Wymeldowany",
   CANCELLED: "Anulowana",
-  NO_SHOW: "No-show",
+  NO_SHOW: "Nie przyjechał",
 };
 
 function formatDisplayDate(dateStr: string): string {

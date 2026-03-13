@@ -38,7 +38,7 @@ const RES_STATUS_PL: Record<string, string> = {
   CHECKED_IN: "Zameldowany",
   CHECKED_OUT: "Wymeldowany",
   CANCELLED: "Anulowana",
-  NO_SHOW: "No-show",
+  NO_SHOW: "Nie przyjechał",
 };
 
 const TABS: { key: QuickStatsTab; label: string; icon: typeof LogIn }[] = [
