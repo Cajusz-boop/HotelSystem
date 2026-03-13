@@ -5,7 +5,7 @@ CONF="/etc/nginx/sites-available/hotel"
 # UWAGA: NIE używaj 301 /training/ — powoduje pętlę z Next.js (trailingSlash: false)
 # Oba /training i /training/ muszą proxy'ować, bez przekierowań
 TRAINING_BLOCK='    location = /training {
-        proxy_pass http://127.0.0.1:3012/;
+        proxy_pass http://127.0.0.1:3012;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection '"'"'upgrade'"'"';
@@ -16,7 +16,7 @@ TRAINING_BLOCK='    location = /training {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
     location /training/ {
-        proxy_pass http://127.0.0.1:3012/;
+        proxy_pass http://127.0.0.1:3012;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection '"'"'upgrade'"'"';
