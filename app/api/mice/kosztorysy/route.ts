@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       : null;
     let totalAmount: number | null = null;
     if (items && items.length > 0) {
-      totalAmount = items.reduce((s, it) => s + it.grossAmount, 0);
+      totalAmount = items.reduce((s: number, it: { grossAmount: number }) => s + it.grossAmount, 0);
     }
     const quote = await prisma.groupQuote.create({
       data: { name, validUntil, items: items as object, totalAmount: totalAmount != null ? totalAmount : null },
