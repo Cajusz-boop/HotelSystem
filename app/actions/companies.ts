@@ -1489,7 +1489,7 @@ export async function createConsolidatedInvoice(data: {
         guest: { select: { name: true } },
         room: { select: { number: true } },
         transactions: {
-          where: { OR: [{ status: "ACTIVE" }, { status: null }] },
+          where: { status: "ACTIVE" },
           select: { amount: true, type: true },
         },
       },
@@ -1528,7 +1528,7 @@ export async function createConsolidatedInvoice(data: {
       const nights = Math.ceil(
         (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)
       );
-      const hasGastro = r.transactions.some(t => t.type === "GASTRONOMY" || t.type === "RESTAURANT");
+      const hasGastro = r.transactions.some((t: { type: string }) => t.type === "GASTRONOMY" || t.type === "RESTAURANT");
       const amountGross = reservationDisplayAmount(r);
       const amountNet = amountGross / (1 + vatRate / 100);
       const amountVat = amountGross - amountNet;
