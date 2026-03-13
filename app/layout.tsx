@@ -67,6 +67,28 @@ if('serviceWorker' in navigator){
         />
       </head>
       <body className={`${fontClass} pms-allow-clicks`} suppressHydrationWarning>
+        {process.env.NEXT_PUBLIC_APP_URL?.includes("/training") && (
+          <>
+            <div
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                zIndex: 9999,
+                background: "#BA7517",
+                color: "#FAEEDA",
+                textAlign: "center",
+                fontSize: "13px",
+                fontWeight: 500,
+                padding: "6px",
+              }}
+            >
+              TRYB TRENINGOWY — żadne zmiany nie wpływają na prawdziwy system
+            </div>
+            <style>{`body { padding-top: 36px; }`}</style>
+          </>
+        )}
         {/* Wymusza klikalność: Radix zostawia pointer-events:none na body – co 50ms dodajemy klasę gdy żaden overlay nie jest otwarty; CSS z !important nadpisuje inline. */}
         <script
           dangerouslySetInnerHTML={{

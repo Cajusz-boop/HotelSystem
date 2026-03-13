@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Briefcase,
@@ -49,6 +49,8 @@ import { PropertySwitcher } from "@/components/property-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useI18n } from "@/components/i18n-provider";
+import { toast } from "sonner";
+import { RotateCcw } from "lucide-react";
 
 const SECTIONS_STATE_KEY = "pms-sidebar-sections";
 const ICON_RAIL_WIDTH = "w-12"; // 48px
@@ -506,6 +508,55 @@ function NavLinks({
   );
 }
 
+/* ── Training reset (tylko tryb treningowy, admin) ── */
+
+function TrainingResetBlock({
+  session,
+  permissions,
+}: {
+  session: SessionPayload | null;
+  permissions: string[] | null;
+}) {
+  const router = useRouter();
+  const url = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const isTraining = url.includes("/training");
+  const canReset = permissions?.includes("admin.settings") ?? false;
+  const [loading, setLoading] = useState(false);
+
+  if (!isTraining || !session || !canReset) return null;
+
+  const handleReset = async () => {
+    if (!window.confirm("Czy na pewno zresetować dane treningowe? Wszystkie rezerwacje i goście zostaną zastąpieni danymi szkoleniowymi.")) return;
+    setLoading(true);
+    try {
+      const base = url.includes("/training") ? "/training" : "";
+      const res = await fetch(`${base}/api/training-reset`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? data.detail ?? "Błąd");
+      toast.success(data.message ?? "Dane zresetowane");
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Błąd resetu danych");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-border pt-2">
+      <button
+        type="button"
+        onClick={handleReset}
+        disabled={loading}
+        className="flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium text-amber-600 hover:bg-amber-500/10 dark:text-amber-500 dark:hover:bg-amber-500/20 disabled:opacity-50"
+      >
+        <RotateCcw className="h-4 w-4 shrink-0" />
+        <span className="truncate text-xs">Resetuj dane treningowe</span>
+      </button>
+    </div>
+  );
+}
+
 /* ── Session Block (drawer footer) ───────────────── */
 
 function SessionBlock({
@@ -593,6 +644,7 @@ export function AppSidebar({
               permissions={permissions}
               session={session}
             />
+            <TrainingResetBlock session={session} permissions={permissions} />
             <SessionBlock session={session} onLinkClick={closeDrawer} />
           </nav>
         </SheetContent>

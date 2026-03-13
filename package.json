@@ -41,6 +41,7 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:seed:kwhotel": "npx tsx prisma/seed-kwhotel.ts",
+    "db:seed:training": "npx tsx prisma/seed-training.ts",
     "db:migrate:kwhotel": "npx tsx prisma/migrate-kwhotel.ts",
     "db:migrate:kwhotel:dry": "cross-env DRY_RUN=1 npx tsx prisma/migrate-kwhotel.ts",
     "db:config:export": "npx tsx prisma/config-export.ts",
