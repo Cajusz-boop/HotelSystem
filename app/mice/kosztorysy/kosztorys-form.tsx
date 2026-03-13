@@ -92,7 +92,7 @@ export function KosztorysForm({ quotes }: { quotes: GroupQuoteForForm[] }) {
     const rawItems = q.items;
     setItems(
       Array.isArray(rawItems) && rawItems.length > 0
-        ? (rawItems as Record<string, unknown>[]).map((it) => migrateLegacyItem(it))
+        ? (rawItems as unknown as Record<string, unknown>[]).map((it) => migrateLegacyItem(it))
         : [emptyItem()]
     );
   };

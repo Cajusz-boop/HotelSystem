@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import type { GroupQuoteItem } from "@/lib/mice-quote-utils";
 import { KosztorysForm } from "./kosztorys-form";
 
 export const metadata = { title: "Kosztorysy", description: "Oferty grupowe MICE" };
@@ -14,7 +15,7 @@ export default async function KosztorysyPage() {
     name: q.name,
     validUntil: q.validUntil ? q.validUntil.toISOString().slice(0, 10) : null,
     totalAmount: q.totalAmount != null ? Number(q.totalAmount) : null,
-    items: q.items as Array<Record<string, unknown>> | null,
+    items: q.items as GroupQuoteItem[] | null,
     clientName: q.clientName ?? null,
     clientNip: q.clientNip ?? null,
     eventDate: q.eventDate ? q.eventDate.toISOString().slice(0, 10) : null,
