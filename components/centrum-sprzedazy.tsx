@@ -911,6 +911,8 @@ function EventDetailModal({
   const [showCancel, setShowCancel] = useState(false);
   const [zakladka, setZakladka] = useState<"dane" | "goscie" | "menu" | "szczegoly" | "zadania">("dane");
   const [editMenuData, setEditMenuData] = useState<Record<string, unknown> | null>(null);
+  const [availableQuotes, setAvailableQuotes] = useState<{ id: string; name: string }[]>([]);
+  const [selectedQuoteId, setSelectedQuoteId] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const subOpen = showDep || showCancel;
@@ -934,6 +936,22 @@ function EventDetailModal({
   useEffect(() => {
     if (editNote) noteRef.current?.focus();
   }, [editNote]);
+  useEffect(() => {
+    const e = events.find((x) => x.id === evId);
+    if (e?.quoteId == null) {
+      fetch("/api/mice/kosztorysy")
+        .then((r) => r.json())
+        .then((data: { id?: string; name?: string }[]) => {
+          setAvailableQuotes(
+            Array.isArray(data) ? data.map((q) => ({ id: String(q.id ?? ""), name: String(q.name ?? "Kosztorys") })).filter((q) => q.id) : []
+          );
+        })
+        .catch(() => setAvailableQuotes([]));
+    } else {
+      setAvailableQuotes([]);
+      setSelectedQuoteId("");
+    }
+  }, [evId, events]);
   useEscape(onClose, !subOpen);
   useClickOutside(ref, onClose, !subOpen);
 
@@ -1157,33 +1175,72 @@ function EventDetailModal({
                 <button onClick={() => window.open(`/mice/kosztorysy`, "_blank")} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "4px", padding: "7px 14px", cursor: "pointer", fontSize: "14px", fontWeight: 600 }}>Otwórz kosztorys</button>
               </div>
             ) : (
-              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "10px 14px" }}>
-                <button
-                  onClick={async () => {
-                    try {
-                      const res = await fetch("/api/mice/kosztorysy", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          name: `${ev.client ?? "Klient"} — ${TL[ev.type] ?? "Impreza"} ${fmtDate(ev.date)}`,
-                          items: ev.menu ? [{ name: "Pakiet menu", quantity: ev.guests ?? 1, unitPrice: 0, amount: 0 }] : [],
-                        }),
-                      });
-                      if (!res.ok) throw new Error("Błąd tworzenia");
-                      const quote = await res.json();
-                      await fetch(`/api/event-orders/${ev.id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ quoteId: quote.id }),
-                      });
-                      onRefresh?.();
-                      showToast("Kosztorys utworzony");
-                    } catch {
-                      showToast("Błąd tworzenia kosztorysu", "err");
-                    }
-                  }}
-                  style={{ background: "white", border: "1px solid #3b82f6", borderRadius: "4px", padding: "7px 14px", fontSize: "14px", fontWeight: 600, color: "#1e40af", cursor: "pointer" }}
-                >Utwórz kosztorys</button>
+              <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "10px 14px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await fetch("/api/mice/kosztorysy", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            name: `${ev.client ?? "Klient"} — ${TL[ev.type] ?? "Impreza"} ${fmtDate(ev.date)}`,
+                          }),
+                        });
+                        if (!res.ok) throw new Error("Błąd tworzenia");
+                        const quote = await res.json();
+                        console.log("[DEBUG quoteId]", quote.id, quote);
+                        const patchRes = await fetch(`/api/event-orders/${ev.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ quoteId: quote.id }),
+                        });
+                        const patchData = await patchRes.json();
+                        console.log("[DEBUG patch result]", patchRes.status, patchData);
+                        onRefresh?.();
+                        showToast("Kosztorys utworzony");
+                      } catch {
+                        showToast("Błąd tworzenia kosztorysu", "err");
+                      }
+                    }}
+                    style={{ background: "white", border: "1px solid #3b82f6", borderRadius: "4px", padding: "7px 14px", fontSize: "14px", fontWeight: 600, color: "#1e40af", cursor: "pointer" }}
+                  >Utwórz kosztorys</button>
+                </div>
+                {availableQuotes.length > 0 && (
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", borderTop: "1px solid #e2e8f0", paddingTop: "10px" }}>
+                    <span style={{ fontSize: "13px", color: "#64748b", fontWeight: 500 }}>Powiąż istniejący:</span>
+                    <select
+                      value={selectedQuoteId}
+                      onChange={(e) => setSelectedQuoteId(e.target.value)}
+                      style={{ padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: "4px", fontSize: "14px", minWidth: "200px" }}
+                    >
+                      <option value="">— wybierz kosztorys —</option>
+                      {availableQuotes.map((q) => (
+                        <option key={q.id} value={q.id}>{q.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={async () => {
+                        if (!selectedQuoteId) return;
+                        try {
+                          const patchRes = await fetch(`/api/event-orders/${ev.id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ quoteId: selectedQuoteId }),
+                          });
+                          if (!patchRes.ok) throw new Error("Błąd powiązania");
+                          onRefresh?.();
+                          showToast("Kosztorys powiązany");
+                          setSelectedQuoteId("");
+                        } catch {
+                          showToast("Błąd powiązania kosztorysu", "err");
+                        }
+                      }}
+                      disabled={!selectedQuoteId}
+                      style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "4px", padding: "7px 14px", fontSize: "14px", fontWeight: 600, cursor: selectedQuoteId ? "pointer" : "not-allowed", opacity: selectedQuoteId ? 1 : 0.6 }}
+                    >Powiąż</button>
+                  </div>
+                )}
               </div>
             )}
             {(() => {

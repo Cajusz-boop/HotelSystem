@@ -152,6 +152,10 @@ export async function PATCH(
     if (menu !== undefined) {
       patchData.menu = menu;
     }
+    const quoteId = data?.quoteId;
+    if (quoteId !== undefined) {
+      patchData.quoteId = quoteId != null ? String(quoteId) : null;
+    }
 
     const forceGcalSync = data?.forceGcalSync === true;
     if (Object.keys(patchData).length === 0 && !forceGcalSync) {
