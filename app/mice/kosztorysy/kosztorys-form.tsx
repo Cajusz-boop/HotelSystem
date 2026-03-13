@@ -89,12 +89,23 @@ export function KosztorysForm({ quotes }: { quotes: GroupQuoteForForm[] }) {
     setEventDate(q.eventDate ? q.eventDate.slice(0, 10) : "");
     setDepositAmount(q.depositAmount != null ? String(q.depositAmount) : "");
     setNotes(q.notes ?? "");
-    const rawItems = q.items;
-    setItems(
-      Array.isArray(rawItems) && rawItems.length > 0
-        ? (rawItems as unknown as Record<string, unknown>[]).map((it) => migrateLegacyItem(it))
-        : [emptyItem()]
-    );
+
+    // Bezpieczne parsowanie items — obsługa string/array/null/undefined
+    let parsedItems: GroupQuoteItem[] = [];
+    try {
+      const raw = typeof q.items === "string"
+        ? JSON.parse(q.items)
+        : q.items;
+      if (Array.isArray(raw) && raw.length > 0) {
+        parsedItems = (raw as Record<string, unknown>[]).map((it) =>
+          migrateLegacyItem(it)
+        );
+      }
+    } catch {
+      // ignore parse error, użyj emptyItem
+    }
+
+    setItems(parsedItems.length > 0 ? parsedItems : [emptyItem()]);
   };
 
   const updateItem = (index: number, field: keyof GroupQuoteItem, value: string | number) => {

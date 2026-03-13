@@ -15,7 +15,14 @@ export default async function KosztorysyPage() {
     name: q.name,
     validUntil: q.validUntil ? q.validUntil.toISOString().slice(0, 10) : null,
     totalAmount: q.totalAmount != null ? Number(q.totalAmount) : null,
-    items: q.items as GroupQuoteItem[] | null,
+    items: (() => {
+      try {
+        const raw = typeof q.items === "string" ? JSON.parse(q.items) : q.items;
+        return Array.isArray(raw) ? (raw as GroupQuoteItem[]) : null;
+      } catch {
+        return null;
+      }
+    })(),
     clientName: q.clientName ?? null,
     clientNip: q.clientNip ?? null,
     eventDate: q.eventDate ? q.eventDate.toISOString().slice(0, 10) : null,

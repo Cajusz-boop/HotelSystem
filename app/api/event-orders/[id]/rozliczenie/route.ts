@@ -43,6 +43,59 @@ export async function GET(
     const event = await prisma.eventOrder.findUnique({ where: { id: id.trim() } });
     if (!event) return new NextResponse("Impreza nie istnieje", { status: 404 });
 
+    // Pobierz powiązany GroupQuote (brak relacji FK — ręczne zapytanie)
+    let quote: Awaited<ReturnType<typeof prisma.groupQuote.findUnique>> = null;
+    if (event.quoteId) {
+      quote = await prisma.groupQuote.findUnique({ where: { id: event.quoteId } });
+    }
+
+    interface QuoteItem {
+      name: string;
+      unit?: string;
+      quantity: number;
+      unitPriceNet?: number;
+      vatRate?: number;
+      netAmount?: number;
+      vatAmount?: number;
+      grossAmount?: number;
+      amount?: number;
+    }
+    let quoteItems: QuoteItem[] = [];
+    let quoteNotes: string | null = null;
+    let quoteDepositAmount = 0;
+    if (quote) {
+      quoteNotes = quote.notes ?? null;
+      quoteDepositAmount = quote.depositAmount != null ? Number(quote.depositAmount) : 0;
+      try {
+        const raw =
+          typeof quote.items === "string" ? JSON.parse(quote.items) : quote.items;
+        if (Array.isArray(raw)) {
+          quoteItems = raw as QuoteItem[];
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    const quoteTotalGross = quoteItems.reduce(
+      (sum, it) => sum + (it.grossAmount ?? it.amount ?? 0),
+      0
+    );
+    const quoteTotalNet = quoteItems.reduce(
+      (sum, it) => sum + (it.netAmount ?? 0),
+      0
+    );
+    const quoteTotalVat = quoteItems.reduce(
+      (sum, it) => sum + (it.vatAmount ?? 0),
+      0
+    );
+    const effectiveDeposit =
+      quoteDepositAmount > 0
+        ? quoteDepositAmount
+        : event.depositAmount != null
+          ? Number(event.depositAmount)
+          : 0;
+    let effectiveRemaining: number | null = null; // ustawione po obliczeniu remaining
+
     let packageName: string | null = null;
     let packagePrice: number | null = null;
     interface SurchargeInfo { code: string; label: string; pricePerPerson: number | null; flatPrice: number | null; }
@@ -103,6 +156,8 @@ export async function GET(
     const menuTotal = guestCount > 0 ? totalPerPerson * guestCount + surchargeFlat : null;
     const depositAmount = event.depositAmount != null ? Number(event.depositAmount) : 0;
     const remaining = menuTotal != null ? menuTotal - depositAmount : null;
+    effectiveRemaining =
+      quoteTotalGross > 0 ? quoteTotalGross - effectiveDeposit : remaining;
 
     const eventDate = event.eventDate ? fmtDateLong(new Date(event.eventDate)) : fmtDateLong(new Date(event.dateFrom));
     const docNumber = `ROZ/${event.eventNumber ?? event.id.slice(-6).toUpperCase()}/${new Date().getFullYear()}`;
@@ -197,8 +252,13 @@ export async function GET(
 
   ${event.eventType === "WESELE" ? `<h2>Szczegóły wesela</h2><div class="grid">${fld("Stół pary młodej", event.brideGroomTable)}${fld("Stół orkiestry", event.orchestraTable)}${fld("Układ stołów", event.tableLayout)}${fld("Winszowanie chlebem", event.breadWelcomeBy)}</div>` : ""}
 
-  <h2>Menu i wycena</h2>
-  ${packageName ? `
+  <h2>${quoteItems.length > 0 ? "Wycena usług" : "Menu i wycena"}</h2>
+  ${quoteItems.length > 0 ? `
+  <table><thead><tr><th>Rodzaj usługi</th><th class="tc">Jedn.</th><th class="tr">Ilość</th><th class="tr">Cena netto</th><th class="tc">VAT</th><th class="tr">Wartość netto</th><th class="tr">Kwota VAT</th><th class="tr">Wartość brutto</th></tr></thead><tbody>
+    ${quoteItems.map((it) => `<tr><td>${esc(it.name)}</td><td class="tc">${esc(it.unit ?? "szt")}</td><td class="tr">${it.quantity}</td><td class="tr">${fm(it.unitPriceNet ?? 0)}</td><td class="tc">${it.vatRate ?? 8}%</td><td class="tr">${fm(it.netAmount ?? 0)}</td><td class="tr">${fm(it.vatAmount ?? 0)}</td><td class="tr"><strong>${fm(it.grossAmount ?? it.amount ?? 0)}</strong></td></tr>`).join("")}
+    <tr style="background:#f9fafb;font-weight:700"><td colspan="5">RAZEM</td><td class="tr">${fm(quoteTotalNet)}</td><td class="tr">${fm(quoteTotalVat)}</td><td class="tr">${fm(quoteTotalGross)}</td></tr>
+  </tbody></table>
+  ${quoteNotes ? `<div class="ib note"><strong>Uwagi:</strong> ${esc(quoteNotes)}</div>` : ""}` : packageName ? `
   <table><thead><tr><th>Pozycja</th><th class="tc">Ilość os.</th><th class="tr">Cena/os. (zł)</th><th class="tr">Wartość (zł)</th></tr></thead><tbody>
     <tr><td><strong>${esc(packageName)}</strong> — pakiet bazowy</td><td class="tc">${guestCount || "—"}</td><td class="tr">${fm(basePerPerson)}</td><td class="tr">${guestCount > 0 ? fm(basePerPerson * guestCount) : "—"}</td></tr>
     ${selectedSurcharges.map((s) => {
@@ -211,18 +271,20 @@ export async function GET(
     ${menu?.dodatkiDan ? Object.values(menu.dodatkiDan).flat().map((d) => `<tr><td>${esc(d.nazwa)} (dod.)</td><td class="tc">${guestCount || "—"}</td><td class="tr">${fm(d.cena)}</td><td class="tr">${guestCount > 0 ? fm(d.cena * guestCount) : "—"}</td></tr>`).join("") : ""}
   </tbody></table>` : `<p style="color:#6b7280;font-size:12px;font-style:italic">Pakiet menu nie wybrany.</p>`}
 
-  ${menuDishesHtml ? `<div style="margin:10px 0;padding:10px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px"><div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:6px">WYBRANE DANIA</div>${menuDishesHtml}</div>` : ""}
-  ${menu?.notatka ? `<div class="ib note"><strong>Notatka do menu:</strong> ${esc(menu.notatka)}</div>` : ""}
+  ${quoteItems.length === 0 && menuDishesHtml ? `<div style="margin:10px 0;padding:10px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px"><div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:6px">WYBRANE DANIA</div>${menuDishesHtml}</div>` : ""}
+  ${quoteItems.length === 0 && menu?.notatka ? `<div class="ib note"><strong>Notatka do menu:</strong> ${esc(menu.notatka)}</div>` : ""}
 
   <div class="summary-box">
-    ${menuTotal != null ? `
+    ${quoteTotalGross > 0 ? `
+    <div class="sr bold"><span>RAZEM:</span><span>${fm(quoteTotalGross)} zł</span></div>
+    ` : menuTotal != null ? `
     <div class="sr"><span>Całość za osobę:</span><span>${fm(totalPerPerson)} zł/os. × ${guestCount} os.</span></div>
     ${surchargeFlat > 0 ? `<div class="sr"><span>Dopłaty ryczałtowe:</span><span>${fm(surchargeFlat)} zł</span></div>` : ""}
     <div class="sr bold"><span>RAZEM:</span><span>${fm(menuTotal)} zł</span></div>
     ` : `<div class="sr" style="color:#6b7280"><span>Kwota do uzupełnienia ręcznie:</span><span>______________ zł</span></div>`}
-    <div class="sr dep"><span>Zadatek wpłacony${event.depositPaid ? " ✓" : ""}:</span><span>${depositAmount > 0 ? fm(depositAmount) + " zł" : "—"}</span></div>
+    <div class="sr dep"><span>Zadatek wpłacony${event.depositPaid ? " ✓" : ""}:</span><span>${effectiveDeposit > 0 ? fm(effectiveDeposit) + " zł" : "—"}</span></div>
     ${event.depositDueDate && !event.depositPaid ? `<div class="sr" style="color:#b45309;font-size:12px"><span>Termin wpłaty zadatku:</span><span>${fmtDateShort(new Date(event.depositDueDate))}</span></div>` : ""}
-    ${remaining != null ? `<div class="sr rem"><span>POZOSTAJE DO ZAPŁATY:</span><span>${fm(remaining)} zł</span></div>` : `<div class="sr rem"><span>POZOSTAJE DO ZAPŁATY:</span><span>______________ zł</span></div>`}
+    ${effectiveRemaining != null ? `<div class="sr rem"><span>POZOSTAJE DO ZAPŁATY:</span><span>${fm(effectiveRemaining)} zł</span></div>` : `<div class="sr rem"><span>POZOSTAJE DO ZAPŁATY:</span><span>______________ zł</span></div>`}
   </div>
 
   ${hasAlcohol(event) ? `<h2>Napoje i alkohol</h2><div class="grid">${fld("Dowóz alkoholu", event.drinksArrival)}${fld("Przechowywanie", event.drinksStorage)}${fld("Szampan", event.champagneStorage)}${fld("Pierwsze butelki", event.firstBottlesBy)}${fld("Coolery z lodem", event.coolersWithIce)}${fld("Obsługa alkoholu", event.alcoholServiceBy)}${fld("Wino", event.wineLocation)}${fld("Piwo", event.beerWhen)}${event.alcoholUnderStairs ? '<div><div class="fl">Pod schodami</div><div class="fv">Tak</div></div>' : ""}${event.alcoholAtTeamTable ? '<div><div class="fl">Alkohol przy stole ekipy</div><div class="fv">Tak</div></div>' : ""}</div>` : ""}
@@ -248,8 +310,8 @@ export async function GET(
       <p style="margin-bottom:8px"><strong>Data:</strong> ${esc(eventDate)} &emsp; <strong>Sala:</strong> ${esc(event.roomName ?? "—")}</p>
       <p style="margin-bottom:8px"><strong>Godziny:</strong> ${event.timeStart || "?"} – ${event.timeEnd || "?"}</p>
       <p style="margin-bottom:8px"><strong>Liczba gości:</strong> ${event.guestCount ?? "—"} os.</p>
-      ${menuTotal != null ? `<p style="margin-bottom:8px"><strong>Kwota razem:</strong> ${fm(menuTotal)} zł &emsp; <strong>Zadatek:</strong> ${depositAmount > 0 ? fm(depositAmount) + " zł" : "brak"} &emsp; <strong>Do zapłaty:</strong> ${fm(remaining ?? 0)} zł</p>` : `<p style="margin-bottom:8px"><strong>Kwota:</strong> do uzgodnienia z Centrum Sprzedaży</p>`}
-      <p style="margin-bottom:8px"><strong>Status:</strong> ${event.status === "DONE" ? "✅ Wykonane" : event.depositPaid && remaining != null && remaining <= 0 ? "✅ Rozliczone" : "⏳ W trakcie"}</p>
+      ${(quoteTotalGross > 0 || menuTotal != null) ? `<p style="margin-bottom:8px"><strong>Kwota razem:</strong> ${quoteTotalGross > 0 ? fm(quoteTotalGross) : fm(menuTotal!)} zł &emsp; <strong>Zadatek:</strong> ${effectiveDeposit > 0 ? fm(effectiveDeposit) + " zł" : "brak"} &emsp; <strong>Do zapłaty:</strong> ${effectiveRemaining != null ? fm(effectiveRemaining) : "?"} zł</p>` : `<p style="margin-bottom:8px"><strong>Kwota:</strong> do uzgodnienia z Centrum Sprzedaży</p>`}
+      <p style="margin-bottom:8px"><strong>Status:</strong> ${event.status === "DONE" ? "✅ Wykonane" : event.depositPaid && effectiveRemaining != null && effectiveRemaining <= 0 ? "✅ Rozliczone" : "⏳ W trakcie"}</p>
       ${event.afterpartyEnabled ? `<p style="margin-bottom:4px"><strong>Afterparty:</strong> ${event.afterpartyTimeFrom || "?"} – ${event.afterpartyTimeTo || "?"}, ${event.afterpartyGuests ?? "?"} os.</p>` : ""}
       ${poprawiny ? `<p style="margin-bottom:4px"><strong>Poprawiny:</strong> ${fmtDateShort(new Date(poprawiny.dateFrom))}, ${poprawiny.guestCount ?? "?"} os., sala: ${poprawiny.roomName ?? "—"}</p>` : ""}
       <p style="margin-top:10px;font-size:11px;color:#6b7280"><em>Dokument wewnętrzny — nie stanowi faktury ani paragonu.</em></p>

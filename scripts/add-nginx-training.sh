@@ -2,10 +2,19 @@
 # Add /training location to nginx hotel config
 CONF="/etc/nginx/sites-available/hotel"
 # Insert before "location / {"
-# We add: location = /training { return 301 /training/; }
-#         location /training/ { ... proxy to 3012 ... }
-
-TRAINING_BLOCK='    location = /training { return 301 /training/; }
+# UWAGA: NIE używaj 301 /training/ — powoduje pętlę z Next.js (trailingSlash: false)
+# Oba /training i /training/ muszą proxy'ować, bez przekierowań
+TRAINING_BLOCK='    location = /training {
+        proxy_pass http://127.0.0.1:3012/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection '"'"'upgrade'"'"';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
     location /training/ {
         proxy_pass http://127.0.0.1:3012/;
         proxy_http_version 1.1;
