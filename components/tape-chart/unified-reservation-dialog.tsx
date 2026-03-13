@@ -30,7 +30,7 @@ const DOC_PAYMENT_LABELS: Record<string, string> = {
   PREPAID: "Przedpłata",
 };
 import { createReservation, updateReservation, updateReservationStatus, getCheckoutBalanceWarning, findGuestsForCheckIn, getReservationCompany, getReservationEditData, deleteReservation, type GuestCheckInSuggestion } from "@/app/actions/reservations";
-import { postRoomChargeOnCheckout, createVatInvoice, createSplitVatInvoices, createProforma, printFiscalReceiptForReservation, printFiscalReceiptForReservations, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates, overrideRoomPrice, getConsolidatedFolioSummary } from "@/app/actions/finance";
+import { postRoomChargeOnCheckout, getInvoicesForReservation, createVatInvoice, createSplitVatInvoices, createProforma, printFiscalReceiptForReservation, printFiscalReceiptForReservations, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates, overrideRoomPrice, getConsolidatedFolioSummary } from "@/app/actions/finance";
 import { lookupCompanyByNip, createConsolidatedVatInvoice } from "@/app/actions/companies";
 import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { getEffectivePriceForRoomOnDate, getRatePlanInfoForRoomDate } from "@/app/actions/rooms";
@@ -49,6 +49,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { X, ChevronDown, AlertTriangle } from "lucide-react";
+const EVENT_TYPE_LABELS_BANNER: Record<string, string> = {
+  WESELE: "Wesele", KOMUNIA: "Komunia", CHRZCINY: "Chrzciny",
+  URODZINY: "Urodziny", STYPA: "Stypa", FIRMOWA: "Firmowa",
+  SYLWESTER: "Sylwester", INNE: "Impreza",
+};
+const STATUS_LABELS_EVENT_BANNER: Record<string, string> = {
+  DRAFT: "Szkic", CONFIRMED: "Potwierdzone", DONE: "Wykonane", CANCELLED: "Anulowane",
+};
 import type { Reservation } from "@/lib/tape-chart-types";
 import type { ReservationSource, ReservationChannel, MealPlan, MarketSegment } from "@/lib/validations/schemas";
 import { SettlementTab, type SettlementTabFormState } from "./tabs/settlement-tab";
@@ -232,6 +240,7 @@ export function UnifiedReservationDialog({
   const [isNonRefundable, setIsNonRefundable] = useState(false);
   const [nipLookupLoading, setNipLookupLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [settleLoading, setSettleLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteReason, setDeleteReason] = useState("");
@@ -271,6 +280,7 @@ export function UnifiedReservationDialog({
   const [dayRatesSaving, setDayRatesSaving] = useState(false);
   /** W trybie edycji: true gdy są niezapisane zmiany; po Zapisz ustawiane na false, okno pozostaje otwarte */
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [eventOrderId, setEventOrderId] = useState<string | null>(null);
 
   // Guest autocomplete
   const [guestSuggestions, setGuestSuggestions] = useState<GuestCheckInSuggestion[]>([]);
@@ -313,9 +323,11 @@ export function UnifiedReservationDialog({
         bedsBooked: reservation.bedsBooked != null ? String(reservation.bedsBooked) : "",
       });
       // Załaduj dane do edycji (email, telefon, źródło, kanał, wyżywienie, itp.)
+      setEventOrderId(reservation?.eventOrderId ?? null);
       getReservationEditData(reservation.id).then((r) => {
         if (r.success && r.data) {
           const d = r.data;
+          setEventOrderId(d.eventOrderId ?? null);
           const remAt = d.reminderAt ? new Date(d.reminderAt) : null;
           setForm((prev) => ({
             ...prev,
@@ -362,6 +374,7 @@ export function UnifiedReservationDialog({
         }
       });
     } else if (!isEdit && createContext) {
+      setEventOrderId(null);
       setForm({
         ...INITIAL_FORM,
         room: createContext.roomNumber,
@@ -592,6 +605,7 @@ export function UnifiedReservationDialog({
               city: form.companyCity.trim() || undefined,
             },
           } : {}),
+          eventOrderId: eventOrderId ?? null,
         });
         if (result.success && result.data) {
           onSaved?.(result.data as Reservation);
@@ -690,7 +704,7 @@ export function UnifiedReservationDialog({
     } finally {
       setSaving(false);
     }
-  }, [form, isEdit, reservation, rooms, onSaved, onCreated, onOpenChange, openRegistrationCard, hasUnsavedChanges, effectivePricePerNight]);
+  }, [form, isEdit, reservation, rooms, onSaved, onCreated, onOpenChange, openRegistrationCard, hasUnsavedChanges, effectivePricePerNight, eventOrderId]);
 
   handleSubmitRef.current = handleSubmit;
   savingRef.current = saving;
@@ -742,8 +756,39 @@ export function UnifiedReservationDialog({
     }
   }, [reservation?.id, onDeleted, onOpenChange, deleteReason]);
 
-  const handleFullCheckout = useCallback(async () => {
+  const handleSettle = useCallback(async () => {
     if (!reservation?.id) return;
+    setSettleLoading(true);
+    try {
+      await postRoomChargeOnCheckout(reservation.id);
+      const existing = await getInvoicesForReservation(reservation.id);
+      if (existing.success && existing.data && existing.data.length > 0) {
+        toast.info("Dokument już wystawiony");
+        return;
+      }
+      setDocChoiceResId(reservation.id);
+      setDocChoiceGuestName(reservation.guestName);
+      setDocChoiceOpen(true);
+    } finally {
+      setSettleLoading(false);
+    }
+  }, [reservation?.id, reservation?.guestName]);
+
+  const handleCheckoutOnly = useCallback(async () => {
+    if (!reservation?.id) return;
+    const balanceResult = await getCheckoutBalanceWarning(reservation.id);
+    if (balanceResult.success && balanceResult.data) {
+      const d = balanceResult.data;
+      if (d.balance > 0) {
+        const proceed = window.confirm(
+          `Nieopłacone saldo: ${d.balance.toFixed(2)} PLN\n` +
+          `(Obciążenia: ${d.totalOwed.toFixed(2)} PLN, Wpłaty: ${d.totalPaid.toFixed(2)} PLN)\n\n` +
+          (d.restaurantCount > 0 ? `Rachunki z restauracji: ${d.restaurantCount} szt. (${d.restaurantCharges.toFixed(2)} PLN)\n\n` : "") +
+          `Czy wymeldować mimo salda?`
+        );
+        if (!proceed) return;
+      }
+    }
     setCheckoutLoading(true);
     try {
       if (reservation.status === "CONFIRMED") {
@@ -752,42 +797,19 @@ export function UnifiedReservationDialog({
           toast.error("error" in checkinResult ? checkinResult.error : "Błąd meldunku");
           return;
         }
-        toast.success("Zameldowano gościa");
       }
-
-      const chargeResult = await postRoomChargeOnCheckout(reservation.id);
-      if (chargeResult.success && chargeResult.data && !chargeResult.data.skipped) {
-        toast.success(`Naliczono nocleg: ${chargeResult.data.amount?.toFixed(2)} PLN`);
-      }
-
-      const balanceResult = await getCheckoutBalanceWarning(reservation.id);
-      if (balanceResult.success && balanceResult.data) {
-        const d = balanceResult.data;
-        if (d.hasUnpaidBalance) {
-          const proceed = window.confirm(
-            `Nieopłacone saldo: ${d.balance.toFixed(2)} PLN\n` +
-            `(Obciążenia: ${d.totalOwed.toFixed(2)} PLN, Wpłaty: ${d.totalPaid.toFixed(2)} PLN)\n\n` +
-            (d.restaurantCount > 0 ? `Rachunki z restauracji: ${d.restaurantCount} szt. (${d.restaurantCharges.toFixed(2)} PLN)\n\n` : "") +
-            `Czy wymeldować mimo salda?`
-          );
-          if (!proceed) return;
-        }
-      }
-
       const result = await updateReservationStatus(reservation.id, "CHECKED_OUT");
       if (result.success && result.data) {
-        toast.success("Gość wymeldowany i rozliczony");
+        toast.success("Gość wymeldowany");
         onSaved?.(result.data as Reservation);
-        setDocChoiceResId(reservation.id);
-        setDocChoiceGuestName(reservation.guestName);
-        setDocChoiceOpen(true);
+        onOpenChange(false);
       } else {
         toast.error("error" in result ? result.error : "Błąd wymeldowania");
       }
     } finally {
       setCheckoutLoading(false);
     }
-  }, [reservation?.id, reservation?.status, reservation?.guestName, onSaved]);
+  }, [reservation?.id, reservation?.status, onSaved, onOpenChange]);
 
   const CHARGE_TYPES = ["ROOM", "LOCAL_TAX", "MINIBAR", "GASTRONOMY", "SPA", "PARKING", "RENTAL", "PHONE", "LAUNDRY", "TRANSPORT", "ATTRACTION", "OTHER"];
   // Fetch charge total when doc choice dialog opens
@@ -1108,6 +1130,40 @@ export function UnifiedReservationDialog({
           {/* PRAWA KOLUMNA (60%) - Zakładki */}
           <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as UnifiedReservationTab)} className="flex-1 flex flex-col min-h-0">
+              {isEdit && reservation?.eventOrderId && (
+                <div className="mx-4 mb-2 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2.5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base">🎉</span>
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Pobyt powiązany z imprezą</div>
+                      <div className="text-sm font-semibold text-blue-900 truncate">
+                        {reservation.eventOrderType && EVENT_TYPE_LABELS_BANNER[reservation.eventOrderType]}
+                        {reservation.eventOrderClient ? ` — ${reservation.eventOrderClient}` : ""}
+                        {reservation.eventOrderDate ? ` · ${new Date(reservation.eventOrderDate).toLocaleDateString("pl-PL")}` : ""}
+                      </div>
+                      <div className="text-[11px] text-blue-700 flex gap-3 mt-0.5">
+                        <span>Status: {STATUS_LABELS_EVENT_BANNER[reservation.eventOrderStatus ?? ""] ?? "—"}</span>
+                        {reservation.eventOrderDeposit != null && (
+                          <span>Zadatek: {Number(reservation.eventOrderDeposit).toFixed(2)} zł {reservation.eventOrderDepositPaid ? "✓" : "✗"}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5 shrink-0">
+                    <Button variant="outline" size="sm" className="h-7 text-xs text-blue-800 border-blue-300 hover:bg-blue-100"
+                      onClick={() => window.open(`/api/event-orders/${reservation.eventOrderId}/rozliczenie`, "_blank")}>
+                      📋 Rozliczenie
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-blue-600 hover:bg-blue-100"
+                      onClick={() => {
+                        const w = window.open(`/api/event-orders/${reservation.eventOrderId}/rozliczenie`, "_blank");
+                        if (w) { setTimeout(() => w.print(), 800); }
+                      }}>
+                      🖨️ Drukuj
+                    </Button>
+                  </div>
+                </div>
+              )}
               <TabsList className="flex w-full overflow-x-auto flex-nowrap shrink-0 rounded-none border-b px-4 gap-0 h-auto min-h-9 mb-2 [&>button]:shrink-0">
                 <TabsTrigger value="rozliczenie" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">Rozlicz.</TabsTrigger>
                 <TabsTrigger value="dokumenty" disabled={!isEdit && !isConsolidated} className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent">Dok.</TabsTrigger>
@@ -1196,7 +1252,17 @@ export function UnifiedReservationDialog({
               </TabsContent>
 
               <TabsContent value="pozostale" className="flex-1 min-h-0 overflow-y-auto mt-0 p-4">
-                <PozostaleTab form={form} onFormChange={onFormChange} reservationId={isEdit ? reservation?.id : undefined} />
+                <PozostaleTab
+                  form={form}
+                  onFormChange={onFormChange}
+                  reservationId={isEdit ? reservation?.id : undefined}
+                  eventOrderId={eventOrderId}
+                  onEventOrderChange={(id) => {
+                    setEventOrderId(id);
+                    setHasUnsavedChanges(true);
+                    scheduleAutoSave();
+                  }}
+                />
               </TabsContent>
 
               <TabsContent value="wlasne" className="flex-1 min-h-0 overflow-y-auto mt-0 p-4">
@@ -1276,9 +1342,14 @@ export function UnifiedReservationDialog({
           </div>
           <div className="flex items-center gap-2">
             {isEdit && reservation && !isConsolidated && reservation.status !== "CANCELLED" && reservation.status !== "CHECKED_OUT" && (
-              <Button type="button" variant="outline" size="sm" className="h-8 text-xs bg-orange-600 hover:bg-orange-700 text-white border-orange-600" disabled={checkoutLoading} onClick={handleFullCheckout}>
-                {checkoutLoading ? "Rozliczanie…" : "Rozlicz i wymelduj"}
-              </Button>
+              <>
+                <Button type="button" variant="outline" size="sm" className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white border-blue-600" disabled={settleLoading || checkoutLoading} onClick={handleSettle}>
+                  Rozlicz
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="h-8 text-xs bg-orange-600 hover:bg-orange-700 text-white border-orange-600" disabled={settleLoading || checkoutLoading} onClick={handleCheckoutOnly}>
+                  {checkoutLoading ? "Wymeldowywanie…" : "Wymelduj"}
+                </Button>
+              </>
             )}
             {!isConsolidated && (
             <Button type="button" variant="outline" size="sm" className="h-8 text-xs bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200" disabled={saving} onClick={() => { saveAndPrintRef.current = true; handleSubmit(); }} title="Ctrl+Shift+Enter">

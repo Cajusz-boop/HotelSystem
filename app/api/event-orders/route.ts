@@ -476,6 +476,8 @@ export async function GET(req: Request) {
     const upcoming = searchParams.get("upcoming");
     const status = searchParams.get("status");
     const all = searchParams.get("all") === "1";
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? Math.min(parseInt(limitParam, 10) || 100, 500) : undefined;
 
     const where = all
       ? {}
@@ -484,20 +486,25 @@ export async function GET(req: Request) {
           ...(upcoming === "1" ? { dateFrom: { gte: new Date() } } : {}),
         };
 
+    const selectForList = {
+      id: true,
+      name: true,
+      eventType: true,
+      clientName: true,
+      eventDate: true,
+      dateFrom: true,
+      dateTo: true,
+      guestCount: true,
+      status: true,
+      packageId: true,
+      roomName: true,
+    };
+
     const events = await prisma.eventOrder.findMany({
       where,
-      select: all ? FULL_SELECT : {
-        id: true,
-        eventType: true,
-        clientName: true,
-        dateFrom: true,
-        dateTo: true,
-        guestCount: true,
-        status: true,
-        packageId: true,
-        roomName: true,
-      },
-      orderBy: { dateFrom: "asc" },
+      select: all ? FULL_SELECT : selectForList,
+      orderBy: limit ? { dateFrom: "desc" } : { dateFrom: "asc" },
+      ...(limit ? { take: limit } : {}),
     });
 
     return NextResponse.json(events, {

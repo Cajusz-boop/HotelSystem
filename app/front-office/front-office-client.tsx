@@ -88,6 +88,8 @@ export function FrontOfficeClient({ initialData }: { initialData: FrontOfficeIni
       }));
     }).catch(() => {
       // Zachowaj initialData przy błędzie
+    }).finally(() => {
+      clientFetchDoneRef.current = true;
     });
   }, []);
 
@@ -96,16 +98,10 @@ export function FrontOfficeClient({ initialData }: { initialData: FrontOfficeIni
   const reservations = Array.isArray(data.reservations) ? data.reservations : [];
 
   const hadDataRef = useRef(false);
+  const clientFetchDoneRef = useRef(false);
   if (rooms.length > 0) hadDataRef.current = true;
 
-  console.log("[FrontOfficeClient render]", {
-    hasMounted,
-    roomsLength: rooms.length,
-    dataRoomsLength: data?.rooms?.length,
-  });
-
-  if (!hasMounted || (rooms.length === 0 && !hadDataRef.current)) {
-    console.log("[FrontOfficeClient] SHOWING LOADING - reason:", !hasMounted ? "not mounted" : "rooms empty");
+  if (!hasMounted || (rooms.length === 0 && !hadDataRef.current && !clientFetchDoneRef.current)) {
     return (
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden items-center justify-center p-8 text-muted-foreground">
         {LOADING_MSG}

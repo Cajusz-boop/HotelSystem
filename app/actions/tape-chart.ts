@@ -31,6 +31,13 @@ export interface TapeChartReservation {
   companyId?: string | null;
   companyName?: string | null;
   hasConsolidatedInvoice?: boolean;
+  eventOrderId?: string | null;
+  eventOrderType?: string | null;
+  eventOrderClient?: string | null;
+  eventOrderDate?: string | null;
+  eventOrderStatus?: string | null;
+  eventOrderDeposit?: number | null;
+  eventOrderDepositPaid?: boolean;
 }
 
 export interface TapeChartRoom {
@@ -140,6 +147,16 @@ function mapReservationToTapeChart(r: {
   companyId?: string | null;
   company?: { id: string; name: string } | null;
   invoiceReservations?: Array<{ id: string }>;
+  eventOrderId?: string | null;
+  eventOrder?: {
+    id: string;
+    eventType: string;
+    clientName: string | null;
+    eventDate: Date | null;
+    status: string;
+    depositAmount: unknown;
+    depositPaid: boolean;
+  } | null;
 }) {
   const firstParking = r.parkingBookings?.[0];
   return {
@@ -184,6 +201,13 @@ function mapReservationToTapeChart(r: {
     companyId: r.companyId ?? undefined,
     companyName: r.company?.name ?? undefined,
     hasConsolidatedInvoice: (r.invoiceReservations?.length ?? 0) > 0,
+    eventOrderId: r.eventOrderId ?? r.eventOrder?.id ?? undefined,
+    eventOrderType: r.eventOrder?.eventType ?? undefined,
+    eventOrderClient: r.eventOrder?.clientName ?? undefined,
+    eventOrderDate: r.eventOrder?.eventDate ? formatDate(r.eventOrder.eventDate) : undefined,
+    eventOrderStatus: r.eventOrder?.status ?? undefined,
+    eventOrderDeposit: r.eventOrder?.depositAmount != null ? Number(r.eventOrder.depositAmount) : undefined,
+    eventOrderDepositPaid: r.eventOrder?.depositPaid ?? undefined,
   };
 }
 
@@ -274,6 +298,17 @@ async function fetchTapeChartDataUncached(
           parkingBookings: { take: 1, include: { parkingSpot: { select: { number: true } } } },
           company: { select: { id: true, name: true } },
           invoiceReservations: { take: 1, select: { id: true } },
+          eventOrder: {
+            select: {
+              id: true,
+              eventType: true,
+              clientName: true,
+              eventDate: true,
+              status: true,
+              depositAmount: true,
+              depositPaid: true,
+            },
+          },
         },
         orderBy: { checkIn: "asc" },
       }),

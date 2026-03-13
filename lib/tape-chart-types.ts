@@ -54,6 +54,14 @@ export interface Reservation {
   companyName?: string | null;
   /** Czy rezerwacja jest już na fakturze zbiorczej */
   hasConsolidatedInvoice?: boolean;
+  /** Powiązanie z imprezą (EventOrder) */
+  eventOrderId?: string | null;
+  eventOrderType?: string | null;
+  eventOrderClient?: string | null;
+  eventOrderDate?: string | null;
+  eventOrderStatus?: string | null;
+  eventOrderDeposit?: number | null;
+  eventOrderDepositPaid?: boolean;
 }
 
 export interface ReservationGroupSummary {

@@ -4903,6 +4903,15 @@ export async function createVatInvoice(
         error: "Do wystawienia faktury VAT wymagany jest NIP nabywcy. Uzupełnij NIP w danych firmy przy rezerwacji.",
       };
     }
+    const onConsolidated = await prisma.invoiceReservation.findFirst({
+      where: { reservationId },
+    });
+    if (onConsolidated) {
+      return {
+        success: false,
+        error: "Rezerwacja jest już objęta fakturą zbiorczą. Nie można wystawić osobnej faktury VAT.",
+      };
+    }
     // Zapobieganie duplikatom: dla NORMAL
     // Zezwalamy na dwie faktury: HOTEL_ONLY + GASTRONOMY_ONLY (różne zakresy)
     if (invoiceType === "NORMAL") {
@@ -5697,13 +5706,28 @@ export async function getInvoicesForReservation(
   >
 > {
   try {
-    const list = await prisma.invoice.findMany({
-      where: { reservationId },
-      orderBy: { issuedAt: "desc" },
-    });
+    const [direct, viaReservations] = await Promise.all([
+      prisma.invoice.findMany({
+        where: { reservationId },
+        orderBy: { issuedAt: "desc" },
+      }),
+      prisma.invoice.findMany({
+        where: { invoiceReservations: { some: { reservationId } } },
+        orderBy: { issuedAt: "desc" },
+      }),
+    ]);
+    const seen = new Set<string>();
+    const merged: typeof direct = [];
+    for (const i of [...direct, ...viaReservations]) {
+      if (!seen.has(i.id)) {
+        seen.add(i.id);
+        merged.push(i);
+      }
+    }
+    merged.sort((a, b) => b.issuedAt.getTime() - a.issuedAt.getTime());
     return {
       success: true,
-      data: list.map((i) => ({
+      data: merged.map((i) => ({
         id: i.id,
         number: i.number,
         amountGross: Number(i.amountGross),

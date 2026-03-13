@@ -343,6 +343,7 @@ const reservationBaseSchema = z.object({
   guestDateOfBirth: dateString.optional().nullable(), // data urodzenia gościa (YYYY-MM-DD)
   room: z.string().min(1, "Pokój wymagany").max(20),
   companyId: z.string().optional().nullable(),
+  eventOrderId: z.string().optional().nullable(),
   companyData: companyDataSchema.optional().nullable(), // firma do meldunku – przy tworzeniu rezerwacji zapisana do Company i powiązana
   rateCodeId: z.string().optional().nullable(),
   rateCodePrice: z.number().min(0).optional().nullable(), // nadpisanie ceny za dobę (PLN)

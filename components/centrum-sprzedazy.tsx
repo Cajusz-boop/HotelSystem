@@ -1278,6 +1278,9 @@ function EventDetailModal({
                 const w = window.open("", "_blank");
                 if (w) { w.document.write(html); w.document.close(); w.print(); }
               }} style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "white", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "9px 16px", fontSize: "14px", fontWeight: 600, color: "#111827", cursor: "pointer" }}>Drukuj kartę</button>
+              <button onClick={() => {
+                window.open(`/api/event-orders/${ev.id}/rozliczenie`, "_blank");
+              }} style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", background: "#1e40af", border: "1px solid #1e3a8a", borderRadius: "4px", padding: "9px 16px", fontSize: "14px", fontWeight: 600, color: "white", cursor: "pointer" }}>📋 Drukuj rozliczenie</button>
             </div>
             </div>
             ) : (

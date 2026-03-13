@@ -132,6 +132,16 @@ function toUiReservation(r: {
   rateCodePrice?: unknown; // Decimal | null – nadpisanie ceny za dobę
   parkingBookings?: Array<{ parkingSpotId: string; parkingSpot: { number: string } }>;
   group?: { id: string; name: string | null } | null;
+  eventOrderId?: string | null;
+  eventOrder?: {
+    id: string;
+    eventType: string;
+    clientName: string | null;
+    eventDate: Date | null;
+    status: string;
+    depositAmount: unknown;
+    depositPaid: boolean;
+  } | null;
 }) {
   const firstParking = r.parkingBookings?.[0];
   return {
@@ -196,6 +206,13 @@ function toUiReservation(r: {
     groupName: r.group?.name ?? undefined,
     parkingSpotId: firstParking?.parkingSpotId ?? undefined,
     parkingSpotNumber: firstParking?.parkingSpot?.number ?? undefined,
+    eventOrderId: r.eventOrderId ?? r.eventOrder?.id ?? undefined,
+    eventOrderType: r.eventOrder?.eventType ?? undefined,
+    eventOrderClient: r.eventOrder?.clientName ?? undefined,
+    eventOrderDate: r.eventOrder?.eventDate ? formatDate(r.eventOrder.eventDate) : undefined,
+    eventOrderStatus: r.eventOrder?.status ?? undefined,
+    eventOrderDeposit: r.eventOrder?.depositAmount != null ? Number(r.eventOrder.depositAmount) : undefined,
+    eventOrderDepositPaid: r.eventOrder?.depositPaid ?? undefined,
   };
 }
 
@@ -521,6 +538,7 @@ export async function getReservationEditData(
   invoiceSingleLine: boolean;
   invoiceScope: string;
   paidAmountOverride: number | null;
+  eventOrderId: string | null;
   isInClosedPeriod: boolean;
   canEditClosedPeriod: boolean;
 }>> {
@@ -548,6 +566,7 @@ export async function getReservationEditData(
         notesVisibleOnChart: true,
         extraStatus: true,
         advanceDueDate: true,
+        eventOrderId: true,
         guest: { select: { email: true, phone: true } },
       },
     });
@@ -579,6 +598,7 @@ export async function getReservationEditData(
         invoiceSingleLine: res.invoiceSingleLine ?? true,
         invoiceScope: res.invoiceScope ?? "ALL",
         paidAmountOverride: res.paidAmountOverride != null ? Number(res.paidAmountOverride) : null,
+        eventOrderId: res.eventOrderId ?? null,
         isInClosedPeriod,
         canEditClosedPeriod,
       },
@@ -2857,6 +2877,9 @@ export async function updateReservation(
       const v = (input as { paidAmountOverride?: number | null }).paidAmountOverride;
       (data as Record<string, unknown>).paidAmountOverride = v != null && v >= 0 ? v : null;
     }
+    if ((input as { eventOrderId?: string | null }).eventOrderId !== undefined) {
+      (data as Record<string, unknown>).eventOrderId = (input as { eventOrderId?: string | null }).eventOrderId || null;
+    }
 
     // Firma / NIP (dla faktury VAT)
     if (input.companyId !== undefined) {
@@ -3140,7 +3163,24 @@ export async function updateReservation(
 
     const finalUpdated = await prisma.reservation.findUnique({
       where: { id: reservationId },
-      include: { guest: true, room: true, rateCode: true, parkingBookings: { include: { parkingSpot: true } }, group: true },
+      include: {
+        guest: true,
+        room: true,
+        rateCode: true,
+        parkingBookings: { include: { parkingSpot: true } },
+        group: true,
+        eventOrder: {
+          select: {
+            id: true,
+            eventType: true,
+            clientName: true,
+            eventDate: true,
+            status: true,
+            depositAmount: true,
+            depositPaid: true,
+          },
+        },
+      },
     }) ?? updated;
 
     const auditNewValue = toUiReservation(finalUpdated) as unknown as Record<string, unknown>;

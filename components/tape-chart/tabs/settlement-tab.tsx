@@ -262,6 +262,7 @@ export interface SettlementTabFormState {
   invoiceScope: string;
   /** Nadpisana kwota wpłat (widoczna na fakturze) – puste = użyj sumy z transakcji */
   paidAmountOverride: string;
+  eventOrderId?: string | null;
 }
 
 interface SettlementTabProps {

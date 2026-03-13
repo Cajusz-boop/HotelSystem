@@ -2073,6 +2073,23 @@ export function TapeChart({
         });
         if (result.success && result.data) {
           setSelectedReservationIds(new Set());
+          await Promise.all(ids.map((id) => updateReservationStatus(id, "CHECKED_OUT")));
+          router.refresh();
+          const firstDate = dates[0];
+          const lastDate = dates[dates.length - 1];
+          if (firstDate && lastDate) {
+            const fromDate = new Date(firstDate + "T12:00:00");
+            const extendedStart = addDays(fromDate, -PRELOAD_DAYS_BACK);
+            const extendedFromStr = `${extendedStart.getFullYear()}-${String(extendedStart.getMonth() + 1).padStart(2, "0")}-${String(extendedStart.getDate()).padStart(2, "0")}`;
+            const res = await getTapeChartData({ dateFrom: extendedFromStr, dateTo: lastDate });
+            setReservations((prevRes) => {
+              const byId = new Map(prevRes.map((r) => [r.id, r]));
+              (res.reservations as Reservation[]).forEach((r) => byId.set(r.id, r));
+              return Array.from(byId.values()).sort((a, b) =>
+                (a.checkIn as string).localeCompare(b.checkIn as string)
+              ) as Reservation[];
+            });
+          }
           const msg = `Faktura zbiorcza ${result.data.invoiceNumber} wystawiona`;
           toast.success(msg, {
             action: {
@@ -2092,7 +2109,7 @@ export function TapeChart({
         setConsolidatedInvoiceSubmitting(false);
       }
     },
-    [selectedReservationIds]
+    [selectedReservationIds, router, dates, setReservations]
   );
 
   const addDaysToStr = useCallback((dateStr: string, days: number): string => {

@@ -1489,6 +1489,7 @@ export async function createConsolidatedInvoice(data: {
         guest: { select: { name: true } },
         room: { select: { number: true } },
         transactions: {
+          where: { OR: [{ status: "ACTIVE" }, { status: null }] },
           select: { amount: true, type: true },
         },
       },
@@ -1527,6 +1528,7 @@ export async function createConsolidatedInvoice(data: {
       const nights = Math.ceil(
         (checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)
       );
+      const hasGastro = r.transactions.some(t => t.type === "GASTRONOMY" || t.type === "RESTAURANT");
       const amountGross = reservationDisplayAmount(r);
       const amountNet = amountGross / (1 + vatRate / 100);
       const amountVat = amountGross - amountNet;
@@ -1543,7 +1545,7 @@ export async function createConsolidatedInvoice(data: {
         amountNet,
         amountVat,
         amountGross,
-        description: `Nocleg ${nights} dób, pokój ${r.room.number}`,
+        description: `Nocleg ${nights} dób${hasGastro ? " + usługi" : ""}, pokój ${r.room.number}`,
       };
     });
 

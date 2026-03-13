@@ -794,6 +794,8 @@ model Reservation {
   unassignedGastronomyCharges UnassignedGastronomyCharge[] @relation("UnassignedCharges")
   cashDocuments    CashDocument[]
   invoiceReservations InvoiceReservation[]
+  eventOrderId  String?
+  eventOrder    EventOrder? @relation(fields: [eventOrderId], references: [id], onDelete: SetNull)
 
   @@index([checkIn, checkOut])
   @@index([roomId])
@@ -807,6 +809,7 @@ model Reservation {
   @@index([channel])
   @@index([marketSegment])
   @@index([packageId])
+  @@index([eventOrderId])
 }
 
 // Dopłaty / extras – katalog typów (łóżko dostawkowe, dziecko, zwierzę, parking itd.)
@@ -1862,6 +1865,7 @@ model EventOrder {
   @@index([status])
   @@index([eventType])
   @@index([parentEventId])
+  reservations  Reservation[]
 }
 
 // Kanały watch Google Calendar (webhooks)

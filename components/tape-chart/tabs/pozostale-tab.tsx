@@ -55,11 +55,28 @@ export interface PozostaleTabProps {
   form: SettlementTabFormState;
   onFormChange: (patch: Partial<SettlementTabFormState>) => void;
   reservationId?: string | null;
+  eventOrderId?: string | null;
+  onEventOrderChange?: (id: string | null) => void;
 }
 
-export function PozostaleTab({ form, onFormChange, reservationId }: PozostaleTabProps) {
+export function PozostaleTab({ form, onFormChange, reservationId, eventOrderId, onEventOrderChange }: PozostaleTabProps) {
   const [auditEntries, setAuditEntries] = useState<Array<{ timestamp: string; actionType: string; changesLabel?: string }>>([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [events, setEvents] = useState<Array<{ id: string; label: string }>>([]);
+
+  useEffect(() => {
+    fetch("/api/event-orders?limit=100")
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: Array<{ id: string; name: string; clientName?: string; eventDate?: string; eventType?: string }>) => {
+        setEvents(
+          data.map((e) => ({
+            id: e.id,
+            label: `${e.clientName ?? e.name} — ${e.eventType ?? ""}${e.eventDate ? " · " + new Date(e.eventDate).toLocaleDateString("pl-PL") : ""}`,
+          }))
+        );
+      })
+      .catch(() => setEvents([]));
+  }, []);
 
   useEffect(() => {
     if (!reservationId?.trim()) {
@@ -88,6 +105,27 @@ export function PozostaleTab({ form, onFormChange, reservationId }: PozostaleTab
 
   return (
     <div className="space-y-4">
+      <div className="rounded border border-blue-200 bg-blue-50/50 p-3">
+        <h4 className="text-xs font-medium uppercase tracking-wider text-blue-800 mb-3">
+          🎉 Powiązana impreza
+        </h4>
+        <div className="space-y-1">
+          <Label className="text-xs">Impreza z Centrum Sprzedaży</Label>
+          <select
+            value={eventOrderId ?? ""}
+            onChange={(e) => onEventOrderChange?.(e.target.value || null)}
+            className={selectClass}
+          >
+            <option value="">— brak powiązania —</option>
+            {events.map((ev) => (
+              <option key={ev.id} value={ev.id}>{ev.label}</option>
+            ))}
+          </select>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Powiązanie wyświetli banner z rozliczeniem imprezy w oknie rezerwacji.
+          </p>
+        </div>
+      </div>
       <div className="rounded border bg-muted/10 p-3">
         <h4 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
           Źródło i kanał
