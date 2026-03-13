@@ -85,11 +85,19 @@ export function MenuPackagesView({
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/menu-packages?includeInactive=true");
       const data = await res.json();
+      if (!res.ok) {
+        setError(data?.error || `Błąd API (${res.status})`);
+        setPackages([]);
+        return;
+      }
+      setError(null);
       setPackages(Array.isArray(data) ? data : []);
     } catch {
+      setError("Nie udało się załadować pakietów. Sprawdź połączenie.");
       setPackages([]);
     } finally {
       setLoading(false);
@@ -522,6 +530,15 @@ export function MenuPackagesView({
 
       {loading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "#6b7280", fontSize: "14px" }}>Ładowanie pakietów…</div>
+      ) : error ? (
+        <div style={{ padding: "48px", textAlign: "center", background: "#fef2f2", borderRadius: "12px", border: "1px solid #fecaca" }}>
+          <div style={{ fontSize: "40px", marginBottom: "12px" }}>⚠️</div>
+          <div style={{ fontSize: "16px", fontWeight: 700, color: "#991b1b", marginBottom: "8px" }}>Błąd ładowania</div>
+          <div style={{ fontSize: "14px", color: "#b91c1c", marginBottom: "16px" }}>{error}</div>
+          <button onClick={load} style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "8px", padding: "10px 20px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
+            Spróbuj ponownie
+          </button>
+        </div>
       ) : packages.length === 0 ? (
         <div style={{ padding: "48px", textAlign: "center", background: "#f9fafb", borderRadius: "12px", border: "1px dashed #d1d5db" }}>
           <div style={{ fontSize: "40px", marginBottom: "12px" }}>🍽️</div>
