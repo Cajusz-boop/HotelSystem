@@ -20,7 +20,8 @@ export async function GET() {
     return Response.json({ error: "Brak uprawnień" }, { status: 401 });
   }
   const allowed = await can(session.role, "admin.settings");
-  if (!allowed) {
+  const isManagerOrOwner = session.role === "MANAGER" || session.role === "OWNER";
+  if (!allowed && !isManagerOrOwner) {
     return Response.json({ error: "Brak uprawnień" }, { status: 401 });
   }
   try {

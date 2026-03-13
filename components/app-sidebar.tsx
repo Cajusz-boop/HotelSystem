@@ -520,7 +520,7 @@ function TrainingResetBlock({
   const router = useRouter();
   const url = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const isTraining = url.includes("/training");
-  const canReset = permissions?.includes("admin.settings") ?? false;
+  const canReset = (permissions?.includes("admin.settings") || session?.role === "MANAGER" || session?.role === "OWNER") ?? false;
   const [loading, setLoading] = useState(false);
 
   if (!isTraining || !session || !canReset) return null;
