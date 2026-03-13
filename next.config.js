@@ -53,6 +53,10 @@ const nextConfig = {
     },
   },
   webpack: (config, { isServer }) => {
+    // Wyłącz cache webpack w CI/deploy — unika race condition (ENOENT 0.pack_, MODULE_NOT_FOUND _document.js)
+    if (process.env.CI === "true" || process.env.DISABLE_WEBPACK_CACHE === "1") {
+      config.cache = false;
+    }
     if (!isServer) {
       config.optimization.splitChunks = {
         ...config.optimization.splitChunks,
