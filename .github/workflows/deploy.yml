@@ -22,7 +22,7 @@ jobs:
         run: npm ci
 
       - name: TypeScript check
-        run: npx tsc --noEmit
+        run: NODE_OPTIONS=--max-old-space-size=4096 npx tsc --noEmit
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
