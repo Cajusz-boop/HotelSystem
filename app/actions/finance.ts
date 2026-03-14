@@ -52,6 +52,7 @@ import {
   FOLIO_BILL_TO,
   type FolioBillTo,
 } from "@/lib/finance-constants";
+import { syncEventQuote } from "@/app/actions/mice";
 
 const MANAGER_PIN = process.env.MANAGER_PIN ?? "1234";
 /** Domyślne limity rabatowe (gdy użytkownik nie ma ustawionych): max % i max kwota PLN */
@@ -3684,6 +3685,15 @@ export async function postRoomChargeOnCheckout(
       },
     });
     if (existing > 0) {
+      const res = await prisma.reservation.findUnique({
+        where: { id: reservationId },
+        select: { eventOrderId: true },
+      });
+      if (res?.eventOrderId) {
+        await syncEventQuote(res.eventOrderId).catch((err) =>
+          console.error("[syncEventQuote postRoomChargeOnCheckout]", err)
+        );
+      }
       return { success: true, data: { skipped: true } };
     }
 
@@ -3771,6 +3781,17 @@ export async function postRoomChargeOnCheckout(
     await updateReservationPaymentStatus(reservationId).catch((err) =>
       console.error("[updateReservationPaymentStatus]", err)
     );
+
+    const res = await prisma.reservation.findUnique({
+      where: { id: reservationId },
+      select: { eventOrderId: true },
+    });
+    if (res?.eventOrderId) {
+      await syncEventQuote(res.eventOrderId).catch((err) =>
+        console.error("[syncEventQuote postRoomChargeOnCheckout]", err)
+      );
+    }
+
     return {
       success: true,
       data: { transactionId: tx.id, amount: Number(tx.amount) },
@@ -4067,6 +4088,17 @@ export async function voidTransaction(
     await updateReservationPaymentStatus(tx.reservationId).catch((err) =>
       console.error("[updateReservationPaymentStatus]", err)
     );
+
+    const res = await prisma.reservation.findUnique({
+      where: { id: tx.reservationId },
+      select: { eventOrderId: true },
+    });
+    if (res?.eventOrderId) {
+      await syncEventQuote(res.eventOrderId).catch((err) =>
+        console.error("[syncEventQuote voidTransaction]", err)
+      );
+    }
+
     return { success: true, data: undefined };
   } catch (e) {
     return {
@@ -12339,7 +12371,17 @@ export async function addFolioCharge(
       entityId: params.reservationId,
       newValue: { message: `Dodano obciążenie ${params.type}: ${params.amount.toFixed(2)} PLN${params.description ? ` (${params.description})` : ""}` },
     });
-    
+
+    const res = await prisma.reservation.findUnique({
+      where: { id: params.reservationId },
+      select: { eventOrderId: true },
+    });
+    if (res?.eventOrderId) {
+      await syncEventQuote(res.eventOrderId).catch((err) =>
+        console.error("[syncEventQuote addFolioCharge]", err)
+      );
+    }
+
     revalidatePath("/finance");
     revalidatePath("/front-office");
     
@@ -13870,7 +13912,20 @@ export async function voidFolioItem(
       entityId: transaction.reservationId ?? undefined,
       newValue: { message: `Anulowano pozycję ${transaction.type}: ${Number(transaction.amount).toFixed(2)} PLN - ${params.reason}` },
     });
-    
+
+    const reservationId = transaction.reservationId;
+    if (reservationId) {
+      const res = await prisma.reservation.findUnique({
+        where: { id: reservationId },
+        select: { eventOrderId: true },
+      });
+      if (res?.eventOrderId) {
+        await syncEventQuote(res.eventOrderId).catch((err) =>
+          console.error("[syncEventQuote voidFolioItem]", err)
+        );
+      }
+    }
+
     revalidatePath("/finance");
     revalidatePath("/front-office");
     

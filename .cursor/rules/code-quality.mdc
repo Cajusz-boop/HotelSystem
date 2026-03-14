@@ -1,0 +1,36 @@
+---
+description: Code quality standards - applies to all code files.
+globs: "*.ts,*.tsx,*.js,*.jsx"
+alwaysApply: true
+---
+
+# CODE QUALITY
+
+## Anti-Compression Protocol
+
+- Gdy modyfikujesz funkcję — pokaż CAŁE ciało funkcji, nie fragment.
+- NIGDY nie używaj placeholderów: `// ...rest of code`, `// unchanged`, `TODO`, `pass`, `[Continue here]`.
+- Jeśli zmieniasz mały fragment dużej funkcji — pokaż całą funkcję z kontekstem.
+- NIE wypisuj całych plików 500+ linii — tylko zmienione funkcje/bloki z otoczeniem.
+
+## TypeScript Strict
+
+- Żadnych `any` — definiuj typy lub używaj `unknown` z type guards.
+- Każda funkcja eksportowana ma jawny typ zwracany.
+- Interfejsy i typy: PascalCase.
+- Preferuj `interface` dla obiektów, `type` dla unii i intersekcji.
+
+## Error Handling
+
+- Każda operacja async w `try/catch` z sensownym komunikatem błędu.
+- Operacje bazodanowe: obsłuż błędy połączenia.
+- API routes: zawsze zwracaj właściwy HTTP status code.
+- Ścieżki krytyczne (płatności, dane użytkowników): pełny error handling + logowanie.
+
+## Ogólne
+
+- Sprawdź czy logika już istnieje w projekcie ZANIM napiszesz nową.
+- Nie zmieniaj plików poza scope'em zadania.
+- Nie zakładaj wartości env vars bez sprawdzenia konfiguracji.
+- Przed edycją pliku — przeczytaj go (Read tool).
+- Po edycji — sprawdź linter errors (ReadLints tool).

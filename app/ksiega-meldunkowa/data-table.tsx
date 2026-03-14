@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronUp, ChevronDown } from "lucide-react";
+import { ChevronUp, ChevronDown, CalendarDays } from "lucide-react";
 import type { LogbookEntry } from "@/app/actions/dashboard";
 import type { ColumnDef } from "./columns-config";
 import {
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
@@ -37,6 +38,8 @@ export interface DataTableProps {
   onPageSizeChange: (size: number) => void;
   onRowClick: (reservationId: string) => void;
   isLoading: boolean;
+  /** Wywoływane po kliknięciu "Dodaj rezerwację" w pustym stanie */
+  onAddReservation?: () => void;
 }
 
 export function DataTable({
@@ -52,6 +55,7 @@ export function DataTable({
   onPageSizeChange,
   onRowClick,
   isLoading,
+  onAddReservation,
 }: DataTableProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -96,11 +100,18 @@ export function DataTable({
               </TableRow>
             ) : data.length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center text-muted-foreground"
-                >
-                  Brak wyników dla wybranych filtrów
+                <TableCell colSpan={columns.length} className="p-0">
+                  <EmptyState
+                    icon={CalendarDays}
+                    title="Brak rezerwacji"
+                    description="Nie znaleziono rezerwacji dla wybranych filtrów. Dodaj nową rezerwację lub dostosuj kryteria wyszukiwania."
+                    action={
+                      onAddReservation
+                        ? { label: "Dodaj rezerwację", onClick: onAddReservation }
+                        : undefined
+                    }
+                    className="min-h-[200px]"
+                  />
                 </TableCell>
               </TableRow>
             ) : (

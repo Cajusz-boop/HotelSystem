@@ -1,0 +1,33 @@
+---
+description: Debugging methodology - applies when fixing bugs or investigating issues.
+globs: *
+alwaysApply: false
+---
+
+# DEBUGGING: Diagnoza przed implementacją
+
+## Zasada nadrzędna
+
+NIGDY nie zgaduj przyczyny buga. Zawsze: zbierz dane → zidentyfikuj przyczynę → dopiero wtedy naprawiaj.
+
+## Procedura
+
+1. **Reprodukcja:** Opisz kroki do odtworzenia problemu.
+2. **Zbieranie danych:** console.log, zapytania DB, network requests, logi serwera — powiedz co trzeba sprawdzić.
+3. **Identyfikacja:** Wskaż DOKŁADNĄ linię/warunek powodujący bug.
+4. **Propozycja:** Dopiero teraz zaproponuj fix — z wyjaśnieniem DLACZEGO to rozwiąże problem.
+
+## Zakazane
+
+- Nie proponuj fixów "na ślepo" (np. "spróbuj dodać null check tutaj").
+- Nie proponuj fixów opartych na założeniach — jeśli brakuje danych, powiedz jakie dane zebrać i jak.
+- Nie przepisuj całego modułu, żeby naprawić jeden bug.
+- Nie zmieniaj więcej niż jest potrzebne do naprawy.
+
+## Raportowanie
+
+Gdy proponujesz fix, podaj:
+- **Przyczyna:** Co dokładnie powoduje bug (linia, warunek, stan).
+- **Fix:** Minimalna zmiana naprawiająca problem.
+- **Ryzyko:** Co może się zepsuć po tej zmianie (side effects).
+- **Test:** Jak zweryfikować że fix działa.

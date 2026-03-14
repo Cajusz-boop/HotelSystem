@@ -1,3 +1,15 @@
+/** Źródła pozycji generowane automatycznie — chronione nie są przy sync (manual items są zachowywane). */
+const AUTO_SOURCES: string[] = [
+  "MENU_PACKAGE",
+  "MENU_PACKAGE_SURCHARGE",
+  "MENU_PACKAGE_EXTRA",
+  "RESERVATION",
+];
+
+export function isAutoSource(source?: string | null): boolean {
+  return !!source && AUTO_SOURCES.includes(source);
+}
+
 export interface GroupQuoteItem {
   name: string;
   unit: string;
@@ -8,9 +20,15 @@ export interface GroupQuoteItem {
   vatAmount: number;
   grossAmount: number;
   amount: number;
+  /** Opcjonalne: źródło pozycji (np. MENU_PACKAGE, SURCHARGE) */
+  source?: string | null;
+  /** Opcjonalne: ID encji źródłowej (np. MenuPackage.id) */
+  sourceId?: string | null;
+  /** Opcjonalne: ID konkretnej pozycji źródłowej (np. MenuPackageSurcharge.id) */
+  sourceItemId?: string | null;
 }
 
-/** Przelicza pola pozycji na podstawie quantity, unitPriceNet, vatRate */
+/** Przelicza pola pozycji na podstawie quantity, unitPriceNet, vatRate. Pola source/sourceId/sourceItemId przepuszcza bez zmian. */
 export function recalcGroupQuoteItem(it: Partial<GroupQuoteItem>): GroupQuoteItem {
   const quantity = Number(it.quantity ?? 1) || 0;
   const unitPriceNet = Number(it.unitPriceNet ?? 0) || 0;
@@ -28,5 +46,8 @@ export function recalcGroupQuoteItem(it: Partial<GroupQuoteItem>): GroupQuoteIte
     vatAmount,
     grossAmount,
     amount: grossAmount,
+    source: it.source ?? undefined,
+    sourceId: it.sourceId ?? undefined,
+    sourceItemId: it.sourceItemId ?? undefined,
   };
 }

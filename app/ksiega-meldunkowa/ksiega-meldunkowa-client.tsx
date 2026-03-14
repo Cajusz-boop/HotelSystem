@@ -291,6 +291,7 @@ export function KsiegaMeldunkowaClient({
         onPageSizeChange={handlePageSizeChange}
         onRowClick={handleRowClick}
         isLoading={isLoading}
+        onAddReservation={() => router.push("/front-office?e2eOpenCreate=1")}
       />
 
       <ColumnsDialog

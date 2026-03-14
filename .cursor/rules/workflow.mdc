@@ -1,0 +1,67 @@
+---
+description: Core workflow rules - applies to ALL tasks. Three-phase development process.
+globs: *
+alwaysApply: true
+---
+
+# WORKFLOW: Trójfazowy proces rozwoju
+
+## Zasady ogólne
+
+- ZAWSZE czytaj ARCHITECTURE.md przed implementacją — to jedyne źródło prawdy o strukturze projektu.
+- Diagnoza PRZED implementacją — nigdy nie naprawiaj bez zrozumienia przyczyny.
+- Dane > założenia — jeśli nie masz danych, powiedz czego potrzebujesz i jak to zebrać.
+- Małe zmiany > przepisywanie — inkrementalne, niskie ryzyko.
+- Nowa sesja czatu po zakończeniu zadania — unikaj degradacji kontekstu.
+- KAŻDA FAZA KOŃCZY SIĘ STOP-em — czekaj na potwierdzenie użytkownika przed przejściem dalej.
+
+## Faza 1 — REKONESANS (zero kodu!)
+
+Gdy dostajesz nowe zadanie, ZANIM napiszesz choćby jedną linię kodu:
+
+1. Przeczytaj ARCHITECTURE.md i potwierdź zrozumienie struktury.
+2. Wylistuj PLIKI DO ZMIANY: ścieżka → funkcja/komponent → powód zmiany.
+3. Wylistuj PLIKI DO REUSE: istniejące utilsy, hooki, typy, komponenty do ponownego użycia.
+4. Wylistuj ZALEŻNOŚCI: importy, typy, hooki, zewnętrzne biblioteki.
+5. Stwórz PLAN: sekwencyjne sub-taski z kolejnością (zależności między nimi).
+6. Zidentyfikuj min. 3 EDGE CASES / FAILURE MODES: scenariusz → co się stanie → jak obsłużymy.
+7. PYTANIA: jeśli coś jest niejasne — pytaj. Nie zgaduj. Nie zakładaj.
+
+**Reguły:** Zero kodu. Żadnych założeń. Czytaj istniejący kod aby zrozumieć konwencje.
+
+### ⛔ STOP — Wyślij raport użytkownikowi. NIE przechodź do Fazy 2. Czekaj na potwierdzenie.
+
+## Faza 2 — IMPLEMENTACJA (anti-compression)
+
+Rozpocznij TYLKO po otrzymaniu potwierdzenia planu z Fazy 1.
+
+**Output:**
+- Pokaż ZMIENIONE FUNKCJE W CAŁOŚCI (nie cały plik, ale pełne ciało funkcji).
+- Dodaj 5-10 linii kontekstu przed/po zmianie dla orientacji.
+- ZERO placeholderów: nigdy `// ...rest`, `// unchanged`, `TODO`, `pass`, `[Continue here]`.
+- Jeśli zmieniasz 3 linie w funkcji 50-liniowej — pokaż całą funkcję.
+
+**Przed zastosowaniem:**
+- Pokaż podsumowanie: plik → funkcja → co się zmienia.
+- Czekaj na potwierdzenie.
+
+**Reguły:** Implementuj dokładnie plan z Fazy 1. Nie dodawaj scope'u. Nie zmieniaj plików poza zakresem. Nie optymalizuj przedwcześnie.
+
+### ⛔ STOP — Wyślij kod użytkownikowi. NIE przechodź do Fazy 3. Czekaj na potwierdzenie.
+
+## Faza 3 — SELF-CHECK (krytyczna ewaluacja)
+
+Rozpocznij TYLKO po otrzymaniu potwierdzenia kodu z Fazy 2.
+
+1. **Edge Case Walkthrough:** Przejdź mentalnie przez kod z każdym edge case'em z Fazy 1. Dla każdego: czy kod go obsługuje?
+2. **Async & State Audit:** Race conditions? Atomowe mutacje? Niespójny stan po error? Cleanup przy early return?
+3. **Spójność z ARCHITECTURE.md:** Konwencje, nazewnictwo, potrzeba migracji?
+4. **Uczciwa lista luk** — WSZYSTKO czego NIE pokryłeś:
+   - Co celowo pominąłeś i dlaczego
+   - Co wymaga manualnego testu
+   - Co może się zepsuć
+   - Skala pewności: 1-5 (1 = "nie jestem pewien", 5 = "na 100%")
+
+**Reguły:** NIE poprawiaj kodu w tej fazie — tylko raportuj. Bądź brutalnie uczciwy.
+
+### ⛔ STOP — Wyślij self-check użytkownikowi. Czekaj na potwierdzenie lub prompty naprawcze.
