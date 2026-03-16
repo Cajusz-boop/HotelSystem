@@ -534,6 +534,7 @@ const groupReservationEntrySchema = reservationBaseSchema.omit({
 export const groupReservationSchema = z.object({
   groupName: z.string().max(100).optional(),
   note: z.string().max(500).optional(),
+  eventOrderId: z.string().nullable().optional(),
   reservations: z
     .array(groupReservationEntrySchema)
     .min(2, "Rezerwacja grupowa wymaga co najmniej dwóch pokoi"),

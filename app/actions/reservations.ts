@@ -2551,6 +2551,7 @@ export async function createGroupReservation(
             pax: res.pax ?? null,
             groupId: group.id,
             ...(res.rateCodeId ? { rateCodeId: res.rateCodeId } : {}),
+            ...(data.eventOrderId ? { eventOrderId: data.eventOrderId } : {}),
           },
           include: { guest: true, room: true, rateCode: true, group: true },
         });
@@ -2598,6 +2599,56 @@ export async function createGroupReservation(
     return {
       success: false,
       error: e instanceof Error ? e.message : "Błąd rezerwacji grupowej",
+    };
+  }
+}
+
+/** Zbiorczo przypisuje lub odłącza rezerwacje od imprezy (EventOrder). */
+export async function bulkAssignEventOrder(
+  reservationIds: string[],
+  eventOrderId: string | null
+): Promise<ActionResult<{ updated: number; failed: number }>> {
+  try {
+    if (eventOrderId != null && eventOrderId !== "") {
+      const eventOrder = await prisma.eventOrder.findUnique({
+        where: { id: eventOrderId },
+      });
+      if (!eventOrder) {
+        return { success: false, error: "Impreza nie istnieje" };
+      }
+    }
+
+    const effectiveEventOrderId = eventOrderId == null || eventOrderId === "" ? null : eventOrderId;
+    let updated = 0;
+    let failed = 0;
+
+    await prisma.$transaction(async (trx) => {
+      for (const id of reservationIds) {
+        try {
+          await trx.reservation.update({
+            where: { id },
+            data: { eventOrderId: effectiveEventOrderId },
+          });
+          updated += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+    });
+
+    revalidatePath("/front-office");
+    revalidatePath("/front-office/kwhotel");
+    revalidatePath("/mice/grafik");
+    revalidatePath("/mice");
+
+    return {
+      success: true,
+      data: { updated, failed },
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd zbiorczego przypisania do imprezy",
     };
   }
 }

@@ -61,7 +61,7 @@ import { ReservationBarWithMenu } from "./reservation-bar-with-menu";
 import { RoomStatusIcon } from "./room-status-icon";
 import { getDateRange } from "@/lib/tape-chart-data";
 import { useTapeChartStore } from "@/lib/store/tape-chart-store";
-import { moveReservation, updateReservationStatus } from "@/app/actions/reservations";
+import { moveReservation, updateReservationStatus, bulkAssignEventOrder } from "@/app/actions/reservations";
 import { createConsolidatedInvoiceFromReservationIds } from "@/app/actions/companies";
 import { getEffectivePricesBatch, updateRoomStatus } from "@/app/actions/rooms";
 import { getTapeChartData } from "@/app/actions/tape-chart";
@@ -112,6 +112,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -1518,6 +1519,10 @@ export function TapeChart({
     idsToInclude: string[];
   } | null>(null);
   const [consolidatedInvoiceSubmitting, setConsolidatedInvoiceSubmitting] = useState(false);
+  const [assignEventReservationIds, setAssignEventReservationIds] = useState<string[] | null>(null);
+  const [assignEventSelectedId, setAssignEventSelectedId] = useState<string>("");
+  const [assignEventOptions, setAssignEventOptions] = useState<Array<{ id: string; name?: string; clientName?: string; eventDate?: string; eventType?: string }>>([]);
+  const [assignEventLoading, setAssignEventLoading] = useState(false);
   const [newReservationContext, setNewReservationContext] = useState<CreateReservationContext | null>(null);
   const [createSheetOpen, setCreateSheetOpen] = useState(false);
   const [effectivePricesMap, setEffectivePricesMap] = useState<Record<string, number>>({});
@@ -2083,6 +2088,22 @@ export function TapeChart({
     },
     [selectedReservationIds, reservations]
   );
+
+  const handleAssignToEventRequest = useCallback((ids: string[]) => {
+    setAssignEventReservationIds(ids);
+    setAssignEventSelectedId("");
+  }, []);
+
+  useEffect(() => {
+    if (assignEventReservationIds !== null) {
+      fetch("/api/event-orders?limit=100")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data: Array<{ id: string; name?: string; clientName?: string; eventDate?: string; eventType?: string }>) =>
+          setAssignEventOptions(Array.isArray(data) ? data : [])
+        )
+        .catch(() => setAssignEventOptions([]));
+    }
+  }, [assignEventReservationIds]);
 
   const handleCreateConsolidatedInvoiceConfirm = useCallback(
     async (companyId: string, reservationIdsToUse?: string[]) => {
@@ -3249,6 +3270,7 @@ export function TapeChart({
                               canConsolidatedInvoice={canConsolidatedInvoice}
                               onClearSelection={() => setSelectedReservationIds(new Set())}
                               onCreateConsolidatedInvoice={handleCreateConsolidatedInvoiceRequest}
+                              onAssignToEvent={handleAssignToEventRequest}
                               onContextMenuClose={() => { contextMenuClosedAtRef.current = Date.now(); }}
                             />
                           </div>
@@ -3692,6 +3714,80 @@ export function TapeChart({
           }
         }}
       />
+      <Dialog
+        open={assignEventReservationIds !== null}
+        onOpenChange={(open) => {
+          if (!open) setAssignEventReservationIds(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Przypisz do imprezy</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Zaznaczono: {assignEventReservationIds?.length ?? 0} rezerwacji
+            </p>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <label className="text-xs font-medium text-muted-foreground">Impreza z Centrum Sprzedaży</label>
+            <select
+              value={assignEventSelectedId}
+              onChange={(e) => setAssignEventSelectedId(e.target.value)}
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            >
+              <option value="">— brak powiązania —</option>
+              {assignEventOptions.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {`${e.clientName ?? e.name} — ${e.eventType ?? ""}${e.eventDate ? " · " + new Date(e.eventDate).toLocaleDateString("pl-PL") : ""}`}
+                </option>
+              ))}
+            </select>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={async () => {
+                if (!assignEventReservationIds || assignEventReservationIds.length === 0) return;
+                setAssignEventLoading(true);
+                const result = await bulkAssignEventOrder(
+                  assignEventReservationIds,
+                  assignEventSelectedId || null
+                );
+                setAssignEventLoading(false);
+                if (result.success && result.data) {
+                  const selectedEvent = assignEventOptions.find((e) => e.id === assignEventSelectedId);
+                  const eventDateStr =
+                    selectedEvent?.eventDate != null
+                      ? typeof selectedEvent.eventDate === "string"
+                        ? selectedEvent.eventDate.slice(0, 10)
+                        : new Date(selectedEvent.eventDate).toISOString().slice(0, 10)
+                      : null;
+                  setReservations((prev) =>
+                    prev.map((r) =>
+                      assignEventReservationIds.includes(r.id)
+                        ? {
+                            ...r,
+                            eventOrderId: assignEventSelectedId || null,
+                            eventOrderType: selectedEvent?.eventType ?? null,
+                            eventOrderClient: selectedEvent?.clientName ?? null,
+                            eventOrderDate: eventDateStr,
+                          }
+                        : r
+                    )
+                  );
+                  toast.success(
+                    `Przypisano ${result.data.updated} rezerwacji${result.data.failed > 0 ? `, pominięto ${result.data.failed}` : ""}`
+                  );
+                  setAssignEventReservationIds(null);
+                } else {
+                  toast.error("error" in result ? result.error : "Błąd przypisania do imprezy");
+                }
+              }}
+              disabled={assignEventLoading}
+            >
+              {assignEventLoading ? "Zapisywanie…" : "Zastosuj"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <StatusColorsDialog
         propertyId={propertyId}
         open={statusColorsDialogOpen}

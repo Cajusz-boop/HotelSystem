@@ -28,7 +28,7 @@ import { PreauthDialog } from "@/components/preauth-dialog";
 import { ReceiptDialog } from "@/components/receipt-dialog";
 import { toast } from "sonner";
 import type { Reservation } from "@/lib/tape-chart-types";
-import { FileText, Receipt, CreditCard, Users } from "lucide-react";
+import { FileText, Receipt, CreditCard, Users, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const LONG_PRESS_MS = 500;
@@ -83,6 +83,8 @@ interface ReservationBarWithMenuProps {
   onClearSelection?: () => void;
   /** Wystaw fakturę zbiorczą (przekazywana rezerwacja z firmą – primaryReservationForInvoice) */
   onCreateConsolidatedInvoice?: (primaryReservation: Reservation) => void;
+  /** Zbiorcze przypisanie zaznaczonych rezerwacji do imprezy */
+  onAssignToEvent?: (reservationIds: string[]) => void;
   /** Wywoływane gdy menu kontekstowe się zamknie – pozwala tłumić fałszywe kliki edycji */
   onContextMenuClose?: () => void;
   /** Podświetlenie komórki pokoju przy najechaniu na pasek/tooltip */
@@ -121,6 +123,7 @@ export function ReservationBarWithMenu({
   canConsolidatedInvoice,
   onClearSelection,
   onCreateConsolidatedInvoice,
+  onAssignToEvent,
   onContextMenuClose,
   onRoomHover,
 }: ReservationBarWithMenuProps) {
@@ -569,6 +572,12 @@ export function ReservationBarWithMenu({
             </ContextMenuItem>
             <ContextMenuItem onSelect={() => onClearSelection?.()}>
               Wyczyść zaznaczenie
+            </ContextMenuItem>
+            <ContextMenuItem
+              onSelect={() => onAssignToEvent?.(Array.from(selectedReservationIds))}
+            >
+              <CalendarDays className="mr-2 h-4 w-4" />
+              Przypisz do imprezy
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>

@@ -37,6 +37,14 @@ interface GroupReservationRow {
   pax?: string;
 }
 
+interface EventOption {
+  id: string;
+  name?: string;
+  clientName?: string;
+  eventDate?: string;
+  eventType?: string;
+}
+
 function addDays(dateStr: string, days: number): string {
   const d = new Date(dateStr + "T12:00:00Z");
   d.setUTCDate(d.getUTCDate() + days);
@@ -99,6 +107,8 @@ export function GroupReservationSheet({
   const [note, setNote] = useState("");
   const [roomGroups, setRoomGroups] = useState<Array<{ id: string; name: string; roomNumbers: string[] }>>([]);
   const [selectedGroupId, setSelectedGroupId] = useState("");
+  const [eventOrderId, setEventOrderId] = useState<string>("");
+  const [events, setEvents] = useState<EventOption[]>([]);
   /** Wspólny okres – do „Zastosuj do wszystkich” */
   const [commonCheckIn, setCommonCheckIn] = useState(defaultDate);
   const [commonCheckOut, setCommonCheckOut] = useState(addDays(defaultDate, 1));
@@ -119,6 +129,15 @@ export function GroupReservationSheet({
   useEffect(() => {
     if (open) {
       getRoomGroups().then((r) => r.success && r.data && setRoomGroups(r.data));
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (open) {
+      fetch("/api/event-orders?limit=100")
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data: EventOption[]) => setEvents(Array.isArray(data) ? data : []))
+        .catch(() => setEvents([]));
     }
   }, [open]);
 
@@ -149,6 +168,7 @@ export function GroupReservationSheet({
       setGroupName("");
       setNote("");
       setSelectedGroupId("");
+      setEventOrderId("");
       setCommonStatus("CONFIRMED");
       setError(null);
     }
@@ -205,6 +225,7 @@ export function GroupReservationSheet({
     const payload = {
       groupName: groupName.trim() || undefined,
       note: note.trim() || undefined,
+      eventOrderId: eventOrderId || undefined,
       reservations: rows.map((row) => ({
         guestName: row.guestName.trim(),
         room: row.roomNumber.trim(),
@@ -308,6 +329,26 @@ export function GroupReservationSheet({
                     </>
                   )}
                 </div>
+              </section>
+
+              {/* Powiązana impreza */}
+              <section className="rounded border border-blue-200 bg-blue-50/50 p-3">
+                <h3 className="text-xs font-medium uppercase tracking-wider text-blue-800 mb-2">
+                  🎉 Powiązana impreza
+                </h3>
+                <Label className="text-xs text-muted-foreground">Impreza z Centrum Sprzedaży</Label>
+                <select
+                  value={eventOrderId}
+                  onChange={(e) => setEventOrderId(e.target.value)}
+                  className={cn(selectClass, "mt-1")}
+                >
+                  <option value="">— brak powiązania —</option>
+                  {events.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {`${e.clientName ?? e.name} — ${e.eventType ?? ""}${e.eventDate ? " · " + new Date(e.eventDate).toLocaleDateString("pl-PL") : ""}`}
+                    </option>
+                  ))}
+                </select>
               </section>
 
               {/* 2. WSPÓLNY OKRES POBYTU */}
