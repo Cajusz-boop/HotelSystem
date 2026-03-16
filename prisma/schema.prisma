@@ -1876,6 +1876,7 @@ model EventOrder {
   depositAmount  Decimal?   @db.Decimal(10, 2)
   depositPaid    Boolean    @default(false)
   depositDueDate DateTime?  @db.Date
+  depositPaymentMethod String? @db.VarChar(32)
 
   // Poprawiny (dzień po weselu)
   isPoprawiny   Boolean @default(false)

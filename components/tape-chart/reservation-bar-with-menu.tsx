@@ -563,7 +563,7 @@ export function ReservationBarWithMenu({
                 selectedReservationIds.size < 2
                   ? "Zaznacz co najmniej 2 rezerwacje (Ctrl+klik)"
                   : !canConsolidatedInvoice
-                    ? "Wszystkie zaznaczone rezerwacje muszą być tej samej firmy"
+                    ? "Przynajmniej jedna zaznaczona rezerwacja musi być powiązana z firmą"
                     : undefined
               }
             >

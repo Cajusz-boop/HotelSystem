@@ -10,6 +10,19 @@ import { getEventTypeFieldsConfig } from "@/app/actions/hotel-config";
 const TODAY = new Date();
 TODAY.setHours(0, 0, 0, 0);
 
+export const DEPOSIT_PAYMENT_METHODS = [
+  { value: "CASH", label: "Gotówka" },
+  { value: "CARD", label: "Karta" },
+  { value: "TRANSFER", label: "Przelew" },
+  { value: "VOUCHER", label: "Voucher" },
+] as const;
+
+export type DepositPaymentMethod = (typeof DEPOSIT_PAYMENT_METHODS)[number]["value"];
+
+export function depositPaymentLabel(value: string | null | undefined): string {
+  return DEPOSIT_PAYMENT_METHODS.find((m) => m.value === value)?.label ?? "—";
+}
+
 type EventRecord = {
   id: string;
   date: string;
@@ -24,6 +37,7 @@ type EventRecord = {
   deposit: number | null;
   paid: boolean;
   depositDueDate: string | null;
+  depositPaymentMethod: string | null;
   status: string;
   notes: string;
   pop: boolean;
@@ -106,6 +120,7 @@ function mapApiToEvent(record: Record<string, unknown>): EventRecord {
     deposit: depNum,
     paid: Boolean(record.depositPaid),
     depositDueDate: (record.depositDueDate as string) ?? null,
+    depositPaymentMethod: (record.depositPaymentMethod as string) ?? null,
     status: (record.status as string) ?? "DRAFT",
     notes: (record.notes as string) ?? "",
     pop: Boolean(record.isPoprawiny),
@@ -464,6 +479,12 @@ function DepositChip({
           style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: "15px", fontWeight: 600, color: ev.paid ? "#2e7d32" : "#c62828", whiteSpace: "nowrap" }}
         >
           {ev.paid ? "✓" : "—"} {fmtZl(ev.deposit)}
+          {ev.deposit != null && ev.deposit > 0 && (
+            <>
+              {" "}
+              <span style={{ fontSize: "11px", color: "#6b7280", fontWeight: 500 }}>({depositPaymentLabel(ev.depositPaymentMethod)})</span>
+            </>
+          )}
         </button>
         {ev.deposit && !ev.paid && ev.depositDueDate && new Date(ev.depositDueDate) < new Date() && (
           <span style={{ fontSize: "10px", color: "#c62828", fontWeight: 700 }}>przeterminowany!</span>
@@ -486,15 +507,18 @@ function DepositChip({
 
 function DepositModal({
   existingAmt,
+  existingPaymentMethod,
   onSave,
   onClose,
 }: {
   existingAmt: number | null;
-  onSave: (amt: number, paid: boolean) => void;
+  existingPaymentMethod?: string | null;
+  onSave: (amount: number, paid: boolean, paymentMethod: string) => void;
   onClose: () => void;
 }) {
   const [amt, setAmt] = useState(existingAmt != null ? String(existingAmt) : "");
   const [paid, setPaid] = useState(true);
+  const [paymentMethod, setPaymentMethod] = useState<string>(existingPaymentMethod ?? "CASH");
   const ref = useRef<HTMLDivElement>(null);
   const inp = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -513,7 +537,7 @@ function DepositModal({
   }, []);
   const save = () => {
     const v = parseFloat(String(amt).replace(",", "."));
-    if (!isNaN(v) && v > 0) onSave(v, paid);
+    if (!isNaN(v) && v > 0) onSave(v, paid, paymentMethod);
   };
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -525,6 +549,14 @@ function DepositModal({
           <label style={{ fontSize: "11px", fontWeight: 600, color: "#111827", display: "block", marginBottom: "4px" }}>Kwota (zł)</label>
           <input ref={inp} type="text" inputMode="decimal" value={amt} onChange={(e) => setAmt(e.target.value)} onKeyDown={(e) => e.key === "Enter" && save()} placeholder="np. 1500,50" style={{ width: "100%", padding: "8px 12px", boxSizing: "border-box", border: "1px solid #ddd", borderRadius: "4px", fontSize: "14px", outline: "none" }} />
           <div style={{ fontSize: "10px", color: "#111827", marginTop: "4px" }}>Wpisz kwotę z przecinkiem lub kropką</div>
+          <div style={{ marginTop: "12px" }}>
+            <label style={{ fontSize: "11px", fontWeight: 600, color: "#111827", display: "block", marginBottom: "4px" }}>Sposób zapłaty</label>
+            <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} style={{ width: "100%", padding: "8px 12px", boxSizing: "border-box", border: "1px solid #ddd", borderRadius: "4px", fontSize: "14px", outline: "none", background: "white" }}>
+              {DEPOSIT_PAYMENT_METHODS.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
         <div style={{ display: "flex", gap: "8px", marginBottom: "16px", padding: "0 18px" }}>
           {[true, false].map((p) => (
@@ -566,7 +598,7 @@ function CancelConfirmModal({ clientName, onConfirm, onClose }: { clientName: st
 
 type Handlers = {
   toggleDeposit: (id: string) => Promise<void>;
-  setDeposit: (id: string, amt: number, paid: boolean) => Promise<void>;
+  setDeposit: (id: string, amt: number, paid: boolean, paymentMethod: string) => Promise<void>;
   updateNote: (id: string, text: string) => Promise<void>;
   changeStatus: (id: string, status: string) => Promise<void>;
   updateMenu: (id: string, menuData: Record<string, unknown>) => Promise<void>;
@@ -606,6 +638,7 @@ function evToFullForm(e: EventRecord): EventFormTabState {
     depositAmount: e.deposit != null ? String(e.deposit) : "",
     depositPaid: e.paid ?? false,
     depositDueDate: e.depositDueDate ?? "",
+    depositPaymentMethod: e.depositPaymentMethod ?? "CASH",
     timeStart: e.tf ?? "",
     timeEnd: e.tt ?? "",
     churchTime: e.churchTime ?? "",
@@ -710,6 +743,7 @@ function toCreatePayload(form: EventFormTabState, menuData: Record<string, unkno
     depositAmount: form.depositAmount ? parseFloat(String(form.depositAmount).replace(",", ".")) : null,
     depositPaid: form.depositPaid,
     depositDueDate: form.depositDueDate || null,
+    depositPaymentMethod: form.depositPaymentMethod || "CASH",
     addPoprawiny: form.eventType === "WESELE" && form.addPoprawiny,
     poprawinyDate: form.addPoprawiny ? form.poprawinyDate : null,
     poprawinyGuestCount: form.addPoprawiny && form.poprawinyGuestCount !== "" ? Number(form.poprawinyGuestCount) : null,
@@ -777,6 +811,7 @@ function toEditPayload(form: EventFormTabState, menuData: Record<string, unknown
     depositAmount: form.depositAmount ? parseFloat(String(form.depositAmount).replace(",", ".")) : null,
     depositPaid,
     depositDueDate: form.depositDueDate || null,
+    depositPaymentMethod: form.depositPaymentMethod || "CASH",
     status,
     ...(menuData && { menu: menuData }),
   };
@@ -847,7 +882,18 @@ function CreateEventModal({
 
   const tc = TC[form.eventType] || TC.INNE;
   const typeLabel = TL[form.eventType] || "Inne";
-  const evForMenu = { type: form.eventType, client: form.clientName, date: form.eventDate || new Date().toISOString().split("T")[0], guests: (form.adultsCount === "" ? 0 : Number(form.adultsCount) || 0) + (form.children03 === "" ? 0 : Number(form.children03) || 0) + (form.children47 === "" ? 0 : Number(form.children47) || 0) || null };
+  const evForMenu = {
+    type: form.eventType,
+    client: form.clientName,
+    date: form.eventDate || new Date().toISOString().split("T")[0],
+    guests: (form.adultsCount === "" ? 0 : Number(form.adultsCount) || 0) + (form.children03 === "" ? 0 : Number(form.children03) || 0) + (form.children47 === "" ? 0 : Number(form.children47) || 0) || null,
+    adultsCount: form.adultsCount === "" ? 0 : Number(form.adultsCount) || 0,
+    children03: form.children03 === "" ? 0 : Number(form.children03) || 0,
+    children47: form.children47 === "" ? 0 : Number(form.children47) || 0,
+    showChildren03: eventTypeFieldsConfig?.[form.eventType]?.children03 !== false,
+    showChildren47: eventTypeFieldsConfig?.[form.eventType]?.children47 !== false,
+    onGuestsChange: (field, value) => updateForm(field, value),
+  };
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.25)", zIndex: 8000, display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "40px" }}>
@@ -964,7 +1010,7 @@ function EventDetailModal({
   const onErr = () => showToast("Błąd zapisu — zmiany cofnięte", "err");
   const doStatus = (s: string) => handlers.changeStatus(evId, s).then(() => showToast(`Status: ${SC[s]?.label ?? s}`)).catch(onErr);
   const doToggleDep = () => handlers.toggleDeposit(evId).then(() => showToast(ev.paid ? "Cofnięto — nieopłacony" : "Opłacony ✅")).catch(onErr);
-  const doSaveDep = (a: number, p: boolean) => handlers.setDeposit(evId, a, p).then(() => { setShowDep(false); showToast(`Zadatek ${fmtZl(a)} ${p ? "opłacony" : "nieopłacony"}`); }).catch(onErr);
+  const doSaveDep = (a: number, p: boolean, paymentMethod: string) => handlers.setDeposit(evId, a, p, paymentMethod).then(() => { setShowDep(false); showToast(`Zadatek ${fmtZl(a)} ${p ? "opłacony" : "nieopłacony"}`); }).catch(onErr);
   const doSaveNote = () => handlers.updateNote(evId, noteText).then(() => { setEditNote(false); showToast("Notatka zapisana"); }).catch(onErr);
   const doCancel = () => handlers.changeStatus(evId, "CANCELLED").then(() => { setShowCancel(false); showToast("Impreza anulowana", "warn"); onClose(); }).catch(onErr);
   const doRestore = () => handlers.changeStatus(evId, "CONFIRMED").then(() => showToast("Impreza przywrócona ✅")).catch(onErr);
@@ -1096,8 +1142,36 @@ function EventDetailModal({
                 form={editForm}
                 update={updateEditForm}
                 menuData={editMenuData ?? ev.menu ?? null}
-                onMenuSave={(d) => { setEditMenuData(d); handlers.updateMenu(evId, d).then(() => { showToast("Menu zapisane"); onRefresh?.(); }); }}
-                evForMenu={{ type: editForm.eventType, client: editForm.clientName, date: editForm.eventDate || ev.date, guests: (editForm.adultsCount === "" ? 0 : Number(editForm.adultsCount) || 0) + (editForm.children03 === "" ? 0 : Number(editForm.children03) || 0) + (editForm.children47 === "" ? 0 : Number(editForm.children47) || 0) || null }}
+                onMenuSave={(d) => {
+                  setEditMenuData(d);
+                  const hasBreakdown = editForm.adultsCount !== "" || editForm.children03 !== "" || editForm.children47 !== "";
+                  const guestCount = hasBreakdown
+                    ? (editForm.adultsCount === "" ? 0 : Number(editForm.adultsCount) || 0) + (editForm.children03 === "" ? 0 : Number(editForm.children03) || 0) + (editForm.children47 === "" ? 0 : Number(editForm.children47) || 0)
+                    : (ev.guests ?? 0);
+                  const body: Record<string, unknown> = {
+                    menu: d,
+                    guestCount: guestCount || null,
+                    adultsCount: hasBreakdown ? (editForm.adultsCount === "" ? null : Number(editForm.adultsCount)) : (ev.guests ?? null),
+                    children03: editForm.children03 === "" ? null : Number(editForm.children03),
+                    children47: editForm.children47 === "" ? null : Number(editForm.children47),
+                  };
+                  fetch(`/api/event-orders/${ev.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+                    .then((res) => { if (!res.ok) throw new Error("Błąd zapisu"); return res.json(); })
+                    .then(() => { showToast("Menu i goście zapisane"); onRefresh?.(); })
+                    .catch(() => showToast("Błąd zapisu", "err"));
+                }}
+                evForMenu={{
+                  type: editForm.eventType,
+                  client: editForm.clientName,
+                  date: editForm.eventDate || ev.date,
+                  guests: (editForm.adultsCount === "" ? 0 : Number(editForm.adultsCount) || 0) + (editForm.children03 === "" ? 0 : Number(editForm.children03) || 0) + (editForm.children47 === "" ? 0 : Number(editForm.children47) || 0) || (ev.guests ?? 0) || null,
+                  adultsCount: editForm.adultsCount === "" && editForm.children03 === "" && editForm.children47 === "" ? (ev.guests ?? 0) : (editForm.adultsCount === "" ? 0 : Number(editForm.adultsCount) || 0),
+                  children03: editForm.children03 === "" ? 0 : Number(editForm.children03) || 0,
+                  children47: editForm.children47 === "" ? 0 : Number(editForm.children47) || 0,
+                  showChildren03: eventTypeFieldsConfig?.[editForm.eventType]?.children03 !== false,
+                  showChildren47: eventTypeFieldsConfig?.[editForm.eventType]?.children47 !== false,
+                  onGuestsChange: (field, value) => updateEditForm(field, value),
+                }}
                 eventTypeFieldsConfig={eventTypeFieldsConfig}
               />
             ) : zakladka === "szczegoly" ? (
@@ -1147,7 +1221,7 @@ function EventDetailModal({
               </div>
               {ev.deposit != null ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-                  <div style={{ fontSize: "20px", fontWeight: 700, color: ev.paid ? "#166534" : "#991b1b" }}>{ev.paid ? "✓" : "—"} {fmtZl(ev.deposit)}</div>
+                  <div style={{ fontSize: "20px", fontWeight: 700, color: ev.paid ? "#166534" : "#991b1b" }}>{ev.paid ? "✓" : "—"} {fmtZl(ev.deposit)}{ev.deposit != null && ev.deposit > 0 ? <>{" "}<span style={{ fontSize: "13px", color: "#6b7280", fontWeight: 500 }}>({depositPaymentLabel(ev.depositPaymentMethod)})</span></> : null}</div>
                   {ev.deposit && !ev.paid && ev.depositDueDate && new Date(ev.depositDueDate) < new Date() && (
                     <span style={{ fontSize: "13px", color: "#c62828", fontWeight: 600 }}>Zadatek przeterminowany!</span>
                   )}
@@ -1307,7 +1381,7 @@ function EventDetailModal({
           </div>
         </div>
       </div>
-      {showDep && <DepositModal existingAmt={ev.deposit} onSave={doSaveDep} onClose={() => setShowDep(false)} />}
+      {showDep && <DepositModal existingAmt={ev.deposit} existingPaymentMethod={ev.depositPaymentMethod ?? null} onSave={doSaveDep} onClose={() => setShowDep(false)} />}
       {showCancel && <CancelConfirmModal clientName={ev.client} onConfirm={doCancel} onClose={() => setShowCancel(false)} />}
     </>
   );
@@ -1856,7 +1930,7 @@ function TimelineView({ events, onOpenModal }: { events: EventRecord[]; onOpenMo
                         <span>👥 {ev.guests ?? "—"} os.</span>
                         {(ev.tf || ev.tt) && <span>⏰ {ev.tf ?? "?"}–{ev.tt ?? "?"}</span>}
                         {ev.deposit != null && (
-                          <span style={{ color: ev.paid ? "#166534" : "#991b1b", fontWeight: 700 }}>{ev.paid ? "✅" : "❌"} {fmtZl(ev.deposit)}</span>
+                          <span style={{ color: ev.paid ? "#166534" : "#991b1b", fontWeight: 700 }}>{ev.paid ? "✅" : "❌"} {fmtZl(ev.deposit)}{ev.deposit > 0 ? <>{" "}<span style={{ fontSize: "11px", color: "#6b7280", fontWeight: 500 }}>({depositPaymentLabel(ev.depositPaymentMethod)})</span></> : null}</span>
                         )}
                       </div>
                     </div>
@@ -2363,7 +2437,7 @@ function GanttView({ events, onOpenModal }: { events: EventRecord[]; onOpenModal
                     <PhoneBtn phone={ev.phone} client={ev.client} date={ev.date} compact />
                   </div>
                   <div style={{ marginTop: "5px", paddingTop: "5px", borderTop: "1px solid #3b82f6", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <span style={{ fontSize: "13px", fontWeight: 700, color: ev.deposit != null ? (ev.paid ? "#166534" : "#991b1b") : "#374151" }}>{ev.deposit != null ? (ev.paid ? "✅ " + fmtZl(ev.deposit) : "❌ " + fmtZl(ev.deposit)) : "brak zadatku"}</span>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: ev.deposit != null ? (ev.paid ? "#166534" : "#991b1b") : "#374151" }}>{ev.deposit != null ? (ev.paid ? "✅ " + fmtZl(ev.deposit) : "❌ " + fmtZl(ev.deposit)) : "brak zadatku"}{ev.deposit != null && ev.deposit > 0 ? <>{" "}<span style={{ fontSize: "12px", color: "#6b7280", fontWeight: 500 }}>({depositPaymentLabel(ev.depositPaymentMethod)})</span></> : null}</span>
                     {ev.notes && <span style={{ fontSize: "13px", color: "#111827" }}>· 📝 {ev.notes}</span>}
                   </div>
                 </div>
@@ -2473,15 +2547,15 @@ export function CentrumSprzedazy() {
           throw new Error("Błąd zapisu");
         }
       },
-      setDeposit: async (id, amt, paid) => {
+      setDeposit: async (id, amt, paid, paymentMethod) => {
         const ev = events.find((e) => e.id === id);
-        const prevDep = ev ? { amount: ev.deposit, paid: ev.paid } : null;
-        if (ev) setEvents((p) => p.map((e) => (e.id === id ? { ...e, deposit: amt, paid } : e)));
+        const prevDep = ev ? { amount: ev.deposit, paid: ev.paid, depositPaymentMethod: ev.depositPaymentMethod } : null;
+        if (ev) setEvents((p) => p.map((e) => (e.id === id ? { ...e, deposit: amt, paid, depositPaymentMethod: paymentMethod } : e)));
         try {
-          await patchEvent(id, { depositAmount: amt, depositPaid: paid });
+          await patchEvent(id, { depositAmount: amt, depositPaid: paid, depositPaymentMethod: paymentMethod });
           await fetchEvents();
         } catch {
-          if (prevDep) setEvents((p) => p.map((e) => (e.id === id ? { ...e, deposit: prevDep.amount, paid: prevDep.paid } : e)));
+          if (prevDep) setEvents((p) => p.map((e) => (e.id === id ? { ...e, deposit: prevDep.amount, paid: prevDep.paid, depositPaymentMethod: prevDep.depositPaymentMethod ?? null } : e)));
           throw new Error("Błąd zapisu");
         }
       },
@@ -2548,10 +2622,10 @@ export function CentrumSprzedazy() {
     }
   };
 
-  const handleDepSaveFromList = async (a: number, pd: boolean) => {
+  const handleDepSaveFromList = async (a: number, pd: boolean, paymentMethod: string) => {
     if (!depId) return;
     try {
-      await handlers.setDeposit(depId, a, pd);
+      await handlers.setDeposit(depId, a, pd, paymentMethod);
       setDepId(null);
       showToast(`Zadatek ${fmtZl(a)} ${pd ? "opłacony" : "nieopłacony"}`);
     } catch {
@@ -2825,7 +2899,7 @@ export function CentrumSprzedazy() {
           showToast={showToast}
         />
       )}
-      {depId && !modalId && <DepositModal existingAmt={events.find((e) => e.id === depId)?.deposit ?? null} onSave={handleDepSaveFromList} onClose={() => setDepId(null)} />}
+      {depId && !modalId && <DepositModal existingAmt={events.find((e) => e.id === depId)?.deposit ?? null} existingPaymentMethod={events.find((e) => e.id === depId)?.depositPaymentMethod ?? null} onSave={handleDepSaveFromList} onClose={() => setDepId(null)} />}
       <Toasts toasts={toasts} />
     </div>
   );

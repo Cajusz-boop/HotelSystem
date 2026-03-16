@@ -283,6 +283,8 @@ export async function syncEventQuote(eventOrderId: string): Promise<ActionResult
         packageId: true,
         guestCount: true,
         adultsCount: true,
+        children03: true,
+        children47: true,
         dateTo: true,
         eventDate: true,
         clientName: true,
@@ -323,7 +325,15 @@ export async function syncEventQuote(eventOrderId: string): Promise<ActionResult
     const manualItems = existingItems.filter((i) => !isAutoSource(i.source));
 
     const items: GroupQuoteItem[] = [];
-    const guestCount = event.guestCount ?? event.adultsCount ?? 0;
+    // Efektywna liczba gości z mnożnikami: dorośli 100%, dzieci 0–3 = 0%, dzieci 4–7 = 50%
+    const adults = event.adultsCount ?? event.guestCount ?? 0;
+    const children03 = event.children03 ?? 0;
+    const children47 = event.children47 ?? 0;
+    const effectiveGuestCount = adults + children47 * 0.5;
+    const guestCountForCalc =
+      event.adultsCount != null || event.children03 != null || event.children47 != null
+        ? Math.round(effectiveGuestCount)
+        : (event.guestCount ?? event.adultsCount ?? 0);
     const menu = event.menu as {
       doplaty?: Record<string, boolean>;
       dodatkiDan?: Record<string, { nazwa: string; cena: number }[]>;
@@ -336,12 +346,12 @@ export async function syncEventQuote(eventOrderId: string): Promise<ActionResult
       });
       if (pkg) {
         const pricePerPerson = Number(pkg.price) || 0;
-        if (guestCount > 0 && pricePerPerson > 0) {
+        if (guestCountForCalc > 0 && pricePerPerson > 0) {
           items.push(
             recalcGroupQuoteItem({
               name: pkg.name,
               unit: "os.",
-              quantity: guestCount,
+              quantity: guestCountForCalc,
               unitPriceNet: pricePerPerson,
               vatRate: 8,
               source: "MENU_PACKAGE",
@@ -356,9 +366,8 @@ export async function syncEventQuote(eventOrderId: string): Promise<ActionResult
           const flatPrice = s.flatPrice != null ? Number(s.flatPrice) : null;
           const isPP = pricePerPerson != null && pricePerPerson > 0;
           const isFlat = flatPrice != null && flatPrice > 0;
-          // POPRAWKA 4: guestCount = 0 → pomiń surcharge per person
-          if (isPP && guestCount <= 0) continue;
-          const qty = isPP ? guestCount : 1;
+          if (isPP && guestCountForCalc <= 0) continue;
+          const qty = isPP ? guestCountForCalc : 1;
           const unitPrice = isPP ? pricePerPerson! : isFlat ? flatPrice! : 0;
           if (unitPrice > 0) {
             items.push(
@@ -381,12 +390,12 @@ export async function syncEventQuote(eventOrderId: string): Promise<ActionResult
     if (menu?.dodatkiDan) {
       for (const dishItems of Object.values(menu.dodatkiDan)) {
         for (const d of dishItems) {
-          if (d.cena > 0 && guestCount > 0) {
+          if (d.cena > 0 && guestCountForCalc > 0) {
             items.push(
               recalcGroupQuoteItem({
                 name: d.nazwa,
                 unit: "os.",
-                quantity: guestCount,
+                quantity: guestCountForCalc,
                 unitPriceNet: d.cena,
                 vatRate: 8,
                 source: "MENU_PACKAGE_EXTRA",

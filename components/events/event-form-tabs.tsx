@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { MenuTab } from "@/components/events/menu-modul";
+import { DEPOSIT_PAYMENT_METHODS } from "@/components/centrum-sprzedazy";
 
 const EVENT_TYPES = [
   { value: "WESELE", label: "Wesele" },
@@ -18,7 +19,7 @@ const EVENT_TYPES = [
 const EVENT_TYPE_FIELDS_CONFIG: Record<string, Record<string, boolean>> = {
   WESELE: {
     clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
-    roomName: true, addPoprawiny: true, depositAmount: true, depositDueDate: true, depositPaid: true,
+    roomName: true, addPoprawiny: true, depositAmount: true, depositDueDate: true, depositPaid: true, depositPaymentMethod: true,
     timeStart: true, timeEnd: true, churchTime: true, adultsCount: true,
     children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
     cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
@@ -32,7 +33,7 @@ const EVENT_TYPE_FIELDS_CONFIG: Record<string, Record<string, boolean>> = {
   },
   KOMUNIA: {
     clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
-    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true, depositPaymentMethod: true,
     timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
     children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
     cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
@@ -46,7 +47,7 @@ const EVENT_TYPE_FIELDS_CONFIG: Record<string, Record<string, boolean>> = {
   },
   CHRZCINY: {
     clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
-    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true, depositPaymentMethod: true,
     timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
     children03: true, children47: true, orchestraCount: false, cameramanCount: false, photographerCount: false,
     cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
@@ -60,7 +61,7 @@ const EVENT_TYPE_FIELDS_CONFIG: Record<string, Record<string, boolean>> = {
   },
   URODZINY: {
     clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
-    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true, depositPaymentMethod: true,
     timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
     children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
     cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
@@ -74,7 +75,7 @@ const EVENT_TYPE_FIELDS_CONFIG: Record<string, Record<string, boolean>> = {
   },
   STYPA: {
     clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
-    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true, depositPaymentMethod: true,
     timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
     children03: false, children47: false, orchestraCount: false, cameramanCount: false, photographerCount: false,
     cakesAndDesserts: false, cakeOrderedAt: false, cakeArrivalTime: false, cakeServedAt: false,
@@ -88,7 +89,7 @@ const EVENT_TYPE_FIELDS_CONFIG: Record<string, Record<string, boolean>> = {
   },
   FIRMOWA: {
     clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
-    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true, depositPaymentMethod: true,
     timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
     children03: false, children47: false, orchestraCount: true, cameramanCount: true, photographerCount: true,
     cakesAndDesserts: true, cakeOrderedAt: false, cakeArrivalTime: false, cakeServedAt: false,
@@ -102,7 +103,7 @@ const EVENT_TYPE_FIELDS_CONFIG: Record<string, Record<string, boolean>> = {
   },
   SYLWESTER: {
     clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
-    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true, depositPaymentMethod: true,
     timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
     children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
     cakesAndDesserts: true, cakeOrderedAt: false, cakeArrivalTime: false, cakeServedAt: false,
@@ -116,7 +117,7 @@ const EVENT_TYPE_FIELDS_CONFIG: Record<string, Record<string, boolean>> = {
   },
   INNE: {
     clientName: true, clientPhone: true, clientEmail: true, eventDate: true,
-    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true,
+    roomName: true, addPoprawiny: false, depositAmount: true, depositDueDate: true, depositPaid: true, depositPaymentMethod: true,
     timeStart: true, timeEnd: true, churchTime: false, adultsCount: true,
     children03: true, children47: true, orchestraCount: true, cameramanCount: true, photographerCount: true,
     cakesAndDesserts: true, cakeOrderedAt: true, cakeArrivalTime: true, cakeServedAt: true,
@@ -288,6 +289,7 @@ export type EventFormTabState = {
   depositAmount: string;
   depositPaid: boolean;
   depositDueDate: string;
+  depositPaymentMethod: string;
   timeStart: string;
   timeEnd: string;
   churchTime: string;
@@ -345,6 +347,7 @@ export const EMPTY_EVENT_FORM: EventFormTabState = {
   depositAmount: "",
   depositPaid: false,
   depositDueDate: "",
+  depositPaymentMethod: "CASH",
   timeStart: "",
   timeEnd: "",
   churchTime: "",
@@ -519,6 +522,20 @@ export function EventFormTabs({
           </>
         )}
         {isVisible("depositAmount") && <Field label="Zadatek (zł)" value={form.depositAmount} onChange={(v) => update("depositAmount", v)} placeholder="np. 1500,50" />}
+        {isVisible("depositPaymentMethod") && (
+          <div style={{ marginBottom: "16px" }}>
+            <label style={{ display: "block", fontSize: "12px", fontWeight: 600, color: "#111827", marginBottom: "4px" }}>Sposób zapłaty zadatku</label>
+            <select
+              value={form.depositPaymentMethod}
+              onChange={(e) => update("depositPaymentMethod", e.target.value)}
+              style={{ width: "100%", padding: "8px 12px", border: "1px solid #ddd", borderRadius: "4px", fontSize: "14px", background: "white" }}
+            >
+              {DEPOSIT_PAYMENT_METHODS.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
         {isVisible("depositDueDate") && <Field label="Termin płatności zadatku" value={form.depositDueDate} onChange={(v) => update("depositDueDate", v)} type="date" />}
         {isVisible("depositPaid") && (
         <div style={{ display: "flex", gap: "8px", marginTop: "12px", marginBottom: "16px" }}>

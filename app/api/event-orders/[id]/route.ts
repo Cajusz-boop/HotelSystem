@@ -93,6 +93,7 @@ function sanitizeEventData(body: Record<string, unknown>) {
   if (b.depositAmount !== undefined) base.depositAmount = typeof b.depositAmount === "number" ? b.depositAmount : (b.depositAmount != null ? parseFloat(String(b.depositAmount)) : null);
   if (b.depositPaid !== undefined) base.depositPaid = Boolean(b.depositPaid);
   if (b.depositDueDate !== undefined) base.depositDueDate = b.depositDueDate ? (typeof b.depositDueDate === "string" ? new Date(b.depositDueDate) : b.depositDueDate instanceof Date ? b.depositDueDate : null) : null;
+  if (b.depositPaymentMethod !== undefined) base.depositPaymentMethod = (b.depositPaymentMethod != null && ["CASH", "CARD", "TRANSFER", "VOUCHER"].includes(String(b.depositPaymentMethod))) ? String(b.depositPaymentMethod) : null;
   if (b.isPoprawiny !== undefined) base.isPoprawiny = Boolean(b.isPoprawiny);
   if (b.parentEventId !== undefined) base.parentEventId = b.parentEventId != null ? String(b.parentEventId) : null;
   if (b.menu !== undefined) base.menu = b.menu != null && typeof b.menu === "object" && !Array.isArray(b.menu) ? (b.menu as object) : undefined;
@@ -156,6 +157,21 @@ export async function PATCH(
     const quoteId = data?.quoteId;
     if (quoteId !== undefined) {
       patchData.quoteId = quoteId != null ? String(quoteId) : null;
+    }
+    if (data?.depositPaymentMethod !== undefined) {
+      patchData.depositPaymentMethod = (data.depositPaymentMethod != null && ["CASH", "CARD", "TRANSFER", "VOUCHER"].includes(String(data.depositPaymentMethod))) ? String(data.depositPaymentMethod) : null;
+    }
+    if (data?.guestCount !== undefined) {
+      patchData.guestCount = typeof data.guestCount === "number" ? data.guestCount : (data.guestCount != null ? parseInt(String(data.guestCount), 10) : null);
+    }
+    if (data?.adultsCount !== undefined) {
+      patchData.adultsCount = typeof data.adultsCount === "number" ? data.adultsCount : (data.adultsCount != null ? parseInt(String(data.adultsCount), 10) : null);
+    }
+    if (data?.children03 !== undefined) {
+      patchData.children03 = typeof data.children03 === "number" ? data.children03 : (data.children03 != null ? parseInt(String(data.children03), 10) : null);
+    }
+    if (data?.children47 !== undefined) {
+      patchData.children47 = typeof data.children47 === "number" ? data.children47 : (data.children47 != null ? parseInt(String(data.children47), 10) : null);
     }
 
     const forceGcalSync = data?.forceGcalSync === true;
@@ -262,7 +278,7 @@ export async function PATCH(
       }
     }
 
-    const syncRelevantKeys = ["menu", "quoteId"];
+    const syncRelevantKeys = ["menu", "quoteId", "guestCount", "adultsCount", "children03", "children47"];
     if (syncRelevantKeys.some((k) => k in patchData)) {
       try {
         await syncEventQuote(id);

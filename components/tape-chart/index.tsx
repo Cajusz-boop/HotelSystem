@@ -63,6 +63,7 @@ import { getDateRange } from "@/lib/tape-chart-data";
 import { useTapeChartStore } from "@/lib/store/tape-chart-store";
 import { moveReservation, updateReservationStatus, bulkAssignEventOrder } from "@/app/actions/reservations";
 import { createConsolidatedInvoiceFromReservationIds } from "@/app/actions/companies";
+import { resolveConsolidatedInvoiceCompany, type ResolvedConsolidatedInvoiceCompany } from "@/lib/utils/consolidated-invoice-company";
 import { getEffectivePricesBatch, updateRoomStatus } from "@/app/actions/rooms";
 import { getTapeChartData } from "@/app/actions/tape-chart";
 import { useRoomsSync, broadcastRoomStatusChange } from "@/hooks/useRoomsSync";
@@ -1518,6 +1519,12 @@ export function TapeChart({
     rightClickedReservation: Reservation;
     idsToInclude: string[];
   } | null>(null);
+  /** Modal potwierdzenia gdy zaznaczone rezerwacje mają różne firmy – użytkownik musi kliknąć Kontynuuj, żeby wystawić FVZ. */
+  const [consolidatedInvoiceDifferentCompaniesConfirm, setConsolidatedInvoiceDifferentCompaniesConfirm] = useState<{
+    warning: string;
+    primaryReservation: Reservation;
+    idsToInclude: string[];
+  } | null>(null);
   const [consolidatedInvoiceSubmitting, setConsolidatedInvoiceSubmitting] = useState(false);
   const [assignEventReservationIds, setAssignEventReservationIds] = useState<string[] | null>(null);
   const [assignEventSelectedId, setAssignEventSelectedId] = useState<string>("");
@@ -2044,25 +2051,29 @@ export function TapeChart({
     return reservations.find((r) => ids.includes(r.id) && r.companyId) ?? null;
   }, [selectedReservationIds, reservations]);
 
+  /** Faktura zbiorcza dostępna gdy ≥2 rezerwacje i przynajmniej jedna ma firmę (reguła doboru kontrahenta). */
   const canConsolidatedInvoice = useMemo(() => {
     const selectedReservations = reservations.filter((r) => selectedReservationIds.has(r.id));
     return (
       selectedReservations.length >= 2 &&
-      selectedReservations.every((r) => !!r.companyId) &&
-      new Set(selectedReservations.map((r) => r.companyId)).size === 1
+      selectedReservations.some((r) => !!r.companyId)
     );
   }, [selectedReservationIds, reservations]);
 
   const handleCreateConsolidatedInvoiceRequest = useCallback(
-    (primaryReservation: Reservation) => {
-      if (!primaryReservation.companyId) {
-        toast.error(
-          "Żadna zaznaczona rezerwacja nie jest powiązana z firmą. Przypisz firmę do co najmniej jednej rezerwacji."
-        );
+    (_primaryReservation: Reservation) => {
+      const ids = Array.from(selectedReservationIds);
+      const selectedReservations = reservations.filter((r) => ids.includes(r.id));
+      if (selectedReservations.length < 2) return;
+
+      let resolved: ResolvedConsolidatedInvoiceCompany;
+      try {
+        resolved = resolveConsolidatedInvoiceCompany(selectedReservations);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Żadna z wybranych rezerwacji nie ma przypisanej firmy.";
+        toast.error(message);
         return;
       }
-
-      const ids = Array.from(selectedReservationIds);
 
       const idsToInclude = ids.filter(
         (id) => !reservations.find((r) => r.id === id)?.hasConsolidatedInvoice
@@ -2079,6 +2090,17 @@ export function TapeChart({
         toast.info(
           `Pominięto ${alreadyInvoiced} rezerwacji już zafakturowanych. Do faktury trafi ${idsToInclude.length}.`
         );
+      }
+
+      const primaryReservation = reservations.find((r) => r.id === resolved.firstReservationWithCompany.id) as Reservation;
+
+      if (resolved.warning) {
+        setConsolidatedInvoiceDifferentCompaniesConfirm({
+          warning: resolved.warning,
+          primaryReservation,
+          idsToInclude,
+        });
+        return;
       }
 
       setConsolidatedInvoicePending({
@@ -2157,7 +2179,7 @@ export function TapeChart({
         setConsolidatedInvoiceSubmitting(false);
       }
     },
-    [selectedReservationIds, router, dates, setReservations]
+    [selectedReservationIds, reservations, router, dates, setReservations]
   );
 
   const addDaysToStr = useCallback((dateStr: string, days: number): string => {
@@ -3687,8 +3709,36 @@ export function TapeChart({
         rooms={allRooms}
         consolidatedReservationIds={consolidatedInvoicePending?.idsToInclude}
         primaryReservation={consolidatedInvoicePending?.rightClickedReservation ?? null}
+        initialTab="dokumenty"
         onSaved={() => {}}
       />
+      <AlertDialog open={!!consolidatedInvoiceDifferentCompaniesConfirm} onOpenChange={(open) => { if (!open) setConsolidatedInvoiceDifferentCompaniesConfirm(null); }}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Różne firmy w zaznaczonych rezerwacjach</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <p className="whitespace-pre-wrap">
+              {consolidatedInvoiceDifferentCompaniesConfirm?.warning}
+            </p>
+          </AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Anuluj</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={consolidatedInvoiceSubmitting}
+              onClick={() => {
+                if (consolidatedInvoiceDifferentCompaniesConfirm) {
+                  setConsolidatedInvoicePending({
+                    rightClickedReservation: consolidatedInvoiceDifferentCompaniesConfirm.primaryReservation,
+                    idsToInclude: consolidatedInvoiceDifferentCompaniesConfirm.idsToInclude,
+                  });
+                  setConsolidatedInvoiceDifferentCompaniesConfirm(null);
+                }
+              }}
+            >
+              Kontynuuj
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <UnifiedReservationDialog
         mode="create"
         createContext={newReservationContext}

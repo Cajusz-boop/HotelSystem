@@ -12,6 +12,13 @@ Dokument opisuje planowane funkcje do dodania do modułu faktury zbiorczej w sys
 | Lista faktur (nr, okres, pozycje, kwota, termin, status) | ✅ Istnieje |
 | Oznacz jako opłaconą | ✅ Istnieje |
 
+### Reguła doboru kontrahenta (Tape Chart)
+
+- **Implementacja:** `lib/utils/consolidated-invoice-company.ts` → `resolveConsolidatedInvoiceCompany(reservations)`.
+- Brak firmy w żadnej rezerwacji → blokada + komunikat.
+- Jedna lub więcej rezerwacji z tą samą firmą (po `companyId`) → dane tej firmy, kwota = suma wszystkich wybranych.
+- Różne firmy → modal z ostrzeżeniem; po „Kontynuuj” używane są dane pierwszej rezerwacji z firmą (kolejność tablicy), kwota = suma wszystkich wybranych.
+
 ---
 
 ## 1. Podgląd i zarządzanie

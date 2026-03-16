@@ -151,6 +151,12 @@ export interface MenuEv {
   client?: string | null;
   date: string;
   guests?: number | null;
+  adultsCount?: number | null;
+  children03?: number | null;
+  children47?: number | null;
+  showChildren03?: boolean;
+  showChildren47?: boolean;
+  onGuestsChange?: (field: "adultsCount" | "children03" | "children47", value: number) => void;
 }
 
 export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: SavedMenu; onSave?: (menuData: Record<string, unknown>) => void }) {
@@ -159,7 +165,6 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
   const [doplaty, setDoplaty] = useState<Record<string, boolean>>(savedMenu?.doplaty ?? {});
   const [dopWybory, setDopWybory] = useState<Record<string, string[]>>(savedMenu?.dopWybory ?? {});
   const [notatka, setNotatka] = useState(savedMenu?.notatka ?? "");
-  const [guestsOvr, setGuestsOvr] = useState<number | null>(null);
   const [tryb, setTryb] = useState<"edycja" | "podglad">("edycja");
   const [zapisano, setZapisano] = useState(false);
   const [walidError, setWalidError] = useState<string | null>(null);
@@ -218,7 +223,13 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
       setAktywnaSekcja(pakiet.sekcje[0].id);
     }
   }, [pakiet?.id]);
-  const cena = useMemo(() => obliczCene(pakiet, doplaty, guestsOvr, ev.guests, dodatkiDan), [pakiet, doplaty, guestsOvr, ev.guests, dodatkiDan]);
+  const effectiveGuests = useMemo(() => {
+    if (ev.adultsCount != null || ev.children03 != null || ev.children47 != null) {
+      return (ev.adultsCount ?? 0) + (ev.children47 ?? 0) * 0.5;
+    }
+    return ev.guests ?? 0;
+  }, [ev.adultsCount, ev.children03, ev.children47, ev.guests]);
+  const cena = useMemo(() => obliczCene(pakiet, doplaty, null, effectiveGuests, dodatkiDan), [pakiet, doplaty, effectiveGuests, dodatkiDan]);
   const statusWyb = useMemo(() => statusWyborow(pakiet, wybory), [pakiet, wybory]);
 
   const toggleWybor = useCallback((sekcjaId: string, danie: string, limit: number) => {
@@ -343,7 +354,7 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
     setTimeout(() => iframe.contentWindow!.print(), 300);
   };
 
-  const effGuests = guestsOvr ?? ev.guests;
+  const effGuests = effectiveGuests;
 
   return (
     <div style={{ fontFamily: "'Source Sans 3','Segoe UI',system-ui,sans-serif", fontSize: "13px", padding: "0 20px 16px" }}>
@@ -361,10 +372,47 @@ export function MenuTab({ ev, savedMenu, onSave }: { ev: MenuEv; savedMenu: Save
             {cena.total == null && <span style={{ fontSize: "11px", color: "#94a3b8", fontStyle: "italic" }}>(wpisz gości →)</span>}
           </div>
         )}
-        <div style={{ display: "flex", alignItems: "center", gap: "5px", flexShrink: 0 }}>
-          <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, whiteSpace: "nowrap" }}>gości:</span>
-          <input type="number" min={1} max={999} value={guestsOvr ?? ev.guests ?? ""} onChange={(e) => { const v = parseInt(e.target.value); setGuestsOvr(isNaN(v) || v <= 0 ? null : v); }} style={{ width: "64px", padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "4px", fontSize: "13px", fontWeight: 600, textAlign: "center", outline: "none" }} />
-          {guestsOvr != null && guestsOvr !== ev.guests && <button onClick={() => setGuestsOvr(null)} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "4px", padding: "4px 7px", cursor: "pointer", fontSize: "11px", color: "#64748b", fontWeight: 600 }}>↩</button>}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, flexWrap: "wrap" }}>
+          <label style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "4px" }}>
+            Dorośli:
+            <input
+              type="number"
+              min={0}
+              max={999}
+              value={ev.adultsCount ?? ""}
+              onChange={(e) => ev.onGuestsChange?.("adultsCount", parseInt(e.target.value, 10) || 0)}
+              disabled={!ev.onGuestsChange}
+              style={{ width: "52px", padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: "4px", fontSize: "12px", fontWeight: 600, textAlign: "center", outline: "none" }}
+            />
+          </label>
+          {ev.showChildren03 !== false && (
+            <label style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "4px" }}>
+              0–3:
+              <input
+                type="number"
+                min={0}
+                max={999}
+                value={ev.children03 ?? ""}
+                onChange={(e) => ev.onGuestsChange?.("children03", parseInt(e.target.value, 10) || 0)}
+                disabled={!ev.onGuestsChange}
+                style={{ width: "44px", padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: "4px", fontSize: "12px", fontWeight: 600, textAlign: "center", outline: "none" }}
+              />
+            </label>
+          )}
+          {ev.showChildren47 !== false && (
+            <label style={{ fontSize: "11px", color: "#64748b", fontWeight: 600, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "4px" }}>
+              4–7:
+              <input
+                type="number"
+                min={0}
+                max={999}
+                value={ev.children47 ?? ""}
+                onChange={(e) => ev.onGuestsChange?.("children47", parseInt(e.target.value, 10) || 0)}
+                disabled={!ev.onGuestsChange}
+                style={{ width: "44px", padding: "4px 6px", border: "1px solid #e2e8f0", borderRadius: "4px", fontSize: "12px", fontWeight: 600, textAlign: "center", outline: "none" }}
+              />
+            </label>
+          )}
         </div>
         {pakiet && statusWyb.total > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
