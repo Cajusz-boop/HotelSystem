@@ -4189,6 +4189,22 @@ export async function printFiscalReceiptForReservation(
     if (!result.success) {
       return { success: false, error: result.error ?? "Błąd druku paragonu" };
     }
+    if (result.receiptNumber && reservationId) {
+      try {
+        const existing = await prisma.reservation.findUnique({
+          where: { id: reservationId },
+          select: { receiptNumber: true },
+        });
+        if (!existing?.receiptNumber) {
+          await prisma.reservation.update({
+            where: { id: reservationId },
+            data: { receiptNumber: result.receiptNumber, receiptDate: new Date() },
+          });
+        }
+      } catch {
+        // błąd zapisu nie przerywa odpowiedzi o sukcesie druku
+      }
+    }
     return { success: true, data: { receiptNumber: result.receiptNumber } };
   } catch (e) {
     return {
@@ -4275,6 +4291,7 @@ export async function printFiscalReceiptForReservations(
     const receiptRequest = {
       transactionId: `RECEIPT-CONSOLIDATED-${Date.now()}`,
       reservationId: reservationIds[0],
+      reservationIds,
       items,
       totalAmount,
       paymentType,
@@ -4285,6 +4302,25 @@ export async function printFiscalReceiptForReservations(
     const result = await printFiscalReceipt(receiptRequest);
     if (!result.success) {
       return { success: false, error: result.error ?? "Błąd druku paragonu" };
+    }
+    if (result.receiptNumber && reservationIds.length > 0) {
+      const receiptDate = new Date();
+      for (const rid of reservationIds) {
+        try {
+          const existing = await prisma.reservation.findUnique({
+            where: { id: rid },
+            select: { receiptNumber: true },
+          });
+          if (!existing?.receiptNumber) {
+            await prisma.reservation.update({
+              where: { id: rid },
+              data: { receiptNumber: result.receiptNumber, receiptDate },
+            });
+          }
+        } catch {
+          // błąd zapisu nie przerywa odpowiedzi o sukcesie druku
+        }
+      }
     }
     return { success: true, data: { receiptNumber: result.receiptNumber } };
   } catch (e) {

@@ -2035,9 +2035,17 @@ export function TapeChart({
       (r) => ids.includes(r.id) && r.companyId && !r.hasConsolidatedInvoice
     );
     if (preferred) return preferred;
-    // Fallback: rezerwacja z firmą (nawet jeśli już zafakturowana) — żeby menu nie było disabled
-    // Handler i tak pokaże odpowiedni toast
+    // Fallback: rezerwacja z firmą (nawet jeśli już zafakturowana) — do otwarcia dialogu
     return reservations.find((r) => ids.includes(r.id) && r.companyId) ?? null;
+  }, [selectedReservationIds, reservations]);
+
+  const canConsolidatedInvoice = useMemo(() => {
+    const selectedReservations = reservations.filter((r) => selectedReservationIds.has(r.id));
+    return (
+      selectedReservations.length >= 2 &&
+      selectedReservations.every((r) => !!r.companyId) &&
+      new Set(selectedReservations.map((r) => r.companyId)).size === 1
+    );
   }, [selectedReservationIds, reservations]);
 
   const handleCreateConsolidatedInvoiceRequest = useCallback(
@@ -3238,6 +3246,7 @@ export function TapeChart({
                               }}
                               selectedReservationIds={selectedReservationIds}
                               primaryReservationForInvoice={primaryReservationForInvoice}
+                              canConsolidatedInvoice={canConsolidatedInvoice}
                               onClearSelection={() => setSelectedReservationIds(new Set())}
                               onCreateConsolidatedInvoice={handleCreateConsolidatedInvoiceRequest}
                               onContextMenuClose={() => { contextMenuClosedAtRef.current = Date.now(); }}

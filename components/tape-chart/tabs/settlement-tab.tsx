@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { updateGuestBlacklist, getReservationsByGuestId, searchGuests, updateReservationStatus, getActiveGuestDiscount } from "@/app/actions/reservations";
 import { getTransactionsForReservation, getFolioSummary, setFolioAssignment, createNewFolio, getFolioItems, transferFolioItem, addFolioDiscount, collectSecurityDeposit, refundSecurityDeposit, getReservationGuestsForFolio, addReservationOccupant, removeReservationOccupant, postRoomChargeOnCheckout, chargeLocalTax, addFolioPayment, voidFolioItem, overrideRoomPrice, updateReservationPaymentStatus, type ReservationGuestForFolio } from "@/app/actions/finance";
 import { type FolioBillTo } from "@/lib/finance-constants";
-import { searchCompanies } from "@/app/actions/companies";
+import { searchCompanies, getCompanyById } from "@/app/actions/companies";
 import type { Reservation } from "@/lib/tape-chart-types";
 import type { RateCodeForUi } from "@/app/actions/rate-codes";
 import { computeRateCodePricePerNight } from "@/lib/rate-code-utils";
@@ -436,6 +436,11 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
   const [reservationGuests, setReservationGuests] = useState<ReservationGuestForFolio[]>([]);
   const [companyOptions, setCompanyOptions] = useState<Array<{ id: string; nip: string; name: string; city: string | null }>>([]);
   const [companySearchQuery, setCompanySearchQuery] = useState("");
+  /** Wyszukiwanie firmy po nazwie w sekcji NIP/rezerwacja (autocomplete) */
+  const [reservationCompanySearchQuery, setReservationCompanySearchQuery] = useState("");
+  const [reservationCompanySuggestions, setReservationCompanySuggestions] = useState<Array<{ id: string; nip: string; name: string; city: string | null }>>([]);
+  const [reservationCompanySuggestionsOpen, setReservationCompanySuggestionsOpen] = useState(false);
+  const [reservationCompanySearchLoading, setReservationCompanySearchLoading] = useState(false);
   const [folioActionLoading, setFolioActionLoading] = useState(false);
   const [newFolioLoading, setNewFolioLoading] = useState(false);
   const [occupantSearchQuery, setOccupantSearchQuery] = useState("");
@@ -606,6 +611,42 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
       });
     } else setCompanyOptions([]);
   }, [companySearchQuery]);
+
+  // Autocomplete firmy po nazwie (sekcja NIP/rezerwacja)
+  useEffect(() => {
+    const q = reservationCompanySearchQuery.trim();
+    if (q.length < 2) {
+      setReservationCompanySuggestions([]);
+      return;
+    }
+    setReservationCompanySearchLoading(true);
+    searchCompanies(q, 10).then((r) => {
+      setReservationCompanySearchLoading(false);
+      if (r.success && r.data) setReservationCompanySuggestions(r.data);
+      else setReservationCompanySuggestions([]);
+    });
+  }, [reservationCompanySearchQuery]);
+
+  const onSelectReservationCompany = useCallback(
+    async (company: { id: string; nip: string; name: string; city: string | null }) => {
+      const res = await getCompanyById(company.id);
+      if (!res.success || !res.data) return;
+      const c = res.data;
+      const nipFormatted = formatNipInput(c.nip);
+      onFormChange({
+        nipInput: nipFormatted,
+        companyName: c.name ?? "",
+        companyAddress: c.address ?? "",
+        companyPostalCode: c.postalCode ?? "",
+        companyCity: c.city ?? "",
+        companyFound: true,
+      });
+      setReservationCompanySearchQuery("");
+      setReservationCompanySuggestions([]);
+      setReservationCompanySuggestionsOpen(false);
+    },
+    [onFormChange]
+  );
 
   const loadPaymentItems = useCallback(async () => {
     if (!reservation?.id) return;
@@ -957,6 +998,41 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
                 <Button type="button" variant="outline" size="sm" className="h-7 text-[10px] px-2 shrink-0"
                   disabled={nipLookupLoading || !validateNipOrVat(form.nipInput.trim()).ok}
                   onClick={onNipLookup}>{nipLookupLoading ? "…" : "Sprawdź"}</Button>
+              </div>
+              <div className="mt-1">
+                <Label className="text-[10px] text-muted-foreground">Lub wyszukaj po nazwie (min. 2 znaki)</Label>
+                <div className="relative mt-0.5">
+                  <Input
+                    type="text"
+                    className={inputCompact}
+                    value={reservationCompanySearchQuery}
+                    onChange={(e) => {
+                      setReservationCompanySearchQuery(e.target.value);
+                      setReservationCompanySuggestionsOpen(true);
+                    }}
+                    onFocus={() => { if (reservationCompanySuggestions.length > 0) setReservationCompanySuggestionsOpen(true); }}
+                    onBlur={() => setTimeout(() => setReservationCompanySuggestionsOpen(false), 200)}
+                    placeholder="np. Karczma Łabędź"
+                    autoComplete="off"
+                  />
+                  {reservationCompanySuggestionsOpen && (reservationCompanySuggestions.length > 0 || reservationCompanySearchLoading) && (
+                    <ul className="absolute z-50 mt-0.5 w-full rounded-md border bg-popover shadow-md py-1 text-xs max-h-48 overflow-auto">
+                      {reservationCompanySearchLoading ? (
+                        <li className="px-2 py-1.5 text-muted-foreground">Ładowanie…</li>
+                      ) : (
+                        reservationCompanySuggestions.map((c) => (
+                          <li
+                            key={c.id}
+                            className="cursor-pointer px-2 py-1.5 hover:bg-muted"
+                            onMouseDown={(e) => { e.preventDefault(); onSelectReservationCompany(c); }}
+                          >
+                            {c.name} {c.nip ? `(${c.nip})` : ""} {c.city ? ` · ${c.city}` : ""}
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  )}
+                </div>
               </div>
               {form.companyFound && (
                 <div className="mt-1 space-y-0.5 rounded border bg-muted/30 p-1.5 text-xs">
@@ -2207,6 +2283,41 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
                     {nipLookupLoading ? "…" : "Sprawdź"}
                   </Button>
                 </div>
+                <div className="mt-1">
+                  <Label className="text-[10px] text-muted-foreground">Lub wyszukaj po nazwie (min. 2 znaki)</Label>
+                  <div className="relative mt-0.5">
+                    <Input
+                      type="text"
+                      className={inputCompact}
+                      value={reservationCompanySearchQuery}
+                      onChange={(e) => {
+                        setReservationCompanySearchQuery(e.target.value);
+                        setReservationCompanySuggestionsOpen(true);
+                      }}
+                      onFocus={() => { if (reservationCompanySuggestions.length > 0) setReservationCompanySuggestionsOpen(true); }}
+                      onBlur={() => setTimeout(() => setReservationCompanySuggestionsOpen(false), 200)}
+                      placeholder="np. Karczma Łabędź"
+                      autoComplete="off"
+                    />
+                    {reservationCompanySuggestionsOpen && (reservationCompanySuggestions.length > 0 || reservationCompanySearchLoading) && (
+                      <ul className="absolute z-50 mt-0.5 w-full rounded-md border bg-popover shadow-md py-1 text-xs max-h-48 overflow-auto">
+                        {reservationCompanySearchLoading ? (
+                          <li className="px-2 py-1.5 text-muted-foreground">Ładowanie…</li>
+                        ) : (
+                          reservationCompanySuggestions.map((c) => (
+                            <li
+                              key={c.id}
+                              className="cursor-pointer px-2 py-1.5 hover:bg-muted"
+                              onMouseDown={(e) => { e.preventDefault(); onSelectReservationCompany(c); }}
+                            >
+                              {c.name} {c.nip ? `(${c.nip})` : ""} {c.city ? ` · ${c.city}` : ""}
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    )}
+                  </div>
+                </div>
                 {form.companyFound && (
                   <div className="mt-1 space-y-0.5 rounded border bg-muted/30 p-1.5 text-xs">
                     <Input className="h-6 text-xs" value={form.companyName} onChange={(e) => onFormChange({ companyName: e.target.value })} placeholder="Nazwa firmy" />
@@ -2238,6 +2349,41 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
                   onClick={onNipLookup}>
                   {nipLookupLoading ? "…" : "Sprawdź"}
                 </Button>
+              </div>
+              <div className="mt-1">
+                <Label className="text-[10px] text-muted-foreground">Lub wyszukaj po nazwie (min. 2 znaki)</Label>
+                <div className="relative mt-0.5">
+                  <Input
+                    type="text"
+                    className={inputCompact}
+                    value={reservationCompanySearchQuery}
+                    onChange={(e) => {
+                      setReservationCompanySearchQuery(e.target.value);
+                      setReservationCompanySuggestionsOpen(true);
+                    }}
+                    onFocus={() => { if (reservationCompanySuggestions.length > 0) setReservationCompanySuggestionsOpen(true); }}
+                    onBlur={() => setTimeout(() => setReservationCompanySuggestionsOpen(false), 200)}
+                    placeholder="np. Karczma Łabędź"
+                    autoComplete="off"
+                  />
+                  {reservationCompanySuggestionsOpen && (reservationCompanySuggestions.length > 0 || reservationCompanySearchLoading) && (
+                    <ul className="absolute z-50 mt-0.5 w-full rounded-md border bg-popover shadow-md py-1 text-xs max-h-48 overflow-auto">
+                      {reservationCompanySearchLoading ? (
+                        <li className="px-2 py-1.5 text-muted-foreground">Ładowanie…</li>
+                      ) : (
+                        reservationCompanySuggestions.map((c) => (
+                          <li
+                            key={c.id}
+                            className="cursor-pointer px-2 py-1.5 hover:bg-muted"
+                            onMouseDown={(e) => { e.preventDefault(); onSelectReservationCompany(c); }}
+                          >
+                            {c.name} {c.nip ? `(${c.nip})` : ""} {c.city ? ` · ${c.city}` : ""}
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  )}
+                </div>
               </div>
               {form.companyFound && (
                 <div className="mt-1 space-y-0.5 rounded border bg-muted/30 p-1.5 text-xs">

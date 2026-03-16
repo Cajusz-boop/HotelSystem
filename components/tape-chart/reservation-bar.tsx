@@ -377,6 +377,8 @@ export function ReservationBar({
             )}
             style={{
               textShadow: "0 0 1px rgba(255,255,255,0.6)",
+              paddingRight: "20px",
+              paddingLeft: "20px",
               ...(barHeightPx != null && barHeightPx > 0 && {
                 fontSize: `${Math.max(9, Math.min(16, Math.round(barHeightPx * 0.48)))}px`,
               }),
@@ -385,43 +387,45 @@ export function ReservationBar({
             {reservation.vip && <Star className="inline h-2.5 w-2.5 mr-0.5 text-amber-600 fill-amber-600 align-middle shrink-0" aria-label="VIP" />}
             {barLabel}
           </span>
-          {hasRestaurantCharges && (
-            <span
-              style={{ fontSize: "12px", lineHeight: 1, flexShrink: 0 }}
-              aria-label="Obciążenia gastronomiczne"
-            >
-              🍽️
-            </span>
-          )}
           {firstLineNotes && (
             <span className="block text-[10px] font-normal opacity-90 truncate px-1 text-black" title={reservation.notes ?? ""}>
               {firstLineNotes}{firstLineNotes.length >= 60 ? "…" : ""}
             </span>
           )}
         </div>
-        {/* Notes indicator – ikona gdy są uwagi ale nie pokazane na pasku */}
-        {reservation.notes && !reservation.notesVisibleOnChart && (
-          <span title={`Uwagi: ${reservation.notes}`}>
-            <StickyNote
-              className="absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-black shrink-0"
-              aria-label="Ma uwagi"
-            />
-          </span>
-        )}
-        {/* Dokument kasowy – ikona w prawym dolnym rogu */}
-        {docStatus === "receipt" && receiptNum && (
-          <span
-            className="absolute right-1 bottom-0.5 shrink-0 opacity-90"
-            title={`Paragon nr ${receiptNum}`}
-            aria-label={`Paragon nr ${receiptNum}`}
+        {/* Ikony statusów – prawy róg paska */}
+        {(hasRestaurantCharges ||
+          (reservation.notes && !reservation.notesVisibleOnChart) ||
+          docStatus === "receipt" ||
+          docStatus === "invoice") && (
+          <div
+            className="absolute right-0.5 top-1/2 -translate-y-1/2 flex items-center gap-[2px]"
+            title={[
+              hasRestaurantCharges ? "Obciążenia gastronomiczne" : "",
+              reservation.notes && !reservation.notesVisibleOnChart ? `Uwagi: ${reservation.notes}` : "",
+              docStatus === "receipt" && receiptNum ? `Paragon nr ${receiptNum}` : "",
+              docStatus === "invoice" ? "Faktura" : "",
+            ]
+              .filter(Boolean)
+              .join(" | ")}
+            style={{ pointerEvents: "none" }}
+            aria-hidden
           >
-            <Receipt className="h-3 w-3 text-black" style={{ width: 12, height: 12 }} />
-          </span>
-        )}
-        {docStatus === "invoice" && (
-          <span className="absolute right-1 bottom-0.5 shrink-0 opacity-90" title="Faktura" aria-label="Faktura">
-            <FileText className="h-3 w-3 text-black" style={{ width: 12, height: 12 }} />
-          </span>
+            {hasRestaurantCharges && (
+              <span style={{ fontSize: "11px", lineHeight: 1 }} aria-hidden>
+                🍽️
+              </span>
+            )}
+            {reservation.notes && !reservation.notesVisibleOnChart && (
+              <StickyNote className="h-3 w-3 text-black shrink-0" aria-hidden />
+            )}
+            {docStatus === "receipt" && receiptNum && (
+              <Receipt className="h-3 w-3 text-black shrink-0" aria-hidden />
+            )}
+            {docStatus === "invoice" && (
+              <FileText className="h-3 w-3 text-black shrink-0" aria-hidden />
+            )}
+          </div>
         )}
       </div>
       {tooltipEl}

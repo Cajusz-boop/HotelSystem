@@ -19,6 +19,8 @@ export interface FiscalReceiptRequest {
   transactionId: string;
   /** Id rezerwacji */
   reservationId: string;
+  /** Wszystkie rezerwacje objęte paragonem (paragon zbiorczy) – do zapisu receiptNumber w complete */
+  reservationIds?: string[];
   /** Pozycje paragonu (zwykle jedna: np. "Nocleg" lub "Zaliczka") */
   items: FiscalReceiptItem[];
   /** Suma do zapłaty (powinna być zgodna z sumą pozycji) */

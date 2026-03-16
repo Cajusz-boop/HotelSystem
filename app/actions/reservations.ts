@@ -809,15 +809,15 @@ export async function createReservation(
     }
 
     let companyId: string | null = data.companyId ?? null;
-    if (data.companyData) {
+    if (data.companyData?.nip?.trim() && data.companyData?.name?.trim()) {
       // Upsert Company (incl. user-edited full trading name) so next NIP lookup returns it from DB
       const companyResult = await createOrUpdateCompany({
-        nip: data.companyData.nip,
-        name: data.companyData.name,
-        address: data.companyData.address,
-        postalCode: data.companyData.postalCode,
-        city: data.companyData.city,
-        country: data.companyData.country,
+        nip: data.companyData.nip.trim(),
+        name: data.companyData.name.trim(),
+        address: data.companyData.address?.trim() || undefined,
+        postalCode: data.companyData.postalCode?.trim() || undefined,
+        city: data.companyData.city?.trim() || undefined,
+        country: data.companyData.country?.trim() || undefined,
       });
       if (!companyResult.success) {
         return { success: false, error: companyResult.error };
@@ -2915,18 +2915,23 @@ export async function updateReservation(
       (data as Record<string, unknown>).receiptDate = v ? new Date(v) : null;
     }
 
-    // Firma / NIP (dla faktury VAT)
+    // Firma / NIP (dla faktury VAT): zachowaj companyId gdy nie zmieniane; przy nowych danych firmy — find-or-update po NIP
     if (input.companyId !== undefined) {
       (data as Record<string, unknown>).companyId = input.companyId && input.companyId.trim() ? input.companyId.trim() : null;
     }
-    if (input.companyData && typeof input.companyData === "object" && input.companyData.nip?.trim()) {
+    if (
+      input.companyData &&
+      typeof input.companyData === "object" &&
+      input.companyData.nip?.trim() &&
+      input.companyData.name?.trim()
+    ) {
       const companyResult = await createOrUpdateCompany({
         nip: input.companyData.nip.trim(),
-        name: input.companyData.name?.trim() ?? "",
+        name: input.companyData.name.trim(),
         address: input.companyData.address?.trim() || undefined,
         postalCode: input.companyData.postalCode?.trim() || undefined,
         city: input.companyData.city?.trim() || undefined,
-        country: input.companyData.country?.trim() || undefined,
+        country: input.companyData.country?.trim() || "POL",
       });
       if (!companyResult.success) {
         return { success: false, error: companyResult.error ?? "Błąd zapisu firmy" };

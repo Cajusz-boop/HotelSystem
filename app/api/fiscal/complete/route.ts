@@ -42,6 +42,46 @@ export async function PATCH(req: Request) {
       },
     });
 
+    if (body.success && body.result && typeof body.result === "object") {
+      const result = body.result as { receiptNumber?: string };
+      const receiptNumber = result.receiptNumber && String(result.receiptNumber).trim();
+      if (receiptNumber && !receiptNumber.startsWith("PAR-")) {
+        try {
+          const job = await prisma.fiscalJob.findUnique({
+            where: { id: body.jobId },
+            select: { type: true, payload: true },
+          });
+          if (job?.type === "receipt" && job.payload && typeof job.payload === "object") {
+            const payload = job.payload as { reservationId?: string; reservationIds?: string[] };
+            const ids = Array.isArray(payload.reservationIds) && payload.reservationIds.length > 0
+              ? payload.reservationIds
+              : payload.reservationId
+                ? [payload.reservationId]
+                : [];
+            const receiptDate = new Date();
+            for (const reservationId of ids) {
+              try {
+                const existing = await prisma.reservation.findUnique({
+                  where: { id: reservationId },
+                  select: { receiptNumber: true },
+                });
+                if (!existing?.receiptNumber) {
+                  await prisma.reservation.update({
+                    where: { id: reservationId },
+                    data: { receiptNumber, receiptDate },
+                  });
+                }
+              } catch {
+                // błąd zapisu dla jednej rezerwacji nie przerywa
+              }
+            }
+          }
+        } catch {
+          // błąd odczytu joba/zapisu rezerwacji nie zmienia odpowiedzi 200
+        }
+      }
+    }
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "DB error";

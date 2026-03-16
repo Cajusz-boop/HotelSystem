@@ -549,8 +549,9 @@ export function UnifiedReservationDialog({
       if (isEdit && reservation) {
         const roomData = rooms.find((r) => r.number === form.room.trim());
         const roomBeds = roomData?.beds ?? 1;
-        const nipValidation = validateNipOrVat(form.nipInput.trim());
-        const hasCompany = nipValidation.ok && form.companyName.trim();
+        const nipTrimmed = (form.nipInput ?? "").trim();
+        const nipValidation = validateNipOrVat(nipTrimmed);
+        const hasCompany = nipValidation.ok && !!(form.companyName ?? "").trim();
         const adultsVal = form.adults !== "" ? parseInt(form.adults, 10) : 1;
         const childrenVal = form.children !== "" ? parseInt(form.children, 10) : 0;
         const paxVal = form.pax !== "" ? parseInt(form.pax, 10) : (adultsVal + childrenVal);
@@ -592,15 +593,19 @@ export function UnifiedReservationDialog({
             const n = parseFloat(v);
             return Number.isNaN(n) || n < 0 ? null : n;
           })(),
-          ...(hasCompany ? {
-            companyData: {
-              nip: nipValidation!.normalized,
-              name: form.companyName.trim(),
-              address: form.companyAddress.trim() || undefined,
-              postalCode: form.companyPostalCode.trim() || undefined,
-              city: form.companyCity.trim() || undefined,
-            },
-          } : {}),
+          ...(hasCompany
+            ? {
+                companyData: {
+                  nip: nipValidation!.normalized,
+                  name: form.companyName.trim(),
+                  address: form.companyAddress.trim() || undefined,
+                  postalCode: form.companyPostalCode.trim() || undefined,
+                  city: form.companyCity.trim() || undefined,
+                },
+              }
+            : reservation.companyId != null
+              ? { companyId: reservation.companyId }
+              : {}),
           eventOrderId: eventOrderId ?? null,
         });
         if (result.success && result.data) {
@@ -623,8 +628,9 @@ export function UnifiedReservationDialog({
         const adultsVal = form.adults !== "" ? parseInt(form.adults, 10) : 1;
         const childrenVal = form.children !== "" ? parseInt(form.children, 10) : 0;
         const paxVal = adultsVal + childrenVal;
-        const nipValidation = validateNipOrVat(form.nipInput.trim());
-        const hasCompany = nipValidation.ok && form.companyName.trim();
+        const nipTrimmed = (form.nipInput ?? "").trim();
+        const nipValidation = validateNipOrVat(nipTrimmed);
+        const hasCompany = nipValidation.ok && !!(form.companyName ?? "").trim();
 
         const result = await createReservation({
           guestName: form.guestName.trim(),
@@ -963,6 +969,9 @@ export function UnifiedReservationDialog({
         if (docChoiceResId) {
           const result = await printFiscalReceiptForReservation(docChoiceResId, docPaymentMethod || "CASH", amtRec > 0 ? amtRec : undefined);
           if (result.success) {
+            if (result.data?.receiptNumber && reservation?.id === docChoiceResId) {
+              onSaved?.({ ...reservation, receiptNumber: result.data.receiptNumber, receiptDate: new Date().toISOString() });
+            }
             window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
             toast.success(result.data?.receiptNumber
               ? `Paragon wydrukowany: ${result.data.receiptNumber}`
@@ -980,6 +989,9 @@ export function UnifiedReservationDialog({
         } else if (docChoiceResIds.length > 0) {
           const result = await printFiscalReceiptForReservations(docChoiceResIds, docPaymentMethod || "CASH", amtRec > 0 ? amtRec : undefined);
           if (result.success) {
+            if (result.data?.receiptNumber && primaryReservation && docChoiceResIds.includes(primaryReservation.id)) {
+              onSaved?.({ ...primaryReservation, receiptNumber: result.data.receiptNumber, receiptDate: new Date().toISOString() });
+            }
             window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
             toast.success(result.data?.receiptNumber
               ? `Paragon wydrukowany: ${result.data.receiptNumber}`
@@ -1009,7 +1021,7 @@ export function UnifiedReservationDialog({
       setDocTotalAmount(null);
       onOpenChange(false);
     }
-  }, [docChoiceResId, docChoiceResIds, primaryReservation, docAmountOverride, docAmountInvoice, docAmountReceipt, docTotalAmount, invoiceNotes, docPaymentMethod, onOpenChange]);
+  }, [docChoiceResId, docChoiceResIds, primaryReservation, reservation, docAmountOverride, docAmountInvoice, docAmountReceipt, docTotalAmount, invoiceNotes, docPaymentMethod, onSaved, onOpenChange]);
 
   const handleIssueDoc = useCallback(async (choice: "vat" | "posnet" | "proforma" | "potwierdzenie") => {
     if (choice === "potwierdzenie") {
@@ -1658,6 +1670,9 @@ export function UnifiedReservationDialog({
                     if (receiptAmt > 0) {
                       const recResult = await printFiscalReceiptForReservation(reservation.id, splitReceiptPaymentMethod || "CASH", receiptAmt);
                       if (recResult.success) {
+                        if (recResult.data?.receiptNumber) {
+                          onSaved?.({ ...reservation, receiptNumber: recResult.data.receiptNumber, receiptDate: new Date().toISOString() });
+                        }
                         window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
                         msg += `, paragon ${receiptAmt.toFixed(2)} PLN`;
                         const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(reservation.id)}&amount=${receiptAmt}${recResult.data?.receiptNumber ? `&receiptNumber=${encodeURIComponent(recResult.data.receiptNumber)}` : ""}`;

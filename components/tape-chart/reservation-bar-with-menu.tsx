@@ -77,6 +77,8 @@ interface ReservationBarWithMenuProps {
   selectedReservationIds?: Set<string>;
   /** Pierwsza zaznaczona rezerwacja z firmą – używana do faktury zbiorczej (działa przy prawym kliku na dowolny zaznaczony pasek) */
   primaryReservationForInvoice?: Reservation | null;
+  /** Czy można wystawić fakturę zbiorczą: ≥2 rezerwacje, wszystkie z tą samą firmą */
+  canConsolidatedInvoice?: boolean;
   /** Wyczyść zaznaczenie (gdy prawy klik na zaznaczony pasek) */
   onClearSelection?: () => void;
   /** Wystaw fakturę zbiorczą (przekazywana rezerwacja z firmą – primaryReservationForInvoice) */
@@ -116,6 +118,7 @@ export function ReservationBarWithMenu({
   showFullInfo,
   selectedReservationIds,
   primaryReservationForInvoice,
+  canConsolidatedInvoice,
   onClearSelection,
   onCreateConsolidatedInvoice,
   onContextMenuClose,
@@ -548,16 +551,16 @@ export function ReservationBarWithMenu({
             </div>
             <ContextMenuItem
               onSelect={() =>
-                selectedReservationIds.size >= 2 &&
+                canConsolidatedInvoice &&
                 primaryReservationForInvoice &&
                 onCreateConsolidatedInvoice?.(primaryReservationForInvoice)
               }
-              disabled={selectedReservationIds.size < 2 || !primaryReservationForInvoice}
+              disabled={!canConsolidatedInvoice}
               title={
                 selectedReservationIds.size < 2
                   ? "Zaznacz co najmniej 2 rezerwacje (Ctrl+klik)"
-                  : !primaryReservationForInvoice
-                    ? "Przynajmniej jedna zaznaczona rezerwacja musi być powiązana z firmą"
+                  : !canConsolidatedInvoice
+                    ? "Wszystkie zaznaczone rezerwacje muszą być tej samej firmy"
                     : undefined
               }
             >

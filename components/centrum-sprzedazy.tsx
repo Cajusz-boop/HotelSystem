@@ -2387,7 +2387,7 @@ export function CentrumSprzedazy() {
   const [archive, setArchive] = useState(false);
   const [specialFilter, setSpecialFilter] = useState<"unpaid" | null>(null);
   const [sort, setSort] = useState("date");
-  const [tab, setTab] = useState<"lista" | "kalendarz" | "wolne" | "os" | "sale" | "tydzien" | "gantt" | "kosztorysy" | "pakiety">("lista");
+  const [tab, setTab] = useState<"lista" | "kalendarz" | "wolne" | "os" | "sale" | "tydzien" | "gantt" | "kosztorysy" | "pakiety">("kalendarz");
   const [ganttOffset, setGanttOffset] = useState(0);
   const ganttBase = new Date(TODAY.getFullYear(), TODAY.getMonth() + ganttOffset, 1);
   const ganttYear = ganttBase.getFullYear();
@@ -2692,8 +2692,8 @@ export function CentrumSprzedazy() {
         </div>
         <div style={{ display: "flex", marginLeft: "auto", borderBottom: "1px solid #3b82f6" }}>
           {[
-            ["lista", "Lista"],
             ["kalendarz", "Kalendarz"],
+            ["lista", "Lista"],
             ["wolne", "Wolne terminy"],
             ["os", "Oś czasu"],
             ["sale", "Sale×Dni"],
