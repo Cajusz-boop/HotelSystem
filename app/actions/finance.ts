@@ -4898,6 +4898,8 @@ export async function getTransactionsForReservation(
       isReadOnly: boolean;
       isManualOverride?: boolean;
       originalAmount?: number;
+      paymentMethod?: string | null;
+      status?: string | null;
     }>
   >
 > {
@@ -4916,6 +4918,8 @@ export async function getTransactionsForReservation(
         isReadOnly: t.isReadOnly,
         isManualOverride: t.isManualOverride ?? false,
         originalAmount: t.originalAmount != null ? Number(t.originalAmount) : undefined,
+        paymentMethod: t.paymentMethod ?? undefined,
+        status: t.status ?? undefined,
       })),
     };
   } catch (e) {

@@ -131,7 +131,7 @@ async function syncEventToGoogle(
   const results: { calendarEventId: string; calId: string }[] = [];
   const roomList = rooms.length > 0 ? rooms : (event.roomName ? [event.roomName] : []);
   for (const room of roomList) {
-    const calId = getCalendarIdForEventOrder(event.eventType, room, event.isPoprawiny ?? false);
+    const calId = getCalendarIdForEventOrder(event.eventType, room, event.isPoprawiny ?? false, event.status);
     const eventId = await createCalendarEvent(
       { ...calPayload, roomName: room },
       packageName,

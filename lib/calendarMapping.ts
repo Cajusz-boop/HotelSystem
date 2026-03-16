@@ -1,12 +1,21 @@
 /**
- * Mapowanie EventOrder.eventType + roomName + isPoprawiny → ID kalendarza Google z .env
+ * Mapowanie EventOrder.eventType + roomName + isPoprawiny + status → ID kalendarza Google z .env.
+ * DRAFT → kalendarz wstępna (jeśli GOOGLE_CALENDAR_WSTEPNA_REZERWACJA ustawione), inaczej typ/sala.
+ * CONFIRMED/DONE → kalendarz typu (Komunia, Chrzciny itd.).
  * roomName to pojedyncza sala (przy wielu salach funkcja wywoływana osobno dla każdej).
  */
 export function getCalendarIdForEventOrder(
   eventType: string,
   roomName?: string | null,
-  isPoprawiny?: boolean
+  isPoprawiny?: boolean,
+  status?: string | null
 ): string {
+  const st = String(status ?? "").trim().toUpperCase();
+  if (st === "DRAFT") {
+    const wstepnaId = process.env.GOOGLE_CALENDAR_WSTEPNA_REZERWACJA;
+    if (wstepnaId?.trim()) return wstepnaId.trim();
+  }
+
   const et = String(eventType || "").trim().toUpperCase();
   const room = String(roomName || "").trim();
   const isPop = Boolean(isPoprawiny);
@@ -69,6 +78,7 @@ export function getCalendarIdForEventOrder(
 /** Zwraca listę ID wszystkich skonfigurowanych kalendarzy (bez duplikatów). */
 export function getAllCalendarIds(): string[] {
   const keys = [
+    "GOOGLE_CALENDAR_WSTEPNA_REZERWACJA",
     "GOOGLE_CALENDAR_WESELA_ZLOTA",
     "GOOGLE_CALENDAR_WESELA_DIAMENTOWA",
     "GOOGLE_CALENDAR_PRZYJECIA_WESELNE",

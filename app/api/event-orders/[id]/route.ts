@@ -6,7 +6,9 @@ import { updateChecklistDoc, updateMenuDoc, type EventOrderForChecklist } from "
 import {
   updateCalendarEvent,
   cancelCalendarEvent,
+  createCalendarEvent,
 } from "@/lib/googleCalendarEvents";
+import { getCalendarIdForEventOrder } from "@/lib/calendarMapping";
 import { syncEventQuote } from "@/app/actions/mice";
 
 const EVENT_TYPES = ["WESELE", "KOMUNIA", "CHRZCINY", "URODZINY", "STYPA", "FIRMOWA", "SYLWESTER", "INNE"];
@@ -223,6 +225,102 @@ export async function PATCH(
         });
       } catch (e) {
         console.error("AuditLog EventOrder UPDATE:", e);
+      }
+    }
+
+    // Przeniesienie z kalendarza wstępna do kalendarza typu przy DRAFT → CONFIRMED/DONE
+    const wstepnaId = process.env.GOOGLE_CALENDAR_WSTEPNA_REZERWACJA?.trim();
+    const movingToType =
+      wstepnaId &&
+      existing?.status === "DRAFT" &&
+      (status === "CONFIRMED" || status === "DONE") &&
+      existing.googleCalendarEventId &&
+      existing.googleCalendarCalId === wstepnaId;
+    if (movingToType && updated && existing.googleCalendarEventId && existing.googleCalendarCalId) {
+      try {
+        await cancelCalendarEvent(existing.googleCalendarEventId, existing.googleCalendarCalId);
+      } catch (err) {
+        console.error("Google cancel (wstępna) error:", err);
+      }
+      let packageName: string | null = null;
+      if (updated.packageId) {
+        const pkg = await prisma.package.findUnique({ where: { id: updated.packageId }, select: { name: true } });
+        packageName = pkg?.name ?? null;
+      }
+      const rooms = updated.roomName?.split(/,\s*/).map((r) => r.trim()).filter(Boolean) ?? [];
+      const roomList = rooms.length > 0 ? rooms : (updated.roomName ? [updated.roomName] : []);
+      const depNum =
+        updated.depositAmount != null
+          ? (typeof updated.depositAmount === "object" && "toNumber" in updated.depositAmount
+            ? (updated.depositAmount as { toNumber: () => number }).toNumber()
+            : Number(updated.depositAmount))
+          : null;
+      try {
+        const results: { calendarEventId: string; calId: string }[] = [];
+        for (const room of roomList) {
+          const typeCalId = getCalendarIdForEventOrder(
+            updated.eventType,
+            room,
+            updated.isPoprawiny ?? false,
+            updated.status
+          );
+          const eventId = await createCalendarEvent(
+            {
+              id: updated.id,
+              clientName: updated.clientName,
+              clientPhone: updated.clientPhone,
+              eventType: updated.eventType,
+              roomName: room,
+              timeStart: updated.timeStart,
+              timeEnd: updated.timeEnd,
+              guestCount: updated.guestCount,
+              status: updated.status,
+              notes: updated.notes,
+              dateFrom: updated.dateFrom,
+              dateTo: updated.dateTo,
+              depositAmount: depNum,
+              depositPaid: updated.depositPaid,
+              isPoprawiny: updated.isPoprawiny,
+            },
+            packageName,
+            updated.checklistDocId,
+            updated.menuDocId
+          );
+          results.push({ calendarEventId: eventId, calId: typeCalId });
+        }
+        const first = results[0];
+        if (first) {
+          const calEvents =
+            results.length > 1
+              ? roomList.map((room, i) => ({ roomName: room, eventId: results[i]?.calendarEventId, calId: results[i]?.calId }))
+              : undefined;
+          const moved = await prisma.eventOrder.update({
+            where: { id },
+            data: {
+              googleCalendarEventId: first.calendarEventId,
+              googleCalendarCalId: first.calId,
+              googleCalendarEvents: calEvents != null ? (calEvents as unknown as Prisma.InputJsonValue) : undefined,
+              googleCalendarSynced: true,
+              googleCalendarSyncedAt: new Date(),
+              googleCalendarError: null,
+            },
+          });
+          updated = moved;
+        }
+      } catch (err) {
+        console.error("Google create (type calendar) after move error:", err);
+        await prisma.eventOrder
+          .update({
+            where: { id },
+            data: {
+              googleCalendarSynced: false,
+              googleCalendarError: err instanceof Error ? err.message : String(err),
+            },
+          })
+          .then((u) => {
+            updated = u;
+          })
+          .catch(() => {});
       }
     }
 

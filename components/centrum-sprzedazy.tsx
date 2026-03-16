@@ -2600,17 +2600,42 @@ export function CentrumSprzedazy() {
     [events, patchEvent, fetchEvents]
   );
 
-  const openModal = useCallback((id: string) => {
-    if (id.startsWith("gcal:")) {
-      const [, eventId, calId] = id.split(":");
-      if (eventId && calId) {
+  const openModal = useCallback(
+    async (id: string) => {
+      if (id.startsWith("gcal:")) {
+        const parts = id.split(":");
+        const eventId = parts[1];
+        const calId = parts.slice(2).join(":");
+        if (!eventId || !calId) {
+          const eid = btoa(`${eventId ?? ""} ${calId ?? ""}`);
+          window.open(`https://calendar.google.com/calendar/event?eid=${eid}`, "_blank");
+          return;
+        }
+        try {
+          const res = await fetch("/api/event-orders/import-from-gcal", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ eventId, calId }),
+          });
+          const data = (await res.json()) as { id?: string; existingId?: string; error?: string };
+          if (res.ok && (data.id ?? data.existingId)) {
+            const openId = data.existingId ?? data.id!;
+            fetchEvents();
+            setModalId(openId);
+            if (data.id) showToast("Zaimportowano wstępną rezerwację do programu");
+            return;
+          }
+        } catch {
+          /* fallback do GCal */
+        }
         const eid = btoa(`${eventId} ${calId}`);
         window.open(`https://calendar.google.com/calendar/event?eid=${eid}`, "_blank");
+        return;
       }
-      return;
-    }
-    setModalId(id);
-  }, []);
+      setModalId(id);
+    },
+    [fetchEvents, showToast]
+  );
 
   const handleDepToggle = async (id: string) => {
     const ev = events.find((e) => e.id === id);

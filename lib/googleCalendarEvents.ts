@@ -100,7 +100,8 @@ export async function createCalendarEvent(
   const calId = getCalendarIdForEventOrder(
     event.eventType ?? "INNE",
     roomName,
-    event.isPoprawiny ?? false
+    event.isPoprawiny ?? false,
+    event.status ?? "DRAFT"
   );
 
   const summary = buildSummary(event, roomName);

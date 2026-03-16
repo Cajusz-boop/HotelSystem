@@ -841,6 +841,15 @@ export function UnifiedReservationDialog({
           setDocAmountReceipt("");
         }
       });
+      Promise.all(docChoiceResIds.map((id) => getTransactionsForReservation(id))).then((results) => {
+        const allTx = results.flatMap((res) => (res.success && res.data ? res.data : []));
+        const payments = allTx
+          .filter((t) => t.type === "PAYMENT" && (t.status === "ACTIVE" || t.status == null))
+          .sort((a, b) => (b.createdAt > a.createdAt ? 1 : b.createdAt < a.createdAt ? -1 : 0));
+        const latest = payments.length > 0 ? payments[0] : null;
+        const method = latest?.paymentMethod?.trim().toUpperCase();
+        setDocPaymentMethod(method && method in DOC_PAYMENT_LABELS ? method : "CASH");
+      });
       return;
     }
     if (!docChoiceResId) {
@@ -849,6 +858,7 @@ export function UnifiedReservationDialog({
       setDocAmountOverride("");
       setDocAmountInvoice("");
       setDocAmountReceipt("");
+      setDocPaymentMethod("CASH");
       return;
     }
     getTransactionsForReservation(docChoiceResId).then((r) => {
@@ -862,11 +872,18 @@ export function UnifiedReservationDialog({
         setDocAmountOverride("");
         setDocAmountInvoice(totalCharges > 0 ? totalCharges.toFixed(2) : "");
         setDocAmountReceipt("");
+        const payments = r.data.filter(
+          (t) => t.type === "PAYMENT" && (t.status === "ACTIVE" || t.status == null)
+        );
+        const latest = payments.length > 0 ? payments[0] : null;
+        const method = latest?.paymentMethod?.trim().toUpperCase();
+        setDocPaymentMethod(method && method in DOC_PAYMENT_LABELS ? method : "CASH");
       } else {
         setDocRoomTotal(null);
         setDocTotalAmount(null);
         setDocAmountInvoice("");
         setDocAmountReceipt("");
+        setDocPaymentMethod("CASH");
       }
     });
   }, [docChoiceOpen, docChoiceResId, docChoiceResIds]);
