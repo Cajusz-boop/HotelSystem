@@ -6,6 +6,23 @@ alwaysApply: true
 
 # WORKFLOW: Trójfazowy proces rozwoju
 
+## ⚠️ NADRZĘDNA ZASADA — KROK 0 (START)
+
+**Na początku KAŻDEGO nowego zadania** — PRZECZYTAJ wszystkie pliki z `.cursor/rules/`:
+- `workflow.mdc` — ten plik (trójfazowy proces)
+- `nextjs-prisma-mydevil.mdc` — deploy, Hetzner, PowerShell
+- `code-quality.mdc` — TypeScript, placeholdery, error handling
+- `dev-server-troubleshooting.mdc` — localhost:3011, EADDRINUSE
+- `debugging.mdc` — diagnoza przed implementacją (przy bugach)
+
+Dopiero potem przystąp do Fazy 1.
+
+## ⚠️ NADRZĘDNA ZASADA — FAZA 1
+
+Dla KAŻDEGO nowego zadania: NAJPIERW wykonaj Fazę 1 (rekonesans, zero kodu) i ZATRZYMAJ SIĘ.
+NIE pisz kodu, NIE proponuj zmian, NIE edytuj plików — dopóki użytkownik nie potwierdzi planu.
+Jeśli użytkownik nie wspomniał o fazach — i tak wykonaj Fazę 1 i czekaj.
+
 ## Zasady ogólne
 
 - ZAWSZE czytaj ARCHITECTURE.md przed implementacją — to jedyne źródło prawdy o strukturze projektu.

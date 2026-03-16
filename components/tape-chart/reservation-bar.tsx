@@ -3,7 +3,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Star, StickyNote } from "lucide-react";
+import { FileText, Receipt, Star, StickyNote } from "lucide-react";
 import type { Reservation } from "@/lib/tape-chart-types";
 import { RESERVATION_STATUS_COLORS, RESERVATION_STATUS_BG } from "@/lib/tape-chart-types";
 import { cn } from "@/lib/utils";
@@ -167,6 +167,7 @@ export function ReservationBar({
           ? "○"
           : "";
 
+  const hasRestaurantCharges = reservation.hasRestaurantCharges ?? false;
   const groupShort = reservation.groupName ? `[${reservation.groupName}]` : "";
   const firstLineNotes =
     reservation.notesVisibleOnChart && reservation.notes
@@ -246,6 +247,10 @@ export function ReservationBar({
   if (reservation.notes) tooltipLines.push(`Uwagi: ${reservation.notes}`);
   if (advanceOverdue) tooltipLines.push("⚠️ Zaliczka po terminie");
   if (reservation.hasConsolidatedInvoice) tooltipLines.push("📄 Na fakturze zbiorczej");
+  const docStatus = reservation.documentStatus;
+  const receiptNum = reservation.receiptNumber;
+  if (docStatus === "receipt" && receiptNum) tooltipLines.push(`🧾 Paragon nr ${receiptNum}`);
+  if (docStatus === "invoice") tooltipLines.push("📄 Faktura");
   const tooltipText = tooltipLines.join("\n");
 
   const canDrag = reservation.status === "CONFIRMED" || reservation.status === "CHECKED_IN";
@@ -380,6 +385,14 @@ export function ReservationBar({
             {reservation.vip && <Star className="inline h-2.5 w-2.5 mr-0.5 text-amber-600 fill-amber-600 align-middle shrink-0" aria-label="VIP" />}
             {barLabel}
           </span>
+          {hasRestaurantCharges && (
+            <span
+              style={{ fontSize: "12px", lineHeight: 1, flexShrink: 0 }}
+              aria-label="Obciążenia gastronomiczne"
+            >
+              🍽️
+            </span>
+          )}
           {firstLineNotes && (
             <span className="block text-[10px] font-normal opacity-90 truncate px-1 text-black" title={reservation.notes ?? ""}>
               {firstLineNotes}{firstLineNotes.length >= 60 ? "…" : ""}
@@ -393,6 +406,21 @@ export function ReservationBar({
               className="absolute right-1 top-1/2 -translate-y-1/2 h-3 w-3 text-black shrink-0"
               aria-label="Ma uwagi"
             />
+          </span>
+        )}
+        {/* Dokument kasowy – ikona w prawym dolnym rogu */}
+        {docStatus === "receipt" && receiptNum && (
+          <span
+            className="absolute right-1 bottom-0.5 shrink-0 opacity-90"
+            title={`Paragon nr ${receiptNum}`}
+            aria-label={`Paragon nr ${receiptNum}`}
+          >
+            <Receipt className="h-3 w-3 text-black" style={{ width: 12, height: 12 }} />
+          </span>
+        )}
+        {docStatus === "invoice" && (
+          <span className="absolute right-1 bottom-0.5 shrink-0 opacity-90" title="Faktura" aria-label="Faktura">
+            <FileText className="h-3 w-3 text-black" style={{ width: 12, height: 12 }} />
           </span>
         )}
       </div>

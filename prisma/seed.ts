@@ -349,6 +349,30 @@ async function main() {
     }
   }
 
+  // GusConfig (KT-1) — Karczma Łabędź
+  await prisma.gusConfig.upsert({
+    where: { id: 1 },
+    create: {
+      id: 1,
+      objectName: "Karczma Łabędź Łukasz Wojenkowski",
+      address: "ul. Marsa 2, Nowa Wieś",
+      postalCode: "14-200",
+      city: "Iława",
+      gmina: "Iława",
+      powiat: "Iławski",
+      voivodeship: "Warmińsko-Mazurskie",
+      regon: "280085232",
+      objectType: 1,
+      category: 3,
+      isYearRound: true,
+      nominalPlaces: 70,
+      nominalRooms: 28,
+      email: "hotel@karczma-labedz.pl",
+    },
+    update: {},
+  });
+  console.log("GusConfig (KT-1): sprawdzono/utworzono");
+
   console.log("Seed completed.");
 }
 

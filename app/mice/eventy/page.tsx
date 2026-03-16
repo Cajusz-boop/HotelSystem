@@ -21,36 +21,50 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default async function EventyPage() {
   const propertyId = await getEffectivePropertyId();
-  const orders = await prisma.eventOrder.findMany({
-    orderBy: { dateFrom: "desc" },
-    take: 200,
-  });
-
-  const salaRooms = await prisma.room.findMany({
-    where: {
-      type: "Sala",
-      activeForSale: true,
-      ...(propertyId ? { propertyId } : {}),
-    },
-    select: { id: true, number: true },
-    orderBy: { number: "asc" },
-  });
+  const [orders, invoicesForEvents, salaRooms] = await Promise.all([
+    prisma.eventOrder.findMany({
+      orderBy: { dateFrom: "desc" },
+      take: 200,
+      select: { id: true, name: true, eventType: true, roomIds: true, dateFrom: true, dateTo: true, status: true, receiptNumber: true },
+    }),
+    prisma.invoice.findMany({
+      where: { sourceType: "EVENT" },
+      select: { sourceId: true },
+    }),
+    prisma.room.findMany({
+      where: {
+        type: "Sala",
+        activeForSale: true,
+        ...(propertyId ? { propertyId } : {}),
+      },
+      select: { id: true, number: true },
+      orderBy: { number: "asc" },
+    }),
+  ]);
 
   const roomMap = Object.fromEntries(salaRooms.map((r) => [r.id, r.number]));
+  const eventIdsWithInvoice = new Set(invoicesForEvents.map((i) => i.sourceId).filter(Boolean));
 
-  const ordersWithRooms = orders.map((o) => ({
-    id: o.id,
-    name: o.name,
-    eventType: o.eventType ?? "OTHER",
-    roomIds: (Array.isArray(o.roomIds) ? o.roomIds : []) as string[],
-    dateFrom: o.dateFrom.toISOString().slice(0, 10),
-    dateTo: o.dateTo.toISOString().slice(0, 10),
-    status: o.status,
-    roomNumbers: ((Array.isArray(o.roomIds) ? o.roomIds : []) as string[])
-      .map((id) => roomMap[id])
-      .filter(Boolean)
-      .join(", "),
-  }));
+  const ordersWithRooms = orders.map((o) => {
+    const hasInvoice = eventIdsWithInvoice.has(o.id);
+    const hasReceipt = o.receiptNumber != null && String(o.receiptNumber).trim() !== "";
+    const documentStatus: "invoice" | "receipt" | "none" = hasInvoice ? "invoice" : hasReceipt ? "receipt" : "none";
+    return {
+      id: o.id,
+      name: o.name,
+      eventType: o.eventType ?? "OTHER",
+      roomIds: (Array.isArray(o.roomIds) ? o.roomIds : []) as string[],
+      dateFrom: o.dateFrom.toISOString().slice(0, 10),
+      dateTo: o.dateTo.toISOString().slice(0, 10),
+      status: o.status,
+      roomNumbers: ((Array.isArray(o.roomIds) ? o.roomIds : []) as string[])
+        .map((id) => roomMap[id])
+        .filter(Boolean)
+        .join(", "),
+      documentStatus,
+      receiptNumber: o.receiptNumber ?? null,
+    };
+  });
 
   return (
     <div className="p-8">

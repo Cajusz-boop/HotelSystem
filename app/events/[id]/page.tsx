@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { CancelEventButton } from "./cancel-button";
+import { EventReceiptSection } from "./event-receipt-section";
 
 export const metadata = { title: "Szczegóły imprezy", description: "Impreza" };
 
@@ -29,11 +30,57 @@ export default async function EventDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const event = await prisma.eventOrder.findUnique({
-    where: { id },
-  });
+  const [event, invoiceForEvent] = await Promise.all([
+    prisma.eventOrder.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        quoteId: true,
+        roomIds: true,
+        dateFrom: true,
+        dateTo: true,
+        status: true,
+        notes: true,
+        eventType: true,
+        receiptNumber: true,
+        receiptDate: true,
+        clientName: true,
+        clientPhone: true,
+        eventDate: true,
+        timeStart: true,
+        timeEnd: true,
+        roomName: true,
+        guestCount: true,
+        adultsCount: true,
+        children03: true,
+        children47: true,
+        churchTime: true,
+        brideGroomTable: true,
+        orchestraTable: true,
+        cakesAndDesserts: true,
+        specialRequests: true,
+        afterpartyEnabled: true,
+        afterpartyTimeFrom: true,
+        afterpartyTimeTo: true,
+        afterpartyGuests: true,
+        afterpartyMenu: true,
+        afterpartyMusic: true,
+        checklistDocUrl: true,
+        menuDocUrl: true,
+        googleCalendarEventId: true,
+      },
+    }),
+    prisma.invoice.findFirst({
+      where: { sourceType: "EVENT", sourceId: id },
+      select: { id: true, number: true },
+    }),
+  ]);
 
   if (!event) notFound();
+
+  const roomIds = (Array.isArray(event.roomIds) ? event.roomIds : []) as string[];
+  const hasInvoice = Boolean(invoiceForEvent);
 
   const fmtDate = (d: Date | null) =>
     d ? new Date(d).toLocaleDateString("pl-PL") : "—";
@@ -108,6 +155,28 @@ export default async function EventDetailPage({
       </h1>
 
       <div className="space-y-4 rounded-lg border p-6 text-base">
+        <EventReceiptSection
+          eventId={id}
+          name={event.name}
+          quoteId={event.quoteId}
+          roomIds={roomIds}
+          dateFrom={event.dateFrom.toISOString().slice(0, 10)}
+          dateTo={event.dateTo.toISOString().slice(0, 10)}
+          status={event.status}
+          notes={event.notes}
+          eventType={event.eventType ?? undefined}
+          receiptNumber={event.receiptNumber}
+          receiptDate={event.receiptDate ? event.receiptDate.toISOString().slice(0, 10) : null}
+          hasInvoice={hasInvoice}
+        />
+        {hasInvoice && invoiceForEvent && (
+          <p>
+            <strong>Faktura VAT:</strong>{" "}
+            <Link href={`/finance/invoice/${invoiceForEvent.id}`} className="text-primary hover:underline">
+              {invoiceForEvent.number}
+            </Link>
+          </p>
+        )}
         {(event.checklistDocUrl || event.menuDocUrl) && (
           <div className="flex flex-wrap gap-2 pb-2 border-b">
             {event.checklistDocUrl && (

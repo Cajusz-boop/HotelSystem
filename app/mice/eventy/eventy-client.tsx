@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { FileText, Minus, Receipt } from "lucide-react";
 
 interface OrderRow {
   id: string;
@@ -15,6 +16,8 @@ interface OrderRow {
   dateTo: string;
   status: string;
   roomNumbers: string;
+  documentStatus?: "invoice" | "receipt" | "none";
+  receiptNumber?: string | null;
 }
 
 export function EventyClient({
@@ -117,7 +120,21 @@ export function EventyClient({
               ) : (
                 <ul className="space-y-2">
                   {items.map((o) => (
-                    <li key={o.id} className="text-sm">
+                    <li key={o.id} className="text-sm flex items-center gap-1.5">
+                      <span
+                        className="shrink-0 text-muted-foreground"
+                        title={
+                          o.documentStatus === "invoice"
+                            ? "Faktura"
+                            : o.documentStatus === "receipt" && o.receiptNumber
+                              ? `Paragon nr ${o.receiptNumber}`
+                              : "Brak dokumentu"
+                        }
+                      >
+                        {o.documentStatus === "invoice" && <FileText className="h-3.5 w-3.5" />}
+                        {o.documentStatus === "receipt" && <Receipt className="h-3.5 w-3.5" />}
+                        {(o.documentStatus === "none" || !o.documentStatus) && <Minus className="h-3.5 w-3.5 opacity-50" />}
+                      </span>
                       <Link
                         href={`/mice/zlecenia`}
                         className="text-primary hover:underline font-medium"

@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { validateNipOrVat } from "@/lib/nip-vat-validate";
+import { EVENT_TYPE_LABELS } from "@/lib/event-type-labels";
 
 /** Formatuje wpis NIP/VAT: polski NIP → XXX-XXX-XX-XX, numer VAT UE → alfanumerycznie (max 14). */
 function formatNipInput(value: string): string {
@@ -859,6 +860,36 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
           </div>
         </section>
 
+        {/* 2b. IMPREZA – gdy rezerwacja powiązana z imprezą */}
+        {isEdit && reservation?.eventOrderId && (
+          <section>
+            <h3 className={sectionHeader}>🎉 IMPREZA</h3>
+            <div className="rounded border border-blue-200 bg-blue-50/80 p-3 text-xs space-y-1.5">
+              <div className="font-medium text-blue-900">
+                {reservation.eventOrderType && (EVENT_TYPE_LABELS[reservation.eventOrderType] ?? reservation.eventOrderType)}
+                {reservation.eventOrderClient ? ` — ${reservation.eventOrderClient}` : ""}
+              </div>
+              {reservation.eventOrderDate && (() => {
+                const d = new Date(reservation.eventOrderDate);
+                if (isNaN(d.getTime())) return null;
+                return (
+                  <div className="text-blue-700">
+                    Data: {d.toLocaleDateString("pl-PL")}
+                  </div>
+                );
+              })()}
+              <a
+                href={`/api/event-orders/${reservation.eventOrderId}/rozliczenie`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-blue-700 hover:text-blue-900 hover:underline font-medium"
+              >
+                Zobacz kosztorys imprezy →
+              </a>
+            </div>
+          </section>
+        )}
+
         {/* 3. DANE GOŚCIA */}
         <section>
           <h3 className={sectionHeader}>👤 DANE GOŚCIA</h3>
@@ -1090,6 +1121,27 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
 
     return (
       <div className="space-y-4">
+        {/* Informacja o imprezie – obciążenia trafiają do kosztorysu */}
+        {isEdit && reservation?.eventOrderId && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50/80 px-3 py-2.5 text-xs flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-blue-900">
+              Obciążenia trafiają do kosztorysu imprezy:{" "}
+              <strong>
+                {reservation.eventOrderType && (EVENT_TYPE_LABELS[reservation.eventOrderType] ?? reservation.eventOrderType)}
+                {reservation.eventOrderClient ? ` — ${reservation.eventOrderClient}` : ""}
+              </strong>
+            </span>
+            <a
+              href={`/api/event-orders/${reservation.eventOrderId}/rozliczenie`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-700 hover:text-blue-900 hover:underline font-medium shrink-0"
+            >
+              Zobacz kosztorys →
+            </a>
+          </div>
+        )}
+
         {/* F3: Podsumowanie salda w jednym miejscu */}
         <div className="rounded border bg-muted/20 p-3 text-xs space-y-1">
           <h3 className="font-semibold text-muted-foreground border-b pb-1 mb-1">Podsumowanie salda</h3>

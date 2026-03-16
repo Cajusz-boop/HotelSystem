@@ -24,6 +24,7 @@ import {
   deleteParkingBookingsByReservation,
 } from "@/app/actions/parking";
 import { postRoomChargeOnCheckout, chargeLocalTax, createVatInvoice, syncRoomChargeToReservationPrice } from "@/app/actions/finance";
+import { syncEventQuote } from "@/app/actions/mice";
 import { computeRateCodePricePerNight } from "@/lib/rate-code-utils";
 import { blockRoomExtensionAfterCheckout } from "@/lib/telephony";
 import { generateRoomAccessCode } from "@/app/actions/digital-keys";
@@ -142,6 +143,8 @@ function toUiReservation(r: {
     depositAmount: unknown;
     depositPaid: boolean;
   } | null;
+  receiptNumber?: string | null;
+  receiptDate?: Date | null;
 }) {
   const firstParking = r.parkingBookings?.[0];
   return {
@@ -213,6 +216,8 @@ function toUiReservation(r: {
     eventOrderStatus: r.eventOrder?.status ?? undefined,
     eventOrderDeposit: r.eventOrder?.depositAmount != null ? Number(r.eventOrder.depositAmount) : undefined,
     eventOrderDepositPaid: r.eventOrder?.depositPaid ?? undefined,
+    receiptNumber: r.receiptNumber ?? undefined,
+    receiptDate: r.receiptDate ? formatDate(r.receiptDate) : undefined,
   };
 }
 
@@ -543,6 +548,8 @@ export async function getReservationEditData(
   invoiceScope: string;
   paidAmountOverride: number | null;
   eventOrderId: string | null;
+  receiptNumber: string | null;
+  receiptDate: string | null;
   isInClosedPeriod: boolean;
   canEditClosedPeriod: boolean;
 }>> {
@@ -571,6 +578,8 @@ export async function getReservationEditData(
         extraStatus: true,
         advanceDueDate: true,
         eventOrderId: true,
+        receiptNumber: true,
+        receiptDate: true,
         guest: { select: { email: true, phone: true } },
       },
     });
@@ -603,6 +612,8 @@ export async function getReservationEditData(
         invoiceScope: res.invoiceScope ?? "ALL",
         paidAmountOverride: res.paidAmountOverride != null ? Number(res.paidAmountOverride) : null,
         eventOrderId: res.eventOrderId ?? null,
+        receiptNumber: res.receiptNumber ?? null,
+        receiptDate: res.receiptDate ? res.receiptDate.toISOString().slice(0, 10) : null,
         isInClosedPeriod,
         canEditClosedPeriod,
       },
@@ -2742,6 +2753,17 @@ export async function updateReservation(
     });
     if (!prev) return { success: false, error: "Rezerwacja nie istnieje" };
 
+    const receiptNumberVal = (input as { receiptNumber?: string | null }).receiptNumber;
+    if (receiptNumberVal !== undefined && receiptNumberVal != null && String(receiptNumberVal).trim() !== "") {
+      const withInvoices = await prisma.reservation.findUnique({
+        where: { id: reservationId },
+        include: { invoices: { take: 1, select: { id: true } } },
+      });
+      if (withInvoices && withInvoices.invoices.length > 0) {
+        return { success: false, error: "Nie można ustawić paragonu — rezerwacja ma już wystawioną fakturę." };
+      }
+    }
+
     const isInClosedPeriod = isReservationInClosedPeriod(prev.checkIn, prev.checkOut);
     const editingClosedPeriod = isInClosedPeriod; // Ograniczenie wyłączone – wszyscy mogą edytować
 
@@ -2883,6 +2905,14 @@ export async function updateReservation(
     }
     if ((input as { eventOrderId?: string | null }).eventOrderId !== undefined) {
       (data as Record<string, unknown>).eventOrderId = (input as { eventOrderId?: string | null }).eventOrderId || null;
+    }
+    if ((input as { receiptNumber?: string | null }).receiptNumber !== undefined) {
+      const v = (input as { receiptNumber?: string | null }).receiptNumber;
+      (data as Record<string, unknown>).receiptNumber = v != null && String(v).trim() !== "" ? String(v).trim() : null;
+    }
+    if ((input as { receiptDate?: Date | string | null }).receiptDate !== undefined) {
+      const v = (input as { receiptDate?: Date | string | null }).receiptDate;
+      (data as Record<string, unknown>).receiptDate = v ? new Date(v) : null;
     }
 
     // Firma / NIP (dla faktury VAT)
@@ -3101,6 +3131,17 @@ export async function updateReservation(
       await syncRoomChargeToReservationPrice(reservationId).catch((err) =>
         console.error("[syncRoomChargeToReservationPrice on rateCodePrice change]", err)
       );
+    }
+
+    if ((input as { eventOrderId?: string | null }).eventOrderId !== undefined) {
+      const oldEventId = prev.eventOrderId ?? null;
+      const newEventId = updated.eventOrderId ?? null;
+      try {
+        if (oldEventId && oldEventId !== newEventId) await syncEventQuote(oldEventId);
+        if (newEventId) await syncEventQuote(newEventId);
+      } catch {
+        /* non-blocking */
+      }
     }
 
     if (data.status === "CHECKED_IN" && prev.status !== "CHECKED_IN") {

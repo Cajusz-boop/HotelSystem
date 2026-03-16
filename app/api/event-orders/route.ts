@@ -5,6 +5,7 @@ import { createAuditLog } from "@/lib/audit";
 import { createChecklistDoc, createMenuDoc, type EventOrderForChecklist } from "@/lib/googleDocs";
 import { createCalendarEvent } from "@/lib/googleCalendarEvents";
 import { getCalendarIdForEventOrder } from "@/lib/calendarMapping";
+import { syncEventQuote } from "@/app/actions/mice";
 
 const EVENT_TYPES = ["WESELE", "KOMUNIA", "CHRZCINY", "URODZINY", "STYPA", "FIRMOWA", "SYLWESTER", "INNE"];
 
@@ -312,6 +313,14 @@ export async function POST(req: Request) {
           },
         });
 
+        if (event.packageId || event.quoteId) {
+          try {
+            await syncEventQuote(event.id);
+            await syncEventQuote(poprawinyEvent.id);
+          } catch {
+            /* non-blocking */
+          }
+        }
         return NextResponse.json(event, { status: 201 });
       } catch (err) {
         console.error("Google API error (wesele+poprawiny):", err);
@@ -368,6 +377,13 @@ export async function POST(req: Request) {
         },
       });
 
+      if (updated.packageId || updated.quoteId) {
+        try {
+          await syncEventQuote(updated.id);
+        } catch {
+          /* non-blocking */
+        }
+      }
       return NextResponse.json(updated, { status: 201 });
     } catch (err) {
       console.error("Google API error:", err);

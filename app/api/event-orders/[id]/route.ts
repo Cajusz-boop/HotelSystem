@@ -7,6 +7,7 @@ import {
   updateCalendarEvent,
   cancelCalendarEvent,
 } from "@/lib/googleCalendarEvents";
+import { syncEventQuote } from "@/app/actions/mice";
 
 const EVENT_TYPES = ["WESELE", "KOMUNIA", "CHRZCINY", "URODZINY", "STYPA", "FIRMOWA", "SYLWESTER", "INNE"];
 
@@ -261,6 +262,15 @@ export async function PATCH(
       }
     }
 
+    const syncRelevantKeys = ["menu", "quoteId"];
+    if (syncRelevantKeys.some((k) => k in patchData)) {
+      try {
+        await syncEventQuote(id);
+      } catch {
+        /* non-blocking */
+      }
+    }
+
     return NextResponse.json(updated);
   } catch (e) {
     if (e && typeof e === "object" && "code" in e && e.code === "P2025") {
@@ -380,6 +390,15 @@ export async function PUT(
           data: { googleCalendarSynced: true, googleCalendarSyncedAt: new Date(), googleCalendarError: null },
         })
         .catch(() => {});
+    }
+
+    const syncRelevantKeys = ["packageId", "menu", "guestCount", "adultsCount", "children03", "children47", "quoteId"];
+    if (syncRelevantKeys.some((k) => k in sanitized)) {
+      try {
+        await syncEventQuote(id);
+      } catch {
+        /* non-blocking */
+      }
     }
 
     return NextResponse.json(event);

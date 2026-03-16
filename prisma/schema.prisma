@@ -797,6 +797,11 @@ model Reservation {
   eventOrderId  String?
   eventOrder    EventOrder? @relation(fields: [eventOrderId], references: [id], onDelete: SetNull)
 
+  /** Numer paragonu fiskalnego (gdy gość nie chce faktury) */
+  receiptNumber  String?   @db.VarChar(64)
+  /** Data wystawienia paragonu */
+  receiptDate    DateTime? @db.Date
+
   @@index([checkIn, checkOut])
   @@index([roomId])
   @@index([status, checkIn, checkOut])
@@ -1720,6 +1725,28 @@ model HotelConfig {
   updatedAt      DateTime @updatedAt
 }
 
+/** Konfiguracja GUS (KT-1) — dane stałe do sprawozdania (singleton, id = 1). */
+model GusConfig {
+  id            Int      @id @default(1)
+  objectName    String
+  address       String?
+  postalCode    String?
+  city          String?
+  gmina         String?
+  powiat        String?
+  voivodeship   String?
+  regon         String?
+  objectType    Int      @default(1)
+  category      Int      @default(3)
+  isYearRound   Boolean  @default(true)
+  nominalPlaces Int      @default(70)
+  nominalRooms  Int      @default(28)
+  email         String?
+  updatedAt     DateTime @updatedAt
+
+  @@map("gus_config")
+}
+
 /** Harmonogram raportów – automatyczne generowanie i wysyłka raportów (cron). */
 model ScheduledReport {
   id              String    @id @default(cuid())
@@ -1866,6 +1893,11 @@ model EventOrder {
   checklist  Json?     // { "cake": true, "flowers": false, ... }
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /** Numer paragonu fiskalnego (gdy nie wystawiano faktury) */
+  receiptNumber  String?   @db.VarChar(64)
+  /** Data wystawienia paragonu */
+  receiptDate    DateTime? @db.Date
 
   @@index([dateFrom])
   @@index([status])

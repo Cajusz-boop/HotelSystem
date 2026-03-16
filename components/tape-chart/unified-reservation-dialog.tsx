@@ -49,11 +49,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { X, ChevronDown, AlertTriangle } from "lucide-react";
-const EVENT_TYPE_LABELS_BANNER: Record<string, string> = {
-  WESELE: "Wesele", KOMUNIA: "Komunia", CHRZCINY: "Chrzciny",
-  URODZINY: "Urodziny", STYPA: "Stypa", FIRMOWA: "Firmowa",
-  SYLWESTER: "Sylwester", INNE: "Impreza",
-};
+import { EVENT_TYPE_LABELS } from "@/lib/event-type-labels";
 const STATUS_LABELS_EVENT_BANNER: Record<string, string> = {
   DRAFT: "Szkic", CONFIRMED: "Potwierdzone", DONE: "Wykonane", CANCELLED: "Anulowane",
 };
@@ -1066,10 +1062,18 @@ export function UnifiedReservationDialog({
   if (isEdit && !reservation) return null;
   if (!isEdit && !createContext) return null;
 
+  const eventPart = [
+    reservation?.eventOrderType ? (EVENT_TYPE_LABELS[reservation.eventOrderType] ?? reservation.eventOrderType) : null,
+    reservation?.eventOrderClient || null,
+  ].filter(Boolean).join(" — ");
+  const eventSuffix =
+    isEdit && reservation?.eventOrderId && eventPart
+      ? ` | ${eventPart}`
+      : "";
   const title = isConsolidated && primaryReservation
     ? `Faktura zbiorcza · ${primaryReservation.guestName} · ${consolidatedReservationIds?.length ?? 0} rezerwacji`
     : isEdit && reservation
-      ? `Edycja rezerwacji${reservation.confirmationNumber ? ` nr ${reservation.confirmationNumber}` : ""} · ${reservation.guestName} · Pokój ${reservation.room}`
+      ? `Edycja rezerwacji${reservation.confirmationNumber ? ` nr ${reservation.confirmationNumber}` : ""} · ${reservation.guestName} · Pokój ${reservation.room}${eventSuffix}`
       : "Nowa rezerwacja";
 
   return (
@@ -1139,7 +1143,7 @@ export function UnifiedReservationDialog({
                     <div className="min-w-0">
                       <div className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Pobyt powiązany z imprezą</div>
                       <div className="text-sm font-semibold text-blue-900 truncate">
-                        {reservation.eventOrderType && EVENT_TYPE_LABELS_BANNER[reservation.eventOrderType]}
+                        {reservation.eventOrderType && EVENT_TYPE_LABELS[reservation.eventOrderType]}
                         {reservation.eventOrderClient ? ` — ${reservation.eventOrderClient}` : ""}
                         {reservation.eventOrderDate ? ` · ${new Date(reservation.eventOrderDate).toLocaleDateString("pl-PL")}` : ""}
                       </div>
@@ -1213,7 +1217,12 @@ export function UnifiedReservationDialog({
                 {isConsolidated && consolidatedReservationIds?.length ? (
                   <DocumentsTab reservationIds={consolidatedReservationIds} isConsolidated />
                 ) : isEdit && reservation ? (
-                  <DocumentsTab reservationId={reservation.id} />
+                  <DocumentsTab
+                    reservationId={reservation.id}
+                    receiptNumber={reservation.receiptNumber ?? null}
+                    receiptDate={reservation.receiptDate ?? null}
+                    onReceiptSave={(updates) => reservation && onSaved?.({ ...reservation, ...updates })}
+                  />
                 ) : null}
               </TabsContent>
 

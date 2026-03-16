@@ -62,6 +62,10 @@ export interface Reservation {
   eventOrderStatus?: string | null;
   eventOrderDeposit?: number | null;
   eventOrderDepositPaid?: boolean;
+  receiptNumber?: string | null;
+  receiptDate?: string | null;
+  documentStatus?: "invoice" | "receipt" | "none";
+  hasRestaurantCharges?: boolean;
 }
 
 export interface ReservationGroupSummary {

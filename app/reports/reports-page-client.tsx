@@ -2886,6 +2886,12 @@ export function ReportsPageClient({
           </h2>
           <div className="flex flex-wrap gap-6">
             <div>
+              <p className="mb-2 text-sm font-medium">Raport KT-1 (GUS)</p>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/reports/kt1">Otwórz raport KT-1</Link>
+              </Button>
+            </div>
+            <div>
               <p className="mb-2 text-sm font-medium">Raport GUS (noclegi, goście)</p>
               <div className="flex flex-wrap items-end gap-2">
                 <div>

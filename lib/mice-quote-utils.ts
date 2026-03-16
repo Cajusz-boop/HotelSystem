@@ -1,9 +1,12 @@
-/** Źródła pozycji generowane automatycznie — chronione nie są przy sync (manual items są zachowywane). */
+export type QuoteItemSource = "MENU" | "RESERVATION" | "MANUAL" | "MANUAL_OVERRIDE";
+
+/** Źródła pozycji generowane automatycznie — nadpisywane przy sync (MANUAL i MANUAL_OVERRIDE są zachowywane). */
 const AUTO_SOURCES: string[] = [
+  "MENU",
+  "RESERVATION",
   "MENU_PACKAGE",
   "MENU_PACKAGE_SURCHARGE",
   "MENU_PACKAGE_EXTRA",
-  "RESERVATION",
 ];
 
 export function isAutoSource(source?: string | null): boolean {

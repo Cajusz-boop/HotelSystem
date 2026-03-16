@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2 } from "lucide-react";
+import { FileText, Minus, Pencil, Receipt, Trash2 } from "lucide-react";
 
 interface SalaRoom {
   id: string;
@@ -36,6 +36,8 @@ interface EventOrderRow {
   dateTo: string;
   status: string;
   notes: string;
+  documentStatus?: "invoice" | "receipt" | "none";
+  receiptNumber?: string | null;
 }
 
 const EVENT_TYPE_LABELS: Record<string, string> = {
@@ -418,11 +420,34 @@ export function ZlecenieForm({
                 key={o.id}
                 className="flex items-center justify-between gap-4 rounded border px-4 py-3 text-sm"
               >
-                <div className="flex-1">
-                  <span className="font-medium">{o.name}</span>
-                  <span className="ml-2 text-muted-foreground">
-                    {o.dateFrom} – {o.dateTo} · {EVENT_TYPE_LABELS[o.eventType] ?? o.eventType} · {STATUS_LABELS[o.status] ?? o.status}
+                <div className="flex-1 flex items-center gap-2">
+                  <span
+                    className="shrink-0 text-muted-foreground"
+                    title={
+                      o.documentStatus === "invoice"
+                        ? "Faktura"
+                        : o.documentStatus === "receipt" && o.receiptNumber
+                          ? `Paragon nr ${o.receiptNumber}`
+                          : "Brak dokumentu"
+                    }
+                    aria-label={
+                      o.documentStatus === "invoice"
+                        ? "Faktura"
+                        : o.documentStatus === "receipt"
+                          ? `Paragon nr ${o.receiptNumber ?? ""}`
+                          : "Brak dokumentu"
+                    }
+                  >
+                    {o.documentStatus === "invoice" && <FileText className="h-4 w-4" />}
+                    {o.documentStatus === "receipt" && <Receipt className="h-4 w-4" />}
+                    {o.documentStatus === "none" && <Minus className="h-4 w-4 opacity-50" />}
                   </span>
+                  <div>
+                    <span className="font-medium">{o.name}</span>
+                    <span className="ml-2 text-muted-foreground">
+                      {o.dateFrom} – {o.dateTo} · {EVENT_TYPE_LABELS[o.eventType] ?? o.eventType} · {STATUS_LABELS[o.status] ?? o.status}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <Button

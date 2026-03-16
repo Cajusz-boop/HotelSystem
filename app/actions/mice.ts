@@ -197,7 +197,9 @@ export async function updateEventOrder(
   dateTo: string,
   status: string,
   notes: string | null,
-  eventType?: EventType
+  eventType?: EventType,
+  receiptNumber?: string | null,
+  receiptDate?: string | Date | null
 ): Promise<ActionResult> {
   try {
     const trimmedName = name?.trim();
@@ -212,6 +214,16 @@ export async function updateEventOrder(
     }
     if (to < from) {
       return { success: false, error: "Data zakończenia musi być po dacie rozpoczęcia" };
+    }
+
+    if (receiptNumber !== undefined && receiptNumber != null && String(receiptNumber).trim() !== "") {
+      const existingInvoice = await prisma.invoice.findFirst({
+        where: { sourceType: "EVENT", sourceId: id },
+        select: { id: true },
+      });
+      if (existingInvoice) {
+        return { success: false, error: "Nie można ustawić paragonu — do imprezy jest już wystawiona faktura." };
+      }
     }
 
     const validStatus = ["DRAFT", "CONFIRMED", "DONE", "CANCELLED"].includes(status)
@@ -232,6 +244,8 @@ export async function updateEventOrder(
         dateTo: to,
         status: validStatus,
         notes: notes?.trim() || null,
+        ...(receiptNumber !== undefined ? { receiptNumber: receiptNumber != null && String(receiptNumber).trim() !== "" ? String(receiptNumber).trim() : null } : {}),
+        ...(receiptDate !== undefined ? { receiptDate: receiptDate ? new Date(receiptDate) : null } : {}),
       },
     });
 

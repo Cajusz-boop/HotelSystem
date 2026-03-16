@@ -38,6 +38,10 @@ export interface TapeChartReservation {
   eventOrderStatus?: string | null;
   eventOrderDeposit?: number | null;
   eventOrderDepositPaid?: boolean;
+  receiptNumber?: string | null;
+  receiptDate?: string | null;
+  documentStatus?: "invoice" | "receipt" | "none";
+  hasRestaurantCharges?: boolean;
 }
 
 export interface TapeChartRoom {
@@ -147,6 +151,9 @@ function mapReservationToTapeChart(r: {
   companyId?: string | null;
   company?: { id: string; name: string } | null;
   invoiceReservations?: Array<{ id: string }>;
+  invoices?: Array<{ id: string }>;
+  receiptNumber?: string | null;
+  receiptDate?: Date | null;
   eventOrderId?: string | null;
   eventOrder?: {
     id: string;
@@ -157,8 +164,11 @@ function mapReservationToTapeChart(r: {
     depositAmount: unknown;
     depositPaid: boolean;
   } | null;
+  transactions?: Array<{ id: string }>;
 }) {
   const firstParking = r.parkingBookings?.[0];
+  const hasInvoice = (r.invoices?.length ?? 0) > 0 || (r.invoiceReservations?.length ?? 0) > 0;
+  const documentStatus: "invoice" | "receipt" | "none" = hasInvoice ? "invoice" : r.receiptNumber ? "receipt" : "none";
   return {
     id: r.id,
     guestId: r.guestId,
@@ -208,6 +218,10 @@ function mapReservationToTapeChart(r: {
     eventOrderStatus: r.eventOrder?.status ?? undefined,
     eventOrderDeposit: r.eventOrder?.depositAmount != null ? Number(r.eventOrder.depositAmount) : undefined,
     eventOrderDepositPaid: r.eventOrder?.depositPaid ?? undefined,
+    receiptNumber: r.receiptNumber ?? undefined,
+    receiptDate: r.receiptDate ? formatDate(r.receiptDate) : undefined,
+    documentStatus,
+    hasRestaurantCharges: (r.transactions?.length ?? 0) > 0,
   };
 }
 
@@ -298,6 +312,7 @@ async function fetchTapeChartDataUncached(
           parkingBookings: { take: 1, include: { parkingSpot: { select: { number: true } } } },
           company: { select: { id: true, name: true } },
           invoiceReservations: { take: 1, select: { id: true } },
+          invoices: { take: 1, select: { id: true } },
           eventOrder: {
             select: {
               id: true,
@@ -308,6 +323,17 @@ async function fetchTapeChartDataUncached(
               depositAmount: true,
               depositPaid: true,
             },
+          },
+          transactions: {
+            where: {
+              OR: [
+                { category: "F_B" },
+                { type: { in: ["RESTAURANT", "GASTRONOMY", "POSTING"] } },
+              ],
+              NOT: { status: "VOIDED" },
+            },
+            select: { id: true },
+            take: 1,
           },
         },
         orderBy: { checkIn: "asc" },
@@ -352,6 +378,18 @@ async function fetchTapeChartDataUncached(
             parkingBookings: { take: 1, include: { parkingSpot: { select: { number: true } } } },
             company: { select: { id: true, name: true } },
             invoiceReservations: { take: 1, select: { id: true } },
+            invoices: { take: 1, select: { id: true } },
+            transactions: {
+              where: {
+                OR: [
+                  { category: "F_B" },
+                  { type: { in: ["RESTAURANT", "GASTRONOMY", "POSTING"] } },
+                ],
+                NOT: { status: "VOIDED" },
+              },
+              select: { id: true },
+              take: 1,
+            },
           },
           orderBy: { checkIn: "asc" },
         }),

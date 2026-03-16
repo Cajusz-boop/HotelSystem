@@ -4937,6 +4937,12 @@ export async function createVatInvoice(
         error: "Do wystawienia faktury VAT wymagany jest NIP nabywcy. Uzupełnij NIP w danych firmy przy rezerwacji.",
       };
     }
+    if (reservation.receiptNumber != null && String(reservation.receiptNumber).trim() !== "") {
+      return {
+        success: false,
+        error: `Do tej rezerwacji jest już przypisany paragon (nr ${reservation.receiptNumber}). Usuń paragon przed wystawieniem faktury.`,
+      };
+    }
     const onConsolidated = await prisma.invoiceReservation.findFirst({
       where: { reservationId },
     });
@@ -5248,6 +5254,19 @@ export async function createSalesInvoice(
       buyerAddress = buyer.address?.trim() || null;
       buyerPostalCode = buyer.postalCode?.trim() || null;
       buyerCity = buyer.city?.trim() || null;
+    }
+
+    if (options?.sourceType === "EVENT" && options?.sourceId) {
+      const eventOrder = await prisma.eventOrder.findUnique({
+        where: { id: options.sourceId },
+        select: { receiptNumber: true },
+      });
+      if (eventOrder?.receiptNumber != null && String(eventOrder.receiptNumber).trim() !== "") {
+        return {
+          success: false,
+          error: `Do tej imprezy jest już przypisany paragon (nr ${eventOrder.receiptNumber}). Usuń paragon przed wystawieniem faktury.`,
+        };
+      }
     }
 
     const configResult = await getCennikConfig();
