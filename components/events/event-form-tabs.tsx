@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { MenuTab } from "@/components/events/menu-modul";
+import { MenuTab, type MenuEv } from "@/components/events/menu-modul";
 import { DEPOSIT_PAYMENT_METHODS } from "@/components/centrum-sprzedazy";
 
 const EVENT_TYPES = [
@@ -406,7 +406,7 @@ export function EventFormTabs({
   update: <K extends keyof EventFormTabState>(k: K, v: EventFormTabState[K]) => void;
   menuData?: Record<string, unknown> | null;
   onMenuSave?: (d: Record<string, unknown>) => void;
-  evForMenu?: { type: string; client?: string | null; date: string; guests?: number | null };
+  evForMenu?: MenuEv;
   eventTypeFieldsConfig?: Record<string, Record<string, boolean>>;
 }) {
   const cfg = eventTypeFieldsConfig?.[form.eventType] ?? EVENT_TYPE_FIELDS_CONFIG[form.eventType] ?? EVENT_TYPE_FIELDS_CONFIG["INNE"];

@@ -196,6 +196,7 @@ function mapGCalToEventRecord(e: GCalExternalEvent): EventRecord {
     deposit: null,
     paid: false,
     depositDueDate: null,
+    depositPaymentMethod: null,
     status: e.source === "rezygnacje" ? "CANCELLED" : "DRAFT",
     notes: e.description ?? "",
     pop: false,
@@ -892,7 +893,7 @@ function CreateEventModal({
     children47: form.children47 === "" ? 0 : Number(form.children47) || 0,
     showChildren03: eventTypeFieldsConfig?.[form.eventType]?.children03 !== false,
     showChildren47: eventTypeFieldsConfig?.[form.eventType]?.children47 !== false,
-    onGuestsChange: (field, value) => updateForm(field, value),
+    onGuestsChange: (field: "adultsCount" | "children03" | "children47", value: number) => updateForm(field, value),
   };
 
   return (
@@ -1170,7 +1171,7 @@ function EventDetailModal({
                   children47: editForm.children47 === "" ? 0 : Number(editForm.children47) || 0,
                   showChildren03: eventTypeFieldsConfig?.[editForm.eventType]?.children03 !== false,
                   showChildren47: eventTypeFieldsConfig?.[editForm.eventType]?.children47 !== false,
-                  onGuestsChange: (field, value) => updateEditForm(field, value),
+                  onGuestsChange: (field: "adultsCount" | "children03" | "children47", value: number) => updateEditForm(field, value),
                 }}
                 eventTypeFieldsConfig={eventTypeFieldsConfig}
               />
