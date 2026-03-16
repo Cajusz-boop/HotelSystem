@@ -73,6 +73,8 @@ export async function POST(req: Request): Promise<NextResponse> {
     if (!dateFrom) {
       return NextResponse.json({ error: "Brak daty w wydarzeniu" }, { status: 400 });
     }
+    const fromDate: Date = dateFrom;
+    const toDate: Date = dateTo ?? fromDate;
 
     const summary = (ev.summary ?? "").trim() || "Zaimportowane z GCal";
     const name = summary.length > 200 ? `${summary.slice(0, 197)}...` : summary;
@@ -82,9 +84,9 @@ export async function POST(req: Request): Promise<NextResponse> {
         name,
         clientName: summary.length <= 200 ? summary : null,
         roomName: "Do ustalenia",
-        eventDate: dateFrom,
-        dateFrom,
-        dateTo,
+        eventDate: fromDate,
+        dateFrom: fromDate,
+        dateTo: toDate,
         status: "DRAFT",
         googleCalendarEventId: eventId,
         googleCalendarCalId: calId,
