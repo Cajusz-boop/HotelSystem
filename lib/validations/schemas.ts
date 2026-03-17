@@ -141,7 +141,7 @@ export type TripPurpose = z.infer<typeof tripPurpose>;
 
 // Plan wyżywienia (Meal Plan)
 export const mealPlan = z.enum([
-  "RO",           // Room Only – tylko nocleg
+  "RO",           // Room Only – tylko usługa hotelowa
   "BB",           // Bed & Breakfast – śniadanie
   "HB",           // Half Board – śniadanie + obiadokolacja
   "FB",           // Full Board – 3 posiłki
@@ -383,7 +383,7 @@ const reservationBaseSchema = z.object({
   notesVisibleOnChart: z.boolean().optional(), // pierwsza linia uwag na pasku rezerwacji w TapeChart
   reminderAt: z.string().datetime().optional().nullable(), // przypomnienie do rezerwacji (ISO datetime)
   advanceDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(), // termin wpłaty zaliczki (YYYY-MM-DD)
-  invoiceSingleLine: z.boolean().optional(), // faktura: jedna linia "Usługa hotelowa" z całą sumą (nocleg+gastronomia+inne)
+  invoiceSingleLine: z.boolean().optional(), // faktura: jedna linia "Usługa hotelowa" z całą sumą (usługa hotelowa+gastronomia+inne)
   invoiceScope: z.enum(["ALL", "HOTEL_ONLY", "GASTRONOMY_ONLY"]).optional(), // zakres faktury
   paidAmountOverride: z.number().min(0).optional().nullable(), // nadpisana kwota wpłat (widoczna na fakturze)
   externalReservationNumber: z.string().max(100).optional().nullable(), // nr rezerwacji w OTA/Booking

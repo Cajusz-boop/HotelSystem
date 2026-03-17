@@ -111,7 +111,7 @@ function ConsolidatedInvoiceDocDialog({
         <p className="text-sm text-muted-foreground">Wybierz jaki dokument wystawić:</p>
         <div className="space-y-3 mt-2">
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Kwota noclegu na paragonie/fakturze [PLN]</label>
+            <label className="text-xs text-muted-foreground mb-1 block">Kwota usługi hotelowej na paragonie/fakturze [PLN]</label>
             <Input
               type="number"
               min={0}
@@ -122,7 +122,7 @@ function ConsolidatedInvoiceDocDialog({
               onChange={(e) => setDocAmountOverride(e.target.value)}
             />
             {docRoomTotal != null && (
-              <p className="text-[10px] text-muted-foreground mt-0.5">Aktualna suma noclegu: {docRoomTotal.toFixed(2)} PLN</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Aktualna suma usługi hotelowej: {docRoomTotal.toFixed(2)} PLN</p>
             )}
           </div>
           <div className="rounded border bg-muted/30 p-2 space-y-2">

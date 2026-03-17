@@ -159,7 +159,7 @@ export async function printFiscalReceipt(
 }
 
 /**
- * Buduje request paragonu z jednej pozycji (np. "Nocleg" / "Zaliczka").
+ * Buduje request paragonu z jednej pozycji (np. "Usługa hotelowa" / "Zaliczka").
  * Używa konfigurowalnego szablonu paragonu z bazy danych.
  */
 export async function buildReceiptRequest(params: {

@@ -197,7 +197,7 @@ export async function generateInvoiceHtml(
     dueDateStr = dueDate.toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
   }
 
-  const roomLabel = (template.roomProductName?.trim() || "Nocleg") as string;
+  const roomLabel = (template.roomProductName?.trim() || "Usługa hotelowa") as string;
   const defaultUnit = template.defaultUnit || "szt.";
   const TYPE_LABELS: Record<string, string> = {
     ROOM: roomLabel,
@@ -230,7 +230,8 @@ export async function generateInvoiceHtml(
   };
   const lineItems: InvoiceLine[] = [];
 
-  if (!invoice.reservationId && invoice.lineItems && invoice.lineItems.length > 0) {
+  // Zapisane w bazie pozycje używamy zawsze gdy są (także dla faktury z rezerwacji), żeby PDF = podgląd po zapisie.
+  if (invoice.lineItems && invoice.lineItems.length > 0) {
     for (const li of invoice.lineItems) {
       lineItems.push({
         name: li.description,

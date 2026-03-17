@@ -70,7 +70,7 @@ export async function GET() {
     const paymentMethod = paymentMethodNames[rawPaymentMethod.toUpperCase()] || rawPaymentMethod;
 
     // Przykładowe pozycje z PKWIU, j.m., rabat
-    const _roomLabel = (template.roomProductName?.trim() || "Nocleg") as string;
+    const _roomLabel = (template.roomProductName?.trim() || "Usługa hotelowa") as string;
     const defaultUnit = template.defaultUnit || "szt.";
     
     type LineItem = {

@@ -403,12 +403,12 @@ export default function SzablonyPage() {
             Określ, jak mają być nazywane produkty/usługi na fakturze. Puste pole = domyślna nazwa.
           </p>
           <div>
-            <Label htmlFor="roomProductName">Nazwa usługi noclegowej</Label>
+            <Label htmlFor="roomProductName">Nazwa usługi hotelowej</Label>
             <Input
               id="roomProductName"
               value={getValue("roomProductName") as string}
               onChange={(e) => handleFieldChange("roomProductName", e.target.value || null)}
-              placeholder="Nocleg"
+              placeholder="Usługa hotelowa"
               className="mt-1"
             />
             <p className="text-xs text-muted-foreground mt-1">

@@ -9,6 +9,7 @@ import {
   supportsFiscalReportsAction,
   printTestReceiptAction,
 } from "@/app/actions/finance";
+import { getAicoConfigAction, runAicoDiagnosticAction } from "@/app/actions/aico";
 import { FISCAL_JOB_ENQUEUED_EVENT } from "@/components/fiscal-relay";
 import type { FiscalConfig } from "@/lib/fiscal/types";
 import {
@@ -27,6 +28,9 @@ import {
   Settings,
   Monitor,
   Download,
+  Server,
+  HardDrive,
+  List,
 } from "lucide-react";
 
 type ConnectionStatus = "idle" | "testing" | "ok" | "error";
@@ -52,6 +56,11 @@ export default function KasaFiskalnaPage() {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("idle");
   const [testResult, setTestResult] = useState<BridgeTestResult | null>(null);
 
+  const [aicoConfigured, setAicoConfigured] = useState<boolean>(false);
+  const [aicoLoading, setAicoLoading] = useState(false);
+  const [aicoResult, setAicoResult] = useState<{ success: boolean; data?: unknown; output?: string; error?: string } | null>(null);
+  const [aicoCapability, setAicoCapability] = useState<string | null>(null);
+
   const loadConfig = useCallback(async () => {
     setLoading(true);
     try {
@@ -71,6 +80,10 @@ export default function KasaFiskalnaPage() {
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
+
+  useEffect(() => {
+    getAicoConfigAction().then((c) => setAicoConfigured(c.configured)).catch(() => setAicoConfigured(false));
+  }, []);
 
   const handleTestConnection = async () => {
     setConnectionStatus("testing");
@@ -279,7 +292,8 @@ export default function KasaFiskalnaPage() {
           </h2>
 
           <p className="text-sm text-muted-foreground mb-4">
-            Sprawdź czy bridge POSNET jest uruchomiony i odpowiada na żądania.
+            Test sprawdza połączenie z bridge&apos;em na <strong>tym komputerze</strong> (localhost:9977).
+            Na produkcji uruchom bridge na stacji recepcji (PC02) i otwórz tę stronę z recepcji.
           </p>
 
           <Button
@@ -367,9 +381,130 @@ export default function KasaFiskalnaPage() {
                 <div>
                   <p className="font-medium text-red-800 dark:text-red-400">Brak połączenia</p>
                   <p className="mt-1 text-red-700 dark:text-red-500">{testResult.error}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Uruchom bridge na komputerze z kasą (np. PC02): URUCHOM-BRIDGE.bat z posnet-bridge-installer.
+                  </p>
                 </div>
               )}
             </div>
+          )}
+        </section>
+
+        {/* Diagnostyka recepcji (AICO) */}
+        <section className="rounded-lg border bg-card p-6 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Server className="w-5 h-5 text-slate-600" />
+            Diagnostyka recepcji (AICO)
+          </h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Zdalne sprawdzenie drukarek i procesów na stacji recepcji (PC02). Wymaga skonfigurowanego AICO (AICO_API_URL, AICO_USERNAME, AICO_PASSWORD w .env).
+          </p>
+          {!aicoConfigured ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4 text-sm text-amber-800 dark:text-amber-200">
+              AICO nie jest skonfigurowane. Ustaw AICO_API_URL, AICO_USERNAME i AICO_PASSWORD w .env i zrestartuj serwer.
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2 mb-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={aicoLoading}
+                  onClick={async () => {
+                    setAicoResult(null);
+                    setAicoCapability("printer.list");
+                    setAicoLoading(true);
+                    try {
+                      const r = await runAicoDiagnosticAction("printer.list");
+                      setAicoResult(r);
+                      if (r.success) toast.success("Drukarki pobrane");
+                      else toast.error(r.error ?? "Błąd AICO");
+                    } catch {
+                      toast.error("Błąd wywołania AICO");
+                      setAicoResult({ success: false, error: "Wyjątek" });
+                    } finally {
+                      setAicoLoading(false);
+                    }
+                  }}
+                >
+                  <Printer className="w-4 h-4 mr-1" />
+                  Drukarki (PC02)
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={aicoLoading}
+                  onClick={async () => {
+                    setAicoResult(null);
+                    setAicoCapability("process.list");
+                    setAicoLoading(true);
+                    try {
+                      const r = await runAicoDiagnosticAction("process.list");
+                      setAicoResult(r);
+                      if (r.success) toast.success("Procesy pobrane");
+                      else toast.error(r.error ?? "Błąd AICO");
+                    } catch {
+                      toast.error("Błąd wywołania AICO");
+                      setAicoResult({ success: false, error: "Wyjątek" });
+                    } finally {
+                      setAicoLoading(false);
+                    }
+                  }}
+                >
+                  <List className="w-4 h-4 mr-1" />
+                  Procesy (PC02)
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={aicoLoading}
+                  onClick={async () => {
+                    setAicoResult(null);
+                    setAicoCapability("disk.usage");
+                    setAicoLoading(true);
+                    try {
+                      const r = await runAicoDiagnosticAction("disk.usage");
+                      setAicoResult(r);
+                      if (r.success) toast.success("Dyski pobrane");
+                      else toast.error(r.error ?? "Błąd AICO");
+                    } catch {
+                      toast.error("Błąd wywołania AICO");
+                      setAicoResult({ success: false, error: "Wyjątek" });
+                    } finally {
+                      setAicoLoading(false);
+                    }
+                  }}
+                >
+                  <HardDrive className="w-4 h-4 mr-1" />
+                  Dyski (PC02)
+                </Button>
+              </div>
+              {aicoLoading && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Pobieranie danych z PC02...
+                </div>
+              )}
+              {aicoResult && !aicoLoading && (
+                <div
+                  className={`rounded-md border p-4 text-sm ${
+                    aicoResult.success
+                      ? "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30"
+                      : "border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30"
+                  }`}
+                >
+                  <p className="font-medium mb-2">
+                    {aicoCapability ?? "Wynik"} {aicoResult.success ? "" : `— ${aicoResult.error ?? "błąd"}`}
+                  </p>
+                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs bg-black/5 dark:bg-black/20 p-3 rounded">
+                    {aicoResult.output ??
+                      (typeof aicoResult.data === "string"
+                        ? aicoResult.data
+                        : JSON.stringify(aicoResult.data, null, 2))}
+                  </pre>
+                </div>
+              )}
+            </>
           )}
         </section>
 

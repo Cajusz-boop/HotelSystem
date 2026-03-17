@@ -993,7 +993,7 @@ export function UnifiedReservationDialog({
             toast.success(result.data?.receiptNumber
               ? `Paragon wydrukowany: ${result.data.receiptNumber}`
               : "Paragon wysłany do kasy fiskalnej (POSNET)");
-            const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(docChoiceResId)}${amtRec > 0 ? `&amount=${amtRec}` : ""}`;
+            const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(docChoiceResId)}${amtRec > 0 ? `&amount=${amtRec}` : ""}${result.data?.receiptNumber ? `&receiptNumber=${encodeURIComponent(result.data.receiptNumber)}` : ""}&paymentMethod=${encodeURIComponent(docPaymentMethod || "CASH")}`;
             const copyWindow = window.open(copyUrl, "_blank");
             if (copyWindow) {
               copyWindow.addEventListener("load", () => {
@@ -1013,7 +1013,7 @@ export function UnifiedReservationDialog({
             toast.success(result.data?.receiptNumber
               ? `Paragon wydrukowany: ${result.data.receiptNumber}`
               : "Paragon wysłany do kasy fiskalnej (POSNET)");
-            const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(docChoiceResIds[0])}${amtRec > 0 ? `&amount=${amtRec}` : ""}`;
+            const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(docChoiceResIds[0])}${amtRec > 0 ? `&amount=${amtRec}` : ""}${result.data?.receiptNumber ? `&receiptNumber=${encodeURIComponent(result.data.receiptNumber)}` : ""}&paymentMethod=${encodeURIComponent(docPaymentMethod || "CASH")}`;
             const copyWindow = window.open(copyUrl, "_blank");
             if (copyWindow) {
               copyWindow.addEventListener("load", () => {
@@ -1692,7 +1692,7 @@ export function UnifiedReservationDialog({
                         }
                         window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
                         msg += `, paragon ${receiptAmt.toFixed(2)} PLN`;
-                        const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(reservation.id)}&amount=${receiptAmt}${recResult.data?.receiptNumber ? `&receiptNumber=${encodeURIComponent(recResult.data.receiptNumber)}` : ""}`;
+                        const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(reservation.id)}&amount=${receiptAmt}${recResult.data?.receiptNumber ? `&receiptNumber=${encodeURIComponent(recResult.data.receiptNumber)}` : ""}&paymentMethod=${encodeURIComponent(splitReceiptPaymentMethod || "CASH")}`;
                         const copyWin = window.open(copyUrl, "_blank");
                         if (copyWin) copyWin.addEventListener("load", () => setTimeout(() => copyWin.print(), 500));
                       } else {

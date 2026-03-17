@@ -78,7 +78,7 @@ function makeTemplate() {
     defaultUnit: "szt.",
     placeOfIssue: "Warszawa",
     issuedByName: "Admin",
-    roomProductName: "Nocleg",
+    roomProductName: "Usługa hotelowa",
     showPkwiu: false,
     showUnit: true,
     showDiscount: false,

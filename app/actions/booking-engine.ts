@@ -8,6 +8,7 @@ import { getCennikForDate, getEffectivePriceForRoomOnDate } from "@/app/actions/
 import { createReservation } from "@/app/actions/reservations";
 import { sendReservationConfirmation, sendReservationConfirmationWithTemplate, sendBookingRequestNotificationToHotel } from "@/app/actions/mailing";
 import { getReceptionEmailForBooking } from "@/app/actions/hotel-config";
+import { normalizeGuestCountryForStorage } from "@/lib/guest-country";
 
 export type ActionResult<T = void> =
   | { success: true; data: T }
@@ -418,13 +419,14 @@ export async function submitBookingFromEngine(params: {
 
   const data = res.data as { id: string; confirmationNumber?: string; guestId?: string };
   const guestId = data.guestId;
+  const normalizedGuestCountry = normalizeGuestCountryForStorage(params.guestCountry);
 
   if (guestId) {
     try {
       await prisma.guest.update({
         where: { id: guestId },
         data: {
-          ...(params.guestCountry?.trim() && { country: params.guestCountry.trim() }),
+          ...(normalizedGuestCountry && { country: normalizedGuestCountry }),
           gdprDataProcessingConsent: true,
           gdprDataProcessingDate: new Date(),
           gdprMarketingConsent: params.marketingConsent ?? false,

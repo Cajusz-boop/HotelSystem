@@ -427,7 +427,7 @@ export async function syncEventQuote(eventOrderId: string): Promise<ActionResult
         const unitPriceNet = Number(tx.unitPrice ?? tx.netAmount) || Number(tx.amount) || 0;
         items.push(
           recalcGroupQuoteItem({
-            name: tx.description || `Nocleg pok. ${res.room?.number ?? "?"}`,
+            name: tx.description || `Usługa hotelowa pok. ${res.room?.number ?? "?"}`,
             unit: tx.type === "ROOM" ? "noc" : "szt",
             quantity: Number(tx.quantity) || 1,
             unitPriceNet: unitPriceNet > 0 ? unitPriceNet : Number(tx.amount),

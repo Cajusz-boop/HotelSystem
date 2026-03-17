@@ -40,7 +40,7 @@ function InvoiceSingleLineCheckbox({
         onCheckedChange={(v) => onCheckedChange(v === true)}
       />
       <Label htmlFor="invoice-single-line" className="text-sm font-normal cursor-pointer">
-        Faktura: jedna linia „Usługa hotelowa” z całą sumą rachunku (nocleg + gastronomia + inne)
+        Faktura: jedna linia „Usługa hotelowa” z całą sumą rachunku (usługa hotelowa + gastronomia + inne)
       </Label>
     </div>
   );

@@ -481,7 +481,7 @@ export default function FinancePage() {
             Faktura na produkty
           </h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Wystaw fakturę VAT na stypy, vouchery, wynajem sal, catering lub inne usługi – bez rezerwacji noclegowej.
+            Wystaw fakturę VAT na stypy, vouchery, wynajem sal, catering lub inne usługi – bez rezerwacji pobytu.
           </p>
           <Button variant="outline" onClick={() => setSalesInvoiceOpen(true)}>
             Wystaw fakturę na produkty
@@ -808,7 +808,7 @@ export default function FinancePage() {
               className="h-8 rounded-md border border-input bg-background px-2 text-xs"
             >
               <option value="all">Wszystkie typy</option>
-              <option value="ROOM">Nocleg</option>
+              <option value="ROOM">Usługa hotelowa</option>
               <option value="RESTAURANT">Restauracja</option>
               <option value="DEPOSIT">Zaliczka</option>
               <option value="LOCAL_TAX">Opłata miejscowa</option>
@@ -855,7 +855,7 @@ export default function FinancePage() {
                       <td className="py-1.5">{t.id}</td>
                       <td className="py-1.5">
                         {t.type === "ROOM"
-                          ? "Nocleg"
+                          ? "Usługa hotelowa"
                           : t.type === "DEPOSIT"
                             ? "Zaliczka"
                             : t.type === "LOCAL_TAX"
@@ -1874,7 +1874,7 @@ export default function FinancePage() {
           Raport prowizji (biura podróży, OTA)
         </h2>
         <p className="mb-4 text-sm text-muted-foreground">
-          Prowizje dla agentów (biur podróży, OTA) wg daty wymeldowania. Przychód = suma transakcji nocleg + opłata miejscowa.
+          Prowizje dla agentów (biur podróży, OTA) wg daty wymeldowania. Przychód = suma transakcji (usługa hotelowa + opłata miejscowa).
         </p>
         <div className="mb-4 flex flex-wrap items-end gap-3">
           <div>

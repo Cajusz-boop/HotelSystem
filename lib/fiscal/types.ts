@@ -4,7 +4,7 @@
  */
 
 export interface FiscalReceiptItem {
-  /** Nazwa pozycji (np. "Nocleg pokój 101") */
+  /** Nazwa pozycji (np. "Usługa hotelowa pokój 101") */
   name: string;
   /** Ilość (np. 1) */
   quantity: number;
@@ -21,7 +21,7 @@ export interface FiscalReceiptRequest {
   reservationId: string;
   /** Wszystkie rezerwacje objęte paragonem (paragon zbiorczy) – do zapisu receiptNumber w complete */
   reservationIds?: string[];
-  /** Pozycje paragonu (zwykle jedna: np. "Nocleg" lub "Zaliczka") */
+  /** Pozycje paragonu (zwykle jedna: np. "Usługa hotelowa" lub "Zaliczka") */
   items: FiscalReceiptItem[];
   /** Suma do zapłaty (powinna być zgodna z sumą pozycji) */
   totalAmount: number;
@@ -59,7 +59,7 @@ export interface FiscalInvoiceRequest {
   reservationId: string;
   /** Firma (nabywca) – z meldunku */
   company: FiscalInvoiceCompany;
-  /** Pozycje faktury (np. nocleg, zaliczka) */
+  /** Pozycje faktury (np. usługa hotelowa, zaliczka) */
   items: FiscalReceiptItem[];
   /** Suma do zapłaty */
   totalAmount: number;

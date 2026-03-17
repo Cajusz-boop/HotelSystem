@@ -2639,8 +2639,8 @@ model InvoiceTemplate {
   paymentTermsText String?  @db.Text  // warunki płatności
   thanksText       String?  // podziękowanie na końcu (np. "Dziękujemy za skorzystanie z naszych usług")
 
-  // Nazwa produktu/usługi noclegowej na fakturze (np. "Nocleg", "Usługa noclegowa")
-  roomProductName  String?  // nadpisuje domyślne "Nocleg" w pozycjach faktury
+  // Nazwa produktu/usługi na fakturze (np. "Usługa hotelowa")
+  roomProductName  String?  // nadpisuje domyślne "Usługa hotelowa" w pozycjach faktury
   
   // Domyślne ustawienia płatności
   defaultPaymentMethod String?  @default("przelew")  // domyślna forma płatności
@@ -2931,7 +2931,7 @@ model FiscalReceiptTemplate {
   
   // Nazwy pozycji dla różnych typów transakcji
   // Obsługiwane placeholdery: {roomNumber}, {guestName}, {checkIn}, {checkOut}, {nights}
-  itemNameRoom     String   @default("Nocleg")  // typ ROOM
+  itemNameRoom     String   @default("Usługa hotelowa")  // typ ROOM
   itemNameDeposit  String   @default("Zaliczka")  // typ DEPOSIT
   itemNameMinibar  String   @default("Minibar")  // typ MINIBAR
   itemNameService  String   @default("Usługa")  // typ SERVICE / inne
@@ -2947,7 +2947,7 @@ model FiscalReceiptTemplate {
   // Czy drukować datę pobytu w opisie
   includeStayDates Boolean @default(false)
   
-  // Format numeru pokoju w nazwie pozycji (np. "Nocleg pok. {roomNumber}")
+  // Format numeru pokoju w nazwie pozycji (np. "Usługa hotelowa pok. {roomNumber}")
   roomNumberFormat String   @default("pok. {roomNumber}")
   
   createdAt        DateTime @default(now())

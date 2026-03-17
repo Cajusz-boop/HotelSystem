@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 /**
  * Testy okna „Wystawić dokument?” – wszystkie możliwości:
- * - Kwota noclegu na paragonie/fakturze (override)
+ * - Kwota usługi hotelowej na paragonie/fakturze (override)
  * - Podział na fakturę i paragon (Kwota na fakturę, Kwota na paragon)
  * - Przycisk „Wystaw oba” (gdy suma = kwota do zapłaty)
  * - Faktura VAT (PDF)
@@ -49,7 +49,7 @@ test.describe("Wystawić dokument – wszystkie możliwości", () => {
 
     await expect(page.getByText("Wystawić dokument?")).toBeVisible({ timeout: 3000 });
     await expect(
-      page.getByLabel(/Kwota noclegu na paragonie\/fakturze/i)
+      page.getByLabel(/Kwota usługi hotelowej na paragonie\/fakturze/i)
     ).toBeVisible({ timeout: 2000 });
     await expect(page.getByText(/Kwota na fakturę|Podział na fakturę/i)).toBeVisible({
       timeout: 2000,

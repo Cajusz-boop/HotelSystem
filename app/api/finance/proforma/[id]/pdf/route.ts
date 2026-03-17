@@ -153,7 +153,7 @@ async function generateProformaHtml(id: string, variant: string | null): Promise
   const buyerPostalCode = company?.postalCode ?? null;
   const buyerCity = company?.city ?? null;
 
-  const roomLabel = (template.roomProductName?.trim() || "Nocleg") as string;
+  const roomLabel = (template.roomProductName?.trim() || "Usługa hotelowa") as string;
   const defaultUnit = template.defaultUnit || "szt.";
 
   // Forma płatności

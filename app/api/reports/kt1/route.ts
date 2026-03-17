@@ -7,7 +7,7 @@ import { can } from "@/lib/permissions";
  * GET /api/reports/kt1?month=1&year=2026
  * Zwraca dane raportu KT-1 (GUS) w formacie JSON.
  */
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await getSession();
   if (!session) {
     return new NextResponse("Unauthorized", { status: 401 });
@@ -35,13 +35,18 @@ export async function GET(request: NextRequest) {
     return new NextResponse("Parametr year musi być prawidłowym rokiem", { status: 400 });
   }
 
-  const data = await getKt1Report(month, year);
-  if (data == null) {
-    return new NextResponse("Brak konfiguracji GUS (GusConfig)", { status: 404 });
-  }
+  try {
+    const data = await getKt1Report(month, year);
+    if (data == null) {
+      return new NextResponse("Brak konfiguracji GUS (GusConfig)", { status: 404 });
+    }
 
-  return NextResponse.json(data, {
-    status: 200,
-    headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
-  });
+    return NextResponse.json(data, {
+      status: 200,
+      headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
+    });
+  } catch (error) {
+    console.error("[kt1-json]", error);
+    return new NextResponse("Błąd pobierania raportu KT-1", { status: 500 });
+  }
 }

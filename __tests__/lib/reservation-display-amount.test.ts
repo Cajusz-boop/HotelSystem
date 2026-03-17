@@ -1,6 +1,6 @@
 /**
  * Testy jednostkowe dla lib/reservation-display-amount.ts
- * Kwota rezerwacji do wyświetlenia (nocleg + posiłki, fallback gdy brak ROOM).
+ * Kwota rezerwacji do wyświetlenia (usługa hotelowa + posiłki, fallback gdy brak ROOM).
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -25,14 +25,14 @@ describe("reservationDisplayAmount", () => {
     expect(reservationDisplayAmount(res)).toBe(600);
   });
 
-  it("zwraca nocleg + posiłki gdy brak ROOM, ale jest rateCodePrice", () => {
+  it("zwraca usługę hotelową + posiłki gdy brak ROOM, ale jest rateCodePrice", () => {
     const res = {
       transactions: [{ amount: 200, type: "RESTAURANT" }],
       rateCodePrice: 300,
       checkIn,
       checkOut,
     };
-    // 200 (posiłki) + 300*2 (nocleg fallback: 2 noce × 300)
+    // 200 (posiłki) + 300*2 (usługa hotelowa fallback: 2 noce × 300)
     expect(reservationDisplayAmount(res)).toBe(800);
   });
 

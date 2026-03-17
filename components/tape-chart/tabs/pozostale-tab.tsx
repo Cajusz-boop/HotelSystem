@@ -27,7 +27,7 @@ const CHANNEL_OPTIONS = [
 ];
 
 const MEAL_PLAN_OPTIONS = [
-  { value: "RO", label: "RO — Tylko nocleg" },
+  { value: "RO", label: "RO — Tylko usługa hotelowa" },
   { value: "BB", label: "BB — Śniadanie" },
   { value: "HB", label: "HB — Półpensja" },
   { value: "FB", label: "FB — Pełne wyżywienie" },

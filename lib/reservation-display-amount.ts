@@ -19,7 +19,7 @@ export function sumChargeAmountFromTransactions(
 }
 
 /**
- * Sprawdza, czy jest naliczenie noclegu (ROOM) w transakcjach.
+ * Sprawdza, czy jest naliczenie usługi hotelowej (ROOM) w transakcjach.
  */
 export function hasRoomCharge(transactions: Array<{ amount: unknown; type: string }> | undefined): boolean {
   if (!transactions?.length) return false;
@@ -27,8 +27,8 @@ export function hasRoomCharge(transactions: Array<{ amount: unknown; type: strin
 }
 
 /**
- * Kwota rezerwacji do wyświetlenia: nocleg + posiłki + inne.
- * Gdy brak transakcji ROOM, dolicza nocleg z rateCodePrice × noce (fallback).
+* Kwota rezerwacji do wyświetlenia: usługa hotelowa + posiłki + inne.
+* Gdy brak transakcji ROOM, dolicza usługę hotelową z rateCodePrice × noce (fallback).
  */
 export function reservationDisplayAmount(res: {
   transactions: Array<{ amount: unknown; type: string }> | undefined;

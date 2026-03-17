@@ -3757,10 +3757,10 @@ export async function postRoomChargeOnCheckout(
       }
     }
     if (totalAmount <= 0) {
-      return { success: false, error: "Nie udało się naliczyć noclegu – pokój nie ma przypisanej ceny. Ustaw cenę pokoju w konfiguracji." };
+      return { success: false, error: "Nie udało się naliczyć usługi hotelowej – pokój nie ma przypisanej ceny. Ustaw cenę pokoju w konfiguracji." };
     }
 
-    const description = `Nocleg ${checkInStr} - ${checkOutStr}`;
+    const description = `Usługa hotelowa ${checkInStr} - ${checkOutStr}`;
     const tx = await prisma.transaction.create({
       data: {
         reservationId,
@@ -3799,7 +3799,7 @@ export async function postRoomChargeOnCheckout(
   } catch (e) {
     return {
       success: false,
-      error: e instanceof Error ? e.message : "Błąd obciążenia za nocleg",
+      error: e instanceof Error ? e.message : "Błąd obciążenia za usługę hotelową",
     };
   }
 }
@@ -3877,7 +3877,7 @@ export async function overrideRoomPrice(
         },
       });
     } else {
-      const description = `Nocleg ${checkInStr} - ${checkOutStr}`;
+      const description = `Usługa hotelowa ${checkInStr} - ${checkOutStr}`;
       await prisma.transaction.create({
         data: {
           reservationId,
@@ -3905,7 +3905,7 @@ export async function overrideRoomPrice(
   } catch (e) {
     return {
       success: false,
-      error: e instanceof Error ? e.message : "Błąd nadpisania ceny noclegu",
+      error: e instanceof Error ? e.message : "Błąd nadpisania ceny usługi hotelowej",
     };
   }
 }
@@ -4425,7 +4425,7 @@ export async function printInvoiceForReservation(
     );
     const items = reservation.transactions.length
       ? reservation.transactions.map((t) => ({
-          name: t.type === "ROOM" ? "Nocleg" : t.type === "DEPOSIT" ? "Zaliczka" : t.type === "LOCAL_TAX" ? "Opłata miejscowa" : t.type === "MINIBAR" ? "Minibar" : t.type,
+          name: t.type === "ROOM" ? "Usługa hotelowa" : t.type === "DEPOSIT" ? "Zaliczka" : t.type === "LOCAL_TAX" ? "Opłata miejscowa" : t.type === "MINIBAR" ? "Minibar" : t.type,
           quantity: 1,
           unitPrice: Number(t.amount),
         }))
@@ -6185,7 +6185,7 @@ const PAYMENT_METHOD_NAMES: Record<string, string> = {
 
 const GASTRONOMY_TYPES = ["GASTRONOMY", "RESTAURANT", "POSTING"] as const;
 const TYPE_LABELS_BASE: Record<string, string> = {
-  ROOM: "Nocleg",
+  ROOM: "Usługa hotelowa",
   LOCAL_TAX: "Opłata miejscowa",
   MINIBAR: "Minibar",
   GASTRONOMY: "Gastronomia",
@@ -6353,7 +6353,7 @@ export async function getInvoicePreviewData(
     const vat = Number(invoice.amountVat);
     const gross = Number(invoice.amountGross);
     const vatRate = Number(invoice.vatRate);
-    const roomLabel = (template.roomProductName?.trim() || "Nocleg") as string;
+    const roomLabel = (template.roomProductName?.trim() || "Usługa hotelowa") as string;
     const defaultUnit = template.defaultUnit || "szt.";
     const TYPE_LABELS: Record<string, string> = { ...TYPE_LABELS_BASE, ROOM: roomLabel };
 
@@ -7111,7 +7111,7 @@ export async function createReceipt(
     } else {
       // Generuj pozycje z transakcji rezerwacji
       const txTypes: Record<string, string> = {
-        ROOM: "Usługa noclegowa",
+        ROOM: "Usługa hotelowa",
         DEPOSIT: "Zaliczka",
         LOCAL_TAX: "Opłata miejscowa",
         MINIBAR: "Minibar",
@@ -8451,7 +8451,7 @@ export async function buildFiscalItemName(params: {
   // Fallback jeśli nie udało się pobrać szablonu
   if (!templateResult.success || !templateResult.data) {
     const fallbackNames: Record<string, string> = {
-      ROOM: "Nocleg",
+      ROOM: "Usługa hotelowa",
       DEPOSIT: "Zaliczka",
       MINIBAR: "Minibar",
       LOCAL_TAX: "Opłata miejscowa",
@@ -13677,7 +13677,7 @@ export async function addFolioDiscount(
         return { success: false, error: "Wybrana pozycja nie jest obciążeniem (kwota musi być dodatnia)." };
       }
       if (targetCharge.type === "DISCOUNT" || targetCharge.type === "PAYMENT") {
-        return { success: false, error: "Rabat można przypisać tylko do pozycji obciążenia (nocleg, minibar, usługa), nie do rabatu ani płatności." };
+        return { success: false, error: "Rabat można przypisać tylko do pozycji obciążenia (usługa hotelowa, minibar, usługa), nie do rabatu ani płatności." };
       }
       // Suma istniejących rabatów na tę pozycję
       const existingLineDiscounts = await prisma.transaction.findMany({
@@ -13784,7 +13784,7 @@ export async function addFolioDiscount(
     if (subtotalAfterDiscounts <= 0) {
       return {
         success: false,
-        error: "Brak obciążeń do rabatowania w tym folio. Dodaj najpierw pozycje (nocleg, minibar itd.).",
+        error: "Brak obciążeń do rabatowania w tym folio. Dodaj najpierw pozycje (usługa hotelowa, minibar itd.).",
       };
     }
 

@@ -147,7 +147,7 @@ const CHANNEL_OPTIONS: { value: string; label: string }[] = [
 ];
 
 const MEAL_PLAN_OPTIONS: { value: string; label: string }[] = [
-  { value: "RO", label: "RO — Tylko nocleg" },
+  { value: "RO", label: "RO — Tylko usługa hotelowa" },
   { value: "BB", label: "BB — Śniadanie" },
   { value: "HB", label: "HB — Półpensja" },
   { value: "FB", label: "FB — Pełne wyżywienie" },
@@ -237,7 +237,7 @@ export interface SettlementTabFormState {
   billingMode: "room" | "person" | "plan";
   /** Cena za dziecko/dziecko1 (gdy billingMode === "person") */
   pricePerChild: string;
-  /** Rabat za nocleg [%] */
+  /** Rabat za usługę hotelową [%] */
   discountPercent: string;
   /** Dolicz opłatę miejscową */
   addLocalTax: boolean;
@@ -257,7 +257,7 @@ export interface SettlementTabFormState {
   voucherType: string;
   /** Kwota zaliczki do dodania (UI) */
   advanceAmount: string;
-  /** Faktura: jedna linia „Usługa hotelowa” z całą sumą (nocleg + gastronomia + inne) */
+  /** Faktura: jedna linia „Usługa hotelowa” z całą sumą (usługa hotelowa + gastronomia + inne) */
   invoiceSingleLine: boolean;
   /** Zakres faktury: ALL | HOTEL_ONLY | GASTRONOMY_ONLY */
   invoiceScope: string;
@@ -1408,7 +1408,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
 
         {/* Rabat za nocleg [%] */}
         <div className="flex items-center gap-2 text-xs">
-          <Label className="text-muted-foreground">Rabat za nocleg [%]</Label>
+          <Label className="text-muted-foreground">Rabat za usługę hotelową [%]</Label>
           <Input type="number" min={0} max={100} step={1} className="h-6 w-14 text-xs" value={form.discountPercent} onChange={(e) => onFormChange({ discountPercent: e.target.value })} />
           {isEdit && reservation?.id && parseFloat(form.discountPercent || "0") > 0 && (
             <Button type="button" variant="outline" size="sm" className="h-6 text-[10px]" onClick={async () => {
@@ -1450,7 +1450,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
 
         {/* Podsumowanie kosztów (KWHotel) */}
         <div className="rounded border bg-muted/10 p-3 text-xs space-y-1">
-          <div className="flex justify-between"><span>Cena za noclegi</span><span className="tabular-nums">{roomTotal.toFixed(2)}</span></div>
+          <div className="flex justify-between"><span>Cena za usługi hotelowe</span><span className="tabular-nums">{roomTotal.toFixed(2)}</span></div>
           <div className="flex justify-between"><span>Cena za posiłki</span><span className="tabular-nums">{mealsAmount.toFixed(2)}</span></div>
           <div className="flex justify-between"><span>Dodatkowe towary i usługi</span><span className="tabular-nums">{otherChargesAmount.toFixed(2)}</span></div>
           <div className="flex justify-between items-center gap-2">
@@ -1638,10 +1638,10 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
           </div>
         )}
 
-        {/* Nalicz nocleg */}
+        {/* Nalicz usługę hotelową */}
         {isEdit && (pricePerNight != null && pricePerNight > 0) && (
           transactions.some((t) => t.type === "ROOM") ? (
-            <p className="text-[10px] text-green-600 dark:text-green-400">✓ Nocleg naliczony</p>
+            <p className="text-[10px] text-green-600 dark:text-green-400">✓ Usługa hotelowa naliczona</p>
           ) : (
             reservation?.id && nights > 0 && (
               <Button type="button" variant="outline" size="sm" className="w-full h-7 text-xs" disabled={roomChargeLoading}
@@ -1651,13 +1651,13 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
                   const result = await postRoomChargeOnCheckout(reservation.id);
                   setRoomChargeLoading(false);
                   if (result.success && result.data) {
-                    if (result.data.skipped) toast.info("Nocleg już był naliczony.");
-                    else toast.success(`Naliczono nocleg: ${result.data.amount?.toFixed(2)} PLN`);
+                    if (result.data.skipped) toast.info("Usługa hotelowa już była naliczona.");
+                    else toast.success(`Naliczono usługę hotelową: ${result.data.amount?.toFixed(2)} PLN`);
                     getTransactionsForReservation(reservation.id).then((r) => r.success && r.data && setTransactions(r.data));
-                  } else toast.error("error" in result ? result.error : "Błąd naliczania noclegu");
+                  } else toast.error("error" in result ? result.error : "Błąd naliczania usługi hotelowej");
                 }}>
                 <Banknote className="mr-1 h-3 w-3" />
-                {roomChargeLoading ? "Naliczanie..." : "Nalicz nocleg"}
+                {roomChargeLoading ? "Naliczanie..." : "Nalicz usługę hotelową"}
               </Button>
             )
           )
@@ -2446,10 +2446,10 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
                   )}
                 </>
               )}
-              {/* Nadpisana cena noclegu */}
+              {/* Nadpisana cena usługi hotelowej */}
               {isEdit && reservation?.id && nights > 0 && (
                 <div className="mt-2 pt-2 border-t space-y-1">
-                  <Label className="text-xs text-muted-foreground">Nadpisana cena noclegu [PLN]</Label>
+                  <Label className="text-xs text-muted-foreground">Nadpisana cena usługi hotelowej [PLN]</Label>
                   <div className="flex gap-1 items-center">
                     <Input
                       type="number"
@@ -2573,7 +2573,7 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
 
         {isEdit && (pricePerNight != null && pricePerNight > 0) && (
           transactions.some((t) => t.type === "ROOM") ? (
-            <p className="text-[10px] text-green-600 dark:text-green-400">✓ Nocleg naliczony</p>
+            <p className="text-[10px] text-green-600 dark:text-green-400">✓ Usługa hotelowa naliczona</p>
           ) : (
             reservation?.id && nights > 0 && (
               <Button type="button" variant="outline" size="sm" className="w-full h-7 text-xs" disabled={roomChargeLoading}
@@ -2583,13 +2583,13 @@ export const SettlementTab = forwardRef<SettlementTabRef, SettlementTabProps>(fu
                   const result = await postRoomChargeOnCheckout(reservation.id);
                   setRoomChargeLoading(false);
                   if (result.success && result.data) {
-                    if (result.data.skipped) toast.info("Nocleg już był naliczony.");
-                    else toast.success(`Naliczono nocleg: ${result.data.amount?.toFixed(2)} PLN`);
+                    if (result.data.skipped) toast.info("Usługa hotelowa już była naliczona.");
+                    else toast.success(`Naliczono usługę hotelową: ${result.data.amount?.toFixed(2)} PLN`);
                     getTransactionsForReservation(reservation.id).then((r) => r.success && r.data && setTransactions(r.data));
-                  } else toast.error("error" in result ? result.error : "Błąd naliczania noclegu");
+                  } else toast.error("error" in result ? result.error : "Błąd naliczania usługi hotelowej");
                 }}>
                 <Banknote className="mr-1 h-3 w-3" />
-                {roomChargeLoading ? "Naliczanie..." : "Nalicz nocleg"}
+                {roomChargeLoading ? "Naliczanie..." : "Nalicz usługę hotelową"}
               </Button>
             )
           )

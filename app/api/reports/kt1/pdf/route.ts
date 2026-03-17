@@ -9,7 +9,7 @@ import { can } from "@/lib/permissions";
  * GET /api/reports/kt1/pdf?month=1&year=2026
  * Zwraca raport KT-1 (GUS) w formacie PDF.
  */
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await getSession();
   if (!session) {
     return new NextResponse("Unauthorized", { status: 401 });
@@ -37,25 +37,29 @@ export async function GET(request: NextRequest) {
     return new NextResponse("Parametr year musi być prawidłowym rokiem", { status: 400 });
   }
 
-  const data = await getKt1Report(month, year);
-  if (data == null) {
-    return new NextResponse("Brak konfiguracji GUS (GusConfig)", { status: 404 });
-  }
+  const inline = searchParams.get("inline") === "1";
+  const filename = `kt1-${year}-${String(month).padStart(2, "0")}.pdf`;
 
   try {
+    const data = await getKt1Report(month, year);
+    if (data == null) {
+      return new NextResponse("Brak konfiguracji GUS (GusConfig)", { status: 404 });
+    }
+
     const html = generateKt1Html(data);
     const pdfBuffer = await generatePdfFromHtml(html);
-    const filename = `kt1-${year}-${String(month).padStart(2, "0")}.pdf`;
     return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": inline
+          ? `inline; filename="${filename}"`
+          : `attachment; filename="${filename}"`,
         "Cache-Control": "no-store, no-cache, must-revalidate",
       },
     });
-  } catch (e) {
-    console.error("[kt1-pdf]", e);
-    return new NextResponse("Błąd generowania PDF", { status: 500 });
+  } catch (error) {
+    console.error("[kt1-pdf]", error);
+    return new NextResponse("Błąd generowania raportu KT-1 PDF", { status: 500 });
   }
 }

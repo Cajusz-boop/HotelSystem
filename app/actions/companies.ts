@@ -1551,7 +1551,7 @@ export async function createConsolidatedInvoice(data: {
         amountNet,
         amountVat,
         amountGross,
-        description: `Nocleg ${nights} dób${hasGastro ? " + usługi" : ""}, pokój ${r.room.number}`,
+        description: `Usługa hotelowa ${nights} dób${hasGastro ? " + usługi" : ""}, pokój ${r.room.number}`,
       };
     });
 

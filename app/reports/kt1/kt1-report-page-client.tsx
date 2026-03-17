@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Download, Copy, ArrowLeft } from "lucide-react";
+import { FileText, Download, Copy, ArrowLeft, Printer } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import type { Kt1ReportResponse } from "@/lib/kt1-report";
@@ -23,21 +23,31 @@ const MONTH_NAMES = [
 ];
 
 function canShowReport(permissions: string[] | null, code: string): boolean {
-  if (!permissions || permissions.length === 0) return true;
+  if (!permissions || permissions.length === 0) return false;
   return permissions.includes(code);
+}
+
+function getReadableErrorMessage(text: string, fallback: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return fallback;
+  if (trimmed.startsWith("<!DOCTYPE") || trimmed.startsWith("<html")) {
+    return fallback;
+  }
+  return trimmed;
 }
 
 export function Kt1ReportPageClient({
   permissions,
 }: {
   permissions: string[] | null;
-}) {
+}): JSX.Element {
   const router = useRouter();
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [data, setData] = useState<Kt1ReportResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const showOfficial = canShowReport(permissions, "reports.official");
@@ -45,6 +55,7 @@ export function Kt1ReportPageClient({
   const fetchReport = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setData(null);
     try {
       const res = await fetch(
         `/api/reports/kt1?month=${month}&year=${year}`,
@@ -64,7 +75,7 @@ export function Kt1ReportPageClient({
       }
       if (!res.ok) {
         const text = await res.text();
-        setError(text || "Błąd pobierania danych.");
+        setError(getReadableErrorMessage(text, "Błąd pobierania danych."));
         return;
       }
       const json: Kt1ReportResponse = await res.json();
@@ -81,13 +92,82 @@ export function Kt1ReportPageClient({
     void fetchReport();
   }, [showOfficial, fetchReport]);
 
-  const handleGenerujPdf = () => {
-    window.open(
-      `/api/reports/kt1/pdf?month=${month}&year=${year}`,
-      "_blank",
-      "noopener,noreferrer"
-    );
-    toast.success("Otwieranie PDF…");
+  const fetchPdfBlob = useCallback(async (): Promise<{
+    blob: Blob;
+    filename: string;
+  } | null> => {
+    setPdfLoading(true);
+    try {
+      const res = await fetch(
+        `/api/reports/kt1/pdf?month=${month}&year=${year}`,
+        { credentials: "include" }
+      );
+
+      if (res.status === 401) {
+        router.push("/login");
+        return null;
+      }
+      if (res.status === 403) {
+        toast.error("Nie masz uprawnień do pobrania raportu KT-1.");
+        return null;
+      }
+      if (res.status === 404) {
+        toast.error("Brak konfiguracji GUS (GusConfig).");
+        return null;
+      }
+      if (!res.ok) {
+        const text = await res.text();
+        toast.error(getReadableErrorMessage(text, "Nie udało się wygenerować PDF."));
+        return null;
+      }
+
+      return {
+        blob: await res.blob(),
+        filename: `kt1-${year}-${String(month).padStart(2, "0")}.pdf`,
+      };
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Błąd połączenia podczas generowania PDF.");
+      return null;
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [month, year, router]);
+
+  const handlePobierzPdf = async () => {
+    const result = await fetchPdfBlob();
+    if (!result) return;
+
+    const blobUrl = URL.createObjectURL(result.blob);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = result.filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    toast.success("PDF został przygotowany do pobrania.");
+  };
+
+  const handleDrukujFormularz = async () => {
+    const printWindow = window.open("", "_blank", "noopener,noreferrer");
+    if (!printWindow) {
+      toast.error("Przeglądarka zablokowała nowe okno. Zezwól na popupy i spróbuj ponownie.");
+      return;
+    }
+
+    printWindow.document.write("<title>KT-1</title><p style=\"font-family: Arial, sans-serif; padding: 16px;\">Przygotowywanie formularza do druku...</p>");
+    printWindow.document.close();
+
+    const result = await fetchPdfBlob();
+    if (!result) {
+      printWindow.close();
+      return;
+    }
+
+    const blobUrl = URL.createObjectURL(result.blob);
+    printWindow.location.href = blobUrl;
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    toast.success("Formularz otwarty w nowej karcie. Użyj Ctrl+P, aby wydrukować.");
   };
 
   const handleKopiujDane = async () => {
@@ -210,21 +290,31 @@ export function Kt1ReportPageClient({
                 type="button"
                 variant="outline"
                 onClick={() => void fetchReport()}
-                disabled={loading}
+                disabled={loading || pdfLoading}
               >
                 {loading ? "Ładowanie…" : "Odśwież"}
               </Button>
               <Button
                 type="button"
-                onClick={handleGenerujPdf}
-                disabled={!data || loading}
+                onClick={() => void handlePobierzPdf()}
+                disabled={!data || loading || pdfLoading}
               >
                 <Download className="mr-2 h-4 w-4" />
-                Generuj PDF
+                Pobierz PDF
               </Button>
               <Button
                 type="button"
                 variant="secondary"
+                onClick={() => void handleDrukujFormularz()}
+                disabled={!data || loading || pdfLoading}
+                title="Otworzy wypełniony druk urzędowy KT-1 w nowej karcie — użyj Ctrl+P, aby wydrukować"
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                Drukuj wypełniony formularz
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
                 onClick={() => void handleKopiujDane()}
                 disabled={!data || loading}
               >

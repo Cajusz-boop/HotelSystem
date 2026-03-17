@@ -177,7 +177,7 @@ export async function setupTrainingDemo(): Promise<
           reservationId: res.id,
           amount: roomCharge,
           type: "ROOM",
-          description: "Nocleg — demo szkoleniowe",
+          description: "Usługa hotelowa — demo szkoleniowe",
           folioNumber: 1,
           status: "ACTIVE",
           category: "ACCOMMODATION",

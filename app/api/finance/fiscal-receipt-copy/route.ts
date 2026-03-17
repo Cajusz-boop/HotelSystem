@@ -4,6 +4,17 @@ import { getFiscalReceiptTemplate } from "@/app/actions/finance";
 
 const HOTEL_NAME = process.env.HOTEL_NAME ?? "Hotel";
 
+/** Etykiety sposobu zapłaty – zgodne z paragonem fiskalnym (unified-reservation-dialog DOC_PAYMENT_LABELS). */
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  CASH: "Gotówka",
+  CARD: "Karta",
+  TRANSFER: "Przelew",
+  PREPAID: "Przedpłata",
+  VOUCHER: "Voucher",
+  BLIK: "BLIK",
+  SPLIT: "Mieszana",
+};
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -13,16 +24,22 @@ function escapeHtml(s: string): string {
 }
 
 /**
- * GET /api/finance/fiscal-receipt-copy?reservationId=xxx&amount=100&receiptNumber=PAR-123
+ * GET /api/finance/fiscal-receipt-copy?reservationId=xxx&amount=100&receiptNumber=PAR-123&paymentMethod=CASH
  * Zwraca kopię paragonu fiskalnego w HTML (do druku – recepcja).
  * amount – opcjonalnie, dla splita (kwota na paragonie).
  * receiptNumber – numer paragonu z kasy fiskalnej (np. PAR-123), aby kopia miała taką samą numerację.
+ * paymentMethod – opcjonalnie: CASH, CARD, TRANSFER, PREPAID, VOUCHER, BLIK, SPLIT (jak na paragonie oryginalnym).
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const reservationId = searchParams.get("reservationId")?.trim();
   const amountParam = searchParams.get("amount");
   const receiptNumber = searchParams.get("receiptNumber")?.trim() || null;
+  const paymentMethodCode = searchParams.get("paymentMethod")?.trim().toUpperCase() || null;
+  const paymentMethodLabel =
+    paymentMethodCode && paymentMethodCode in PAYMENT_METHOD_LABELS
+      ? PAYMENT_METHOD_LABELS[paymentMethodCode]
+      : paymentMethodCode || null;
 
   if (!reservationId) {
     return new NextResponse("Brak reservationId", { status: 400 });
@@ -125,7 +142,8 @@ export async function GET(request: NextRequest) {
   ${headerLines.map((l) => `<div class="header">${escapeHtml(l)}</div>`).join("")}
   <h1>Paragon${receiptNumber ? ` · Nr ${escapeHtml(receiptNumber)}` : ""}</h1>
   <p style="font-size: 11px; margin: 0 0 0.5rem;">Data: ${escapeHtml(issuedAt)} · Gość: ${escapeHtml(guestName)}</p>
-  <p style="font-size: 11px; margin: 0 0 0.75rem;">Rezerwacja: ${escapeHtml(reservationId.slice(0, 8))}${receiptNumber ? ` · Nr paragonu: ${escapeHtml(receiptNumber)}` : ""}</p>
+  <p style="font-size: 11px; margin: 0 0 0.25rem;">Rezerwacja: ${escapeHtml(reservationId.slice(0, 8))}${receiptNumber ? ` · Nr paragonu: ${escapeHtml(receiptNumber)}` : ""}</p>
+  ${paymentMethodLabel ? `<p style="font-size: 11px; margin: 0 0 0.75rem;"><strong>Sposób zapłaty:</strong> ${escapeHtml(paymentMethodLabel)}</p>` : ""}
   <table>
     <thead>
       <tr>

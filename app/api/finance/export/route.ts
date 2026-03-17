@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       buyerAddress: i.buyerAddress,
       buyerPostalCode: i.buyerPostalCode,
       buyerCity: i.buyerCity,
-      description: "Usługa noclegowa",
+      description: "Usługa hotelowa",
       paymentMethod: i.paymentMethod,
     }));
 

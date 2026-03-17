@@ -1750,7 +1750,7 @@ function CompaniesSection() {
                         <div><Label htmlFor="contractFixedPrice">Stała cena za noc (zł)</Label><Input id="contractFixedPrice" type="number" min="0" step="0.01" value={contractFixedPrice} onChange={(e) => setContractFixedPrice(e.target.value)} placeholder="np. 180.00" className="mt-1" /><p className="text-xs text-muted-foreground mt-1">Alternatywa dla rabatu procentowego</p></div>
                         <div><Label htmlFor="contractValidFrom">Od daty *</Label><Input id="contractValidFrom" type="date" value={contractValidFrom} onChange={(e) => setContractValidFrom(e.target.value)} className="mt-1" /></div>
                         <div><Label htmlFor="contractValidTo">Do daty *</Label><Input id="contractValidTo" type="date" value={contractValidTo} onChange={(e) => setContractValidTo(e.target.value)} className="mt-1" /></div>
-                        <div><Label htmlFor="contractMinNights">Min. noclegów rocznie</Label><Input id="contractMinNights" type="number" min="0" value={contractMinNights} onChange={(e) => setContractMinNights(e.target.value)} placeholder="np. 100" className="mt-1" /></div>
+                        <div><Label htmlFor="contractMinNights">Min. pobytów rocznie</Label><Input id="contractMinNights" type="number" min="0" value={contractMinNights} onChange={(e) => setContractMinNights(e.target.value)} placeholder="np. 100" className="mt-1" /></div>
                         <div><Label htmlFor="contractPaymentTermDays">Termin płatności (dni)</Label><Input id="contractPaymentTermDays" type="number" min="0" value={contractPaymentTermDays} onChange={(e) => setContractPaymentTermDays(e.target.value)} placeholder="np. 14" className="mt-1" /></div>
                         <div><Label htmlFor="contractContactPerson">Osoba kontaktowa</Label><Input id="contractContactPerson" value={contractContactPerson} onChange={(e) => setContractContactPerson(e.target.value)} placeholder="np. Jan Kowalski" className="mt-1" /></div>
                         <div><Label htmlFor="contractContactEmail">E-mail kontaktowy</Label><Input id="contractContactEmail" type="email" value={contractContactEmail} onChange={(e) => setContractContactEmail(e.target.value)} placeholder="np. jan@firma.pl" className="mt-1" /></div>
@@ -1800,7 +1800,7 @@ function CompaniesSection() {
                               {contract.fixedPricePerNight !== null && <div><p className="text-xs text-muted-foreground">Stała cena/noc</p><p className="font-medium">{contract.fixedPricePerNight.toFixed(2)} zł</p></div>}
                               {contract.rateCode && <div><p className="text-xs text-muted-foreground">Kod cenowy</p><p className="font-medium">{contract.rateCode.code}</p></div>}
                               <div><p className="text-xs text-muted-foreground">Termin płatności</p><p className="font-medium">{contract.paymentTermDays} dni</p></div>
-                              {contract.minNightsPerYear !== null && <div><p className="text-xs text-muted-foreground">Min. noclegów/rok</p><p className="font-medium">{contract.minNightsPerYear}</p></div>}
+                              {contract.minNightsPerYear !== null && <div><p className="text-xs text-muted-foreground">Min. pobytów/rok</p><p className="font-medium">{contract.minNightsPerYear}</p></div>}
                               {contract.contactPerson && <div><p className="text-xs text-muted-foreground">Kontakt</p><p className="font-medium">{contract.contactPerson}</p></div>}
                             </div>
                           </div>

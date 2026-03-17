@@ -18,7 +18,7 @@ export interface InvoiceForExport {
   buyerAddress?: string | null;
   buyerPostalCode?: string | null;
   buyerCity?: string | null;
-  /** Opis pozycji (np. "Usługa noclegowa") – jedna pozycja na fakturze. */
+  /** Opis pozycji (np. "Usługa hotelowa") – jedna pozycja na fakturze. */
   description?: string;
   /** Forma płatności: CASH, CARD, TRANSFER, BLIK, etc. */
   paymentMethod?: string | null;
@@ -71,7 +71,7 @@ function buildOptimaXml(documents: InvoiceForExport[]): string {
 
   for (const doc of documents) {
     const dataWystawienia = formatDateOptima(doc.issuedAt);
-    const nazwaPozycji = doc.description ?? "Usługa noclegowa";
+    const nazwaPozycji = doc.description ?? "Usługa hotelowa";
     lines.push("    <Faktura>");
     lines.push(`      <Numer>${escapeXml(doc.number)}</Numer>`);
     lines.push(`      <DataWystawienia>${dataWystawienia}</DataWystawienia>`);
@@ -147,7 +147,7 @@ function buildSubiektXml(documents: InvoiceForExport[]): string {
 
   for (const doc of documents) {
     const dataWystawienia = formatDateOptima(doc.issuedAt);
-    const nazwaPozycji = doc.description ?? "Usługa noclegowa";
+    const nazwaPozycji = doc.description ?? "Usługa hotelowa";
     lines.push("  <Faktura>");
     lines.push(`    <Numer>${escapeXml(doc.number)}</Numer>`);
     lines.push(`    <DataWystawienia>${dataWystawienia}</DataWystawienia>`);
@@ -217,7 +217,7 @@ function buildWfirmaJson(documents: InvoiceForExport[]): string {
 
   const faktury = documents.map((doc) => {
     const dataWystawienia = formatDateOptima(doc.issuedAt);
-    const nazwaPozycji = doc.description ?? "Usługa noclegowa";
+    const nazwaPozycji = doc.description ?? "Usługa hotelowa";
     const formaPlatnosci = doc.paymentMethod
       ? paymentMethodMap[doc.paymentMethod.toUpperCase()] || "przelew"
       : "przelew";
@@ -279,7 +279,7 @@ export async function exportToWfirma(
 function buildFakturowniaJson(documents: InvoiceForExport[]): string {
   const invoices = documents.map((doc) => {
     const sellDate = formatDateOptima(doc.issuedAt);
-    const nazwaPozycji = doc.description ?? "Usługa noclegowa";
+    const nazwaPozycji = doc.description ?? "Usługa hotelowa";
     return {
       kind: "vat",
       sell_date: sellDate,
@@ -352,7 +352,7 @@ function buildSymfoniaCsv(documents: InvoiceForExport[]): string {
       doc.vatRate.toFixed(2),
       doc.amountVat.toFixed(2),
       doc.amountGross.toFixed(2),
-      escapeCsv(doc.description ?? "Usługa noclegowa"),
+      escapeCsv(doc.description ?? "Usługa hotelowa"),
     ].join(";");
   });
   return [header, ...rows].join("\r\n");

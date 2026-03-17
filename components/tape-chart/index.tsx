@@ -3660,10 +3660,12 @@ export function TapeChart({
         onSaved={(updated) => {
           if (updated.status === "CANCELLED" || updated.status === "NO_SHOW") {
             setReservations((prev) => prev.filter((r) => r.id !== updated.id));
+            setSelectedReservation((prev) => (prev?.id === updated.id ? null : prev));
           } else {
             setReservations((prev) =>
               prev.map((r) => (r.id === updated.id ? updated : r))
             );
+            setSelectedReservation((prev) => (prev?.id === updated.id ? (updated as Reservation) : prev));
           }
         }}
         onPaymentRecorded={(reservationId, paymentStatus) => {

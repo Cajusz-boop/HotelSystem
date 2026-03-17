@@ -62,7 +62,7 @@ export async function exportToOptimaAction(
     buyerAddress: i.buyerAddress,
     buyerPostalCode: i.buyerPostalCode,
     buyerCity: i.buyerCity,
-    description: "Usługa noclegowa",
+    description: "Usługa hotelowa",
     paymentMethod: i.paymentMethod,
   }));
 
@@ -149,7 +149,7 @@ export async function exportToSubiektAction(
     buyerAddress: i.buyerAddress,
     buyerPostalCode: i.buyerPostalCode,
     buyerCity: i.buyerCity,
-    description: "Usługa noclegowa",
+    description: "Usługa hotelowa",
     paymentMethod: i.paymentMethod,
   }));
 
@@ -236,7 +236,7 @@ export async function exportToWfirmaAction(
     buyerAddress: i.buyerAddress,
     buyerPostalCode: i.buyerPostalCode,
     buyerCity: i.buyerCity,
-    description: "Usługa noclegowa",
+    description: "Usługa hotelowa",
     paymentMethod: i.paymentMethod,
   }));
 
@@ -345,7 +345,7 @@ export async function exportToFakturowniaAction(
     buyerAddress: i.buyerAddress,
     buyerPostalCode: i.buyerPostalCode,
     buyerCity: i.buyerCity,
-    description: "Usługa noclegowa",
+    description: "Usługa hotelowa",
     paymentMethod: i.paymentMethod,
   }));
 
@@ -453,7 +453,7 @@ export async function exportToSymfoniaAction(
     buyerAddress: i.buyerAddress,
     buyerPostalCode: i.buyerPostalCode,
     buyerCity: i.buyerCity,
-    description: "Usługa noclegowa",
+    description: "Usługa hotelowa",
     paymentMethod: i.paymentMethod,
   }));
 
@@ -540,7 +540,7 @@ export async function exportToEnovaAction(
     buyerAddress: i.buyerAddress,
     buyerPostalCode: i.buyerPostalCode,
     buyerCity: i.buyerCity,
-    description: "Usługa noclegowa",
+    description: "Usługa hotelowa",
     paymentMethod: i.paymentMethod,
   }));
 

@@ -4,6 +4,7 @@
  */
 
 import { prisma } from "@/lib/db";
+import { getKt1CountryCode, isForeignCountry } from "@/lib/guest-country";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -15,6 +16,7 @@ export const KT1_COUNTRIES: { code: string; label: string }[] = [
   { code: "BY", label: "Białoruś" },
   { code: "LT", label: "Litwa" },
   { code: "CZ", label: "Czechy" },
+  { code: "SK", label: "Słowacja" },
   { code: "FR", label: "Francja" },
   { code: "IT", label: "Włochy" },
   { code: "NL", label: "Holandia" },
@@ -83,17 +85,6 @@ export interface Kt1ReportResponse {
   };
 }
 
-function isForeign(country: string | null): boolean {
-  if (country == null || String(country).trim() === "") return false;
-  return country.trim().toUpperCase() !== "PL";
-}
-
-function normalizeCountryCode(country: string | null): string {
-  if (country == null || String(country).trim() === "") return "OTHER";
-  const code = country.trim().toUpperCase();
-  return code.length > 0 ? code : "OTHER";
-}
-
 /** Zwraca liczbę dni w miesiącu (UTC). */
 function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -152,14 +143,14 @@ export async function getKt1Report(
     personNightsTotal += nightsInMonth * pax;
     roomNightsTotal += nightsInMonth;
 
-    const foreign = isForeign(r.guest?.country ?? null);
+    const countryCode = getKt1CountryCode(r.guest?.country ?? null);
+    const foreign = isForeignCountry(r.guest?.country ?? null);
     if (foreign) {
       guestsForeign += pax;
       personNightsForeign += nightsInMonth * pax;
       roomNightsForeign += nightsInMonth;
 
-      const code = normalizeCountryCode(r.guest?.country ?? null);
-      const mappedCode = knownCodes.has(code) ? code : "OTHER";
+      const mappedCode = knownCodes.has(countryCode) ? countryCode : "OTHER";
       const prev = countryAgg.get(mappedCode) ?? { guests: 0, personNights: 0 };
       countryAgg.set(mappedCode, {
         guests: prev.guests + pax,

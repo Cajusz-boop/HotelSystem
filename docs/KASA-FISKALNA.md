@@ -195,3 +195,68 @@ W katalogu `lib/fiscal/`:
 | `/ustawienia/kasa-fiskalna` | Konfiguracja kasy — status, test połączenia, instrukcja |
 | `/ustawienia/paragon` | Szablon paragonu — nagłówek, stopka, nazwy pozycji |
 | `/finance` | Finanse — sekcja "Kasa fiskalna" ze statusem i linkiem do konfiguracji |
+
+---
+
+## Recepcja PC02 i zdalna diagnostyka (AICO)
+
+Stacja recepcji z kasą fiskalną jest zarejestrowana w AICO. Dzięki temu można zdalnie sprawdzić stan bridge’a i drukarek bez logowania się na PC02.
+
+### Dane PC02
+
+| Parametr | Wartość |
+|----------|--------|
+| **Agent ID** | PC02 |
+| **OS** | Windows 10 (64-bit) |
+| **IP recepcji** | Sprawdź w panelu AICO: `/dashboard/agents` |
+| **NATS** | tls://10.119.169.61:4222 |
+| **HotelSystem** | hotel.karczma-labedz.pl/front-office (przeglądarka na PC02) |
+| **Bridge POSNET** | Powinien nasłuchiwać na `http://127.0.0.1:9977` na PC02 (URUCHOM-BRIDGE.bat / `posnet-bridge-installer`) |
+
+### Capabilities AICO na PC02
+
+- `disk.usage` — miejsce na dyskach  
+- `service.status` — status usługi Windows  
+- `process.list` — lista procesów (np. czy działa `node` / bridge)  
+- `log.read` — Windows Event Log  
+- `printer.list` — lista drukarek (wmic)  
+- `printer.status` — status drukarek  
+
+### Przykłady zdalnej diagnostyki (AICO API)
+
+Login (pobierz token):
+
+```bash
+curl -X POST http://localhost:8000/api/login \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"admin\",\"password\":\"admin\"}"
+```
+
+Lista drukarek na PC02:
+
+```bash
+curl -X POST http://localhost:8000/api/tasks \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"capability_id\": \"printer.list\", \"target_agent_id\": \"PC02\"}"
+```
+
+Status usługi (np. sprawdzenie, czy usługa bridge’a działa):
+
+```bash
+curl -X POST http://localhost:8000/api/tasks \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"capability_id\": \"service.status\", \"target_agent_id\": \"PC02\", \"payload\": {\"service_name\": \"NAZWA_USLUGI\"}}"
+```
+
+Lista procesów (szukanie `node` / bridge na porcie 9977):
+
+```bash
+curl -X POST http://localhost:8000/api/tasks \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"capability_id\": \"process.list\", \"target_agent_id\": \"PC02\"}"
+```
+
+Gdy kasa „nie łączy”, warto z AICO na PC02 sprawdzić: czy w `process.list` jest proces bridge’a (node/server.mjs), czy `printer.list` pokazuje drukarkę POSNET, i ewentualnie `service.status` jeśli bridge jest zainstalowany jako usługa.

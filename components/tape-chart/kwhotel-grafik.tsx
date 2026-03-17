@@ -1077,6 +1077,7 @@ export function KwhotelGrafik({
           setReservations((prev) =>
             prev.map((r) => (r.id === updated.id ? updated : r))
           );
+          setSelectedReservation((prev) => (prev?.id === updated.id ? (updated as Reservation) : prev));
         }}
         onPaymentRecorded={(reservationId, paymentStatus) => {
           if (paymentStatus) {

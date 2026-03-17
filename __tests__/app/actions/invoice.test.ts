@@ -1,5 +1,5 @@
 /**
- * Testy jednostkowe dla wystawiania faktur VAT, naliczania noclegu i konfiguracji VAT.
+ * Testy jednostkowe dla wystawiania faktur VAT, naliczania usługi hotelowej i konfiguracji VAT.
  * Pokrywają scenariusze, które powodowały błędy:
  * - brak firmy przy rezerwacji
  * - brak NIP nabywcy
@@ -179,7 +179,7 @@ function makeRoomTransaction(amount: number, type = "ROOM") {
     status: "ACTIVE",
     createdAt: new Date(),
     paymentMethod: null,
-    description: "Nocleg 2026-02-18 - 2026-02-19",
+    description: "Usługa hotelowa 2026-02-18 - 2026-02-19",
     quantity: 1,
     unitPrice: amount,
     vatRate: 8,
@@ -665,7 +665,7 @@ describe("Fakturowanie – createVatInvoice", () => {
 
 // ─── postRoomChargeOnCheckout ───────────────────────────────────────────────
 
-describe("Naliczanie noclegu – postRoomChargeOnCheckout", () => {
+describe("Naliczanie usługi hotelowej – postRoomChargeOnCheckout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -726,7 +726,7 @@ describe("Naliczanie noclegu – postRoomChargeOnCheckout", () => {
     }
   });
 
-  it("Happy path: nalicza nocleg z ceny pokoju", async () => {
+  it("Happy path: nalicza usługę hotelową z ceny pokoju", async () => {
     const res = makeReservation();
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
     vi.mocked(prisma.transaction.count).mockResolvedValue(0);
@@ -755,7 +755,7 @@ describe("Naliczanie noclegu – postRoomChargeOnCheckout", () => {
     );
   });
 
-  it("Happy path: nalicza nocleg ze stawki sezonowej (priorytet nad ceną pokoju)", async () => {
+  it("Happy path: nalicza usługę hotelową ze stawki sezonowej (priorytet nad ceną pokoju)", async () => {
     const res = makeReservation({
       room: { id: "room-1", number: "5", price: 200 },
     });
@@ -806,7 +806,7 @@ describe("Naliczanie noclegu – postRoomChargeOnCheckout", () => {
     );
   });
 
-  it("Opis noclegu: zawiera daty w formacie YYYY-MM-DD", async () => {
+  it("Opis usługi hotelowej: zawiera daty w formacie YYYY-MM-DD", async () => {
     const res = makeReservation();
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
     vi.mocked(prisma.transaction.count).mockResolvedValue(0);
@@ -822,7 +822,7 @@ describe("Naliczanie noclegu – postRoomChargeOnCheckout", () => {
     expect(prisma.transaction.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          description: expect.stringMatching(/Nocleg \d{4}-\d{2}-\d{2} - \d{4}-\d{2}-\d{2}/),
+          description: expect.stringMatching(/Usługa hotelowa \d{4}-\d{2}-\d{2} - \d{4}-\d{2}-\d{2}/),
         }),
       })
     );
@@ -918,7 +918,7 @@ describe("Konfiguracja VAT – getCennikConfig", () => {
 
 // ─── overrideRoomPrice ──────────────────────────────────────────────────────
 
-describe("Nadpisanie ceny noclegu – overrideRoomPrice", () => {
+describe("Nadpisanie ceny usługi hotelowej – overrideRoomPrice", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -1036,7 +1036,7 @@ describe("Druk faktury POSNET – printInvoiceForReservation", () => {
     }
   });
 
-  it("Auto-naliczanie: bez transakcji ROOM próbuje naliczyć nocleg", async () => {
+  it("Auto-naliczanie: bez transakcji ROOM próbuje naliczyć usługę hotelową", async () => {
     const res = makeReservation({ transactions: [] });
     vi.mocked(prisma.reservation.findUnique).mockResolvedValue(res as never);
     vi.mocked(prisma.transaction.count).mockResolvedValue(0);

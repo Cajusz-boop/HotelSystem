@@ -220,7 +220,7 @@ export async function seedTraining(): Promise<void> {
       reservationId: res2.id,
       amount: 560,
       type: "ROOM",
-      description: "Nocleg 2 noce",
+      description: "Usługa hotelowa 2 noce",
       folioNumber: 1,
       status: "ACTIVE",
       category: "ACCOMMODATION",
@@ -242,7 +242,7 @@ export async function seedTraining(): Promise<void> {
   });
   await prisma.transaction.createMany({
     data: [
-      { reservationId: res3.id, amount: 840, type: "ROOM", description: "Nocleg 3 noce", folioNumber: 1, status: "ACTIVE", category: "ACCOMMODATION" },
+      { reservationId: res3.id, amount: 840, type: "ROOM", description: "Usługa hotelowa 3 noce", folioNumber: 1, status: "ACTIVE", category: "ACCOMMODATION" },
       { reservationId: res3.id, amount: 120, type: "GASTRONOMY", description: "Restauracja", folioNumber: 1, status: "ACTIVE", category: "F_B", subcategory: "RESTAURANT" },
     ],
   });
@@ -299,8 +299,8 @@ export async function seedTraining(): Promise<void> {
   });
   await prisma.transaction.createMany({
     data: [
-      { reservationId: res5.id, amount: 560, type: "ROOM", description: "Nocleg 2 noce", folioNumber: 1, status: "ACTIVE", category: "ACCOMMODATION" },
-      { reservationId: res6.id, amount: 560, type: "ROOM", description: "Nocleg 2 noce", folioNumber: 1, status: "ACTIVE", category: "ACCOMMODATION" },
+      { reservationId: res5.id, amount: 560, type: "ROOM", description: "Usługa hotelowa 2 noce", folioNumber: 1, status: "ACTIVE", category: "ACCOMMODATION" },
+      { reservationId: res6.id, amount: 560, type: "ROOM", description: "Usługa hotelowa 2 noce", folioNumber: 1, status: "ACTIVE", category: "ACCOMMODATION" },
     ],
   });
 
@@ -342,7 +342,7 @@ export async function seedTraining(): Promise<void> {
   });
   await prisma.transaction.createMany({
     data: [
-      { reservationId: res8.id, amount: 1050, type: "ROOM", description: "Nocleg 3 noce VIP", folioNumber: 1, status: "ACTIVE", category: "ACCOMMODATION" },
+      { reservationId: res8.id, amount: 1050, type: "ROOM", description: "Usługa hotelowa 3 noce VIP", folioNumber: 1, status: "ACTIVE", category: "ACCOMMODATION" },
       { reservationId: res8.id, amount: 45, type: "MINIBAR", description: "Minibar", folioNumber: 1, status: "ACTIVE", category: "F_B", subcategory: "MINIBAR" },
     ],
   });

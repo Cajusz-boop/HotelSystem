@@ -252,7 +252,7 @@ export default async function DashboardPage() {
                 {kpi.revPar != null ? `${kpi.revPar.toFixed(2)} PLN` : "—"}
               </p>
               <p className="text-xs text-muted-foreground">
-                Przychód noclegowy: {kpi.roomRevenue.toFixed(2)} PLN
+                Przychód z usług hotelowych: {kpi.roomRevenue.toFixed(2)} PLN
               </p>
             </div>
           </div>

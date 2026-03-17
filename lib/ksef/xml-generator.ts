@@ -30,7 +30,7 @@ export interface InvoiceForKsef {
   correctionReason?: string | null;
   correctedInvoiceNumber?: string | null;
   correctedInvoicePeriod?: string | null;
-  /** Jedna pozycja (np. "Usługa noclegowa") lub wiele – każda z netto/VAT/brutto */
+  /** Jedna pozycja (np. "Usługa hotelowa") lub wiele – każda z netto/VAT/brutto */
   items?: Array<{
     name: string;
     pkwiu?: string;
@@ -167,7 +167,7 @@ export function buildFa2Xml(
     ? invoice.items
     : [
         {
-          name: "Usługa noclegowa",
+          name: "Usługa hotelowa",
           quantity: 1,
           amountNet: invoice.amountNet,
           amountVat: invoice.amountVat,

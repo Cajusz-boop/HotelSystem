@@ -6,23 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import { GUEST_COUNTRY_OPTIONS } from "@/lib/guest-country";
 import { cn } from "@/lib/utils";
-
-const COUNTRIES = [
-  "Polska",
-  "Niemcy",
-  "Czechy",
-  "Słowacja",
-  "Ukraina",
-  "Litwa",
-  "Białoruś",
-  "Rosja",
-  "Wielka Brytania",
-  "Francja",
-  "Włochy",
-  "Hiszpania",
-  "Inny",
-];
 
 export function GuestForm({
   roomName,
@@ -48,11 +33,11 @@ export function GuestForm({
   onBack: () => void;
   loading: boolean;
   error: string | null;
-}) {
+}): JSX.Element {
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
-  const [guestCountry, setGuestCountry] = useState("Polska");
+  const [guestCountry, setGuestCountry] = useState("PL");
   const [notes, setNotes] = useState("");
   const [acceptRegulamin, setAcceptRegulamin] = useState(false);
   const [acceptRodo, setAcceptRodo] = useState(false);
@@ -125,9 +110,9 @@ export function GuestForm({
             "mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           )}
         >
-          {COUNTRIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
+          {GUEST_COUNTRY_OPTIONS.map((country) => (
+            <option key={country.code} value={country.code}>
+              {country.label}
             </option>
           ))}
         </select>
