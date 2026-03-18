@@ -292,14 +292,21 @@ export function UnifiedReservationDialog({
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savingRef = useRef(false);
   const handleSubmitRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const lastLoadedReservationIdRef = useRef<string | null>(null);
 
-  // Reset form on open / context change
+  // Reset form on open / context change (tylko gdy otwieramy inną rezerwację — nie po zapisie tej samej)
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      lastLoadedReservationIdRef.current = null;
+      return;
+    }
     setActiveTab(initialTab ?? "rozliczenie");
     setError(null);
 
     if (isEdit && reservation) {
+      if (lastLoadedReservationIdRef.current === reservation.id) return;
+      lastLoadedReservationIdRef.current = reservation.id;
+
       setForm({
         ...INITIAL_FORM,
         guestName: reservation.guestName,
@@ -497,13 +504,17 @@ export function UnifiedReservationDialog({
     [suggestionsOpen, guestSuggestions, highlightedIdx, selectGuest]
   );
 
-  // NIP / numer VAT UE lookup
+  // NIP / numer VAT UE lookup (ref do aktualnego NIP żeby efekt nie zależał od form.nipInput → mniej re-runów)
+  const nipInputRef = useRef(form.nipInput);
+  nipInputRef.current = form.nipInput;
+
   const handleNipLookup = useCallback(async () => {
-    const validation = validateNipOrVat(form.nipInput.trim());
+    const nip = nipInputRef.current.trim();
+    const validation = validateNipOrVat(nip);
     if (!validation.ok) return;
     setNipLookupLoading(true);
     try {
-      const result = await lookupCompanyByNip(form.nipInput.trim());
+      const result = await lookupCompanyByNip(nip);
       if (result.success && result.data) {
         setForm((prev) => ({
           ...prev,
@@ -518,13 +529,21 @@ export function UnifiedReservationDialog({
       }
     } catch { /* ignore */ }
     finally { setNipLookupLoading(false); }
-  }, [form.nipInput, scheduleAutoSave]);
+  }, [scheduleAutoSave]);
 
-  // Auto-lookup NIP (tylko polski – WL)
+  // Auto-lookup NIP (tylko polski 10 znaków) — przy pełnym NIP wywołaj raz
+  const lastAutoLookupNipRef = useRef<string | null>(null);
   useEffect(() => {
-    const validation = validateNipOrVat(form.nipInput.trim());
+    const trimmed = form.nipInput.trim();
+    const validation = validateNipOrVat(trimmed);
+    if (validation.normalized.length < 10) {
+      lastAutoLookupNipRef.current = null;
+      return;
+    }
     if (!validation.ok || form.companyFound) return;
-    if (validation.normalized.length === 10) handleNipLookup();
+    if (lastAutoLookupNipRef.current === validation.normalized) return;
+    lastAutoLookupNipRef.current = validation.normalized;
+    handleNipLookup();
   }, [form.nipInput, form.companyFound, handleNipLookup]);
 
   const openRegistrationCard = useCallback((reservationId: string, triggerPrint = false) => {
