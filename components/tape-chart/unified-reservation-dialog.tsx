@@ -536,11 +536,12 @@ export function UnifiedReservationDialog({
   useEffect(() => {
     const trimmed = form.nipInput.trim();
     const validation = validateNipOrVat(trimmed);
+    if (!validation.ok) return;
     if (validation.normalized.length < 10) {
       lastAutoLookupNipRef.current = null;
       return;
     }
-    if (!validation.ok || form.companyFound) return;
+    if (form.companyFound) return;
     if (lastAutoLookupNipRef.current === validation.normalized) return;
     lastAutoLookupNipRef.current = validation.normalized;
     handleNipLookup();
