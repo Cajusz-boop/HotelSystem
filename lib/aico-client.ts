@@ -125,11 +125,14 @@ export async function getAicoAgents(): Promise<{ success: true; agents: AicoAgen
     }
     const agents: AicoAgent[] = list
       .filter((a: unknown) => a && typeof a === "object" && typeof (a as Record<string, unknown>).id === "string")
-      .map((a: Record<string, unknown>) => ({
-        id: a.id as string,
-        name: typeof a.name === "string" ? a.name : undefined,
-        ...a,
-      }));
+      .map((a: unknown) => {
+        const o = a as Record<string, unknown>;
+        return {
+          id: o.id as string,
+          name: typeof o.name === "string" ? o.name : undefined,
+          ...o,
+        };
+      });
     return { success: true, agents };
   } catch (e) {
     clearTimeout(timeout);
