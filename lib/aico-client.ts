@@ -62,12 +62,81 @@ async function getToken(): Promise<string> {
   }
 }
 
+export interface AicoAgent {
+  id: string;
+  name?: string;
+  [key: string]: unknown;
+}
+
 export interface AicoTaskResult {
   success: boolean;
   data?: unknown;
   output?: string;
   error?: string;
   taskId?: string;
+}
+
+/**
+ * Pobiera listę dostępnych agentów (komputerów) z AICO.
+ * GET /api/agents — np. POS01 (POS kelnerski pos-karczma), PC02 (recepcja HotelSystem).
+ */
+export async function getAicoAgents(): Promise<{ success: true; agents: AicoAgent[] } | { success: false; error: string }> {
+  const config = getAicoConfig();
+  if (!config.configured) {
+    return {
+      success: false,
+      error:
+        "AICO nie skonfigurowane. Ustaw AICO_API_URL oraz AICO_USERNAME i AICO_PASSWORD (lub AICO_TOKEN) w .env.",
+    };
+  }
+  let token: string;
+  try {
+    token = await getToken();
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd logowania do AICO",
+    };
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AICO_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${config.baseUrl}/api/agents`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) {
+      const text = await res.text();
+      return {
+        success: false,
+        error: `AICO GET /api/agents HTTP ${res.status}: ${text.slice(0, 200)}`,
+      };
+    }
+    const raw = (await res.json().catch(() => null)) as unknown;
+    const list = Array.isArray(raw) ? raw : (raw && typeof raw === "object" && Array.isArray((raw as Record<string, unknown>).agents) ? (raw as Record<string, unknown>).agents : null);
+    if (!list) {
+      return { success: false, error: "AICO: nieprawidłowa odpowiedź GET /api/agents (oczekiwano tablicy agentów)" };
+    }
+    const agents: AicoAgent[] = list
+      .filter((a: unknown) => a && typeof a === "object" && typeof (a as Record<string, unknown>).id === "string")
+      .map((a: Record<string, unknown>) => ({
+        id: a.id as string,
+        name: typeof a.name === "string" ? a.name : undefined,
+        ...a,
+      }));
+    return { success: true, agents };
+  } catch (e) {
+    clearTimeout(timeout);
+    if (e instanceof Error && e.name === "AbortError") {
+      return { success: false, error: `AICO: timeout (${AICO_TIMEOUT_MS / 1000}s)` };
+    }
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Błąd połączenia z AICO",
+    };
+  }
 }
 
 /**

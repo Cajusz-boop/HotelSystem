@@ -451,7 +451,7 @@ export function UnifiedReservationDialog({
       autoSaveTimerRef.current = null;
       if (savingRef.current) return;
       handleSubmitRef.current();
-    }, 800);
+    }, 2000);
   }, [isEdit, reservation?.id]);
 
   const onFormChange = useCallback((patch: Partial<SettlementTabFormState>) => {
