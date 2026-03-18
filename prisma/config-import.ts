@@ -81,13 +81,10 @@ async function main() {
     console.log("  Property: OK");
   }
 
-  // DocumentNumberingConfig
-  await upsertMany(
-    "DocumentNumberingConfig",
-    snapshot.documentNumbering as Record<string, unknown>[] | undefined,
-    "documentType",
-    prisma.documentNumberingConfig as unknown as { upsert: (args: unknown) => Promise<unknown> },
-  );
+  // DocumentNumberingConfig — NIE importujemy przy deploy: numeracja (roczna/miesięczna)
+  // jest ustawiana w UI na produkcji; snapshot w repo miałby includeMonth: false i przy
+  // każdym pushu nadpisywałby ustawienia. Pomijamy ten blok, żeby deploy nie resetował numeracji.
+  // (getDocumentNumberingConfig tworzy domyślną konfigurację przy pierwszym odczycie, jeśli brak.)
 
   // InvoiceTemplate
   await upsertMany(

@@ -41,7 +41,7 @@ jobs:
             npx prisma@6 generate
             DISABLE_WEBPACK_CACHE=1 NODE_OPTIONS=--max-old-space-size=2048 npm run build
             npx prisma@6 db push --skip-generate
-            npx prisma@6 db seed
+            # Seed wyłączony na produkcji — import config-snapshot nadpisywał ustawienia (numeracja, szablony, cenniki). Seed tylko lokalnie.
             # Wstrzykuj zmienne SMTP z GitHub Secrets (nie nadpisuje reszty .env)
             if [ -n "${{ secrets.SMTP_HOST }}" ]; then
               sed -i '/^SMTP_/d' .env

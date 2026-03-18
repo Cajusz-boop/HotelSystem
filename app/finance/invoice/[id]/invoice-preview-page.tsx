@@ -52,6 +52,9 @@ const DEFAULT_SELLER = {
   sellerBankAccount: "64 2490 0005 0000 4530 3746 8866",
 };
 
+/** Id faktur, dla których auto-druk już się wykonał (przetrwa remount w Strict Mode — unikamy podwójnego druku). */
+const autoPrintDoneIds = new Set<string>();
+
 export interface EditableLineItem {
   name: string;
   quantity: number;
@@ -453,13 +456,12 @@ export function InvoicePreviewPage({ id, autoPrint }: InvoicePreviewPageProps) {
     [id, saveAndThen]
   );
 
-  const autoPrintTriggered = useRef(false);
   useEffect(() => {
-    if (autoPrint && !loading && data && !autoPrintTriggered.current) {
-      autoPrintTriggered.current = true;
-      handlePrint();
-    }
-  }, [autoPrint, loading, data, handlePrint]);
+    if (!autoPrint || loading || !data) return;
+    if (autoPrintDoneIds.has(id)) return;
+    autoPrintDoneIds.add(id);
+    handlePrint();
+  }, [autoPrint, loading, data, id, handlePrint]);
 
   const handlePdf = () => {
     let url = `/api/finance/invoice/${id}/pdf?format=pdf`;
