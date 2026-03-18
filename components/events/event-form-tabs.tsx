@@ -573,6 +573,12 @@ export function EventFormTabs({
           </button>
         </div>
         )}
+        {isVisible("notes") && (
+          <>
+            <div style={{ marginTop: "20px", marginBottom: "12px", fontSize: "11px", fontWeight: 700, color: "#888" }}>─── Notatki ───</div>
+            <textarea value={form.notes} onChange={(e) => update("notes", e.target.value)} rows={4} placeholder="Dodatkowe informacje..." style={{ ...inputStyle, resize: "vertical" }} />
+          </>
+        )}
       </div>
     );
   }
@@ -735,13 +741,6 @@ export function EventFormTabs({
                 {isVisible("afterpartyMusic") && <Field label="Muzyka afterparty" value={form.afterpartyMusic} onChange={(v) => update("afterpartyMusic", v)} />}
               </>
             )}
-          </>
-        )}
-
-        {isVisible("notes") && (
-          <>
-            <div style={{ marginTop: "20px", marginBottom: "12px", fontSize: "11px", fontWeight: 700, color: "#888" }}>─── Notatki ───</div>
-            <textarea value={form.notes} onChange={(e) => update("notes", e.target.value)} rows={4} placeholder="Dodatkowe informacje..." style={{ ...inputStyle, resize: "vertical" }} />
           </>
         )}
       </div>

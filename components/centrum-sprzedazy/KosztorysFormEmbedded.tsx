@@ -104,6 +104,8 @@ export function KosztorysFormEmbedded({
   const [items, setItems] = useState<GroupQuoteItem[]>([emptyItem()]);
   const [submitting, setSubmitting] = useState(false);
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
+  /** Domyślnie wpisywana jest cena brutto; można przełączyć na netto. */
+  const [priceEntryMode, setPriceEntryMode] = useState<"gross" | "net">("gross");
 
   const loadQuote = useCallback(async (id: string) => {
     setLoading(true);
@@ -420,8 +422,18 @@ export function KosztorysFormEmbedded({
                 <tr style={{ background: "#f3f4f6", borderBottom: "1px solid #e5e7eb" }}>
                   <th style={{ textAlign: "left", padding: "6px 8px", fontWeight: 600 }}>Nazwa</th>
                   <th style={{ textAlign: "left", padding: "6px 8px", width: 50 }}>Jedn.</th>
-                  <th style={{ textAlign: "right", padding: "6px 8px", width: 55 }}>Ilość</th>
-                  <th style={{ textAlign: "right", padding: "6px 8px", width: 75 }}>Cena netto</th>
+                  <th style={{ textAlign: "right", padding: "6px 8px", width: 72 }}>Ilość</th>
+                  <th style={{ textAlign: "right", padding: "6px 8px", width: 95 }}>
+                    <span style={{ marginRight: 4 }}>Cena {priceEntryMode === "gross" ? "brutto" : "netto"}</span>
+                    <button
+                      type="button"
+                      onClick={() => setPriceEntryMode((m) => (m === "gross" ? "net" : "gross"))}
+                      style={{ fontSize: 10, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: "#fff", cursor: "pointer", color: "#6b7280" }}
+                      title={priceEntryMode === "gross" ? "Kliknij, aby wpisywać cenę netto" : "Kliknij, aby wpisywać cenę brutto"}
+                    >
+                      → {priceEntryMode === "gross" ? "netto" : "brutto"}
+                    </button>
+                  </th>
                   <th style={{ textAlign: "center", padding: "6px 8px", width: 55 }}>VAT %</th>
                   <th style={{ textAlign: "right", padding: "6px 8px", width: 85 }}>Netto</th>
                   <th style={{ textAlign: "right", padding: "6px 8px", width: 75 }}>VAT</th>
@@ -439,10 +451,26 @@ export function KosztorysFormEmbedded({
                       <Input placeholder="szt" value={it.unit} onChange={(e) => updateItem(i, "unit", e.target.value)} className="h-7 text-xs w-full min-w-[40px]" />
                     </td>
                     <td style={{ padding: "4px" }}>
-                      <Input type="number" min={0} step={1} value={it.quantity || ""} onChange={(e) => updateItem(i, "quantity", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right" />
+                      <Input type="number" min={0} step={1} value={it.quantity || ""} onChange={(e) => updateItem(i, "quantity", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right min-w-[60px] w-16" />
                     </td>
                     <td style={{ padding: "4px" }}>
-                      <Input type="number" min={0} step={0.01} value={it.unitPriceNet || ""} onChange={(e) => updateItem(i, "unitPriceNet", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right" />
+                      {priceEntryMode === "gross" ? (
+                        <Input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={it.quantity ? (it.grossAmount / it.quantity) || "" : ""}
+                          onChange={(e) => {
+                            const grossPerUnit = parseFloat(e.target.value) || 0;
+                            const vatRate = it.vatRate || 8;
+                            const unitPriceNet = vatRate === 0 ? grossPerUnit : Math.round((grossPerUnit / (1 + vatRate / 100)) * 100) / 100;
+                            updateItem(i, "unitPriceNet", unitPriceNet);
+                          }}
+                          className="h-7 text-xs text-right"
+                        />
+                      ) : (
+                        <Input type="number" min={0} step={0.01} value={it.unitPriceNet || ""} onChange={(e) => updateItem(i, "unitPriceNet", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right" />
+                      )}
                     </td>
                     <td style={{ padding: "4px" }}>
                       <select

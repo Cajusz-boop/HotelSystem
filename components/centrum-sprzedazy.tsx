@@ -1364,7 +1364,42 @@ function EventDetailModal({
             </div>
             ) : (
               <MenuTab
-                ev={{ type: ev.type, client: ev.client, date: ev.date, guests: ev.guests }}
+                ev={{
+                  type: ev.type,
+                  client: ev.client,
+                  date: ev.date,
+                  guests: ev.guests,
+                  adultsCount: ev.adultsCount ?? (ev.guests ?? 0),
+                  children03: ev.children03 ?? 0,
+                  children47: ev.children47 ?? 0,
+                  showChildren03: eventTypeFieldsConfig?.[ev.type]?.children03 !== false,
+                  showChildren47: eventTypeFieldsConfig?.[ev.type]?.children47 !== false,
+                  onGuestsChange: (field: "adultsCount" | "children03" | "children47", value: number) => {
+                    const nextAdults = field === "adultsCount" ? value : (ev.adultsCount ?? ev.guests ?? 0);
+                    const next03 = field === "children03" ? value : (ev.children03 ?? 0);
+                    const next47 = field === "children47" ? value : (ev.children47 ?? 0);
+                    const guestCount = nextAdults + next03 + next47 || null;
+                    fetch(`/api/event-orders/${ev.id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        adultsCount: nextAdults || null,
+                        children03: next03 || null,
+                        children47: next47 || null,
+                        guestCount,
+                      }),
+                    })
+                      .then((res) => {
+                        if (res.ok) {
+                          debouncedRefresh();
+                          showToast("Liczba gości zapisana");
+                        } else {
+                          showToast("Błąd zapisu", "err");
+                        }
+                      })
+                      .catch(() => showToast("Błąd zapisu", "err"));
+                  },
+                }}
                 savedMenu={ev.menu ?? null}
                 onSave={async (menuData) => {
                   try {

@@ -440,35 +440,54 @@ export async function findGuestsForCheckIn(
     const trimmed = query.trim();
     if (trimmed.length < 2) return { success: true, data: [] };
 
-    // Rozbij zapytanie na osobne słowa (np. "Jan Kow" → ["Jan", "Kow"])
-    const words = trimmed.split(/\s+/).filter(w => w.length > 0);
+    const digitsOnly = trimmed.replace(/\D/g, "");
+    const isPhoneQuery = digitsOnly.length >= 6 && digitsOnly.length <= 15;
 
-    // Każde słowo musi pasować do imienia LUB emaila LUB telefonu
-    const wordConditions: Prisma.GuestWhereInput[] = words.map(word => ({
-      OR: [
-        { name: { contains: word } },
-        { email: { contains: word } },
-        { phone: { contains: word } },
-      ]
-    }));
+    let guests: { id: string; name: string; email: string | null; phone: string | null; dateOfBirth: Date | null }[];
 
-    const guests = await prisma.guest.findMany({
-      where: {
-        AND: [
-          ...wordConditions,
-          { isBlacklisted: false },
+    if (isPhoneQuery) {
+      const normalizedQuery = normalizePhoneForMatch(trimmed);
+      if (!normalizedQuery) {
+        guests = [];
+      } else {
+        const withPhone = await prisma.guest.findMany({
+          where: { phone: { not: null }, isBlacklisted: false },
+          take: 50,
+          select: { id: true, name: true, email: true, phone: true, dateOfBirth: true },
+          orderBy: { name: "asc" },
+        });
+        guests = withPhone.filter(
+          (g) => g.phone && normalizePhoneForMatch(g.phone) === normalizedQuery
+        ).slice(0, 8);
+      }
+    } else {
+      const words = trimmed.split(/\s+/).filter(w => w.length > 0);
+      const wordConditions: Prisma.GuestWhereInput[] = words.map(word => ({
+        OR: [
+          { name: { contains: word } },
+          { email: { contains: word } },
+          { phone: { contains: word } },
         ]
-      },
-      take: 8,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        dateOfBirth: true,
-      },
-      orderBy: { name: "asc" },
-    });
+      }));
+
+      guests = await prisma.guest.findMany({
+        where: {
+          AND: [
+            ...wordConditions,
+            { isBlacklisted: false },
+          ]
+        },
+        take: 8,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          dateOfBirth: true,
+        },
+        orderBy: { name: "asc" },
+      });
+    }
 
     const data: GuestCheckInSuggestion[] = guests.map((g) => ({
       id: g.id,
@@ -652,6 +671,59 @@ export async function getReservationCompany(
   }
 }
 
+/** Normalizuje numer telefonu do porównania: same cyfry; 9 cyfr → z prefixem 48 (PL). */
+function normalizePhoneForMatch(phone: string | null | undefined): string | null {
+  if (!phone || typeof phone !== "string") return null;
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 0) return null;
+  if (digits.length === 9) return "48" + digits;
+  if (digits.length === 11 && digits.startsWith("48")) return digits;
+  return digits;
+}
+
+/** Typ zwracany przez getReservationCompany i getGuestLastCompany */
+export type ReservationCompanyData = {
+  nip: string;
+  name: string;
+  address?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+};
+
+/**
+ * Pobiera dane firmy z ostatniej rezerwacji gościa (do uzupełnienia formularza przy wyborze gościa).
+ * Źródło: baza Reservation + Company (ta sama baza co goście).
+ */
+export async function getGuestLastCompany(
+  guestId: string
+): Promise<ActionResult<ReservationCompanyData | null>> {
+  if (!guestId?.trim()) return { success: true, data: null };
+  try {
+    const res = await prisma.reservation.findFirst({
+      where: {
+        guestId: guestId.trim(),
+        companyId: { not: null },
+      },
+      orderBy: { checkIn: "desc" },
+      select: { company: { select: { nip: true, name: true, address: true, postalCode: true, city: true } } },
+    });
+    if (!res?.company) return { success: true, data: null };
+    const c = res.company;
+    return {
+      success: true,
+      data: {
+        nip: c.nip ?? "",
+        name: c.name ?? "",
+        address: c.address,
+        postalCode: c.postalCode,
+        city: c.city,
+      },
+    };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Błąd" };
+  }
+}
+
 /**
  * Tworzy nową rezerwację; zwraca pełny obiekt rezerwacji do dodania do Tape Chart.
  * @param input - dane rezerwacji (walidowane przez reservationSchema)
@@ -687,10 +759,26 @@ export async function createReservation(
     }
 
     if (!guest) {
-      guest = await prisma.guest.findFirst({
-        where: { name: data.guestName },
-        select: { id: true, name: true, isBlacklisted: true },
+      const nameMatch = await prisma.guest.findMany({
+        where: { name: data.guestName.trim() },
+        select: { id: true, name: true, isBlacklisted: true, phone: true },
+        take: 20,
+        orderBy: { name: "asc" },
       });
+      const normalizedInputPhone = normalizePhoneForMatch(guestPhone);
+      if (normalizedInputPhone && nameMatch.length > 0) {
+        const byPhone = nameMatch.find(
+          (g) => g.phone && normalizePhoneForMatch(g.phone) === normalizedInputPhone
+        );
+        if (byPhone) guest = { id: byPhone.id, name: byPhone.name, isBlacklisted: byPhone.isBlacklisted };
+      }
+      if (!guest && nameMatch.length > 0) {
+        guest = {
+          id: nameMatch[0].id,
+          name: nameMatch[0].name,
+          isBlacklisted: nameMatch[0].isBlacklisted,
+        };
+      }
     }
 
     let guestMatched = false;

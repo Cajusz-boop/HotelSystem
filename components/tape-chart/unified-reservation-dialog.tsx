@@ -29,7 +29,7 @@ const DOC_PAYMENT_LABELS: Record<string, string> = {
   TRANSFER: "Przelew",
   PREPAID: "Przedpłata",
 };
-import { createReservation, updateReservation, updateReservationStatus, getCheckoutBalanceWarning, findGuestsForCheckIn, getReservationCompany, getReservationEditData, deleteReservation, type GuestCheckInSuggestion } from "@/app/actions/reservations";
+import { createReservation, updateReservation, updateReservationStatus, getCheckoutBalanceWarning, findGuestsForCheckIn, getReservationCompany, getGuestLastCompany, getReservationEditData, deleteReservation, type GuestCheckInSuggestion } from "@/app/actions/reservations";
 import { postRoomChargeOnCheckout, getInvoicesForReservation, createVatInvoice, createSplitVatInvoices, createProforma, printFiscalReceiptForReservation, printFiscalReceiptForReservations, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates, overrideRoomPrice, getConsolidatedFolioSummary } from "@/app/actions/finance";
 import { lookupCompanyByNip, createConsolidatedVatInvoice } from "@/app/actions/companies";
 import { validateNipOrVat } from "@/lib/nip-vat-validate";
@@ -491,6 +491,23 @@ export function UnifiedReservationDialog({
     setSuggestionsOpen(false);
     setHighlightedIdx(-1);
     requestAnimationFrame(() => saveBtnRef.current?.focus());
+
+    getGuestLastCompany(g.id).then((res) => {
+      if (res.success && res.data) {
+        const c = res.data;
+        setForm((prev) => ({
+          ...prev,
+          nipInput: c.nip,
+          companyName: c.name ?? "",
+          companyAddress: c.address ?? "",
+          companyPostalCode: c.postalCode ?? "",
+          companyCity: c.city ?? "",
+          companyFound: true,
+        }));
+        setHasUnsavedChanges(true);
+        scheduleAutoSave();
+      }
+    });
   }, [scheduleAutoSave]);
 
   const handleGuestKeyDown = useCallback(
