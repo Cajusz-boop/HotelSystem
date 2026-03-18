@@ -115,7 +115,11 @@ export async function getAicoAgents(): Promise<{ success: true; agents: AicoAgen
       };
     }
     const raw = (await res.json().catch(() => null)) as unknown;
-    const list = Array.isArray(raw) ? raw : (raw && typeof raw === "object" && Array.isArray((raw as Record<string, unknown>).agents) ? (raw as Record<string, unknown>).agents : null);
+    const list: unknown[] | null = Array.isArray(raw)
+      ? raw
+      : raw && typeof raw === "object" && Array.isArray((raw as Record<string, unknown>).agents)
+        ? ((raw as Record<string, unknown>).agents as unknown[])
+        : null;
     if (!list) {
       return { success: false, error: "AICO: nieprawidłowa odpowiedź GET /api/agents (oczekiwano tablicy agentów)" };
     }
