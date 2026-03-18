@@ -963,10 +963,20 @@ function EventDetailModal({
   const [selectedQuoteId, setSelectedQuoteId] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
+  const lastSyncedEvIdRef = useRef<string | null>(null);
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const subOpen = showDep || showCancel;
   const updateEditForm = useCallback(<K extends keyof EventFormTabState>(k: K, v: EventFormTabState[K]) => {
     setEditForm((f) => ({ ...f, [k]: v }));
   }, []);
+
+  const debouncedRefresh = useCallback(() => {
+    if (refreshTimeoutRef.current) return;
+    refreshTimeoutRef.current = setTimeout(() => {
+      refreshTimeoutRef.current = null;
+      onRefresh?.();
+    }, 400);
+  }, [onRefresh]);
 
   useEffect(() => {
     setNoteText(ev?.notes ?? "");
@@ -976,11 +986,15 @@ function EventDetailModal({
     setEditMode(false);
   }, [ev?.id]);
   useEffect(() => {
-    if (ev) {
-      setEditForm(evToFullForm(ev));
-      setEditMenuData(null);
-    }
+    if (!ev?.id) return;
+    if (lastSyncedEvIdRef.current === ev.id) return;
+    lastSyncedEvIdRef.current = ev.id;
+    setEditForm(evToFullForm(ev));
+    setEditMenuData(null);
   }, [ev?.id]);
+  useEffect(() => () => {
+    if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
+  }, []);
   useEffect(() => {
     if (editNote) noteRef.current?.focus();
   }, [editNote]);
@@ -1025,7 +1039,7 @@ function EventDetailModal({
         body: JSON.stringify({ checklist: next }),
       });
       if (res.ok) {
-        onRefresh?.();
+        debouncedRefresh();
         showToast(checked ? "Zaznaczono" : "Odznaczono");
       } else {
         showToast("Błąd zapisu", "err");
@@ -1045,7 +1059,7 @@ function EventDetailModal({
         body: JSON.stringify(body),
       });
       if (res.ok) {
-        onRefresh?.();
+        debouncedRefresh();
         setEditMode(false);
         showToast("Zapisano zmiany");
       } else {
@@ -1134,7 +1148,7 @@ function EventDetailModal({
                 eventDisplay={{ client: ev.client, date: ev.date, type: ev.type }}
                 availableQuotes={availableQuotes}
                 defaultName={`${ev.client ?? "Klient"} — ${TL[ev.type] ?? "Impreza"} ${fmtDate(ev.date)}`}
-                onSaved={() => onRefresh?.()}
+                onSaved={() => debouncedRefresh()}
                 showToast={showToast}
               />
             ) : editMode ? (
@@ -1158,7 +1172,7 @@ function EventDetailModal({
                   };
                   fetch(`/api/event-orders/${ev.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
                     .then((res) => { if (!res.ok) throw new Error("Błąd zapisu"); return res.json(); })
-                    .then(() => { showToast("Menu i goście zapisane"); onRefresh?.(); })
+                    .then(() => { showToast("Menu i goście zapisane"); debouncedRefresh(); })
                     .catch(() => showToast("Błąd zapisu", "err"));
                 }}
                 evForMenu={{
@@ -1283,7 +1297,7 @@ function EventDetailModal({
                         });
                         if (res.ok) {
                           showToast("Zsynchronizowano opis z Google Calendar");
-                          onRefresh?.();
+                          debouncedRefresh();
                         } else {
                           showToast("Błąd synchronizacji", "err");
                         }
