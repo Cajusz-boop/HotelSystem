@@ -35,7 +35,6 @@ jobs:
             set -e
             cd /var/www/hotel
             git fetch origin && git reset --hard origin/master
-            pm2 stop hotel-pms
             rm -rf .next
             npm ci --production=false
             npx prisma@6 generate
@@ -53,7 +52,7 @@ jobs:
               echo "SMTP_PASS=\"${{ secrets.SMTP_PASS }}\"" >> .env
               [ -n "${{ secrets.SMTP_FROM }}" ] && echo "SMTP_FROM=\"${{ secrets.SMTP_FROM }}\"" >> .env
             fi
-            pm2 start hotel-pms
+            pm2 reload hotel-pms
             sleep 10 && curl -f http://127.0.0.1:3000/api/health || exit 1
 
   deploy-training:

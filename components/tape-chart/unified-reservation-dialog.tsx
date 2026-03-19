@@ -30,7 +30,7 @@ const DOC_PAYMENT_LABELS: Record<string, string> = {
   PREPAID: "Przedpłata",
 };
 import { createReservation, updateReservation, updateReservationStatus, getCheckoutBalanceWarning, findGuestsForCheckIn, getReservationCompany, getGuestLastCompany, getReservationEditData, deleteReservation, type GuestCheckInSuggestion } from "@/app/actions/reservations";
-import { postRoomChargeOnCheckout, getInvoicesForReservation, createVatInvoice, createSplitVatInvoices, createProforma, printFiscalReceiptForReservation, printFiscalReceiptForReservations, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates, overrideRoomPrice, getConsolidatedFolioSummary } from "@/app/actions/finance";
+import { postRoomChargeOnCheckout, getInvoicesForReservation, createVatInvoice, createSplitVatInvoices, createProforma, getTransactionsForReservation, getReservationDayRates, saveReservationDayRates, overrideRoomPrice, getConsolidatedFolioSummary } from "@/app/actions/finance";
 import { lookupCompanyByNip, createConsolidatedVatInvoice } from "@/app/actions/companies";
 import { validateNipOrVat } from "@/lib/nip-vat-validate";
 import { getEffectivePriceForRoomOnDate, getRatePlanInfoForRoomDate } from "@/app/actions/rooms";
@@ -444,15 +444,10 @@ export function UnifiedReservationDialog({
     getRatePlanInfoForRoomDate(form.room.trim(), form.checkIn).then((info) => setIsNonRefundable(info.isNonRefundable));
   }, [form.room, form.checkIn]);
 
+  // Autozapis wyłączony — może kiedyś wrócić
   const scheduleAutoSave = useCallback(() => {
-    if (!isEdit || !reservation?.id) return;
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => {
-      autoSaveTimerRef.current = null;
-      if (savingRef.current) return;
-      handleSubmitRef.current();
-    }, 2000);
-  }, [isEdit, reservation?.id]);
+    /* no-op */
+  }, []);
 
   const onFormChange = useCallback((patch: Partial<SettlementTabFormState>) => {
     setForm((prev) => ({ ...prev, ...patch }));
@@ -1020,37 +1015,54 @@ export function UnifiedReservationDialog({
         }
       }
       if (choice === "posnet" || (choice === "both" && amtRec > 0)) {
-        if (docChoiceResId) {
-          const result = await printFiscalReceiptForReservation(docChoiceResId, docPaymentMethod || "CASH", amtRec > 0 ? amtRec : undefined);
-          if (result.success) {
-            if (result.data?.receiptNumber && reservation?.id === docChoiceResId) {
-              onSaved?.({ ...reservation, receiptNumber: result.data.receiptNumber, receiptDate: new Date().toISOString() });
-            }
-            window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
-            toast.success(result.data?.receiptNumber
-              ? `Paragon wydrukowany: ${result.data.receiptNumber}`
-              : "Paragon wysłany do kasy fiskalnej (POSNET)");
-            const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(docChoiceResId)}${amtRec > 0 ? `&amount=${amtRec}` : ""}${result.data?.receiptNumber ? `&receiptNumber=${encodeURIComponent(result.data.receiptNumber)}` : ""}&paymentMethod=${encodeURIComponent(docPaymentMethod || "CASH")}`;
-            const copyWindow = window.open(copyUrl, "_blank");
-            if (copyWindow) {
-              copyWindow.addEventListener("load", () => {
-                setTimeout(() => copyWindow.print(), 500);
+        const receiptBody: Record<string, unknown> = {
+          paymentMethod: docPaymentMethod || "CASH",
+          amount: amtRec > 0 ? amtRec : undefined,
+        };
+        const primaryResId = docChoiceResId || (docChoiceResIds.length > 0 ? docChoiceResIds[0] : null);
+        if (docChoiceResIds.length > 0) {
+          receiptBody.reservationIds = docChoiceResIds;
+        } else if (docChoiceResId) {
+          receiptBody.reservationId = docChoiceResId;
+        }
+
+        if (primaryResId) {
+          let result: { success: boolean; error?: string; data?: { receiptNumber?: string } } | null = null;
+          const MAX_RETRIES = 2;
+          for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+              const resp = await fetch("/api/finance/print-receipt", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(receiptBody),
               });
+              result = await resp.json();
+              if (result?.success) break;
+              if (attempt < MAX_RETRIES) {
+                await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+              }
+            } catch {
+              if (attempt === MAX_RETRIES) {
+                result = { success: false, error: "Błąd połączenia z serwerem – spróbuj ponownie" };
+              } else {
+                await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+              }
             }
-          } else {
-            toast.error("error" in result ? result.error : "Błąd druku paragonu");
           }
-        } else if (docChoiceResIds.length > 0) {
-          const result = await printFiscalReceiptForReservations(docChoiceResIds, docPaymentMethod || "CASH", amtRec > 0 ? amtRec : undefined);
-          if (result.success) {
-            if (result.data?.receiptNumber && primaryReservation && docChoiceResIds.includes(primaryReservation.id)) {
-              onSaved?.({ ...primaryReservation, receiptNumber: result.data.receiptNumber, receiptDate: new Date().toISOString() });
+
+          if (result?.success) {
+            if (result.data?.receiptNumber) {
+              const targetRes = docChoiceResId ? reservation : primaryReservation;
+              if (targetRes && (docChoiceResId === targetRes.id || docChoiceResIds.includes(targetRes.id))) {
+                onSaved?.({ ...targetRes, receiptNumber: result.data.receiptNumber, receiptDate: new Date().toISOString() });
+              }
             }
             window.dispatchEvent(new CustomEvent(FISCAL_JOB_ENQUEUED_EVENT));
             toast.success(result.data?.receiptNumber
               ? `Paragon wydrukowany: ${result.data.receiptNumber}`
               : "Paragon wysłany do kasy fiskalnej (POSNET)");
-            const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(docChoiceResIds[0])}${amtRec > 0 ? `&amount=${amtRec}` : ""}${result.data?.receiptNumber ? `&receiptNumber=${encodeURIComponent(result.data.receiptNumber)}` : ""}&paymentMethod=${encodeURIComponent(docPaymentMethod || "CASH")}`;
+            const copyResId = docChoiceResId || docChoiceResIds[0];
+            const copyUrl = `/api/finance/fiscal-receipt-copy?reservationId=${encodeURIComponent(copyResId)}${amtRec > 0 ? `&amount=${amtRec}` : ""}${result.data?.receiptNumber ? `&receiptNumber=${encodeURIComponent(result.data.receiptNumber)}` : ""}&paymentMethod=${encodeURIComponent(docPaymentMethod || "CASH")}`;
             const copyWindow = window.open(copyUrl, "_blank");
             if (copyWindow) {
               copyWindow.addEventListener("load", () => {
@@ -1058,7 +1070,7 @@ export function UnifiedReservationDialog({
               });
             }
           } else {
-            toast.error("error" in result ? result.error : "Błąd druku paragonu");
+            toast.error(result?.error || "Błąd druku paragonu");
           }
         }
       }
@@ -1722,8 +1734,23 @@ export function UnifiedReservationDialog({
                     window.open(`/finance/invoice/${result.data.hotelInvoice.id}?autoPrint=1`, "_blank");
                     window.open(`/finance/invoice/${result.data.gastronomyInvoice.id}?autoPrint=1`, "_blank");
                     if (receiptAmt > 0) {
-                      const recResult = await printFiscalReceiptForReservation(reservation.id, splitReceiptPaymentMethod || "CASH", receiptAmt);
-                      if (recResult.success) {
+                      let recResult: { success: boolean; error?: string; data?: { receiptNumber?: string } } | null = null;
+                      for (let attempt = 0; attempt <= 2; attempt++) {
+                        try {
+                          const resp = await fetch("/api/finance/print-receipt", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ reservationId: reservation.id, paymentMethod: splitReceiptPaymentMethod || "CASH", amount: receiptAmt }),
+                          });
+                          recResult = await resp.json();
+                          if (recResult?.success) break;
+                          if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+                        } catch {
+                          if (attempt === 2) recResult = { success: false, error: "Błąd połączenia" };
+                          else await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+                        }
+                      }
+                      if (recResult?.success) {
                         if (recResult.data?.receiptNumber) {
                           onSaved?.({ ...reservation, receiptNumber: recResult.data.receiptNumber, receiptDate: new Date().toISOString() });
                         }
@@ -1733,7 +1760,7 @@ export function UnifiedReservationDialog({
                         const copyWin = window.open(copyUrl, "_blank");
                         if (copyWin) copyWin.addEventListener("load", () => setTimeout(() => copyWin.print(), 500));
                       } else {
-                        toast.error(recResult.error ?? "Błąd paragonu");
+                        toast.error(recResult?.error ?? "Błąd paragonu");
                       }
                     }
                     toast.success(msg);
